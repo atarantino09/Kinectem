@@ -37,9 +37,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center">
-              <span className="text-primary font-black text-sm tracking-tighter">K</span>
-            </div>
+            <img
+              src={`${import.meta.env.BASE_URL}logo-icon.png`}
+              alt="Kinectem"
+              className="w-9 h-9 rounded-lg object-cover"
+            />
             <span className="font-black text-xl tracking-tight">Kinectem</span>
           </Link>
 
