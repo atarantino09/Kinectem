@@ -1,0 +1,4523 @@
+openapi: 3.0.3
+info:
+  title: Kinectem API
+  version: 0.1.0
+  description: Youth sports recruiting platform API
+
+servers:
+  - url: /api/v1
+    description: Versioned API base path
+
+# All endpoints require Clerk session authentication.
+# Auth is enforced by clerkMiddleware + requireAuth before the validator runs.
+security:
+  - clerkSession: []
+
+paths:
+  /api/v1/users:
+    get:
+      operationId: searchUsers
+      summary: Search users by name
+      tags: [Users]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: search
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserSearchResult'
+        '400':
+          description: Missing or too-short search parameter
+        '401':
+          description: Authentication required
+        '429':
+          description: Rate limited
+
+  /api/v1/users/{userId}:
+    get:
+      operationId: getUserById
+      summary: Get user profile
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                # NOTE: PrivateUserResponse extends PublicUserResponse via allOf,
+                # so every valid Private response also matches Public. This makes
+                # the oneOf technically ambiguous under OAS 3.0 semantics. This is
+                # safe because validateResponses is disabled (see app.ts). If
+                # response validation is ever enabled, add a discriminator or
+                # restructure schemas. See BACKLOG P3-11.
+                oneOf:
+                  - $ref: '#/components/schemas/PrivateUserResponse'
+                  - $ref: '#/components/schemas/PublicUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateUser
+      summary: Update user profile (self only)
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/cover-photo:
+    put:
+      operationId: setUserCoverPhoto
+      summary: Set user cover photo
+      description: Sets the user's cover photo to a confirmed image asset they own.
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assetId
+              properties:
+                assetId:
+                  type: string
+                  format: uuid
+                  description: ID of a confirmed image asset owned by the user.
+      responses:
+        '200':
+          description: Cover photo set successfully. Returns updated user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '400':
+          description: Asset is not an image type.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Asset not found or not confirmed.
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteUserCoverPhoto
+      summary: Remove user cover photo
+      description: Removes the user's cover photo. Returns the updated profile with coverPhotoUrl set to null. Returning 200 with the full profile (rather than 204) is deliberate — it gives the client an updated profile snapshot without a follow-up GET.
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Cover photo removed. Returns updated user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/organizations:
+    get:
+      operationId: listUserOrganizations
+      summary: List organizations the user belongs to
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of organizations the user belongs to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations:
+    post:
+      operationId: createOrganization
+      summary: Create a new organization
+      tags:
+        - Organizations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+      responses:
+        '201':
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: listOrganizations
+      summary: List and search organizations
+      tags:
+        - Organizations
+      parameters:
+        - name: slug
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 2
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of organizations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}:
+    get:
+      operationId: getOrganizationById
+      summary: Get organization by ID
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateOrganization
+      summary: Update organization details
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationRequest'
+      responses:
+        '200':
+          description: Updated organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteOrganization
+      summary: Delete organization (not yet supported)
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '403':
+          description: >-
+            Organization deletion is not yet supported (DELETE_NOT_SUPPORTED),
+            or the requester is not authorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}/follow:
+    post:
+      operationId: followOrg
+      summary: Follow an organization
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '201':
+          description: Follow created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowOrgResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: unfollowOrg
+      summary: Unfollow an organization
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '204':
+          description: Unfollowed (idempotent)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}/followers:
+    get:
+      operationId: listOrgFollowers
+      summary: List followers of an organization
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/FollowLimit'
+      responses:
+        '200':
+          description: Paginated list of followers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFollowersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}/members:
+    get:
+      operationId: listMembers
+      summary: List members of an organization
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of organization members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMembersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: addMember
+      summary: Add a member to an organization
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '201':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/assets/upload:
+    post:
+      operationId: requestUpload
+      summary: Request a presigned URL for asset upload
+      tags:
+        - Assets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetUploadRequest'
+      responses:
+        '201':
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/assets/{assetId}/confirm:
+    post:
+      operationId: confirmUpload
+      summary: Confirm an asset upload after file is in S3
+      tags:
+        - Assets
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Asset confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/assets/{assetId}:
+    get:
+      operationId: getAsset
+      summary: Get asset by ID
+      tags:
+        - Assets
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Asset details with signed download URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteAsset
+      summary: Soft-delete an asset
+      tags:
+        - Assets
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '204':
+          description: Asset deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}/members/{userId}:
+    patch:
+      operationId: updateMemberRole
+      summary: Update a member's role in an organization
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/MemberUserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleRequest'
+      responses:
+        '200':
+          description: Member role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: removeMember
+      summary: Remove a member from an organization
+      tags:
+        - Members
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/MemberUserId'
+      responses:
+        '204':
+          description: Member removed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/posts:
+    post:
+      operationId: createPost
+      summary: Create a new post
+      tags:
+        - Posts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '201':
+          description: Post created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/posts/{postId}:
+    get:
+      operationId: getPost
+      summary: Get a post by ID
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Post details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updatePost
+      summary: Update a post
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePostRequest'
+      responses:
+        '200':
+          description: Post updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deletePost
+      summary: Soft-delete a post
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '204':
+          description: Post deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/posts/{postId}/revisions:
+    get:
+      operationId: getPostRevisions
+      summary: List edit history for a post
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Revision history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PostRevisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}/posts:
+    get:
+      operationId: listOrgPosts
+      summary: List posts for an organization
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of organization posts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPostsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/follow:
+    post:
+      operationId: followUser
+      summary: Follow a user
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '201':
+          description: Follow created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: unfollowUser
+      summary: Unfollow a user
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Unfollowed (idempotent)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/followers:
+    get:
+      operationId: listUserFollowers
+      summary: List followers of a user
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/FollowLimit'
+      responses:
+        '200':
+          description: Paginated list of followers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFollowersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/following:
+    get:
+      operationId: listUserFollowing
+      summary: List users and organizations a user follows
+      tags:
+        - Follows
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/FollowLimit'
+      responses:
+        '200':
+          description: Paginated list of followed entities (users and organizations)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFollowingResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/block:
+    post:
+      operationId: blockUser
+      summary: Block a user
+      tags:
+        - Blocks
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '201':
+          description: Block created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: unblockUser
+      summary: Unblock a user
+      tags:
+        - Blocks
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Unblocked (idempotent)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/privacy:
+    get:
+      operationId: getUserPrivacy
+      summary: Get user privacy settings (self only)
+      tags:
+        - Privacy
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User privacy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPrivacySettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateUserPrivacy
+      summary: Update user privacy settings (self only)
+      tags:
+        - Privacy
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrivacySettingsRequest'
+      responses:
+        '200':
+          description: Updated user privacy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPrivacySettingsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/organizations/{orgId}/privacy:
+    get:
+      operationId: getOrgPrivacy
+      summary: Get organization privacy settings (owner/admin only)
+      tags:
+        - Privacy
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Organization privacy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgPrivacySettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateOrgPrivacy
+      summary: Update organization privacy settings (owner/admin only)
+      tags:
+        - Privacy
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrivacySettingsRequest'
+      responses:
+        '200':
+          description: Updated organization privacy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgPrivacySettingsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/posts:
+    get:
+      operationId: listUserPosts
+      summary: List posts for a user
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of user posts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPostsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Contact info endpoints (user phones & addresses)
+  # ------------------------------------------------------------------
+
+  /api/v1/users/{userId}/phones:
+    post:
+      operationId: createUserPhone
+      summary: Add a phone number to own profile
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePhoneRequest'
+      responses:
+        '201':
+          description: Phone created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: listUserPhones
+      summary: List own phone numbers
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: List of phone numbers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/phones/{phoneId}:
+    get:
+      operationId: getUserPhone
+      summary: Get a single phone number
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/PhoneId'
+      responses:
+        '200':
+          description: Phone detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateUserPhone
+      summary: Update a phone number
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/PhoneId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhoneRequest'
+      responses:
+        '200':
+          description: Phone updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteUserPhone
+      summary: Delete a phone number
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/PhoneId'
+      responses:
+        '204':
+          description: Phone deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/addresses:
+    post:
+      operationId: createUserAddress
+      summary: Add an address to own profile
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAddressRequest'
+      responses:
+        '201':
+          description: Address created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: listUserAddresses
+      summary: List own addresses
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: List of addresses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/addresses/{addressId}:
+    get:
+      operationId: getUserAddress
+      summary: Get a single address
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/AddressId'
+      responses:
+        '200':
+          description: Address detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateUserAddress
+      summary: Update an address
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/AddressId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAddressRequest'
+      responses:
+        '200':
+          description: Address updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteUserAddress
+      summary: Delete an address
+      tags:
+        - Contacts
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/AddressId'
+      responses:
+        '204':
+          description: Address deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # COPPA Consent endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/consent/requests:
+    post:
+      operationId: createConsentRequest
+      summary: Create a parental consent request
+      tags:
+        - Consent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsentRequest'
+      responses:
+        '201':
+          description: Consent request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/consent/status:
+    get:
+      operationId: getConsentStatus
+      summary: Get current consent status for the authenticated user
+      tags:
+        - Consent
+      responses:
+        '200':
+          description: Current consent status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentRequestResponse'
+        '204':
+          description: No consent request exists
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Notification endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      summary: List notifications for the authenticated user
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotifications'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/notifications/unread-count:
+    get:
+      operationId: getUnreadCount
+      summary: Get unread notification count
+      tags:
+        - Notifications
+      responses:
+        '200':
+          description: Unread notification count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationUnreadCount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/notifications/{notificationId}/read:
+    patch:
+      operationId: markNotificationAsRead
+      summary: Mark a notification as read
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/notifications/read-all:
+    post:
+      operationId: markAllNotificationsAsRead
+      summary: Mark all notifications as read
+      tags:
+        - Notifications
+      responses:
+        '200':
+          description: Count of newly-marked notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkAllReadResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/notifications/email-preference:
+    get:
+      operationId: getEmailPreference
+      summary: Get email notification preference
+      tags:
+        - Notifications
+      responses:
+        '200':
+          description: Email preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailPreferenceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateEmailPreference
+      summary: Update email notification preference
+      tags:
+        - Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEmailPreferenceRequest'
+      responses:
+        '200':
+          description: Updated email preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailPreferenceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Messaging endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/conversations:
+    post:
+      operationId: createConversation
+      summary: Create or resume a conversation
+      description: >
+        Creates a new conversation with the given recipient. If an active conversation
+        already exists between the same participants (same type, same participants),
+        returns the existing conversation with 200 instead of creating a duplicate (201).
+      tags:
+        - Messaging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListItem'
+        '200':
+          description: Existing conversation returned (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      operationId: listConversations
+      summary: List conversations (inbox)
+      description: Returns a paginated list of the authenticated user's conversations, ordered by most recent activity.
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of conversations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConversations'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/conversations/unread-count:
+    get:
+      operationId: getUnreadCount
+      summary: Get total unread message count
+      description: Returns the total number of unread messages across all of the authenticated user's conversations.
+      tags:
+        - Messaging
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/conversations/{conversationId}:
+    get:
+      operationId: getConversation
+      summary: Get a conversation by ID
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: Conversation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteConversation
+      summary: Soft-delete a conversation (leaves for the other party)
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '204':
+          description: Conversation deleted for requesting user
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/conversations/{conversationId}/messages:
+    post:
+      operationId: sendMessage
+      summary: Send a message in a conversation
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      operationId: listMessages
+      summary: List messages in a conversation
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of messages (newest first)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMessages'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/conversations/{conversationId}/messages/{messageId}:
+    delete:
+      operationId: deleteMessage
+      summary: Soft-delete a message (replaces body with a deletion stub)
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/MessageId'
+      responses:
+        '204':
+          description: Message deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/conversations/{conversationId}/read:
+    post:
+      operationId: markConversationRead
+      summary: Mark all messages in a conversation as read
+      tags:
+        - Messaging
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '204':
+          description: Conversation marked as read
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ------------------------------------------------------------------
+  # Teams endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/organizations/{orgId}/teams:
+    post:
+      operationId: createTeam
+      summary: Create a team under an organization
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: Team created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: listOrgTeams
+      summary: List teams for an organization
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 2
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of teams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeams'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/teams/{teamId}:
+    get:
+      operationId: getTeamById
+      summary: Get team by ID
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateTeam
+      summary: Update team details
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: Updated team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteTeam
+      summary: Delete a team
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '204':
+          description: Team deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Team Season endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/teams/{teamId}/seasons:
+    post:
+      operationId: createTeamSeason
+      summary: Create a season for a team
+      tags:
+        - Team Seasons
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamSeasonRequest'
+      responses:
+        '201':
+          description: Season created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamSeasonResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      operationId: listTeamSeasons
+      summary: List seasons for a team
+      tags:
+        - Team Seasons
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of seasons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamSeasons'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/teams/{teamId}/seasons/{seasonId}:
+    patch:
+      operationId: updateTeamSeason
+      summary: Update a team season
+      tags:
+        - Team Seasons
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/SeasonId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamSeasonRequest'
+      responses:
+        '200':
+          description: Updated season
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamSeasonResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Team Follow endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/teams/{teamId}/follow:
+    post:
+      operationId: followTeam
+      summary: Follow a team
+      tags:
+        - Team Follows
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '201':
+          description: Follow created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamFollowResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: unfollowTeam
+      summary: Unfollow a team
+      tags:
+        - Team Follows
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '204':
+          description: Unfollowed (idempotent)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/teams/{teamId}/followers:
+    get:
+      operationId: listTeamFollowers
+      summary: List followers of a team
+      tags:
+        - Team Follows
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/FollowLimit'
+      responses:
+        '200':
+          description: Paginated list of followers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFollowersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Team Member endpoints
+  # ------------------------------------------------------------------
+
+  /api/v1/teams/{teamId}/members:
+    get:
+      operationId: listTeamMembers
+      summary: List team members for the active (or specified) season
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - name: seasonId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: position
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [player, coach, assistant_coach, manager, parent]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, active]
+        - $ref: '#/components/parameters/Cursor'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Paginated list of team members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamMembers'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: addTeamMember
+      summary: Add a user to the team roster
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTeamMemberRequest'
+      responses:
+        '201':
+          description: Member added (status pending)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/teams/{teamId}/members/{memberId}:
+    get:
+      operationId: getTeamMember
+      summary: Get a single team member by membership ID
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/MemberId'
+      responses:
+        '200':
+          description: Team member details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateTeamMember
+      summary: Update a team member's role or position
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/MemberId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamMemberRequest'
+      responses:
+        '200':
+          description: Updated team member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: removeTeamMember
+      summary: Remove a member from the team roster (soft delete)
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/MemberId'
+      responses:
+        '204':
+          description: Member removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/teams/{teamId}/members/{memberId}/accept:
+    post:
+      operationId: acceptTeamInvite
+      summary: Accept a pending team membership invite
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/MemberId'
+      responses:
+        '200':
+          description: Invite accepted, membership now active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/teams/{teamId}/members/{memberId}/decline:
+    post:
+      operationId: declineTeamInvite
+      summary: Decline a pending team membership invite
+      tags:
+        - Team Members
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/MemberId'
+      responses:
+        '204':
+          description: Invite declined (soft delete)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ------------------------------------------------------------------
+  # Roster invite endpoints (B3)
+  # ------------------------------------------------------------------
+
+  /api/v1/teams/{teamId}/invites:
+    post:
+      operationId: createRosterInvite
+      summary: Create a roster invite for a team
+      tags:
+        - Roster Invites
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInviteRequest'
+      responses:
+        '201':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/InviteCreateResolvedResponse'
+                  - $ref: '#/components/schemas/InviteCreatePendingResponse'
+                discriminator:
+                  propertyName: status
+                  mapping:
+                    resolved: '#/components/schemas/InviteCreateResolvedResponse'
+                    pending: '#/components/schemas/InviteCreatePendingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    get:
+      operationId: listRosterInvites
+      summary: List invites for a team
+      tags:
+        - Roster Invites
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, accepted, declined, expired, withdrawn, resolved]
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInvitesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/teams/{teamId}/invites/{inviteId}:
+    delete:
+      operationId: withdrawRosterInvite
+      summary: Withdraw a pending roster invite
+      tags:
+        - Roster Invites
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/InviteId'
+      responses:
+        '200':
+          description: Invite withdrawn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/invites/{token}/accept:
+    post:
+      operationId: acceptRosterInvite
+      summary: Accept a roster invite via token
+      tags:
+        - Roster Invites
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '200':
+          description: Invite accepted, team membership created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/invites/{token}/decline:
+    post:
+      operationId: declineRosterInvite
+      summary: Decline a roster invite via token
+      tags:
+        - Roster Invites
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '200':
+          description: Invite declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/search:
+    get:
+      operationId: crossEntitySearch
+      summary: Search users, organizations, and teams by name
+      tags: [Search]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query string (min 3, max 100 characters)
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 100
+        - name: type
+          in: query
+          required: false
+          description: >
+            Comma-separated entity types to search. Defaults to all three.
+            Valid values: users, organizations, teams.
+          schema:
+            type: string
+            default: "users,organizations,teams"
+        - name: limit
+          in: query
+          required: false
+          description: Max results per entity type (1-50, default 10)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Pagination cursor. When provided, type must contain exactly one value.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Grouped search results with per-type pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    $ref: '#/components/schemas/UserSearchSection'
+                  organizations:
+                    $ref: '#/components/schemas/OrgSearchSection'
+                  teams:
+                    $ref: '#/components/schemas/TeamSearchSection'
+        '400':
+          description: Validation error or malformed cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    UserSearchResult:
+      type: object
+      required: [id, displayName, avatarUrl, type]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [user]
+
+    PublicUserResponse:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+        - isOwnProfile
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nickname:
+          type: string
+          nullable: true
+          maxLength: 100
+        bio:
+          type: string
+          nullable: true
+          maxLength: 1000
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        coverPhotoUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.
+        isOwnProfile:
+          type: boolean
+        isFollowing:
+          type: boolean
+        isConnection:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PrivateUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/PublicUserResponse'
+        - type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+            dateOfBirth:
+              type: string
+              format: date
+              nullable: true
+
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        bio:
+          type: string
+          nullable: true
+          maxLength: 1000
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        nickname:
+          type: string
+          nullable: true
+          maxLength: 100
+
+    # ----------------------------------------------------------------
+    # Contact info schemas (phones & addresses)
+    # ----------------------------------------------------------------
+
+    CreatePhoneRequest:
+      type: object
+      required:
+        - number
+        - type
+      additionalProperties: false
+      properties:
+        number:
+          type: string
+          minLength: 1
+          maxLength: 20
+        type:
+          type: string
+          enum: [mobile, office, home, fax]
+
+    UpdatePhoneRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        number:
+          type: string
+          minLength: 1
+          maxLength: 20
+        type:
+          type: string
+          enum: [mobile, office, home, fax]
+
+    PhoneResponse:
+      type: object
+      required:
+        - id
+        - number
+        - type
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        type:
+          type: string
+          enum: [mobile, office, home, fax]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PhoneListResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneResponse'
+
+    CreateAddressRequest:
+      type: object
+      required:
+        - line1
+        - city
+        - postalCode
+        - country
+      additionalProperties: false
+      properties:
+        line1:
+          type: string
+          minLength: 1
+          maxLength: 255
+        line2:
+          type: string
+          maxLength: 255
+          nullable: true
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 100
+          nullable: true
+        postalCode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: ISO 3166-1 alpha-2 country code
+
+    UpdateAddressRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        line1:
+          type: string
+          minLength: 1
+          maxLength: 255
+        line2:
+          type: string
+          maxLength: 255
+          nullable: true
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 100
+          nullable: true
+        postalCode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: ISO 3166-1 alpha-2 country code
+
+    AddressResponse:
+      type: object
+      required:
+        - id
+        - line1
+        - city
+        - postalCode
+        - country
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        line1:
+          type: string
+        line2:
+          type: string
+          nullable: true
+        city:
+          type: string
+        state:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AddressListResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressResponse'
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - error
+        - correlationId
+      properties:
+        code:
+          type: string
+        error:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+
+    OrganizationResponse:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - isMember
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+          format: uri
+        isMember:
+          type: boolean
+        role:
+          type: string
+          nullable: true
+          enum:
+            - owner
+            - admin
+            - member
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateOrganizationRequest:
+      type: object
+      required:
+        - name
+        - slug
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+          minLength: 3
+          maxLength: 50
+        description:
+          type: string
+        website:
+          type: string
+          format: uri
+
+    UpdateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        website:
+          type: string
+          format: uri
+
+    MemberResponse:
+      type: object
+      required:
+        - userId
+        - displayName
+        - role
+        - joinedAt
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+          format: uri
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - member
+        joinedAt:
+          type: string
+          format: date-time
+
+    AddMemberRequest:
+      type: object
+      required:
+        - userId
+        - role
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+
+    UpdateMemberRoleRequest:
+      type: object
+      required:
+        - role
+      additionalProperties: false
+      properties:
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+
+    PaginatedOrganizationsResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginatedMembersResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginatedPostsResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    AssetUploadRequest:
+      type: object
+      required:
+        - fileName
+        - fileType
+        - fileSize
+      additionalProperties: false
+      properties:
+        fileName:
+          type: string
+          maxLength: 255
+        fileType:
+          type: string
+        fileSize:
+          type: integer
+          minimum: 1
+
+    AssetUploadResponse:
+      type: object
+      required:
+        - assetId
+        - uploadUrl
+        - expiresIn
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        uploadUrl:
+          type: string
+          format: uri
+        expiresIn:
+          type: integer
+
+    AssetResponse:
+      type: object
+      required:
+        - id
+        - createdBy
+        - fileType
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdBy:
+          type: string
+          format: uuid
+        fileType:
+          type: string
+        fileSize:
+          type: integer
+          nullable: true
+        originalFilename:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+        url:
+          type: string
+          format: uri
+          nullable: true
+        urlExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Follow schemas
+    # ------------------------------------------------------------------
+
+    FollowUserResponse:
+      type: object
+      required:
+        - followerId
+        - followingUserId
+        - createdAt
+      properties:
+        followerId:
+          type: string
+          format: uuid
+        followingUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    FollowOrgResponse:
+      type: object
+      required:
+        - followerId
+        - organizationId
+        - createdAt
+      properties:
+        followerId:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    FollowerListItem:
+      type: object
+      required:
+        - id
+        - displayName
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        followedAt:
+          type: string
+          format: date-time
+
+    FollowingListItem:
+      type: object
+      required:
+        - id
+        - displayName
+        - entityType
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        entityType:
+          type: string
+          enum:
+            - user
+            - organization
+        followedAt:
+          type: string
+          format: date-time
+
+    PaginatedFollowersResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FollowerListItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginatedFollowingResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FollowingListItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ------------------------------------------------------------------
+    # Block schemas
+    # ------------------------------------------------------------------
+
+    BlockResponse:
+      type: object
+      required:
+        - blockerId
+        - blockedId
+        - createdAt
+      properties:
+        blockerId:
+          type: string
+          format: uuid
+        blockedId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Privacy schemas
+    # ------------------------------------------------------------------
+
+    UserPrivacySettingsResponse:
+      type: object
+      required:
+        - userId
+        - settings
+      properties:
+        userId:
+          type: string
+          format: uuid
+        settings:
+          type: object
+          required:
+            - profile
+            - posts
+            - contact
+            - orgAffiliations
+          properties:
+            profile:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - connections
+                - private
+            posts:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - connections
+                - private
+            contact:
+              type: string
+              enum:
+                - authenticated
+                - connections
+                - private
+            orgAffiliations:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - connections
+                - private
+
+    OrgPrivacySettingsResponse:
+      type: object
+      required:
+        - organizationId
+        - settings
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+        settings:
+          type: object
+          required:
+            - profile
+            - posts
+            - contact
+            - memberList
+          properties:
+            profile:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - membersOnly
+                - private
+            posts:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - membersOnly
+                - private
+            contact:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - membersOnly
+                - private
+            memberList:
+              type: string
+              enum:
+                - public
+                - authenticated
+                - membersOnly
+                - private
+
+    UpdatePrivacySettingsRequest:
+      type: object
+      required:
+        - settings
+      properties:
+        settings:
+          type: object
+          additionalProperties:
+            type: string
+
+    # ------------------------------------------------------------------
+    # Post schemas
+    # ------------------------------------------------------------------
+
+    CreatePostRequest:
+      type: object
+      required:
+        - postType
+      properties:
+        postType:
+          type: string
+          enum:
+            - short
+            - long
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 50000
+        body:
+          type: string
+          maxLength: 50000
+        organizationId:
+          type: string
+          format: uuid
+        assetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 10
+
+    UpdatePostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          nullable: true
+        description:
+          type: string
+          maxLength: 50000
+          nullable: true
+        body:
+          type: string
+          maxLength: 50000
+          nullable: true
+        assetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 10
+
+    PostAuthor:
+      type: object
+      required:
+        - id
+        - displayName
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    PostContext:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          enum:
+            - user
+            - organization
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+
+    PostAssetResponse:
+      type: object
+      required:
+        - id
+        - fileType
+        - displayOrder
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileType:
+          type: string
+        url:
+          type: string
+          format: uri
+          nullable: true
+        displayOrder:
+          type: integer
+
+    PostResponse:
+      type: object
+      required:
+        - id
+        - postType
+        - author
+        - context
+        - assets
+        - isEdited
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        postType:
+          type: string
+          enum:
+            - short
+            - long
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+        author:
+          $ref: '#/components/schemas/PostAuthor'
+        context:
+          $ref: '#/components/schemas/PostContext'
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostAssetResponse'
+        isEdited:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PostRevisionEditor:
+      type: object
+      required:
+        - id
+        - displayName
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+
+    PostRevisionResponse:
+      type: object
+      required:
+        - id
+        - editedBy
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+        editedBy:
+          $ref: '#/components/schemas/PostRevisionEditor'
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # COPPA Consent schemas
+    # ------------------------------------------------------------------
+
+    CreateConsentRequest:
+      type: object
+      required:
+        - parentEmail
+      additionalProperties: false
+      properties:
+        parentEmail:
+          type: string
+          format: email
+          maxLength: 255
+          description: Parent or guardian email address for consent verification.
+
+    ConsentRequestResponse:
+      type: object
+      required:
+        - id
+        - childUserId
+        - status
+        - expiresAt
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        childUserId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - expired
+            - revoked
+        expiresAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Notification schemas
+    # ------------------------------------------------------------------
+
+    NotificationResponse:
+      type: object
+      required:
+        - id
+        - type
+        - title
+        - isRead
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+          nullable: true
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+        isRead:
+          type: boolean
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginatedNotifications:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    NotificationUnreadCount:
+      type: object
+      required:
+        - unreadCount
+      properties:
+        unreadCount:
+          type: integer
+          minimum: 0
+
+    MarkAllReadResponse:
+      type: object
+      required:
+        - markedCount
+      properties:
+        markedCount:
+          type: integer
+          minimum: 0
+
+    EmailPreferenceResponse:
+      type: object
+      required:
+        - emailOptOut
+      properties:
+        emailOptOut:
+          type: boolean
+
+    UpdateEmailPreferenceRequest:
+      type: object
+      required:
+        - emailOptOut
+      additionalProperties: false
+      properties:
+        emailOptOut:
+          type: boolean
+
+    # ------------------------------------------------------------------
+    # Messaging schemas
+    # ------------------------------------------------------------------
+
+    CreateConversationRequest:
+      type: object
+      required:
+        - recipientType
+        - recipientId
+      additionalProperties: false
+      properties:
+        recipientType:
+          type: string
+          enum:
+            - user
+            - organization
+        recipientId:
+          type: string
+          format: uuid
+        senderOrgId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            When set, the conversation is sent on behalf of an organization.
+            The authenticated user must be an admin or owner of the specified org.
+        message:
+          type: object
+          additionalProperties: false
+          properties:
+            body:
+              type: string
+              maxLength: 10000
+            assetIds:
+              type: array
+              items:
+                type: string
+                format: uuid
+              maxItems: 10
+
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+          maxLength: 10000
+        assetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 10
+
+    ConversationParticipant:
+      type: object
+      required:
+        - id
+        - type
+        - displayName
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - user
+            - organization
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    ConversationLastMessage:
+      type: object
+      required:
+        - id
+        - senderDisplayName
+        - hasAttachments
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        senderDisplayName:
+          type: string
+        bodyPreview:
+          type: string
+          nullable: true
+          description: First 200 characters of the message body, or null if the message was deleted.
+        hasAttachments:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ConversationListItem:
+      type: object
+      required:
+        - id
+        - type
+        - participant
+        - unreadCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - direct
+            - user_to_org
+            - org_to_org
+        participant:
+          $ref: '#/components/schemas/ConversationParticipant'
+        lastMessage:
+          $ref: '#/components/schemas/ConversationLastMessage'
+        unreadCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MessageAsset:
+      type: object
+      required:
+        - id
+        - fileName
+        - mimeType
+        - size
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: integer
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: Time-limited signed S3 URL. Null if the asset upload has not yet been confirmed.
+
+    MessageResponse:
+      type: object
+      required:
+        - id
+        - senderId
+        - senderDisplayName
+        - assets
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+        senderDisplayName:
+          type: string
+        senderAvatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        body:
+          type: string
+          nullable: true
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageAsset'
+        createdAt:
+          type: string
+          format: date-time
+
+    DeletedMessageStub:
+      type: object
+      required:
+        - id
+        - deleted
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        deleted:
+          type: boolean
+          enum:
+            - true
+          description: Always true. Discriminator field distinguishing a deleted stub from a full MessageResponse.
+        createdAt:
+          type: string
+          format: date-time
+
+    UnreadCountResponse:
+      type: object
+      required:
+        - unreadCount
+      properties:
+        unreadCount:
+          type: integer
+          minimum: 0
+
+    PaginatedConversations:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationListItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginatedMessages:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/MessageResponse'
+              - $ref: '#/components/schemas/DeletedMessageStub'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ------------------------------------------------------------------
+    # Team schemas
+    # ------------------------------------------------------------------
+
+    TeamOrganizationEmbed:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+
+    TeamSeasonResponse:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        startDate:
+          type: string
+          format: date
+          nullable: true
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - completed
+        createdAt:
+          type: string
+          format: date-time
+
+    TeamResponse:
+      type: object
+      required:
+        - id
+        - organization
+        - name
+        - slug
+        - followerCount
+        - isFollowing
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization:
+          $ref: '#/components/schemas/TeamOrganizationEmbed'
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        sport:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        currentSeason:
+          type: object
+          nullable: true
+          description: The team's current active season, or null if none.
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            startDate:
+              type: string
+              format: date
+              nullable: true
+            endDate:
+              type: string
+              format: date
+              nullable: true
+            status:
+              type: string
+              enum:
+                - active
+                - completed
+            createdAt:
+              type: string
+              format: date-time
+        followerCount:
+          type: integer
+          minimum: 0
+        isFollowing:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateTeamRequest:
+      type: object
+      required:
+        - name
+        - slug
+        - season
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        description:
+          type: string
+        sport:
+          type: string
+        level:
+          type: string
+        season:
+          type: object
+          required:
+            - name
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+            startDate:
+              type: string
+              format: date
+            endDate:
+              type: string
+              format: date
+
+    UpdateTeamRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        sport:
+          type: string
+        level:
+          type: string
+
+    PaginatedTeams:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    CreateTeamSeasonRequest:
+      type: object
+      required:
+        - name
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+
+    UpdateTeamSeasonRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+            - completed
+
+    PaginatedTeamSeasons:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamSeasonResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    TeamFollowResponse:
+      type: object
+      required:
+        - followerId
+        - teamId
+        - createdAt
+      properties:
+        followerId:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    TeamMemberResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - userId
+        - displayName
+        - teamId
+        - seasonId
+        - role
+        - position
+        - status
+        - joinedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        teamId:
+          type: string
+          format: uuid
+        seasonId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [owner, admin, member]
+        position:
+          type: string
+          enum: [player, coach, assistant_coach, manager, parent]
+        status:
+          type: string
+          enum: [pending, active]
+        joinedAt:
+          type: string
+          format: date-time
+
+    AddTeamMemberRequest:
+      type: object
+      required:
+        - userId
+        - seasonId
+        - position
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+          format: uuid
+        seasonId:
+          type: string
+          format: uuid
+        position:
+          type: string
+          enum: [player, coach, assistant_coach, manager, parent]
+        role:
+          type: string
+          enum: [owner, admin, member]
+          default: member
+
+    UpdateTeamMemberRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+        position:
+          type: string
+          enum: [player, coach, assistant_coach, manager, parent]
+
+    PaginatedTeamMembers:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamMemberResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ----------------------------------------------------------------
+    # Roster invite schemas (B3)
+    # ----------------------------------------------------------------
+
+    CreateInviteRequest:
+      type: object
+      required:
+        - email
+        - seasonId
+        - position
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        seasonId:
+          type: string
+          format: uuid
+        position:
+          type: string
+          enum: [player, coach, assistant_coach, manager, parent]
+        role:
+          type: string
+          enum: [owner, admin, member]
+          default: member
+
+    InviteResponse:
+      type: object
+      required:
+        - id
+        - position
+        - role
+        - status
+        - invitedBy
+        - seasonId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        position:
+          type: string
+          enum: [player, coach, assistant_coach, manager, parent]
+          nullable: true
+        role:
+          type: string
+          enum: [owner, admin, member]
+        status:
+          type: string
+          enum: [pending, accepted, declined, expired, withdrawn, resolved]
+        invitedBy:
+          type: object
+          required:
+            - id
+            - displayName
+          properties:
+            id:
+              type: string
+              format: uuid
+            displayName:
+              type: string
+        seasonId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    InviteCreateResolvedResponse:
+      type: object
+      required:
+        - id
+        - status
+        - userId
+        - membershipId
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [resolved]
+        userId:
+          type: string
+          format: uuid
+        membershipId:
+          type: string
+          format: uuid
+
+    InviteCreatePendingResponse:
+      type: object
+      required:
+        - id
+        - status
+        - token
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending]
+        token:
+          type: string
+
+    InviteStatusResponse:
+      type: object
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, declined, expired, withdrawn, resolved]
+
+    PaginatedInvitesResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginationMeta:
+      type: object
+      required:
+        - hasMore
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+        hasMore:
+          type: boolean
+        totalCount:
+          type: integer
+          nullable: true
+
+    SearchUserResult:
+      type: object
+      required: [entityType, id, displayName]
+      properties:
+        entityType:
+          type: string
+          enum: [user]
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+
+    OrgSearchResult:
+      type: object
+      required: [entityType, id, name, slug]
+      properties:
+        entityType:
+          type: string
+          enum: [organization]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+
+    TeamSearchResult:
+      type: object
+      required: [entityType, id, name, slug, organizationName, organizationSlug]
+      properties:
+        entityType:
+          type: string
+          enum: [team]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        organizationName:
+          type: string
+        organizationSlug:
+          type: string
+
+    SearchSectionPagination:
+      type: object
+      required: [nextCursor, hasMore]
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+        hasMore:
+          type: boolean
+
+    UserSearchSection:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchUserResult'
+        pagination:
+          $ref: '#/components/schemas/SearchSectionPagination'
+
+    OrgSearchSection:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgSearchResult'
+        pagination:
+          $ref: '#/components/schemas/SearchSectionPagination'
+
+    TeamSearchSection:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamSearchResult'
+        pagination:
+          $ref: '#/components/schemas/SearchSectionPagination'
+
+  responses:
+    BadRequest:
+      description: Validation error — malformed body, invalid params, or constraint violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: No valid authentication session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated but not authorized for this action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntity:
+      description: Request payload is syntactically valid but semantically incorrect
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource already exists (e.g., duplicate slug)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotImplemented:
+      description: Endpoint is defined but not yet implemented
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Unhandled server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    clerkSession:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk-issued session token. Enforced by clerkMiddleware before the OpenAPI validator runs.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PostId:
+      name: postId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MemberUserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 500
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 50
+    FollowLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    IncludeTotal:
+      name: includeTotal
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: false
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageId:
+      name: messageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PhoneId:
+      name: phoneId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AddressId:
+      name: addressId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SeasonId:
+      name: seasonId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MemberId:
+      name: memberId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InviteId:
+      name: inviteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InviteToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string

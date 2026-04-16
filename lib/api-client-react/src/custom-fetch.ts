@@ -358,6 +358,13 @@ export async function customFetch<T = unknown>(
     }
   }
 
+  // Stub Clerk session for the mock server. The Prism mock validates the
+  // presence of an Authorization header on protected endpoints but does not
+  // verify the token's contents.
+  if (!headers.has("authorization")) {
+    headers.set("authorization", "Bearer stub-clerk-session-token");
+  }
+
   const requestInfo = { method, url: resolveUrl(input) };
 
   const response = await fetch(input, { ...init, method, headers });

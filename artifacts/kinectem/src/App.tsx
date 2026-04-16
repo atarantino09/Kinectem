@@ -9,10 +9,8 @@ import OrganizationsListPage from "@/pages/OrganizationsListPage";
 import OrganizationPage from "@/pages/OrganizationPage";
 import TeamPage from "@/pages/TeamPage";
 import UserProfilePage from "@/pages/UserProfilePage";
-import ArticlePage from "@/pages/ArticlePage";
-import HighlightPage from "@/pages/HighlightPage";
-import NewArticlePage from "@/pages/NewArticlePage";
-import NewHighlightPage from "@/pages/NewHighlightPage";
+import PostPage from "@/pages/PostPage";
+import NewPostPage from "@/pages/NewPostPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,8 +25,7 @@ function Router() {
   return (
     <Switch>
       {/* Fullscreen creators (no layout) */}
-      <Route path="/articles/new" component={NewArticlePage} />
-      <Route path="/highlights/new" component={NewHighlightPage} />
+      <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}
       <Route>
@@ -39,8 +36,7 @@ function Router() {
             <Route path="/organizations/:orgId" component={OrganizationPage} />
             <Route path="/teams/:teamId" component={TeamPage} />
             <Route path="/users/:userId" component={UserProfilePage} />
-            <Route path="/articles/:articleId" component={ArticlePage} />
-            <Route path="/highlights/:highlightId" component={HighlightPage} />
+            <Route path="/posts/:postId" component={PostPage} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

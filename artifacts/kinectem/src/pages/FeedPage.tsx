@@ -1,22 +1,37 @@
-import { useGetFeed, useListOrganizations, useGetCurrentUser } from "@workspace/api-client-react";
 import { Link } from "wouter";
+import {
+  useGetUserById,
+  useListOrganizations,
+  useListOrgPosts,
+  useListUserOrganizations,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Building2, Trophy, MapPin } from "lucide-react";
-import { FeedItemCard } from "@/components/FeedItemCard";
+import { Building2 } from "lucide-react";
+import { PostCard } from "@/components/PostCard";
 import { getInitials } from "@/lib/format";
+import { STUB_USER_ID } from "@/lib/me";
 
 export default function FeedPage() {
-  const { data: feed, isLoading } = useGetFeed();
+  const { data: me } = useGetUserById(STUB_USER_ID);
+  const { data: myOrgs } = useListUserOrganizations(STUB_USER_ID);
   const { data: orgs } = useListOrganizations();
-  const { data: me } = useGetCurrentUser();
+
+  const featuredOrgId = orgs?.data?.[0]?.id;
+  const { data: posts, isLoading: postsLoading } = useListOrgPosts(
+    featuredOrgId ?? "",
+    undefined,
+    { query: { enabled: !!featuredOrgId } as never },
+  );
+
+  const displayName = me ? `${me.firstName} ${me.lastName}` : "";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_300px] gap-6">
-      {/* Left sidebar: profile card */}
+      {/* Left sidebar */}
       <aside className="hidden lg:block space-y-4">
         {me && (
           <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
@@ -26,24 +41,24 @@ export default function FeedPage() {
                 <Avatar className="w-16 h-16 border-4 border-card cursor-pointer">
                   {me.avatarUrl && <AvatarImage src={me.avatarUrl} />}
                   <AvatarFallback className="bg-slate-100 text-slate-800 font-bold">
-                    {getInitials(me.name)}
+                    {getInitials(displayName)}
                   </AvatarFallback>
                 </Avatar>
               </Link>
-              <h3 className="font-black text-base tracking-tight mt-3">{me.name}</h3>
-              {me.position && (
-                <p className="text-xs font-bold text-primary uppercase tracking-wider mt-0.5">
-                  {me.jerseyNumber ? `#${me.jerseyNumber} • ` : ""}
-                  {me.position}
+              <h3 className="font-black text-base tracking-tight mt-3">
+                {displayName}
+              </h3>
+              {me.bio && (
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed line-clamp-3">
+                  {me.bio}
                 </p>
               )}
-              {me.location && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2 font-medium">
-                  <MapPin className="w-3 h-3" /> {me.location}
-                </div>
-              )}
               <Link href={`/users/${me.id}`}>
-                <Button variant="outline" size="sm" className="w-full mt-3 font-semibold">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-4 font-bold"
+                >
                   View Profile
                 </Button>
               </Link>
@@ -51,95 +66,99 @@ export default function FeedPage() {
           </Card>
         )}
 
-        <Card className="rounded-xl border border-border shadow-sm">
-          <CardContent className="p-4">
-            <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">
-              Quick Actions
-            </h4>
-            <div className="space-y-2">
-              <Link href="/articles/new">
-                <Button variant="ghost" size="sm" className="w-full justify-start font-semibold">
-                  <Plus className="w-4 h-4 mr-2" /> New Recap
-                </Button>
-              </Link>
-              <Link href="/highlights/new">
-                <Button variant="ghost" size="sm" className="w-full justify-start font-semibold">
-                  <Plus className="w-4 h-4 mr-2" /> New Highlight
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </aside>
-
-      {/* Center feed */}
-      <section className="space-y-4 min-w-0">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-black tracking-tight">Your Feed</h1>
-          <Badge variant="outline" className="font-bold">
-            {feed?.length ?? 0} posts
-          </Badge>
-        </div>
-
-        {isLoading && (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-64 rounded-xl" />
-            ))}
-          </div>
-        )}
-
-        {!isLoading && feed && feed.length === 0 && (
-          <Card className="rounded-xl border border-border">
-            <CardContent className="p-10 text-center">
-              <Trophy className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <h3 className="font-bold">No posts yet</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Follow teams or organizations to see activity here.
-              </p>
+        {myOrgs && myOrgs.data.length > 0 && (
+          <Card className="rounded-xl border border-border shadow-sm">
+            <CardContent className="p-4">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+                Your Organizations
+              </h4>
+              <div className="space-y-2">
+                {myOrgs.data.slice(0, 4).map((org) => (
+                  <Link key={org.id} href={`/organizations/${org.id}`}>
+                    <div className="flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer">
+                      <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="truncate">{org.name}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
+      </aside>
 
-        {feed?.map((item) => (
-          <FeedItemCard key={item.id} item={item} />
-        ))}
-      </section>
+      {/* Center feed */}
+      <div className="space-y-4">
+        <h2 className="text-2xl font-black tracking-tight">Latest Activity</h2>
+        {!featuredOrgId ? (
+          orgs ? (
+            <Card className="rounded-xl border border-border">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                No posts yet. Follow an organization to see updates here.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Skeleton className="h-48 rounded-xl" />
+              <Skeleton className="h-48 rounded-xl" />
+            </>
+          )
+        ) : postsLoading ? (
+          <>
+            <Skeleton className="h-48 rounded-xl" />
+            <Skeleton className="h-48 rounded-xl" />
+          </>
+        ) : !posts || posts.data.length === 0 ? (
+          <Card className="rounded-xl border border-border">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              No posts yet.
+            </CardContent>
+          </Card>
+        ) : (
+          posts.data.map((post) => <PostCard key={post.id} post={post} />)
+        )}
+      </div>
 
       {/* Right sidebar: orgs */}
       <aside className="hidden lg:block space-y-4">
-        <Card className="rounded-xl border border-border shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Organizations
+        {orgs && (
+          <Card className="rounded-xl border border-border shadow-sm">
+            <CardContent className="p-4">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+                Featured Organizations
               </h4>
-              <Building2 className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <div className="space-y-3">
-              {orgs?.slice(0, 6).map((org) => (
-                <Link key={org.id} href={`/organizations/${org.id}`}>
-                  <div className="flex items-center gap-3 cursor-pointer hover:bg-muted/60 -mx-2 px-2 py-2 rounded-lg">
-                    <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shrink-0 text-primary font-black text-xs tracking-tighter">
-                      {getInitials(org.name)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold truncate">{org.name}</p>
-                      {org.sport && (
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                          {org.sport}
+              <div className="space-y-3">
+                {orgs.data.slice(0, 5).map((org) => (
+                  <Link key={org.id} href={`/organizations/${org.id}`}>
+                    <div className="flex items-start gap-3 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded">
+                      <div className="w-9 h-9 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
+                        {getInitials(org.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm leading-tight truncate">
+                          {org.name}
                         </p>
-                      )}
+                        {org.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                            {org.description}
+                          </p>
+                        )}
+                        {org.isMember && (
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 text-[10px] font-bold"
+                          >
+                            Member
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
-              {!orgs?.length && (
-                <p className="text-xs text-muted-foreground">No organizations yet.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </aside>
     </div>
   );

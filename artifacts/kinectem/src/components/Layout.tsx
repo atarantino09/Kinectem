@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useGetCurrentUser } from "@workspace/api-client-react";
+import { useGetUserById } from "@workspace/api-client-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,18 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-export function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
+import { STUB_USER_ID } from "@/lib/me";
+import { getInitials } from "@/lib/format";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { data: currentUser } = useGetCurrentUser();
+  const { data: currentUser } = useGetUserById(STUB_USER_ID);
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
 
@@ -31,6 +24,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     e.preventDefault();
     if (query.trim()) setLocation(`/?q=${encodeURIComponent(query.trim())}`);
   };
+
+  const displayName = currentUser
+    ? `${currentUser.firstName} ${currentUser.lastName}`
+    : "";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -77,10 +74,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onSelect={() => setLocation("/articles/new")}>
+              <DropdownMenuItem onSelect={() => setLocation("/posts/new?type=long")}>
                 <Trophy className="w-4 h-4 mr-2" /> Game Recap
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setLocation("/highlights/new")}>
+              <DropdownMenuItem onSelect={() => setLocation("/posts/new?type=short")}>
                 <Plus className="w-4 h-4 mr-2" /> Highlight Clip
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -95,7 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Avatar className="w-9 h-9 border border-border hover:ring-2 hover:ring-primary transition-all">
                 {currentUser.avatarUrl && <AvatarImage src={currentUser.avatarUrl} />}
                 <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-                  {getInitials(currentUser.name)}
+                  {getInitials(displayName)}
                 </AvatarFallback>
               </Avatar>
             </Link>

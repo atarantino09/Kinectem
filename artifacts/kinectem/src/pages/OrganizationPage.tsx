@@ -1,66 +1,62 @@
 import { useParams, Link } from "wouter";
 import {
-  useGetOrganization,
-  useGetOrganizationActivity,
+  useGetOrganizationById,
+  useListOrgTeams,
+  useListOrgPosts,
+  useListMembers,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Users, ChevronRight, Building2 } from "lucide-react";
-import { FeedItemCard } from "@/components/FeedItemCard";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Building2, Users, ChevronRight } from "lucide-react";
+import { PostCard } from "@/components/PostCard";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params.orgId;
-  const { data, isLoading } = useGetOrganization(orgId);
-  const { data: activity } = useGetOrganizationActivity(orgId);
+  const { data: organization, isLoading } = useGetOrganizationById(orgId);
+  const { data: teamsResp } = useListOrgTeams(orgId);
+  const { data: postsResp } = useListOrgPosts(orgId);
+  const { data: membersResp } = useListMembers(orgId);
 
-  if (isLoading || !data) {
+  if (isLoading || !organization) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Skeleton className="h-48 rounded-xl" />
-        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
 
-  const { organization, teams } = data;
+  const teams = teamsResp?.data ?? [];
+  const posts = postsResp?.data ?? [];
+  const members = membersResp?.data ?? [];
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="rounded-xl overflow-hidden border border-border bg-card shadow-sm">
-        <div className="h-40 brand-gradient-dark relative">
-          {organization.bannerUrl && (
-            <img src={organization.bannerUrl} alt="" className="w-full h-full object-cover opacity-80" />
-          )}
-        </div>
+    <div className="space-y-6">
+      {/* Hero */}
+      <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
+        <div className="h-32 brand-gradient relative" />
         <div className="px-6 pb-6 -mt-10 flex items-end justify-between gap-4 flex-wrap">
           <div className="flex items-end gap-4">
             <div className="w-20 h-20 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center shrink-0 overflow-hidden">
-              {organization.logoUrl ? (
-                <img src={organization.logoUrl} alt={organization.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-2xl font-black text-primary tracking-tighter">
-                  {getInitials(organization.name)}
-                </div>
-              )}
+              <div className="text-2xl font-black text-primary tracking-tighter">
+                {getInitials(organization.name)}
+              </div>
             </div>
             <div className="pb-2">
-              <h1 className="text-3xl font-black tracking-tight leading-none">{organization.name}</h1>
+              <h1 className="text-3xl font-black tracking-tight leading-none">
+                {organization.name}
+              </h1>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium">
-                {organization.location && (
-                  <>
-                    <MapPin className="w-3.5 h-3.5" /> {organization.location}
-                  </>
-                )}
-                {organization.followerCount !== undefined && (
+                <span className="font-bold text-foreground">@{organization.slug}</span>
+                {organization.role && (
                   <>
                     <span className="opacity-50">•</span>
-                    <span className="font-bold text-foreground">
-                      {organization.followerCount.toLocaleString()} FOLLOWERS
+                    <span className="font-bold uppercase tracking-wider">
+                      {organization.role}
                     </span>
                   </>
                 )}
@@ -68,7 +64,7 @@ export default function OrganizationPage() {
             </div>
           </div>
           <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6">
-            Follow
+            {organization.isMember ? "Following" : "Follow"}
           </Button>
         </div>
         {organization.description && (
@@ -76,10 +72,15 @@ export default function OrganizationPage() {
             <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
               {organization.description}
             </p>
-            {organization.sport && (
-              <Badge variant="secondary" className="mt-3 font-semibold">
-                {organization.sport}
-              </Badge>
+            {organization.website && (
+              <a
+                href={organization.website}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-bold text-primary mt-2 inline-block hover:underline"
+              >
+                {organization.website}
+              </a>
             )}
           </div>
         )}
@@ -88,8 +89,10 @@ export default function OrganizationPage() {
       {/* Teams */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-black tracking-tight">Active Teams</h2>
-          <span className="text-sm font-bold text-muted-foreground">{teams.length} teams</span>
+          <h2 className="text-xl font-black tracking-tight">Teams</h2>
+          <span className="text-sm font-bold text-muted-foreground">
+            {teams.length} teams
+          </span>
         </div>
         {teams.length === 0 ? (
           <Card className="rounded-xl border border-border">
@@ -105,15 +108,14 @@ export default function OrganizationPage() {
                 <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start mb-2">
-                      {team.season && (
+                      {team.sport && (
                         <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider">
-                          {team.season}
+                          {team.sport}
                         </Badge>
                       )}
-                      {(team.wins !== undefined || team.losses !== undefined) && (
+                      {team.level && (
                         <span className="text-xs font-bold text-muted-foreground">
-                          {team.wins ?? 0}-{team.losses ?? 0}
-                          {team.ties ? `-${team.ties}` : ""}
+                          {team.level}
                         </span>
                       )}
                     </div>
@@ -122,7 +124,8 @@ export default function OrganizationPage() {
                     </h3>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                        <Users className="w-3.5 h-3.5" /> {team.playerCount ?? 0} Players
+                        <Users className="w-3.5 h-3.5" />{" "}
+                        {team.followerCount ?? 0} Followers
                       </div>
                       <ChevronRight className="w-4 h-4 text-primary" />
                     </div>
@@ -134,16 +137,46 @@ export default function OrganizationPage() {
         )}
       </section>
 
-      {/* Recent activity */}
+      {/* Members preview */}
+      {members.length > 0 && (
+        <section>
+          <h2 className="text-xl font-black tracking-tight mb-4">Members</h2>
+          <Card className="rounded-xl border border-border">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap gap-3">
+                {members.slice(0, 12).map((m) => (
+                  <Link key={m.userId} href={`/users/${m.userId}`}>
+                    <div className="flex items-center gap-2 bg-muted/50 hover:bg-muted px-3 py-2 rounded-lg cursor-pointer">
+                      <div className="w-7 h-7 rounded-full bg-slate-900 text-primary-foreground flex items-center justify-center text-[10px] font-bold">
+                        {getInitials(m.displayName)}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold leading-tight">
+                          {m.displayName}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
+                          {m.role}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {/* Posts */}
       <section>
-        <h2 className="text-xl font-black tracking-tight mb-4">Recent Activity</h2>
+        <h2 className="text-xl font-black tracking-tight mb-4">Recent Posts</h2>
         <div className="space-y-3">
-          {activity && activity.length > 0 ? (
-            activity.map((item) => <FeedItemCard key={item.id} item={item} />)
+          {posts.length > 0 ? (
+            posts.map((p) => <PostCard key={p.id} post={p} />)
           ) : (
             <Card className="rounded-xl border border-border">
               <CardContent className="p-6 text-center text-sm text-muted-foreground">
-                No recent activity.
+                No posts yet.
               </CardContent>
             </Card>
           )}
