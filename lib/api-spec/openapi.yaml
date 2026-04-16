@@ -3,34 +3,599 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Kinectem API - social platform for youth athletes
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: Athlete and coach profiles
+  - name: organizations
+    description: Organization pages
+  - name: teams
+    description: Team pages and rosters
+  - name: articles
+    description: Game recap articles
+  - name: highlights
+    description: Video highlights
+  - name: feed
+    description: Home feed
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
-      summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
           content:
             application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /me:
+    get:
+      operationId: getCurrentUser
+      tags: [users]
+      summary: Get the currently signed-in demo user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+
+  /users/{userId}:
+    get:
+      operationId: getUser
+      tags: [users]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserProfile" }
+
+  /users/{userId}/tagged-content:
+    get:
+      operationId: getUserTaggedContent
+      tags: [users]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaggedContent" }
+
+  /organizations:
+    get:
+      operationId: listOrganizations
+      tags: [organizations]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Organization" }
+    post:
+      operationId: createOrganization
+      tags: [organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewOrganization" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+
+  /organizations/{orgId}:
+    get:
+      operationId: getOrganization
+      tags: [organizations]
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationDetail" }
+
+  /organizations/{orgId}/activity:
+    get:
+      operationId: getOrganizationActivity
+      tags: [organizations]
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FeedItem" }
+
+  /teams:
+    post:
+      operationId: createTeam
+      tags: [teams]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewTeam" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Team" }
+
+  /teams/{teamId}:
+    get:
+      operationId: getTeam
+      tags: [teams]
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamDetail" }
+
+  /teams/{teamId}/roster:
+    get:
+      operationId: getTeamRoster
+      tags: [teams]
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RosterEntry" }
+    post:
+      operationId: addRosterEntry
+      tags: [teams]
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewRosterEntry" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RosterEntry" }
+
+  /teams/{teamId}/articles:
+    get:
+      operationId: getTeamArticles
+      tags: [teams]
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Article" }
+
+  /teams/{teamId}/highlights:
+    get:
+      operationId: getTeamHighlights
+      tags: [teams]
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Highlight" }
+
+  /articles:
+    post:
+      operationId: createArticle
+      tags: [articles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewArticle" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+
+  /articles/{articleId}:
+    get:
+      operationId: getArticle
+      tags: [articles]
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleDetail" }
+
+  /highlights:
+    post:
+      operationId: createHighlight
+      tags: [highlights]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewHighlight" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Highlight" }
+
+  /highlights/{highlightId}:
+    get:
+      operationId: getHighlight
+      tags: [highlights]
+      parameters:
+        - name: highlightId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HighlightDetail" }
+
+  /feed:
+    get:
+      operationId: getFeed
+      tags: [feed]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FeedItem" }
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
 
+    User:
+      type: object
+      required: [id, name, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role:
+          type: string
+          enum: [athlete, coach, admin]
+        sport: { type: string }
+        position: { type: string }
+        jerseyNumber: { type: integer }
+        grade: { type: string }
+        location: { type: string }
+        avatarUrl: { type: string }
+        bio: { type: string }
+
+    UserStats:
+      type: object
+      properties:
+        gamesPlayed: { type: integer }
+        primaryStatLabel: { type: string }
+        primaryStatValue: { type: string }
+        secondaryStatLabel: { type: string }
+        secondaryStatValue: { type: string }
+        tertiaryStatLabel: { type: string }
+        tertiaryStatValue: { type: string }
+
+    UserProfile:
+      type: object
+      required: [user, teams, stats]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        teams:
+          type: array
+          items: { $ref: "#/components/schemas/TeamSummary" }
+        stats: { $ref: "#/components/schemas/UserStats" }
+
+    TaggedContent:
+      type: object
+      required: [highlights, articles]
+      properties:
+        highlights:
+          type: array
+          items: { $ref: "#/components/schemas/Highlight" }
+        articles:
+          type: array
+          items: { $ref: "#/components/schemas/Article" }
+
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sport: { type: string }
+        location: { type: string }
+        description: { type: string }
+        logoUrl: { type: string }
+        bannerUrl: { type: string }
+        followerCount: { type: integer }
+
+    OrganizationDetail:
+      type: object
+      required: [organization, teams]
+      properties:
+        organization: { $ref: "#/components/schemas/Organization" }
+        teams:
+          type: array
+          items: { $ref: "#/components/schemas/TeamSummary" }
+
+    NewOrganization:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        sport: { type: string }
+        location: { type: string }
+        description: { type: string }
+
+    Team:
+      type: object
+      required: [id, name, organizationId]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        organizationId: { type: string }
+        sport: { type: string }
+        season: { type: string }
+        wins: { type: integer }
+        losses: { type: integer }
+        ties: { type: integer }
+
+    TeamSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        organizationId: { type: string }
+        organizationName: { type: string }
+        sport: { type: string }
+        season: { type: string }
+        wins: { type: integer }
+        losses: { type: integer }
+        ties: { type: integer }
+        playerCount: { type: integer }
+
+    TeamDetail:
+      type: object
+      required: [team, organization, roster]
+      properties:
+        team: { $ref: "#/components/schemas/Team" }
+        organization: { $ref: "#/components/schemas/Organization" }
+        roster:
+          type: array
+          items: { $ref: "#/components/schemas/RosterEntry" }
+
+    NewTeam:
+      type: object
+      required: [name, organizationId]
+      properties:
+        name: { type: string }
+        organizationId: { type: string }
+        sport: { type: string }
+        season: { type: string }
+
+    RosterEntry:
+      type: object
+      required: [id, teamId, user, role]
+      properties:
+        id: { type: string }
+        teamId: { type: string }
+        user: { $ref: "#/components/schemas/User" }
+        role:
+          type: string
+          enum: [player, coach]
+        position: { type: string }
+        jerseyNumber: { type: integer }
+        grade: { type: string }
+
+    NewRosterEntry:
+      type: object
+      required: [userId, role]
+      properties:
+        userId: { type: string }
+        role:
+          type: string
+          enum: [player, coach]
+        position: { type: string }
+        jerseyNumber: { type: integer }
+        grade: { type: string }
+
+    Article:
+      type: object
+      required: [id, title, teamId, createdAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        teamId: { type: string }
+        teamName: { type: string }
+        opponentName: { type: string }
+        gameDate: { type: string, format: date-time }
+        gameScore: { type: string }
+        snippet: { type: string }
+        body: { type: string }
+        coverImageUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+        taggedUsers:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+
+    ArticleDetail:
+      type: object
+      required: [article, highlights]
+      properties:
+        article: { $ref: "#/components/schemas/Article" }
+        highlights:
+          type: array
+          items: { $ref: "#/components/schemas/Highlight" }
+
+    NewArticle:
+      type: object
+      required: [title, teamId, body]
+      properties:
+        title: { type: string }
+        teamId: { type: string }
+        opponentName: { type: string }
+        gameDate: { type: string, format: date-time }
+        gameScore: { type: string }
+        snippet: { type: string }
+        body: { type: string }
+        coverImageUrl: { type: string }
+        taggedUserIds:
+          type: array
+          items: { type: string }
+        highlightIds:
+          type: array
+          items: { type: string }
+
+    Highlight:
+      type: object
+      required: [id, title, teamId]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        teamId: { type: string }
+        teamName: { type: string }
+        articleId: { type: string }
+        articleTitle: { type: string }
+        thumbnailUrl: { type: string }
+        videoUrl: { type: string }
+        durationSeconds: { type: integer }
+        createdAt: { type: string, format: date-time }
+        taggedUsers:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+
+    HighlightDetail:
+      type: object
+      required: [highlight]
+      properties:
+        highlight: { $ref: "#/components/schemas/Highlight" }
+        article: { $ref: "#/components/schemas/Article" }
+
+    NewHighlight:
+      type: object
+      required: [title, teamId]
+      properties:
+        title: { type: string }
+        teamId: { type: string }
+        articleId: { type: string }
+        thumbnailUrl: { type: string }
+        videoUrl: { type: string }
+        durationSeconds: { type: integer }
+        taggedUserIds:
+          type: array
+          items: { type: string }
+
+    FeedItem:
+      type: object
+      required: [id, kind, createdAt]
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum: [article, highlight, roster, team]
+        createdAt: { type: string, format: date-time }
+        article: { $ref: "#/components/schemas/Article" }
+        highlight: { $ref: "#/components/schemas/Highlight" }
+        team: { $ref: "#/components/schemas/Team" }
+        organization: { $ref: "#/components/schemas/Organization" }
+        message: { type: string }
