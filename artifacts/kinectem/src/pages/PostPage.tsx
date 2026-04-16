@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Play, FileText } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
+import { PostInteractions } from "@/components/PostInteractions";
 
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
@@ -111,6 +112,8 @@ export default function PostPage() {
           ))}
         </div>
       )}
+
+      <PostInteractions post={post} />
     </article>
   );
 }

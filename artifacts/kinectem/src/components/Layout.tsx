@@ -21,7 +21,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) setLocation(`/?q=${encodeURIComponent(query.trim())}`);
+    if (query.trim()) setLocation(`/search?q=${encodeURIComponent(query.trim())}`);
   };
 
   const displayName = currentUser

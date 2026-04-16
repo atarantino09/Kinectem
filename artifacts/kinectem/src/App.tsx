@@ -11,6 +11,7 @@ import TeamPage from "@/pages/TeamPage";
 import UserProfilePage from "@/pages/UserProfilePage";
 import PostPage from "@/pages/PostPage";
 import NewPostPage from "@/pages/NewPostPage";
+import SearchPage from "@/pages/SearchPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,7 @@ function Router() {
         <Layout>
           <Switch>
             <Route path="/" component={FeedPage} />
+            <Route path="/search" component={SearchPage} />
             <Route path="/organizations" component={OrganizationsListPage} />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
             <Route path="/teams/:teamId" component={TeamPage} />
