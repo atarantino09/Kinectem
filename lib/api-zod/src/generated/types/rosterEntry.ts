@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RosterEntryRole } from "./rosterEntryRole";
+import type { RosterEntryStatus } from "./rosterEntryStatus";
 import type { User } from "./user";
 
 export interface RosterEntry {
@@ -13,6 +14,7 @@ export interface RosterEntry {
   teamId: string;
   user: User;
   role: RosterEntryRole;
+  status: RosterEntryStatus;
   position?: string;
   jerseyNumber?: number;
   grade?: string;

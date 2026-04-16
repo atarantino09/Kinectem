@@ -11,13 +11,27 @@ export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
 
-/**
- * @summary Get the currently signed-in demo user
- */
-export const GetCurrentUserResponse = zod.object({
+export const SignupBody = zod.object({
+  name: zod.string(),
+  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  email: zod.string().optional(),
+  sport: zod.string().optional(),
+  position: zod.string().optional(),
+  grade: zod.string().optional(),
+  location: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+  parentId: zod.string().optional(),
+});
+
+export const LoginBody = zod.object({
+  userId: zod.string(),
+});
+
+export const LoginResponse = zod.object({
   id: zod.string(),
   name: zod.string(),
-  role: zod.enum(["athlete", "coach", "admin"]),
+  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  email: zod.string().optional(),
   sport: zod.string().optional(),
   position: zod.string().optional(),
   jerseyNumber: zod.number().optional(),
@@ -25,7 +39,256 @@ export const GetCurrentUserResponse = zod.object({
   location: zod.string().optional(),
   avatarUrl: zod.string().optional(),
   bio: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+  parentId: zod.string().optional(),
+  requireTagConsent: zod.boolean().optional(),
 });
+
+export const GetCurrentUserResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  email: zod.string().optional(),
+  sport: zod.string().optional(),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+  location: zod.string().optional(),
+  avatarUrl: zod.string().optional(),
+  bio: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+  parentId: zod.string().optional(),
+  requireTagConsent: zod.boolean().optional(),
+});
+
+export const GetMyTagsResponse = zod.object({
+  articleTags: zod.array(
+    zod.object({
+      tagId: zod.string(),
+      article: zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        teamId: zod.string(),
+        teamName: zod.string().optional(),
+        opponentName: zod.string().optional(),
+        gameDate: zod.coerce.date().optional(),
+        gameScore: zod.string().optional(),
+        snippet: zod.string().optional(),
+        body: zod.string().optional(),
+        coverImageUrl: zod.string().optional(),
+        status: zod.enum(["draft", "published"]),
+        publishedAt: zod.coerce.date().optional(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date().optional(),
+        author: zod
+          .object({
+            id: zod.string(),
+            name: zod.string(),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
+            sport: zod.string().optional(),
+            position: zod.string().optional(),
+            jerseyNumber: zod.number().optional(),
+            grade: zod.string().optional(),
+            location: zod.string().optional(),
+            avatarUrl: zod.string().optional(),
+            bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
+          })
+          .optional(),
+        coAuthors: zod
+          .array(
+            zod.object({
+              id: zod.string(),
+              name: zod.string(),
+              role: zod.enum(["athlete", "coach", "admin", "parent"]),
+              email: zod.string().optional(),
+              sport: zod.string().optional(),
+              position: zod.string().optional(),
+              jerseyNumber: zod.number().optional(),
+              grade: zod.string().optional(),
+              location: zod.string().optional(),
+              avatarUrl: zod.string().optional(),
+              bio: zod.string().optional(),
+              dateOfBirth: zod.coerce.date().optional(),
+              parentId: zod.string().optional(),
+              requireTagConsent: zod.boolean().optional(),
+            }),
+          )
+          .optional(),
+        taggedUsers: zod
+          .array(
+            zod.object({
+              id: zod.string(),
+              name: zod.string(),
+              role: zod.enum(["athlete", "coach", "admin", "parent"]),
+              email: zod.string().optional(),
+              sport: zod.string().optional(),
+              position: zod.string().optional(),
+              jerseyNumber: zod.number().optional(),
+              grade: zod.string().optional(),
+              location: zod.string().optional(),
+              avatarUrl: zod.string().optional(),
+              bio: zod.string().optional(),
+              dateOfBirth: zod.coerce.date().optional(),
+              parentId: zod.string().optional(),
+              requireTagConsent: zod.boolean().optional(),
+            }),
+          )
+          .optional(),
+      }),
+    }),
+  ),
+  highlightTags: zod.array(
+    zod.object({
+      tagId: zod.string(),
+      highlight: zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        teamId: zod.string(),
+        teamName: zod.string().optional(),
+        articleId: zod.string().optional(),
+        articleTitle: zod.string().optional(),
+        thumbnailUrl: zod.string().optional(),
+        videoUrl: zod.string().optional(),
+        durationSeconds: zod.number().optional(),
+        createdAt: zod.coerce.date().optional(),
+        taggedUsers: zod
+          .array(
+            zod.object({
+              id: zod.string(),
+              name: zod.string(),
+              role: zod.enum(["athlete", "coach", "admin", "parent"]),
+              email: zod.string().optional(),
+              sport: zod.string().optional(),
+              position: zod.string().optional(),
+              jerseyNumber: zod.number().optional(),
+              grade: zod.string().optional(),
+              location: zod.string().optional(),
+              avatarUrl: zod.string().optional(),
+              bio: zod.string().optional(),
+              dateOfBirth: zod.coerce.date().optional(),
+              parentId: zod.string().optional(),
+              requireTagConsent: zod.boolean().optional(),
+            }),
+          )
+          .optional(),
+      }),
+    }),
+  ),
+});
+
+export const GetMyNotificationsResponseItem = zod.object({
+  id: zod.string(),
+  kind: zod.string(),
+  message: zod.string(),
+  link: zod.string().optional(),
+  read: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const GetMyNotificationsResponse = zod.array(
+  GetMyNotificationsResponseItem,
+);
+
+export const MarkNotificationReadParams = zod.object({
+  notificationId: zod.coerce.string(),
+});
+
+export const GetMyDraftsResponseItem = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  teamId: zod.string(),
+  teamName: zod.string().optional(),
+  opponentName: zod.string().optional(),
+  gameDate: zod.coerce.date().optional(),
+  gameScore: zod.string().optional(),
+  snippet: zod.string().optional(),
+  body: zod.string().optional(),
+  coverImageUrl: zod.string().optional(),
+  status: zod.enum(["draft", "published"]),
+  publishedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+  author: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      role: zod.enum(["athlete", "coach", "admin", "parent"]),
+      email: zod.string().optional(),
+      sport: zod.string().optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
+      grade: zod.string().optional(),
+      location: zod.string().optional(),
+      avatarUrl: zod.string().optional(),
+      bio: zod.string().optional(),
+      dateOfBirth: zod.coerce.date().optional(),
+      parentId: zod.string().optional(),
+      requireTagConsent: zod.boolean().optional(),
+    })
+    .optional(),
+  coAuthors: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+export const GetMyDraftsResponse = zod.array(GetMyDraftsResponseItem);
+
+export const GetMyChildrenResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  email: zod.string().optional(),
+  sport: zod.string().optional(),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+  location: zod.string().optional(),
+  avatarUrl: zod.string().optional(),
+  bio: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+  parentId: zod.string().optional(),
+  requireTagConsent: zod.boolean().optional(),
+});
+export const GetMyChildrenResponse = zod.array(GetMyChildrenResponseItem);
 
 export const ListUsersQueryParams = zod.object({
   q: zod.coerce.string().optional(),
@@ -34,7 +297,8 @@ export const ListUsersQueryParams = zod.object({
 export const ListUsersResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
-  role: zod.enum(["athlete", "coach", "admin"]),
+  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  email: zod.string().optional(),
   sport: zod.string().optional(),
   position: zod.string().optional(),
   jerseyNumber: zod.number().optional(),
@@ -42,6 +306,9 @@ export const ListUsersResponseItem = zod.object({
   location: zod.string().optional(),
   avatarUrl: zod.string().optional(),
   bio: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+  parentId: zod.string().optional(),
+  requireTagConsent: zod.boolean().optional(),
 });
 export const ListUsersResponse = zod.array(ListUsersResponseItem);
 
@@ -53,7 +320,8 @@ export const GetUserResponse = zod.object({
   user: zod.object({
     id: zod.string(),
     name: zod.string(),
-    role: zod.enum(["athlete", "coach", "admin"]),
+    role: zod.enum(["athlete", "coach", "admin", "parent"]),
+    email: zod.string().optional(),
     sport: zod.string().optional(),
     position: zod.string().optional(),
     jerseyNumber: zod.number().optional(),
@@ -61,19 +329,25 @@ export const GetUserResponse = zod.object({
     location: zod.string().optional(),
     avatarUrl: zod.string().optional(),
     bio: zod.string().optional(),
+    dateOfBirth: zod.coerce.date().optional(),
+    parentId: zod.string().optional(),
+    requireTagConsent: zod.boolean().optional(),
   }),
   teams: zod.array(
     zod.object({
-      id: zod.string(),
-      name: zod.string(),
-      organizationId: zod.string().optional(),
-      organizationName: zod.string().optional(),
-      sport: zod.string().optional(),
-      season: zod.string().optional(),
-      wins: zod.number().optional(),
-      losses: zod.number().optional(),
-      ties: zod.number().optional(),
-      playerCount: zod.number().optional(),
+      team: zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        organizationId: zod.string().optional(),
+        organizationName: zod.string().optional(),
+        sport: zod.string().optional(),
+        season: zod.string().optional(),
+        playerCount: zod.number().optional(),
+      }),
+      status: zod.enum(["pending", "accepted", "declined"]),
+      role: zod.enum(["player", "coach"]).optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
     }),
   ),
   stats: zod.object({
@@ -85,6 +359,40 @@ export const GetUserResponse = zod.object({
     tertiaryStatLabel: zod.string().optional(),
     tertiaryStatValue: zod.string().optional(),
   }),
+  canManageTags: zod.boolean().optional(),
+});
+
+export const UpdateUserParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const UpdateUserBody = zod.object({
+  name: zod.string().optional(),
+  sport: zod.string().optional(),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+  location: zod.string().optional(),
+  avatarUrl: zod.string().optional(),
+  bio: zod.string().optional(),
+  requireTagConsent: zod.boolean().optional(),
+});
+
+export const UpdateUserResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  email: zod.string().optional(),
+  sport: zod.string().optional(),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+  location: zod.string().optional(),
+  avatarUrl: zod.string().optional(),
+  bio: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+  parentId: zod.string().optional(),
+  requireTagConsent: zod.boolean().optional(),
 });
 
 export const GetUserTaggedContentParams = zod.object({
@@ -109,7 +417,8 @@ export const GetUserTaggedContentResponse = zod.object({
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -117,6 +426,9 @@ export const GetUserTaggedContentResponse = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -134,13 +446,35 @@ export const GetUserTaggedContentResponse = zod.object({
       snippet: zod.string().optional(),
       body: zod.string().optional(),
       coverImageUrl: zod.string().optional(),
+      status: zod.enum(["draft", "published"]),
+      publishedAt: zod.coerce.date().optional(),
       createdAt: zod.coerce.date(),
-      taggedUsers: zod
+      updatedAt: zod.coerce.date().optional(),
+      author: zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
+          sport: zod.string().optional(),
+          position: zod.string().optional(),
+          jerseyNumber: zod.number().optional(),
+          grade: zod.string().optional(),
+          location: zod.string().optional(),
+          avatarUrl: zod.string().optional(),
+          bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
+        })
+        .optional(),
+      coAuthors: zod
         .array(
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -148,6 +482,29 @@ export const GetUserTaggedContentResponse = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
+          }),
+        )
+        .optional(),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
+            sport: zod.string().optional(),
+            position: zod.string().optional(),
+            jerseyNumber: zod.number().optional(),
+            grade: zod.string().optional(),
+            location: zod.string().optional(),
+            avatarUrl: zod.string().optional(),
+            bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -199,12 +556,10 @@ export const GetOrganizationResponse = zod.object({
       organizationName: zod.string().optional(),
       sport: zod.string().optional(),
       season: zod.string().optional(),
-      wins: zod.number().optional(),
-      losses: zod.number().optional(),
-      ties: zod.number().optional(),
       playerCount: zod.number().optional(),
     }),
   ),
+  canManage: zod.boolean().optional(),
 });
 
 export const GetOrganizationActivityParams = zod.object({
@@ -227,13 +582,35 @@ export const GetOrganizationActivityResponseItem = zod.object({
       snippet: zod.string().optional(),
       body: zod.string().optional(),
       coverImageUrl: zod.string().optional(),
+      status: zod.enum(["draft", "published"]),
+      publishedAt: zod.coerce.date().optional(),
       createdAt: zod.coerce.date(),
-      taggedUsers: zod
+      updatedAt: zod.coerce.date().optional(),
+      author: zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
+          sport: zod.string().optional(),
+          position: zod.string().optional(),
+          jerseyNumber: zod.number().optional(),
+          grade: zod.string().optional(),
+          location: zod.string().optional(),
+          avatarUrl: zod.string().optional(),
+          bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
+        })
+        .optional(),
+      coAuthors: zod
         .array(
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -241,6 +618,29 @@ export const GetOrganizationActivityResponseItem = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
+          }),
+        )
+        .optional(),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
+            sport: zod.string().optional(),
+            position: zod.string().optional(),
+            jerseyNumber: zod.number().optional(),
+            grade: zod.string().optional(),
+            location: zod.string().optional(),
+            avatarUrl: zod.string().optional(),
+            bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -263,7 +663,8 @@ export const GetOrganizationActivityResponseItem = zod.object({
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -271,6 +672,9 @@ export const GetOrganizationActivityResponseItem = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -283,9 +687,6 @@ export const GetOrganizationActivityResponseItem = zod.object({
       organizationId: zod.string(),
       sport: zod.string().optional(),
       season: zod.string().optional(),
-      wins: zod.number().optional(),
-      losses: zod.number().optional(),
-      ties: zod.number().optional(),
     })
     .optional(),
   organization: zod
@@ -324,9 +725,6 @@ export const GetTeamResponse = zod.object({
     organizationId: zod.string(),
     sport: zod.string().optional(),
     season: zod.string().optional(),
-    wins: zod.number().optional(),
-    losses: zod.number().optional(),
-    ties: zod.number().optional(),
   }),
   organization: zod.object({
     id: zod.string(),
@@ -345,7 +743,8 @@ export const GetTeamResponse = zod.object({
       user: zod.object({
         id: zod.string(),
         name: zod.string(),
-        role: zod.enum(["athlete", "coach", "admin"]),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
         sport: zod.string().optional(),
         position: zod.string().optional(),
         jerseyNumber: zod.number().optional(),
@@ -353,13 +752,18 @@ export const GetTeamResponse = zod.object({
         location: zod.string().optional(),
         avatarUrl: zod.string().optional(),
         bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
       }),
       role: zod.enum(["player", "coach"]),
+      status: zod.enum(["pending", "accepted", "declined"]),
       position: zod.string().optional(),
       jerseyNumber: zod.number().optional(),
       grade: zod.string().optional(),
     }),
   ),
+  canManage: zod.boolean().optional(),
 });
 
 export const GetTeamRosterParams = zod.object({
@@ -372,7 +776,8 @@ export const GetTeamRosterResponseItem = zod.object({
   user: zod.object({
     id: zod.string(),
     name: zod.string(),
-    role: zod.enum(["athlete", "coach", "admin"]),
+    role: zod.enum(["athlete", "coach", "admin", "parent"]),
+    email: zod.string().optional(),
     sport: zod.string().optional(),
     position: zod.string().optional(),
     jerseyNumber: zod.number().optional(),
@@ -380,8 +785,12 @@ export const GetTeamRosterResponseItem = zod.object({
     location: zod.string().optional(),
     avatarUrl: zod.string().optional(),
     bio: zod.string().optional(),
+    dateOfBirth: zod.coerce.date().optional(),
+    parentId: zod.string().optional(),
+    requireTagConsent: zod.boolean().optional(),
   }),
   role: zod.enum(["player", "coach"]),
+  status: zod.enum(["pending", "accepted", "declined"]),
   position: zod.string().optional(),
   jerseyNumber: zod.number().optional(),
   grade: zod.string().optional(),
@@ -395,6 +804,128 @@ export const AddRosterEntryParams = zod.object({
 export const AddRosterEntryBody = zod.object({
   userId: zod.string(),
   role: zod.enum(["player", "coach"]),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+});
+
+export const GetTeamInvitesParams = zod.object({
+  teamId: zod.coerce.string(),
+});
+
+export const GetTeamInvitesResponseItem = zod.object({
+  id: zod.string(),
+  token: zod.string(),
+  teamId: zod.string(),
+  invitedEmail: zod.string(),
+  invitedName: zod.string().optional(),
+  role: zod.enum(["player", "coach"]),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+  status: zod.enum(["pending", "accepted", "expired", "revoked"]),
+  createdAt: zod.coerce.date(),
+});
+export const GetTeamInvitesResponse = zod.array(GetTeamInvitesResponseItem);
+
+export const CreateTeamInviteParams = zod.object({
+  teamId: zod.coerce.string(),
+});
+
+export const CreateTeamInviteBody = zod.object({
+  invitedEmail: zod.string(),
+  invitedName: zod.string().optional(),
+  role: zod.enum(["player", "coach"]),
+  position: zod.string().optional(),
+  jerseyNumber: zod.number().optional(),
+  grade: zod.string().optional(),
+});
+
+export const GetInviteParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const GetInviteResponse = zod.object({
+  invite: zod.object({
+    id: zod.string(),
+    token: zod.string(),
+    teamId: zod.string(),
+    invitedEmail: zod.string(),
+    invitedName: zod.string().optional(),
+    role: zod.enum(["player", "coach"]),
+    position: zod.string().optional(),
+    jerseyNumber: zod.number().optional(),
+    grade: zod.string().optional(),
+    status: zod.enum(["pending", "accepted", "expired", "revoked"]),
+    createdAt: zod.coerce.date(),
+  }),
+  team: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    organizationId: zod.string(),
+    sport: zod.string().optional(),
+    season: zod.string().optional(),
+  }),
+  organization: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    sport: zod.string().optional(),
+    location: zod.string().optional(),
+    description: zod.string().optional(),
+    logoUrl: zod.string().optional(),
+    bannerUrl: zod.string().optional(),
+    followerCount: zod.number().optional(),
+  }),
+  invitedBy: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      role: zod.enum(["athlete", "coach", "admin", "parent"]),
+      email: zod.string().optional(),
+      sport: zod.string().optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
+      grade: zod.string().optional(),
+      location: zod.string().optional(),
+      avatarUrl: zod.string().optional(),
+      bio: zod.string().optional(),
+      dateOfBirth: zod.coerce.date().optional(),
+      parentId: zod.string().optional(),
+      requireTagConsent: zod.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const AcceptInviteParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const AcceptInviteBody = zod.object({
+  name: zod.string().optional(),
+  dateOfBirth: zod.coerce.date().optional(),
+});
+
+export const AcceptInviteResponse = zod.object({
+  id: zod.string(),
+  teamId: zod.string(),
+  user: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    role: zod.enum(["athlete", "coach", "admin", "parent"]),
+    email: zod.string().optional(),
+    sport: zod.string().optional(),
+    position: zod.string().optional(),
+    jerseyNumber: zod.number().optional(),
+    grade: zod.string().optional(),
+    location: zod.string().optional(),
+    avatarUrl: zod.string().optional(),
+    bio: zod.string().optional(),
+    dateOfBirth: zod.coerce.date().optional(),
+    parentId: zod.string().optional(),
+    requireTagConsent: zod.boolean().optional(),
+  }),
+  role: zod.enum(["player", "coach"]),
+  status: zod.enum(["pending", "accepted", "declined"]),
   position: zod.string().optional(),
   jerseyNumber: zod.number().optional(),
   grade: zod.string().optional(),
@@ -415,13 +946,35 @@ export const GetTeamArticlesResponseItem = zod.object({
   snippet: zod.string().optional(),
   body: zod.string().optional(),
   coverImageUrl: zod.string().optional(),
+  status: zod.enum(["draft", "published"]),
+  publishedAt: zod.coerce.date().optional(),
   createdAt: zod.coerce.date(),
-  taggedUsers: zod
+  updatedAt: zod.coerce.date().optional(),
+  author: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      role: zod.enum(["athlete", "coach", "admin", "parent"]),
+      email: zod.string().optional(),
+      sport: zod.string().optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
+      grade: zod.string().optional(),
+      location: zod.string().optional(),
+      avatarUrl: zod.string().optional(),
+      bio: zod.string().optional(),
+      dateOfBirth: zod.coerce.date().optional(),
+      parentId: zod.string().optional(),
+      requireTagConsent: zod.boolean().optional(),
+    })
+    .optional(),
+  coAuthors: zod
     .array(
       zod.object({
         id: zod.string(),
         name: zod.string(),
-        role: zod.enum(["athlete", "coach", "admin"]),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
         sport: zod.string().optional(),
         position: zod.string().optional(),
         jerseyNumber: zod.number().optional(),
@@ -429,11 +982,114 @@ export const GetTeamArticlesResponseItem = zod.object({
         location: zod.string().optional(),
         avatarUrl: zod.string().optional(),
         bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
       }),
     )
     .optional(),
 });
 export const GetTeamArticlesResponse = zod.array(GetTeamArticlesResponseItem);
+
+export const GetTeamDraftsParams = zod.object({
+  teamId: zod.coerce.string(),
+});
+
+export const GetTeamDraftsResponseItem = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  teamId: zod.string(),
+  teamName: zod.string().optional(),
+  opponentName: zod.string().optional(),
+  gameDate: zod.coerce.date().optional(),
+  gameScore: zod.string().optional(),
+  snippet: zod.string().optional(),
+  body: zod.string().optional(),
+  coverImageUrl: zod.string().optional(),
+  status: zod.enum(["draft", "published"]),
+  publishedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+  author: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      role: zod.enum(["athlete", "coach", "admin", "parent"]),
+      email: zod.string().optional(),
+      sport: zod.string().optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
+      grade: zod.string().optional(),
+      location: zod.string().optional(),
+      avatarUrl: zod.string().optional(),
+      bio: zod.string().optional(),
+      dateOfBirth: zod.coerce.date().optional(),
+      parentId: zod.string().optional(),
+      requireTagConsent: zod.boolean().optional(),
+    })
+    .optional(),
+  coAuthors: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+export const GetTeamDraftsResponse = zod.array(GetTeamDraftsResponseItem);
 
 export const GetTeamHighlightsParams = zod.object({
   teamId: zod.coerce.string(),
@@ -455,7 +1111,8 @@ export const GetTeamHighlightsResponseItem = zod.object({
       zod.object({
         id: zod.string(),
         name: zod.string(),
-        role: zod.enum(["athlete", "coach", "admin"]),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
         sport: zod.string().optional(),
         position: zod.string().optional(),
         jerseyNumber: zod.number().optional(),
@@ -463,6 +1120,9 @@ export const GetTeamHighlightsResponseItem = zod.object({
         location: zod.string().optional(),
         avatarUrl: zod.string().optional(),
         bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
       }),
     )
     .optional(),
@@ -478,8 +1138,9 @@ export const CreateArticleBody = zod.object({
   gameDate: zod.coerce.date().optional(),
   gameScore: zod.string().optional(),
   snippet: zod.string().optional(),
-  body: zod.string(),
+  body: zod.string().optional(),
   coverImageUrl: zod.string().optional(),
+  status: zod.enum(["draft", "published"]).optional(),
   taggedUserIds: zod.array(zod.string()).optional(),
   highlightIds: zod.array(zod.string()).optional(),
 });
@@ -500,13 +1161,35 @@ export const GetArticleResponse = zod.object({
     snippet: zod.string().optional(),
     body: zod.string().optional(),
     coverImageUrl: zod.string().optional(),
+    status: zod.enum(["draft", "published"]),
+    publishedAt: zod.coerce.date().optional(),
     createdAt: zod.coerce.date(),
-    taggedUsers: zod
+    updatedAt: zod.coerce.date().optional(),
+    author: zod
+      .object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      })
+      .optional(),
+    coAuthors: zod
       .array(
         zod.object({
           id: zod.string(),
           name: zod.string(),
-          role: zod.enum(["athlete", "coach", "admin"]),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
           sport: zod.string().optional(),
           position: zod.string().optional(),
           jerseyNumber: zod.number().optional(),
@@ -514,6 +1197,29 @@ export const GetArticleResponse = zod.object({
           location: zod.string().optional(),
           avatarUrl: zod.string().optional(),
           bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
+        }),
+      )
+      .optional(),
+    taggedUsers: zod
+      .array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
+          sport: zod.string().optional(),
+          position: zod.string().optional(),
+          jerseyNumber: zod.number().optional(),
+          grade: zod.string().optional(),
+          location: zod.string().optional(),
+          avatarUrl: zod.string().optional(),
+          bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
         }),
       )
       .optional(),
@@ -535,7 +1241,8 @@ export const GetArticleResponse = zod.object({
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -543,11 +1250,199 @@ export const GetArticleResponse = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
     }),
   ),
+});
+
+export const UpdateArticleParams = zod.object({
+  articleId: zod.coerce.string(),
+});
+
+export const UpdateArticleBody = zod.object({
+  title: zod.string().optional(),
+  opponentName: zod.string().optional(),
+  gameDate: zod.coerce.date().optional(),
+  gameScore: zod.string().optional(),
+  snippet: zod.string().optional(),
+  body: zod.string().optional(),
+  coverImageUrl: zod.string().optional(),
+  taggedUserIds: zod.array(zod.string()).optional(),
+});
+
+export const UpdateArticleResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  teamId: zod.string(),
+  teamName: zod.string().optional(),
+  opponentName: zod.string().optional(),
+  gameDate: zod.coerce.date().optional(),
+  gameScore: zod.string().optional(),
+  snippet: zod.string().optional(),
+  body: zod.string().optional(),
+  coverImageUrl: zod.string().optional(),
+  status: zod.enum(["draft", "published"]),
+  publishedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+  author: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      role: zod.enum(["athlete", "coach", "admin", "parent"]),
+      email: zod.string().optional(),
+      sport: zod.string().optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
+      grade: zod.string().optional(),
+      location: zod.string().optional(),
+      avatarUrl: zod.string().optional(),
+      bio: zod.string().optional(),
+      dateOfBirth: zod.coerce.date().optional(),
+      parentId: zod.string().optional(),
+      requireTagConsent: zod.boolean().optional(),
+    })
+    .optional(),
+  coAuthors: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const PublishArticleParams = zod.object({
+  articleId: zod.coerce.string(),
+});
+
+export const PublishArticleResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  teamId: zod.string(),
+  teamName: zod.string().optional(),
+  opponentName: zod.string().optional(),
+  gameDate: zod.coerce.date().optional(),
+  gameScore: zod.string().optional(),
+  snippet: zod.string().optional(),
+  body: zod.string().optional(),
+  coverImageUrl: zod.string().optional(),
+  status: zod.enum(["draft", "published"]),
+  publishedAt: zod.coerce.date().optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+  author: zod
+    .object({
+      id: zod.string(),
+      name: zod.string(),
+      role: zod.enum(["athlete", "coach", "admin", "parent"]),
+      email: zod.string().optional(),
+      sport: zod.string().optional(),
+      position: zod.string().optional(),
+      jerseyNumber: zod.number().optional(),
+      grade: zod.string().optional(),
+      location: zod.string().optional(),
+      avatarUrl: zod.string().optional(),
+      bio: zod.string().optional(),
+      dateOfBirth: zod.coerce.date().optional(),
+      parentId: zod.string().optional(),
+      requireTagConsent: zod.boolean().optional(),
+    })
+    .optional(),
+  coAuthors: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        role: zod.enum(["athlete", "coach", "admin", "parent"]),
+        email: zod.string().optional(),
+        sport: zod.string().optional(),
+        position: zod.string().optional(),
+        jerseyNumber: zod.number().optional(),
+        grade: zod.string().optional(),
+        location: zod.string().optional(),
+        avatarUrl: zod.string().optional(),
+        bio: zod.string().optional(),
+        dateOfBirth: zod.coerce.date().optional(),
+        parentId: zod.string().optional(),
+        requireTagConsent: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const AddCoAuthorParams = zod.object({
+  articleId: zod.coerce.string(),
+});
+
+export const AddCoAuthorBody = zod.object({
+  userId: zod.string(),
+});
+
+export const DeleteArticleTagParams = zod.object({
+  tagId: zod.coerce.string(),
+});
+
+export const DeleteHighlightTagParams = zod.object({
+  tagId: zod.coerce.string(),
 });
 
 export const CreateHighlightBody = zod.object({
@@ -581,7 +1476,8 @@ export const GetHighlightResponse = zod.object({
         zod.object({
           id: zod.string(),
           name: zod.string(),
-          role: zod.enum(["athlete", "coach", "admin"]),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
           sport: zod.string().optional(),
           position: zod.string().optional(),
           jerseyNumber: zod.number().optional(),
@@ -589,6 +1485,9 @@ export const GetHighlightResponse = zod.object({
           location: zod.string().optional(),
           avatarUrl: zod.string().optional(),
           bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
         }),
       )
       .optional(),
@@ -605,13 +1504,35 @@ export const GetHighlightResponse = zod.object({
       snippet: zod.string().optional(),
       body: zod.string().optional(),
       coverImageUrl: zod.string().optional(),
+      status: zod.enum(["draft", "published"]),
+      publishedAt: zod.coerce.date().optional(),
       createdAt: zod.coerce.date(),
-      taggedUsers: zod
+      updatedAt: zod.coerce.date().optional(),
+      author: zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
+          sport: zod.string().optional(),
+          position: zod.string().optional(),
+          jerseyNumber: zod.number().optional(),
+          grade: zod.string().optional(),
+          location: zod.string().optional(),
+          avatarUrl: zod.string().optional(),
+          bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
+        })
+        .optional(),
+      coAuthors: zod
         .array(
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -619,6 +1540,29 @@ export const GetHighlightResponse = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
+          }),
+        )
+        .optional(),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
+            sport: zod.string().optional(),
+            position: zod.string().optional(),
+            jerseyNumber: zod.number().optional(),
+            grade: zod.string().optional(),
+            location: zod.string().optional(),
+            avatarUrl: zod.string().optional(),
+            bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -642,13 +1586,35 @@ export const GetFeedResponseItem = zod.object({
       snippet: zod.string().optional(),
       body: zod.string().optional(),
       coverImageUrl: zod.string().optional(),
+      status: zod.enum(["draft", "published"]),
+      publishedAt: zod.coerce.date().optional(),
       createdAt: zod.coerce.date(),
-      taggedUsers: zod
+      updatedAt: zod.coerce.date().optional(),
+      author: zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          role: zod.enum(["athlete", "coach", "admin", "parent"]),
+          email: zod.string().optional(),
+          sport: zod.string().optional(),
+          position: zod.string().optional(),
+          jerseyNumber: zod.number().optional(),
+          grade: zod.string().optional(),
+          location: zod.string().optional(),
+          avatarUrl: zod.string().optional(),
+          bio: zod.string().optional(),
+          dateOfBirth: zod.coerce.date().optional(),
+          parentId: zod.string().optional(),
+          requireTagConsent: zod.boolean().optional(),
+        })
+        .optional(),
+      coAuthors: zod
         .array(
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -656,6 +1622,29 @@ export const GetFeedResponseItem = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
+          }),
+        )
+        .optional(),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
+            sport: zod.string().optional(),
+            position: zod.string().optional(),
+            jerseyNumber: zod.number().optional(),
+            grade: zod.string().optional(),
+            location: zod.string().optional(),
+            avatarUrl: zod.string().optional(),
+            bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -678,7 +1667,8 @@ export const GetFeedResponseItem = zod.object({
           zod.object({
             id: zod.string(),
             name: zod.string(),
-            role: zod.enum(["athlete", "coach", "admin"]),
+            role: zod.enum(["athlete", "coach", "admin", "parent"]),
+            email: zod.string().optional(),
             sport: zod.string().optional(),
             position: zod.string().optional(),
             jerseyNumber: zod.number().optional(),
@@ -686,6 +1676,9 @@ export const GetFeedResponseItem = zod.object({
             location: zod.string().optional(),
             avatarUrl: zod.string().optional(),
             bio: zod.string().optional(),
+            dateOfBirth: zod.coerce.date().optional(),
+            parentId: zod.string().optional(),
+            requireTagConsent: zod.boolean().optional(),
           }),
         )
         .optional(),
@@ -698,9 +1691,6 @@ export const GetFeedResponseItem = zod.object({
       organizationId: zod.string(),
       sport: zod.string().optional(),
       season: zod.string().optional(),
-      wins: zod.number().optional(),
-      losses: zod.number().optional(),
-      ties: zod.number().optional(),
     })
     .optional(),
   organization: zod

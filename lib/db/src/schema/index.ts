@@ -1,11 +1,15 @@
-import { pgTable, text, integer, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, uuid, pgEnum, boolean, primaryKey, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin"]);
+export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent"]);
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
+export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
+export const articleStatusEnum = pgEnum("article_status", ["draft", "published"]);
+export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").unique(),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull(),
   sport: text("sport"),
@@ -15,6 +19,16 @@ export const users = pgTable("users", {
   location: text("location"),
   avatarUrl: text("avatar_url"),
   bio: text("bio"),
+  dateOfBirth: timestamp("date_of_birth"),
+  parentId: uuid("parent_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  requireTagConsent: boolean("require_tag_consent").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -26,8 +40,15 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const organizationAdmins = pgTable("organization_admins", {
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -46,8 +67,24 @@ export const rosterEntries = pgTable("roster_entries", {
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   role: rosterRoleEnum("role").notNull(),
+  status: rosterStatusEnum("status").notNull().default("accepted"),
   position: text("position"),
   jerseyNumber: integer("jersey_number"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const rosterInvites = pgTable("roster_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull().unique(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  invitedEmail: text("invited_email").notNull(),
+  invitedName: text("invited_name"),
+  role: rosterRoleEnum("role").notNull(),
+  position: text("position"),
+  jerseyNumber: integer("jersey_number"),
+  grade: text("grade"),
+  status: inviteStatusEnum("status").notNull().default("pending"),
+  invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -57,14 +94,23 @@ export const articles = pgTable("articles", {
   authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   summary: text("summary"),
-  body: text("body").notNull(),
+  body: text("body").notNull().default(""),
   coverImageUrl: text("cover_image_url"),
   opponentName: text("opponent_name"),
   teamScore: integer("team_score"),
   opponentScore: integer("opponent_score"),
   gameDate: timestamp("game_date"),
+  status: articleStatusEnum("status").notNull().default("published"),
+  publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const articleAuthors = pgTable("article_authors", {
+  articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.articleId, t.userId] }) }));
 
 export const highlights = pgTable("highlights", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -83,22 +129,42 @@ export const articleTags = pgTable("article_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
   articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const highlightTags = pgTable("highlight_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
   highlightId: uuid("highlight_id").references(() => highlights.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind").notNull(),
+  message: text("message").notNull(),
+  link: text("link"),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const usersRelations = relations(users, ({ many, one }) => ({
   rosterEntries: many(rosterEntries),
   articleTags: many(articleTags),
   highlightTags: many(highlightTags),
+  parent: one(users, { fields: [users.parentId], references: [users.id], relationName: "parent_child" }),
 }));
 
-export const organizationsRelations = relations(organizations, ({ many }) => ({
+export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   teams: many(teams),
+  admins: many(organizationAdmins),
+  createdBy: one(users, { fields: [organizations.createdById], references: [users.id] }),
+}));
+
+export const organizationAdminsRelations = relations(organizationAdmins, ({ one }) => ({
+  organization: one(organizations, { fields: [organizationAdmins.organizationId], references: [organizations.id] }),
+  user: one(users, { fields: [organizationAdmins.userId], references: [users.id] }),
 }));
 
 export const teamsRelations = relations(teams, ({ one, many }) => ({
@@ -106,6 +172,7 @@ export const teamsRelations = relations(teams, ({ one, many }) => ({
   rosterEntries: many(rosterEntries),
   articles: many(articles),
   highlights: many(highlights),
+  invites: many(rosterInvites),
 }));
 
 export const rosterEntriesRelations = relations(rosterEntries, ({ one }) => ({
@@ -113,10 +180,21 @@ export const rosterEntriesRelations = relations(rosterEntries, ({ one }) => ({
   user: one(users, { fields: [rosterEntries.userId], references: [users.id] }),
 }));
 
+export const rosterInvitesRelations = relations(rosterInvites, ({ one }) => ({
+  team: one(teams, { fields: [rosterInvites.teamId], references: [teams.id] }),
+  invitedBy: one(users, { fields: [rosterInvites.invitedById], references: [users.id] }),
+}));
+
 export const articlesRelations = relations(articles, ({ one, many }) => ({
   team: one(teams, { fields: [articles.teamId], references: [teams.id] }),
   author: one(users, { fields: [articles.authorId], references: [users.id] }),
   tags: many(articleTags),
+  coAuthors: many(articleAuthors),
+}));
+
+export const articleAuthorsRelations = relations(articleAuthors, ({ one }) => ({
+  article: one(articles, { fields: [articleAuthors.articleId], references: [articles.id] }),
+  user: one(users, { fields: [articleAuthors.userId], references: [users.id] }),
 }));
 
 export const highlightsRelations = relations(highlights, ({ one, many }) => ({
@@ -133,4 +211,8 @@ export const articleTagsRelations = relations(articleTags, ({ one }) => ({
 export const highlightTagsRelations = relations(highlightTags, ({ one }) => ({
   highlight: one(highlights, { fields: [highlightTags.highlightId], references: [highlights.id] }),
   user: one(users, { fields: [highlightTags.userId], references: [users.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));

@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+export type SignupBodyRole =
+  (typeof SignupBodyRole)[keyof typeof SignupBodyRole];
 
-export const UserRole = {
+export const SignupBodyRole = {
   athlete: "athlete",
   coach: "coach",
   admin: "admin",

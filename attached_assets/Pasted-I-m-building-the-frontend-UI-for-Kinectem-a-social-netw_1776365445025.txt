@@ -1,0 +1,25 @@
+I'm building the frontend UI for Kinectem, a social networking platform for youth athletes (think LinkedIn for youth sports). It connects players, coaches, organization admins, and parents across a hierarchy of organizations, teams, and individual profiles.
+I've uploaded openapi.yml — that's the full OpenAPI 3.0.3 spec for our backend API. All API shapes, endpoints, and data models must come from this file. Do not invent endpoints or response shapes — read them from the spec.
+Please do the following:
+Set up a React + TypeScript + Vite project with Material UI (MUI v6) for components. Use React Router for navigation and TanStack React Query for data fetching.
+Install Stoplight Prism and run it as a mock server against openapi.yml on a local port. Point the frontend's API base URL at that mock server. I don't have access to the real backend from Replit, so every screen must work against the Prism mock.
+Read openapi.yml carefully and generate TypeScript types from it (use openapi-typescript or similar). All API calls should be fully typed.
+Build these core pages, using the endpoints defined in the spec:
+Home feed — list of posts (/feed)
+Profile page — user profile with their posts, teams, sports (/users/{id})
+Organization page — org details, teams, members (/organizations/{slug})
+Team page — team roster, season info (/teams/{id})
+Post detail page — single post with comments and reactions (/posts/{id})
+Search page — cross-entity search results (/search)
+Messages — conversation list and thread view (/conversations)
+Settings — profile, account, privacy tabs (/users/me)
+Design conventions:
+Mobile-first, responsive layouts. Minimum 44px touch targets.
+Inter font, 12px border radius, clean modern look.
+All API responses use camelCase.
+Errors return { code, message, correlationId } — show user-friendly error states.
+Loading states for every async call.
+Do NOT build a custom login/signup UI. Authentication is handled by Clerk in production. For now, assume the user is logged in and stub any Authorization header — we'll wire up Clerk later.
+File uploads use a two-step signed-URL flow (see /assets endpoints in the spec): first request an upload URL, then PUT the file directly to that URL.
+When you're done, give me a list of any endpoints or fields in the spec that seemed ambiguous or incomplete — I'll forward those to our backend team.
+Ask me questions if anything is unclear before building.

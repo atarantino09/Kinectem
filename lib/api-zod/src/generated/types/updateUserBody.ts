@@ -5,13 +5,9 @@
  * Kinectem API - social platform for youth athletes
  * OpenAPI spec version: 0.1.0
  */
-import type { UserRole } from "./userRole";
 
-export interface User {
-  id: string;
-  name: string;
-  role: UserRole;
-  email?: string;
+export interface UpdateUserBody {
+  name?: string;
   sport?: string;
   position?: string;
   jerseyNumber?: number;
@@ -19,7 +15,5 @@ export interface User {
   location?: string;
   avatarUrl?: string;
   bio?: string;
-  dateOfBirth?: Date;
-  parentId?: string;
   requireTagConsent?: boolean;
 }

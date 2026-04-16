@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Organization } from "./organization";
-import type { TeamSummary } from "./teamSummary";
+import type { RosterInvite } from "./rosterInvite";
+import type { Team } from "./team";
+import type { User } from "./user";
 
-export interface OrganizationDetail {
+export interface RosterInviteDetail {
+  invite: RosterInvite;
+  team: Team;
   organization: Organization;
-  teams: TeamSummary[];
-  canManage?: boolean;
+  invitedBy?: User;
 }

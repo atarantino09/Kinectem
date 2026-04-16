@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+export type NewRosterInviteRole =
+  (typeof NewRosterInviteRole)[keyof typeof NewRosterInviteRole];
 
-export const UserRole = {
-  athlete: "athlete",
+export const NewRosterInviteRole = {
+  player: "player",
   coach: "coach",
-  admin: "admin",
-  parent: "parent",
 } as const;

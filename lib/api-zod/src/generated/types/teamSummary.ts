@@ -13,8 +13,5 @@ export interface TeamSummary {
   organizationName?: string;
   sport?: string;
   season?: string;
-  wins?: number;
-  losses?: number;
-  ties?: number;
   playerCount?: number;
 }

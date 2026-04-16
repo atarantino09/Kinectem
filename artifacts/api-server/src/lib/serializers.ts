@@ -1,10 +1,20 @@
-import type { users, organizations, teams, articles, highlights, rosterEntries } from "@workspace/db";
+import type {
+  users,
+  organizations,
+  teams,
+  articles,
+  highlights,
+  rosterEntries,
+  rosterInvites,
+  notifications,
+} from "@workspace/db";
 
 export function toUser(u: typeof users.$inferSelect) {
   return {
     id: u.id,
     name: u.name,
     role: u.role,
+    email: u.email ?? undefined,
     sport: u.sport ?? undefined,
     position: u.position ?? undefined,
     jerseyNumber: u.jerseyNumber ?? undefined,
@@ -12,6 +22,9 @@ export function toUser(u: typeof users.$inferSelect) {
     location: u.location ?? undefined,
     avatarUrl: u.avatarUrl ?? undefined,
     bio: u.bio ?? undefined,
+    dateOfBirth: u.dateOfBirth ?? undefined,
+    parentId: u.parentId ?? undefined,
+    requireTagConsent: u.requireTagConsent,
   };
 }
 
@@ -28,22 +41,19 @@ export function toOrganization(o: typeof organizations.$inferSelect) {
   };
 }
 
-export function toTeam(t: typeof teams.$inferSelect, extras?: { wins?: number; losses?: number; ties?: number }) {
+export function toTeam(t: typeof teams.$inferSelect) {
   return {
     id: t.id,
     name: t.name,
     organizationId: t.organizationId,
     sport: t.sport ?? undefined,
     season: t.season ?? undefined,
-    wins: extras?.wins,
-    losses: extras?.losses,
-    ties: extras?.ties,
   };
 }
 
 export function toTeamSummary(
   t: typeof teams.$inferSelect,
-  extras: { organizationName: string; playerCount?: number; wins?: number; losses?: number; ties?: number },
+  extras: { organizationName: string; playerCount?: number },
 ) {
   return {
     id: t.id,
@@ -52,9 +62,6 @@ export function toTeamSummary(
     organizationName: extras.organizationName,
     sport: t.sport ?? undefined,
     season: t.season ?? undefined,
-    wins: extras.wins,
-    losses: extras.losses,
-    ties: extras.ties,
     playerCount: extras.playerCount,
   };
 }
@@ -69,6 +76,8 @@ export function toArticle(
   extras: {
     teamName?: string;
     taggedUsers?: ReturnType<typeof toUser>[];
+    author?: ReturnType<typeof toUser>;
+    coAuthors?: ReturnType<typeof toUser>[];
   },
 ) {
   return {
@@ -82,7 +91,12 @@ export function toArticle(
     snippet: a.summary ?? undefined,
     body: a.body,
     coverImageUrl: a.coverImageUrl ?? undefined,
+    status: a.status,
+    publishedAt: a.publishedAt ?? undefined,
     createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+    author: extras.author,
+    coAuthors: extras.coAuthors,
     taggedUsers: extras.taggedUsers,
   };
 }
@@ -120,8 +134,36 @@ export function toRosterEntry(
     teamId: r.teamId,
     user,
     role: r.role,
+    status: r.status,
     position: r.position ?? undefined,
     jerseyNumber: r.jerseyNumber ?? undefined,
     grade: user.grade,
+  };
+}
+
+export function toRosterInvite(i: typeof rosterInvites.$inferSelect) {
+  return {
+    id: i.id,
+    token: i.token,
+    teamId: i.teamId,
+    invitedEmail: i.invitedEmail,
+    invitedName: i.invitedName ?? undefined,
+    role: i.role,
+    position: i.position ?? undefined,
+    jerseyNumber: i.jerseyNumber ?? undefined,
+    grade: i.grade ?? undefined,
+    status: i.status,
+    createdAt: i.createdAt,
+  };
+}
+
+export function toNotification(n: typeof notifications.$inferSelect) {
+  return {
+    id: n.id,
+    kind: n.kind,
+    message: n.message,
+    link: n.link ?? undefined,
+    read: n.read,
+    createdAt: n.createdAt,
   };
 }

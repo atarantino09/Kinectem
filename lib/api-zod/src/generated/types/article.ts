@@ -5,6 +5,7 @@
  * Kinectem API - social platform for youth athletes
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleStatus } from "./articleStatus";
 import type { User } from "./user";
 
 export interface Article {
@@ -18,6 +19,11 @@ export interface Article {
   snippet?: string;
   body?: string;
   coverImageUrl?: string;
+  status: ArticleStatus;
+  publishedAt?: Date;
   createdAt: Date;
+  updatedAt?: Date;
+  author?: User;
+  coAuthors?: User[];
   taggedUsers?: User[];
 }

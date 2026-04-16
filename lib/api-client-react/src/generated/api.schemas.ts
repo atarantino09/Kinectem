@@ -9,18 +9,34 @@ export interface HealthStatus {
   status: string;
 }
 
-export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+export interface LoginBody {
+  userId: string;
+}
 
-export const UserRole = {
+export type SignupBodyRole =
+  (typeof SignupBodyRole)[keyof typeof SignupBodyRole];
+
+export const SignupBodyRole = {
   athlete: "athlete",
   coach: "coach",
   admin: "admin",
+  parent: "parent",
 } as const;
 
-export interface User {
-  id: string;
+export interface SignupBody {
   name: string;
-  role: UserRole;
+  role: SignupBodyRole;
+  email?: string;
+  sport?: string;
+  position?: string;
+  grade?: string;
+  location?: string;
+  dateOfBirth?: string;
+  parentId?: string;
+}
+
+export interface UpdateUserBody {
+  name?: string;
   sport?: string;
   position?: string;
   jerseyNumber?: number;
@@ -28,6 +44,33 @@ export interface User {
   location?: string;
   avatarUrl?: string;
   bio?: string;
+  requireTagConsent?: boolean;
+}
+
+export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+
+export const UserRole = {
+  athlete: "athlete",
+  coach: "coach",
+  admin: "admin",
+  parent: "parent",
+} as const;
+
+export interface User {
+  id: string;
+  name: string;
+  role: UserRole;
+  email?: string;
+  sport?: string;
+  position?: string;
+  jerseyNumber?: number;
+  grade?: string;
+  location?: string;
+  avatarUrl?: string;
+  bio?: string;
+  dateOfBirth?: string;
+  parentId?: string;
+  requireTagConsent?: boolean;
 }
 
 export interface UserStats {
@@ -47,16 +90,39 @@ export interface TeamSummary {
   organizationName?: string;
   sport?: string;
   season?: string;
-  wins?: number;
-  losses?: number;
-  ties?: number;
   playerCount?: number;
+}
+
+export type UserTeamMembershipStatus =
+  (typeof UserTeamMembershipStatus)[keyof typeof UserTeamMembershipStatus];
+
+export const UserTeamMembershipStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  declined: "declined",
+} as const;
+
+export type UserTeamMembershipRole =
+  (typeof UserTeamMembershipRole)[keyof typeof UserTeamMembershipRole];
+
+export const UserTeamMembershipRole = {
+  player: "player",
+  coach: "coach",
+} as const;
+
+export interface UserTeamMembership {
+  team: TeamSummary;
+  status: UserTeamMembershipStatus;
+  role?: UserTeamMembershipRole;
+  position?: string;
+  jerseyNumber?: number;
 }
 
 export interface UserProfile {
   user: User;
-  teams: TeamSummary[];
+  teams: UserTeamMembership[];
   stats: UserStats;
+  canManageTags?: boolean;
 }
 
 export interface Highlight {
@@ -73,6 +139,13 @@ export interface Highlight {
   taggedUsers?: User[];
 }
 
+export type ArticleStatus = (typeof ArticleStatus)[keyof typeof ArticleStatus];
+
+export const ArticleStatus = {
+  draft: "draft",
+  published: "published",
+} as const;
+
 export interface Article {
   id: string;
   title: string;
@@ -84,13 +157,42 @@ export interface Article {
   snippet?: string;
   body?: string;
   coverImageUrl?: string;
+  status: ArticleStatus;
+  publishedAt?: string;
   createdAt: string;
+  updatedAt?: string;
+  author?: User;
+  coAuthors?: User[];
   taggedUsers?: User[];
 }
 
 export interface TaggedContent {
   highlights: Highlight[];
   articles: Article[];
+}
+
+export interface MyArticleTag {
+  tagId: string;
+  article: Article;
+}
+
+export interface MyHighlightTag {
+  tagId: string;
+  highlight: Highlight;
+}
+
+export interface MyTags {
+  articleTags: MyArticleTag[];
+  highlightTags: MyHighlightTag[];
+}
+
+export interface Notification {
+  id: string;
+  kind: string;
+  message: string;
+  link?: string;
+  read: boolean;
+  createdAt: string;
 }
 
 export interface Organization {
@@ -107,6 +209,7 @@ export interface Organization {
 export interface OrganizationDetail {
   organization: Organization;
   teams: TeamSummary[];
+  canManage?: boolean;
 }
 
 export interface NewOrganization {
@@ -122,9 +225,6 @@ export interface Team {
   organizationId: string;
   sport?: string;
   season?: string;
-  wins?: number;
-  losses?: number;
-  ties?: number;
 }
 
 export type RosterEntryRole =
@@ -135,11 +235,21 @@ export const RosterEntryRole = {
   coach: "coach",
 } as const;
 
+export type RosterEntryStatus =
+  (typeof RosterEntryStatus)[keyof typeof RosterEntryStatus];
+
+export const RosterEntryStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  declined: "declined",
+} as const;
+
 export interface RosterEntry {
   id: string;
   teamId: string;
   user: User;
   role: RosterEntryRole;
+  status: RosterEntryStatus;
   position?: string;
   jerseyNumber?: number;
   grade?: string;
@@ -149,6 +259,7 @@ export interface TeamDetail {
   team: Team;
   organization: Organization;
   roster: RosterEntry[];
+  canManage?: boolean;
 }
 
 export interface NewTeam {
@@ -174,10 +285,79 @@ export interface NewRosterEntry {
   grade?: string;
 }
 
+export type RosterInviteRole =
+  (typeof RosterInviteRole)[keyof typeof RosterInviteRole];
+
+export const RosterInviteRole = {
+  player: "player",
+  coach: "coach",
+} as const;
+
+export type RosterInviteStatus =
+  (typeof RosterInviteStatus)[keyof typeof RosterInviteStatus];
+
+export const RosterInviteStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  expired: "expired",
+  revoked: "revoked",
+} as const;
+
+export interface RosterInvite {
+  id: string;
+  token: string;
+  teamId: string;
+  invitedEmail: string;
+  invitedName?: string;
+  role: RosterInviteRole;
+  position?: string;
+  jerseyNumber?: number;
+  grade?: string;
+  status: RosterInviteStatus;
+  createdAt: string;
+}
+
+export interface RosterInviteDetail {
+  invite: RosterInvite;
+  team: Team;
+  organization: Organization;
+  invitedBy?: User;
+}
+
+export type NewRosterInviteRole =
+  (typeof NewRosterInviteRole)[keyof typeof NewRosterInviteRole];
+
+export const NewRosterInviteRole = {
+  player: "player",
+  coach: "coach",
+} as const;
+
+export interface NewRosterInvite {
+  invitedEmail: string;
+  invitedName?: string;
+  role: NewRosterInviteRole;
+  position?: string;
+  jerseyNumber?: number;
+  grade?: string;
+}
+
+export interface AcceptInviteBody {
+  name?: string;
+  dateOfBirth?: string;
+}
+
 export interface ArticleDetail {
   article: Article;
   highlights: Highlight[];
 }
+
+export type NewArticleStatus =
+  (typeof NewArticleStatus)[keyof typeof NewArticleStatus];
+
+export const NewArticleStatus = {
+  draft: "draft",
+  published: "published",
+} as const;
 
 export interface NewArticle {
   title: string;
@@ -186,10 +366,26 @@ export interface NewArticle {
   gameDate?: string;
   gameScore?: string;
   snippet?: string;
-  body: string;
+  body?: string;
   coverImageUrl?: string;
+  status?: NewArticleStatus;
   taggedUserIds?: string[];
   highlightIds?: string[];
+}
+
+export interface UpdateArticleBody {
+  title?: string;
+  opponentName?: string;
+  gameDate?: string;
+  gameScore?: string;
+  snippet?: string;
+  body?: string;
+  coverImageUrl?: string;
+  taggedUserIds?: string[];
+}
+
+export interface AddCoAuthorBody {
+  userId: string;
 }
 
 export interface HighlightDetail {

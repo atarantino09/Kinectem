@@ -6,10 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Team {
-  id: string;
-  name: string;
-  organizationId: string;
-  sport?: string;
-  season?: string;
+export interface LoginBody {
+  userId: string;
 }

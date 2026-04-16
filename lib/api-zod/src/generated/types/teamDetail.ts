@@ -13,4 +13,5 @@ export interface TeamDetail {
   team: Team;
   organization: Organization;
   roster: RosterEntry[];
+  canManage?: boolean;
 }

@@ -5,18 +5,14 @@
  * Kinectem API - social platform for youth athletes
  * OpenAPI spec version: 0.1.0
  */
-import type { NewArticleStatus } from "./newArticleStatus";
 
-export interface NewArticle {
-  title: string;
-  teamId: string;
+export interface UpdateArticleBody {
+  title?: string;
   opponentName?: string;
   gameDate?: Date;
   gameScore?: string;
   snippet?: string;
   body?: string;
   coverImageUrl?: string;
-  status?: NewArticleStatus;
   taggedUserIds?: string[];
-  highlightIds?: string[];
 }

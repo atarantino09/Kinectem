@@ -5,12 +5,13 @@
  * Kinectem API - social platform for youth athletes
  * OpenAPI spec version: 0.1.0
  */
-import type { TeamSummary } from "./teamSummary";
 import type { User } from "./user";
 import type { UserStats } from "./userStats";
+import type { UserTeamMembership } from "./userTeamMembership";
 
 export interface UserProfile {
   user: User;
-  teams: TeamSummary[];
+  teams: UserTeamMembership[];
   stats: UserStats;
+  canManageTags?: boolean;
 }

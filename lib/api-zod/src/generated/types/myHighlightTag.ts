@@ -5,11 +5,9 @@
  * Kinectem API - social platform for youth athletes
  * OpenAPI spec version: 0.1.0
  */
+import type { Highlight } from "./highlight";
 
-export interface Team {
-  id: string;
-  name: string;
-  organizationId: string;
-  sport?: string;
-  season?: string;
+export interface MyHighlightTag {
+  tagId: string;
+  highlight: Highlight;
 }

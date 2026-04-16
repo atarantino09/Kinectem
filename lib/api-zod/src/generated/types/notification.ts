@@ -6,10 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Team {
+export interface Notification {
   id: string;
-  name: string;
-  organizationId: string;
-  sport?: string;
-  season?: string;
+  kind: string;
+  message: string;
+  link?: string;
+  read: boolean;
+  createdAt: Date;
 }

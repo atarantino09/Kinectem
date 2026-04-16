@@ -2,12 +2,16 @@ import { db } from "@workspace/db";
 import {
   users,
   organizations,
+  organizationAdmins,
   teams,
   rosterEntries,
+  rosterInvites,
   articles,
+  articleAuthors,
   highlights,
   articleTags,
   highlightTags,
+  notifications,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
@@ -24,11 +28,12 @@ export async function seedIfEmpty(): Promise<void> {
 
   logger.info("Seeding database...");
 
-  const [marcus, jordan, tyler, coachDavis, adminSam, daniela, chris] = await db
+  const [marcus, jordan, tyler, coachDavis, adminSam, daniela, chris, parentLisa, childSamira] = await db
     .insert(users)
     .values([
       {
         name: "Marcus Rivera",
+        email: "marcus@kinectem.demo",
         role: "athlete",
         sport: "Football",
         position: "Wide Receiver",
@@ -39,6 +44,7 @@ export async function seedIfEmpty(): Promise<void> {
       },
       {
         name: "Jordan Bennett",
+        email: "jordan@kinectem.demo",
         role: "athlete",
         sport: "Football",
         position: "Quarterback",
@@ -49,6 +55,7 @@ export async function seedIfEmpty(): Promise<void> {
       },
       {
         name: "Tyler Chen",
+        email: "tyler@kinectem.demo",
         role: "athlete",
         sport: "Football",
         position: "Running Back",
@@ -59,6 +66,7 @@ export async function seedIfEmpty(): Promise<void> {
       },
       {
         name: "Coach Mike Davis",
+        email: "coach@kinectem.demo",
         role: "coach",
         sport: "Football",
         position: "Head Coach",
@@ -67,12 +75,14 @@ export async function seedIfEmpty(): Promise<void> {
       },
       {
         name: "Sam Patel",
+        email: "sam@kinectem.demo",
         role: "admin",
         location: "Westfield, NJ",
         bio: "Athletic Director, Westfield Athletic Club.",
       },
       {
         name: "Daniela Ortiz",
+        email: "daniela@kinectem.demo",
         role: "athlete",
         sport: "Basketball",
         position: "Point Guard",
@@ -83,6 +93,7 @@ export async function seedIfEmpty(): Promise<void> {
       },
       {
         name: "Chris Walker",
+        email: "chris@kinectem.demo",
         role: "athlete",
         sport: "Football",
         position: "Linebacker",
@@ -91,8 +102,30 @@ export async function seedIfEmpty(): Promise<void> {
         location: "Westfield, NJ",
         bio: "Tackle machine. Captain on and off the field.",
       },
+      {
+        name: "Lisa Carter",
+        email: "lisa@kinectem.demo",
+        role: "parent",
+        location: "Westfield, NJ",
+        bio: "Mom of two athletes. Soccer + basketball families never sleep.",
+      },
+      {
+        name: "Samira Carter",
+        email: "samira@kinectem.demo",
+        role: "athlete",
+        sport: "Basketball",
+        position: "Shooting Guard",
+        jerseyNumber: 22,
+        grade: "Class of 2032",
+        location: "Westfield, NJ",
+        bio: "Middle school hooper, big dreams.",
+        dateOfBirth: new Date("2014-03-12"),
+      },
     ])
     .returning();
+
+  // Link parent ↔ child
+  await db.update(users).set({ parentId: parentLisa.id }).where(sql`id = ${childSamira.id}`);
 
   const [westfield] = await db
     .insert(organizations)
@@ -103,48 +136,56 @@ export async function seedIfEmpty(): Promise<void> {
         location: "Westfield, NJ",
         description:
           "Premier youth sports organization dedicated to developing student-athletes in Union County. Home of the Blue Devils. Developing talent, character, and leadership since 1995.",
+        createdById: adminSam.id,
       },
     ])
     .returning();
+
+  await db.insert(organizationAdmins).values([
+    { organizationId: westfield.id, userId: adminSam.id },
+    { organizationId: westfield.id, userId: coachDavis.id },
+  ]);
 
   const [varsityFootball, jvFootball, varsityBasketball] = await db
     .insert(teams)
     .values([
-      {
-        organizationId: westfield.id,
-        name: "Varsity Football",
-        season: "Fall 2025",
-        sport: "Football",
-        level: "Varsity",
-      },
-      {
-        organizationId: westfield.id,
-        name: "JV Football",
-        season: "Fall 2025",
-        sport: "Football",
-        level: "JV",
-      },
-      {
-        organizationId: westfield.id,
-        name: "Varsity Boys Basketball",
-        season: "Winter 2025",
-        sport: "Basketball",
-        level: "Varsity",
-      },
+      { organizationId: westfield.id, name: "Varsity Football", season: "Fall 2025", sport: "Football", level: "Varsity" },
+      { organizationId: westfield.id, name: "JV Football", season: "Fall 2025", sport: "Football", level: "JV" },
+      { organizationId: westfield.id, name: "Varsity Boys Basketball", season: "Winter 2025", sport: "Basketball", level: "Varsity" },
     ])
     .returning();
 
   await db.insert(rosterEntries).values([
-    { teamId: varsityFootball.id, userId: marcus.id, role: "player", position: "WR", jerseyNumber: 12 },
-    { teamId: varsityFootball.id, userId: jordan.id, role: "player", position: "QB", jerseyNumber: 7 },
-    { teamId: varsityFootball.id, userId: tyler.id, role: "player", position: "RB", jerseyNumber: 24 },
-    { teamId: varsityFootball.id, userId: chris.id, role: "player", position: "LB", jerseyNumber: 55 },
-    { teamId: varsityFootball.id, userId: coachDavis.id, role: "coach", position: "Head Coach" },
-    { teamId: jvFootball.id, userId: tyler.id, role: "player", position: "RB", jerseyNumber: 24 },
-    { teamId: varsityBasketball.id, userId: daniela.id, role: "player", position: "PG", jerseyNumber: 3 },
+    { teamId: varsityFootball.id, userId: marcus.id, role: "player", status: "accepted", position: "WR", jerseyNumber: 12 },
+    { teamId: varsityFootball.id, userId: jordan.id, role: "player", status: "accepted", position: "QB", jerseyNumber: 7 },
+    { teamId: varsityFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
+    { teamId: varsityFootball.id, userId: chris.id, role: "player", status: "accepted", position: "LB", jerseyNumber: 55 },
+    { teamId: varsityFootball.id, userId: coachDavis.id, role: "coach", status: "accepted", position: "Head Coach" },
+    { teamId: jvFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
+    { teamId: varsityBasketball.id, userId: daniela.id, role: "player", status: "accepted", position: "PG", jerseyNumber: 3 },
+    // A pending invitation already accepted by player
+    { teamId: varsityBasketball.id, userId: samiraPlaceholder(childSamira.id), role: "player", status: "pending", position: "SG", jerseyNumber: 22 },
   ]);
 
-  const [recap1, recap2] = await db
+  // Pending email invite (no user yet)
+  await db.insert(rosterInvites).values([
+    {
+      token: "demo-invite-token-001",
+      teamId: varsityFootball.id,
+      invitedEmail: "newrecruit@example.com",
+      invitedName: "Devon Williams",
+      role: "player",
+      position: "Cornerback",
+      jerseyNumber: 21,
+      status: "pending",
+      invitedById: coachDavis.id,
+    },
+  ]);
+
+  const publishedAt1 = new Date("2025-10-14");
+  const publishedAt2 = new Date("2025-09-26");
+
+  const [recap1, recap2, draftRecap] = await db
     .insert(articles)
     .values([
       {
@@ -157,7 +198,9 @@ export async function seedIfEmpty(): Promise<void> {
         opponentName: "Lincoln High",
         teamScore: 34,
         opponentScore: 14,
-        gameDate: new Date("2025-10-14"),
+        gameDate: publishedAt1,
+        status: "published",
+        publishedAt: publishedAt1,
       },
       {
         teamId: varsityFootball.id,
@@ -169,10 +212,26 @@ export async function seedIfEmpty(): Promise<void> {
         opponentName: "Millburn",
         teamScore: 21,
         opponentScore: 17,
-        gameDate: new Date("2025-09-26"),
+        gameDate: publishedAt2,
+        status: "published",
+        publishedAt: publishedAt2,
+      },
+      {
+        teamId: varsityFootball.id,
+        authorId: coachDavis.id,
+        title: "Draft: Recap vs. Cranford",
+        summary: "Working title — early notes from Friday's game.",
+        body: "Notes: Big stop on 4th and 1. Need to mention Tyler's 35-yard run in the third. Add Marcus's two-point conversion catch.",
+        opponentName: "Cranford",
+        gameDate: new Date("2025-10-21"),
+        status: "draft",
       },
     ])
     .returning();
+
+  await db.insert(articleAuthors).values([
+    { articleId: draftRecap.id, userId: coachDavis.id },
+  ]);
 
   await db.insert(articleTags).values([
     { articleId: recap1.id, userId: marcus.id },
@@ -224,5 +283,16 @@ export async function seedIfEmpty(): Promise<void> {
     { highlightId: hl3.id, userId: chris.id },
   ]);
 
+  await db.insert(notifications).values([
+    {
+      userId: childSamira.id,
+      kind: "roster_invite",
+      message: "Coach Mike Davis added you to Varsity Boys Basketball — accept your roster spot.",
+      link: `/u/${childSamira.id}`,
+    },
+  ]);
+
   logger.info("Database seeded successfully");
 }
+
+function samiraPlaceholder(id: string) { return id; }
