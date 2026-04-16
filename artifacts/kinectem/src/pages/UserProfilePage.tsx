@@ -35,7 +35,7 @@ export default function UserProfilePage() {
       {/* Left: profile card */}
       <aside className="space-y-4">
         <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
-          <div className="h-24 bg-gradient-to-r from-slate-900 to-blue-900 relative">
+          <div className="h-24 brand-gradient-dark relative">
             <div className="absolute top-3 right-3 flex gap-2">
               <Button size="icon" variant="secondary" className="rounded-full bg-white/20 text-white hover:bg-white/30 border-none backdrop-blur-md w-8 h-8">
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -160,7 +160,7 @@ export default function UserProfilePage() {
               {highlights.map((h) => (
                 <Link key={h.id} href={`/highlights/${h.id}`}>
                   <Card className="rounded-xl border border-border shadow-sm overflow-hidden group cursor-pointer">
-                    <div className="h-40 bg-gradient-to-tr from-slate-900 to-slate-800 relative flex items-center justify-center">
+                    <div className="h-40 brand-gradient-dark relative flex items-center justify-center">
                       {h.thumbnailUrl && (
                         <img src={h.thumbnailUrl} alt={h.title} className="absolute inset-0 w-full h-full object-cover opacity-60" />
                       )}

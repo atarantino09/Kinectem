@@ -32,7 +32,7 @@ export default function OrganizationPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="rounded-xl overflow-hidden border border-border bg-card shadow-sm">
-        <div className="h-40 bg-gradient-to-tr from-slate-900 via-blue-900 to-slate-800 relative">
+        <div className="h-40 brand-gradient-dark relative">
           {organization.bannerUrl && (
             <img src={organization.bannerUrl} alt="" className="w-full h-full object-cover opacity-80" />
           )}

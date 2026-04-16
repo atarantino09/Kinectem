@@ -20,7 +20,7 @@ export default function FeedPage() {
       <aside className="hidden lg:block space-y-4">
         {me && (
           <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="h-16 bg-gradient-to-r from-slate-900 to-primary" />
+            <div className="h-16 brand-gradient" />
             <CardContent className="p-4 -mt-8">
               <Link href={`/users/${me.id}`}>
                 <Avatar className="w-16 h-16 border-4 border-card cursor-pointer">

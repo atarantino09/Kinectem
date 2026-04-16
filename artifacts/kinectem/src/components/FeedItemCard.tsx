@@ -93,7 +93,7 @@ export function FeedItemCard({ item }: { item: FeedItem }) {
           </div>
           <Link href={`/highlights/${h.id}`}>
             <div className="cursor-pointer">
-              <div className="h-72 bg-gradient-to-br from-slate-900 to-slate-800 relative flex items-center justify-center group">
+              <div className="h-72 brand-gradient-dark relative flex items-center justify-center group">
                 {h.thumbnailUrl && (
                   <img src={h.thumbnailUrl} alt={h.title} className="absolute inset-0 w-full h-full object-cover opacity-60" />
                 )}

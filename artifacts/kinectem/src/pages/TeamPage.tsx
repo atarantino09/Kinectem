@@ -280,7 +280,7 @@ export default function TeamPage() {
                     {h.thumbnailUrl && (
                       <img src={h.thumbnailUrl} alt={h.title} className="absolute inset-0 w-full h-full object-cover opacity-60" />
                     )}
-                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-primary transition-colors z-10">
+                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:brand-gradient transition-colors z-10">
                       <Play className="w-4 h-4 text-white ml-1" fill="currentColor" />
                     </div>
                   </div>

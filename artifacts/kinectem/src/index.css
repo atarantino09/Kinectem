@@ -113,6 +113,12 @@
   --chart-4: 38 92% 50%;
   --chart-5: 142 71% 45%;
 
+  /* Kinectem brand gradient (purple -> blue, matches logo) */
+  --brand-purple: 262 83% 58%;
+  --brand-blue: 217 91% 60%;
+  --brand-gradient: linear-gradient(135deg, hsl(var(--brand-purple)) 0%, hsl(var(--brand-blue)) 100%);
+  --brand-gradient-dark: linear-gradient(135deg, hsl(262 60% 20%) 0%, hsl(222 47% 11%) 55%, hsl(217 60% 22%) 100%);
+
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
@@ -274,6 +280,30 @@
  * need to be distinguished from eachother visually.
  */
 @layer utilities {
+  .brand-gradient { background: var(--brand-gradient); }
+  .brand-gradient-dark { background: var(--brand-gradient-dark); }
+  .brand-gradient-text {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .brand-gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+  }
+  .brand-gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: var(--brand-gradient);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
 
   /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {
