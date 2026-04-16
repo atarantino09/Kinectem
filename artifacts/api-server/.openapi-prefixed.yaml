@@ -59,20 +59,22 @@ paths:
     get:
       operationId: getUserById
       summary: Get user profile
+      description: >
+        Returns either a `PrivateUserResponse` (when the caller is viewing
+        their own profile, a linked guardian, or has permission to see
+        private fields) or a `PublicUserResponse` (everyone else). The
+        variants share all public fields; the private variant adds
+        caller-only fields such as email and age-gated metadata. UI clients
+        can treat the response as `PublicUserResponse` with optional private
+        fields. A discriminator will be added in a future spec version.
       parameters:
         - $ref: '#/components/parameters/UserId'
       responses:
         '200':
-          description: User profile
+          description: User profile (public or private view depending on requester)
           content:
             application/json:
               schema:
-                # NOTE: PrivateUserResponse extends PublicUserResponse via allOf,
-                # so every valid Private response also matches Public. This makes
-                # the oneOf technically ambiguous under OAS 3.0 semantics. This is
-                # safe because validateResponses is disabled (see app.ts). If
-                # response validation is ever enabled, add a discriminator or
-                # restructure schemas. See BACKLOG P3-11.
                 oneOf:
                   - $ref: '#/components/schemas/PrivateUserResponse'
                   - $ref: '#/components/schemas/PublicUserResponse'
@@ -120,8 +122,6 @@ paths:
       description: Sets the user's cover photo to a confirmed image asset they own.
       tags:
         - Users
-      security:
-        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/UserId'
       requestBody:
@@ -129,14 +129,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - assetId
-              properties:
-                assetId:
-                  type: string
-                  format: uuid
-                  description: ID of a confirmed image asset owned by the user.
+              $ref: '#/components/schemas/SetAssetIdRequest'
       responses:
         '200':
           description: Cover photo set successfully. Returns updated user profile.
@@ -158,8 +151,6 @@ paths:
       description: Removes the user's cover photo. Returns the updated profile with coverPhotoUrl set to null. Returning 200 with the full profile (rather than 204) is deliberate — it gives the client an updated profile snapshot without a follow-up GET.
       tags:
         - Users
-      security:
-        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/UserId'
       responses:
@@ -173,6 +164,213 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/avatar:
+    put:
+      operationId: setUserAvatar
+      summary: Set user avatar
+      description: Sets the user's avatar to a confirmed image asset they own.
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAssetIdRequest'
+      responses:
+        '200':
+          description: Avatar set. Returns updated user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteUserAvatar
+      summary: Remove user asset-backed avatar
+      description: Removes the user's asset-backed avatar. The stored legacy URL (Clerk) is retained. Returns the updated user profile.
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Avatar removed. Returns updated user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/sports:
+    get:
+      operationId: getUserSports
+      summary: List the user's sports (self only)
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The user's sports list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSportsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      operationId: updateUserSports
+      summary: Replace the user's sports list (self only)
+      description: Full-replace semantics — the submitted array overwrites the stored list.
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserSportsRequest'
+      responses:
+        '200':
+          description: Updated sports list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSportsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{userId}/teams:
+    get:
+      operationId: listUserTeams
+      summary: List teams the user belongs to
+      tags:
+        - Users
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, pending]
+        - name: seasonId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated list of team memberships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserTeamMembershipsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/me:
+    get:
+      operationId: getLoggedInUser
+      summary: Get the authenticated user's full profile
+      tags:
+        - Users
+      responses:
+        '200':
+          description: The authenticated user's private profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/me/settings:
+    get:
+      operationId: getMySettings
+      summary: Get the authenticated user's settings bag
+      tags:
+        - Users
+      responses:
+        '200':
+          description: The user's settings object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      operationId: updateMySettings
+      summary: Shallow-merge a patch into the authenticated user's settings bag
+      description: >
+        Unknown keys are rejected with 400 (strict Zod schema). Empty body returns
+        the current settings unchanged.
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserSettingsRequest'
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSettingsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -455,6 +653,23 @@ paths:
     post:
       operationId: requestUpload
       summary: Request a presigned URL for asset upload
+      description: |
+        Step 1 of the 3-step asset upload flow:
+
+        1. `POST /assets/upload` — this endpoint. Returns `{ assetId, uploadUrl, uploadHeaders, expiresIn }`.
+        2. `PUT <uploadUrl>` — upload the binary **directly to the signed storage URL**
+           (Supabase / S3-compatible). This request does NOT go through the Kinectem
+           API. Use the exact headers from `uploadHeaders` (typically `Content-Type`
+           matching `fileType`). The URL is valid for `expiresIn` seconds.
+        3. `POST /assets/{assetId}/confirm` — confirm the upload is complete so the
+           backend can verify the object and mark the asset `confirmed`.
+
+        Once confirmed, reference the asset by `assetId` elsewhere in the API
+        (e.g. `SetAssetIdRequest` for `PUT /users/{userId}/avatar`,
+        `PUT /organizations/{orgId}/avatar`, `PUT /teams/{teamId}/avatar`, or as
+        entries in `assetIds` on `CreatePostRequest`).
+
+        Requires an adult or consented-minor user.
       tags:
         - Assets
       requestBody:
@@ -1345,7 +1560,7 @@ paths:
 
   /api/v1/notifications/unread-count:
     get:
-      operationId: getUnreadCount
+      operationId: getUnreadNotificationCount
       summary: Get unread notification count
       tags:
         - Notifications
@@ -1511,7 +1726,7 @@ paths:
 
   /api/v1/conversations/unread-count:
     get:
-      operationId: getUnreadCount
+      operationId: getUnreadMessageCount
       summary: Get total unread message count
       description: Returns the total number of unread messages across all of the authenticated user's conversations.
       tags:
@@ -2327,6 +2542,1104 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/feed:
+    get:
+      operationId: listFeed
+      summary: Home feed for the authenticated user
+      description: >
+        Returns a paginated unified feed assembled from the user's own posts,
+        followed users/orgs/teams, and member orgs/teams. COPPA rule: minor-authored
+        posts are excluded at query time.
+      tags:
+        - Feed
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated feed results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/posts/{postId}/reactions:
+    put:
+      operationId: addPostReaction
+      summary: Add or upsert a reaction on a post
+      description: Idempotent. Calling twice with the same user is a no-op. Requires adult or consented-minor user.
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddReactionRequest'
+      responses:
+        '204':
+          description: Reaction added or already existed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: removePostReaction
+      summary: Remove the current user's reaction from a post
+      description: Idempotent. Calling when no reaction exists is a no-op.
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '204':
+          description: Reaction removed or did not exist
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listPostReactors
+      summary: List users who reacted to a post (paginated)
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of reactors, most recent first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReactors'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/posts/{postId}/comments:
+    post:
+      operationId: createPostComment
+      summary: Create a comment on a post
+      description: Requires adult or consented-minor user.
+      tags:
+        - Comments
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '201':
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listPostComments
+      summary: List comments for a post (paginated, oldest first)
+      tags:
+        - Comments
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated comments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedComments'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/posts/{postId}/comments/{commentId}:
+    delete:
+      operationId: deletePostComment
+      summary: Soft-delete a comment
+      description: Requires adult or consented-minor user. Only the comment author or a moderator can delete.
+      tags:
+        - Comments
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '204':
+          description: Comment deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/posts/{postId}/comments/{commentId}/reactions:
+    get:
+      operationId: listCommentReactors
+      summary: List users who reacted to a comment (paginated)
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/CommentId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of reactors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReactors'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: addCommentReaction
+      summary: Add or upsert a reaction on a comment
+      description: Idempotent. Requires adult or consented-minor user.
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/CommentId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddReactionRequest'
+      responses:
+        '204':
+          description: Reaction added or already existed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: removeCommentReaction
+      summary: Remove the current user's reaction from a comment
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '204':
+          description: Reaction removed or did not exist
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/posts/{postId}/tags:
+    post:
+      operationId: createPostTags
+      summary: Propose one or more content tags on a post
+      tags:
+        - Tags
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagsRequest'
+      responses:
+        '201':
+          description: Tags proposed and persisted in pending status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TagResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: listPostTags
+      summary: List tags on a post
+      tags:
+        - Tags
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Tags for the post
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TagResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/tags/pending:
+    get:
+      operationId: listPendingTags
+      summary: List tags pending moderation for the authenticated approver
+      description: >
+        Returns the pending-tag queue for the caller (tags on entities they own
+        or moderate). Requires adult or consented-minor user.
+      tags:
+        - Tags
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending tag queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TagResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/tags/{tagId}/approve:
+    post:
+      operationId: approveTag
+      summary: Approve a pending tag
+      tags:
+        - Tags
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+      responses:
+        '200':
+          description: Tag approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/tags/{tagId}/decline:
+    post:
+      operationId: declineTag
+      summary: Decline a pending tag
+      tags:
+        - Tags
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+      responses:
+        '200':
+          description: Tag declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/tags/{tagId}:
+    delete:
+      operationId: removeTag
+      summary: Remove a tag (author or tagged party only)
+      tags:
+        - Tags
+      parameters:
+        - $ref: '#/components/parameters/TagId'
+      responses:
+        '204':
+          description: Tag removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/teams/{teamId}/posts:
+    get:
+      operationId: listTeamPosts
+      summary: List posts created in the context of a team (paginated)
+      tags:
+        - Teams
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated team posts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPostsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/teams/{teamId}/avatar:
+    put:
+      operationId: setTeamAvatar
+      summary: Set a team's avatar from a confirmed asset
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAssetIdRequest'
+      responses:
+        '200':
+          description: Avatar set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteTeamAvatar
+      summary: Remove a team's avatar
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '204':
+          description: Avatar removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/teams/{teamId}/join-link:
+    post:
+      operationId: getOrCreateTeamJoinLink
+      summary: Get or create the current join link for a team
+      description: Returns the active rotating join link (token) for a team. Creates one if none exists.
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '200':
+          description: Join link token and metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/join/{token}/accept:
+    post:
+      operationId: acceptTeamJoinLink
+      summary: Join a team via a join-link token
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/JoinLinkToken'
+      responses:
+        '200':
+          description: Joined (or already a member — idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Join link expired or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/join/{token}/preview:
+    get:
+      operationId: previewTeamJoinLink
+      summary: Preview a team join-link (public, unauthenticated)
+      description: Used by the marketing/join landing page before the user signs in. Rate-limited.
+      tags:
+        - Teams
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/JoinLinkToken'
+      responses:
+        '200':
+          description: Public team preview for the join flow
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinLinkPreviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Join link expired or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/organizations/{orgId}/avatar:
+    put:
+      operationId: setOrgAvatar
+      summary: Set an organization's avatar from a confirmed asset
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAssetIdRequest'
+      responses:
+        '200':
+          description: Avatar set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteOrgAvatar
+      summary: Remove an organization's avatar
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '204':
+          description: Avatar removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/join-requests:
+    post:
+      operationId: createOrgJoinRequest
+      summary: Request to join an organization
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '201':
+          description: Join request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listOrgJoinRequests
+      summary: List join requests for an organization (admin)
+      description: >
+        Returns the join-request queue for an organization. Defaults to
+        `status=pending`; pass `status` to see decided requests.
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - name: status
+          in: query
+          required: false
+          description: Filter by request status. Defaults to `pending`.
+          schema:
+            $ref: '#/components/schemas/JoinRequestStatus'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated join request queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JoinRequestResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/join-requests/{requestId}/approve:
+    post:
+      operationId: approveOrgJoinRequest
+      summary: Approve a pending org join request
+      description: >
+        Approves the request and adds the user to the organization. An optional
+        `role` in the body promotes the joiner to `admin`; defaults to `member`
+        when omitted.
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveJoinRequestBody'
+      responses:
+        '200':
+          description: Request approved; user added to org
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/join-requests/{requestId}/decline:
+    post:
+      operationId: declineOrgJoinRequest
+      summary: Decline a pending org join request
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Request declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/join-requests/{requestId}:
+    delete:
+      operationId: withdrawOrgJoinRequest
+      summary: Withdraw a pending join request (requester only)
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Request withdrawn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/post-approvals:
+    get:
+      operationId: listOrgPostApprovals
+      summary: List post-approval queue for an organization (admin)
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated post-approval queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PostApprovalResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/post-approvals/{approvalId}/approve:
+    post:
+      operationId: approveOrgPostApproval
+      summary: Approve a pending post for publication under the organization
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/ApprovalId'
+      responses:
+        '200':
+          description: Post approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostApprovalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{orgId}/post-approvals/{approvalId}/decline:
+    post:
+      operationId: declineOrgPostApproval
+      summary: Decline a pending post
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/ApprovalId'
+      responses:
+        '200':
+          description: Post declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostApprovalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/users/{userId}/guardians:
+    get:
+      operationId: listUserGuardians
+      summary: List guardian links for a child user
+      description: Returns the guardians linked to the given child. Visibility restricted to self or linked guardians.
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Guardian links
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GuardianLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/users/{userId}/guardians/invite:
+    post:
+      operationId: inviteGuardian
+      summary: Invite a guardian for a child user (COPPA)
+      description: >
+        Creates a pending guardian link and triggers a consent-request email
+        to the provided address. Only the child themselves, an existing primary
+        guardian, or a platform admin may invite.
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteGuardianRequest'
+      responses:
+        '200':
+          description: >
+            Privacy-safe dedup response. Returned when the email is already
+            linked (pending or active) to this child. The server deliberately
+            does not confirm whether an account exists; treat this as "invite
+            processed" rather than an error.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+        '201':
+          description: Guardian link created in pending status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardianLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/users/{userId}/children:
+    get:
+      operationId: listUserChildren
+      summary: List child user links for a guardian
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Child links
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChildLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/guardian-links/{linkId}/accept:
+    post:
+      operationId: acceptGuardianLink
+      summary: Accept a pending guardian invitation
+      description: The invited guardian accepts the link. Marks the link active and records consent.
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      responses:
+        '200':
+          description: Guardian link accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardianLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/guardian-links/{linkId}/decline:
+    post:
+      operationId: declineGuardianLink
+      summary: Decline a pending guardian invitation
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      responses:
+        '204':
+          description: Guardian link declined
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/guardian-links/{linkId}:
+    delete:
+      operationId: removeGuardianLink
+      summary: Remove a guardian link
+      description: >
+        Either the guardian or the child (or primary guardian) may remove a
+        link. Primary guardian cannot be removed if it is the last guardian.
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      responses:
+        '204':
+          description: Link removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/guardian-links/{linkId}/transfer-primary:
+    post:
+      operationId: transferPrimaryGuardian
+      summary: Transfer the primary-guardian flag to this link
+      description: Only the current primary guardian can transfer the primary role to another active link.
+      tags:
+        - Guardians
+      parameters:
+        - $ref: '#/components/parameters/LinkId'
+      responses:
+        '200':
+          description: Primary transferred
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardianLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/conversations/search/contacts:
+    get:
+      operationId: searchConversationContacts
+      summary: Search the caller's eligible messaging contacts
+      description: >
+        Returns users the authenticated user may start a DM with, matching a
+        query string. Used to populate the new-conversation composer.
+      tags:
+        - Messaging
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query (min 1 character)
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationContactResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/invites/{token}/preview:
+    get:
+      operationId: previewRosterInvite
+      summary: Preview a roster invite token (public, unauthenticated)
+      description: Powers the invite landing page before the invitee signs in. Rate-limited.
+      tags:
+        - Roster Invites
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '200':
+          description: Invite preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Invite expired or withdrawn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/posts/{postId}/preview:
+    get:
+      operationId: getPostPreview
+      summary: Public preview of a post (used for social share unfurling and the public post page)
+      tags:
+        - Posts
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Post preview (may be redacted for privacy)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostPreviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/posts/{postId}/og-image:
+    get:
+      operationId: getPostOgImage
+      summary: Generated Open Graph preview image for a post
+      tags:
+        - Posts
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: PNG image binary
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/search:
     get:
       operationId: crossEntitySearch
@@ -2486,18 +3799,134 @@ components:
       type: object
       additionalProperties: false
       properties:
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        dateOfBirth:
+          type: string
+          format: date
+          description: ISO 8601 date (YYYY-MM-DD).
         bio:
           type: string
           nullable: true
           maxLength: 1000
-        avatarUrl:
-          type: string
-          format: uri
-          nullable: true
         nickname:
           type: string
           nullable: true
           maxLength: 100
+        level:
+          type: string
+          nullable: true
+          maxLength: 50
+
+    SetAssetIdRequest:
+      type: object
+      required: [assetId]
+      additionalProperties: false
+      properties:
+        assetId:
+          type: string
+          format: uuid
+          description: UUID of a confirmed asset owned by the caller.
+
+    UpdateUserSportsRequest:
+      type: object
+      required: [sports]
+      additionalProperties: false
+      properties:
+        sports:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+
+    UserSportsResponse:
+      type: object
+      required: [sports]
+      properties:
+        sports:
+          type: array
+          items:
+            type: string
+
+    UserSettingsResponse:
+      type: object
+      additionalProperties: true
+      description: Free-form settings bag. Known keys below; clients may receive additional keys in the future.
+      properties:
+        share_to_facebook_default:
+          type: boolean
+
+    UpdateUserSettingsRequest:
+      type: object
+      additionalProperties: false
+      description: Strict — unknown keys rejected with 400.
+      properties:
+        share_to_facebook_default:
+          type: boolean
+
+    UserTeamMembershipResponse:
+      type: object
+      required:
+        - id
+        - teamId
+        - teamName
+        - teamSlug
+        - organization
+        - role
+        - position
+        - status
+        - seasonId
+        - joinedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        teamName:
+          type: string
+        teamSlug:
+          type: string
+        teamAvatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        organization:
+          $ref: '#/components/schemas/TeamOrganizationEmbed'
+        role:
+          type: string
+          enum: [owner, admin, author, member]
+        position:
+          type: string
+          enum: [player, coach, assistant_coach, manager, parent]
+        status:
+          type: string
+          enum: [pending, active]
+        seasonId:
+          type: string
+          format: uuid
+        seasonName:
+          type: string
+          nullable: true
+        joinedAt:
+          type: string
+          format: date-time
+
+    PaginatedUserTeamMembershipsResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserTeamMembershipResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
 
     # ----------------------------------------------------------------
     # Contact info schemas (phones & addresses)
@@ -3246,12 +4675,26 @@ components:
           enum:
             - user
             - organization
+            - team
         id:
           type: string
           format: uuid
         name:
           type: string
           nullable: true
+        slug:
+          type: string
+          nullable: true
+          description: URL slug for org or team contexts; omitted for user context.
+        orgSlug:
+          type: string
+          nullable: true
+          description: Parent org slug for team contexts only.
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Signed S3 URL resolved at read time for org/team avatars.
 
     PostAssetResponse:
       type: object
@@ -3281,6 +4724,9 @@ components:
         - context
         - assets
         - isEdited
+        - reactionCount
+        - hasReacted
+        - commentCount
         - createdAt
         - updatedAt
       properties:
@@ -3311,6 +4757,18 @@ components:
             $ref: '#/components/schemas/PostAssetResponse'
         isEdited:
           type: boolean
+        reactionCount:
+          type: integer
+          minimum: 0
+        hasReacted:
+          type: boolean
+        commentCount:
+          type: integer
+          minimum: 0
+        recentReactorName:
+          type: string
+          nullable: true
+          description: Display name of the most recent reactor (if any), for "X and N others reacted" UI hints.
         createdAt:
           type: string
           format: date-time
@@ -3422,6 +4880,12 @@ components:
           format: uuid
         type:
           type: string
+          description: >
+            Open-ended notification type. Known values today include
+            `roster_invite`, `post_reaction`, `comment`, `follow`,
+            `guardian_invite`, `consent_granted`, `consent_revoked`, plus
+            moderation events. Treat unknown values as "generic notification"
+            — new types may be added without a spec bump.
         title:
           type: string
         body:
@@ -3431,6 +4895,10 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+          description: >
+            Type-specific payload. Shape varies per `type` — consult the
+            Notifications doc (or the controller) for the shape matching a
+            given type. Do not assume fixed keys are present.
         isRead:
           type: boolean
         readAt:
@@ -4321,6 +5789,680 @@ components:
         pagination:
           $ref: '#/components/schemas/SearchSectionPagination'
 
+    # ------------------------------------------------------------------
+    # Feed
+    # ------------------------------------------------------------------
+
+    FeedAuthor:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+
+    FeedContext:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [user, organization, team]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        slug:
+          type: string
+          nullable: true
+        orgSlug:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+
+    FeedPostAsset:
+      type: object
+      required: [id, fileType, url, displayOrder]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileType:
+          type: string
+        url:
+          type: string
+          format: uri
+        displayOrder:
+          type: integer
+          minimum: 0
+
+    FeedPost:
+      type: object
+      required:
+        - id
+        - postType
+        - bodyTruncated
+        - isEdited
+        - createdAt
+        - author
+        - context
+        - assets
+        - reactionCount
+        - hasReacted
+        - commentCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        postType:
+          type: string
+          enum: [short, long]
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+        bodyTruncated:
+          type: boolean
+          description: True when description or body was truncated in the feed page
+        isEdited:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        author:
+          $ref: '#/components/schemas/FeedAuthor'
+        context:
+          $ref: '#/components/schemas/FeedContext'
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedPostAsset'
+        reactionCount:
+          type: integer
+          minimum: 0
+        hasReacted:
+          type: boolean
+        commentCount:
+          type: integer
+          minimum: 0
+        recentReactorName:
+          type: string
+          nullable: true
+          description: Display name of the most recent reactor, for "X and N others reacted" UI.
+
+    FeedResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedPost'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ------------------------------------------------------------------
+    # Reactions & Comments
+    # ------------------------------------------------------------------
+
+    AddReactionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reactionType:
+          type: string
+          enum: [like]
+          default: like
+
+    ReactorListItem:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+          description: Suppressed (null) for under-13 reactors unless the requester is self.
+
+    PaginatedReactors:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReactorListItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    CreateCommentRequest:
+      type: object
+      required: [body]
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    CommentAuthor:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null when the author's user row has been deleted.
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+
+    CommentResponse:
+      type: object
+      required:
+        - id
+        - postId
+        - body
+        - author
+        - reactionCount
+        - hasReacted
+        - recentReactorName
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        postId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        author:
+          $ref: '#/components/schemas/CommentAuthor'
+        reactionCount:
+          type: integer
+          minimum: 0
+        hasReacted:
+          type: boolean
+        recentReactorName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginatedComments:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ------------------------------------------------------------------
+    # Tags (content tagging)
+    # ------------------------------------------------------------------
+
+    TagDirection:
+      type: string
+      enum: [upward, downward, lateral]
+
+    TaggedEntityType:
+      type: string
+      enum: [user, team, organization]
+
+    TagStatus:
+      type: string
+      enum: [pending, approved, declined, removed]
+
+    CreateTagsRequest:
+      type: object
+      required: [tags]
+      additionalProperties: false
+      properties:
+        tags:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [taggedEntityType, taggedEntityId]
+            additionalProperties: false
+            properties:
+              taggedEntityType:
+                $ref: '#/components/schemas/TaggedEntityType'
+              taggedEntityId:
+                type: string
+                format: uuid
+              direction:
+                $ref: '#/components/schemas/TagDirection'
+
+    TagResponse:
+      type: object
+      required:
+        - id
+        - postId
+        - taggedEntityType
+        - taggedEntityId
+        - direction
+        - status
+        - approverId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        postId:
+          type: string
+          format: uuid
+        taggedEntityType:
+          $ref: '#/components/schemas/TaggedEntityType'
+        taggedEntityId:
+          type: string
+          format: uuid
+        direction:
+          $ref: '#/components/schemas/TagDirection'
+        status:
+          $ref: '#/components/schemas/TagStatus'
+        approverId:
+          type: string
+          format: uuid
+          nullable: true
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: The tagger's user ID. Visible only to the approver or the tagged party.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Team join links & previews
+    # ------------------------------------------------------------------
+
+    JoinLinkResponse:
+      type: object
+      required: [token, teamId, expiresAt]
+      properties:
+        token:
+          type: string
+        teamId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    JoinLinkPreviewResponse:
+      type: object
+      required: [team]
+      properties:
+        team:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            avatarUrl:
+              type: string
+              nullable: true
+            organizationName:
+              type: string
+              nullable: true
+            orgSlug:
+              type: string
+              nullable: true
+
+    # ------------------------------------------------------------------
+    # Roster invite preview
+    # ------------------------------------------------------------------
+
+    InvitePreviewResponse:
+      type: object
+      required: [invite]
+      properties:
+        invite:
+          type: object
+          required: [teamId, teamName, role]
+          properties:
+            teamId:
+              type: string
+              format: uuid
+            teamName:
+              type: string
+            teamAvatarUrl:
+              type: string
+              nullable: true
+            organizationName:
+              type: string
+              nullable: true
+            orgSlug:
+              type: string
+              nullable: true
+            role:
+              type: string
+            invitedBy:
+              type: string
+              nullable: true
+            expiresAt:
+              type: string
+              format: date-time
+              nullable: true
+
+    # ------------------------------------------------------------------
+    # Post preview (public share)
+    # ------------------------------------------------------------------
+
+    PostPreviewResponse:
+      type: object
+      required: [id, postType, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        postType:
+          type: string
+          enum: [short, long]
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+          description: May be truncated for long-form posts.
+        author:
+          type: object
+          nullable: true
+          properties:
+            displayName:
+              type: string
+              nullable: true
+            avatarUrl:
+              type: string
+              nullable: true
+        context:
+          $ref: '#/components/schemas/FeedContext'
+        ogImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Organization join requests & post approvals
+    # ------------------------------------------------------------------
+
+    JoinRequestStatus:
+      type: string
+      enum: [pending, approved, declined, withdrawn]
+
+    ApproveJoinRequestBody:
+      type: object
+      additionalProperties: false
+      description: Optional body for approving an org join request.
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+          description: Role to grant to the joining user. Defaults to `member`.
+
+    JoinRequestResponse:
+      type: object
+      required: [id, orgId, userId, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        user:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            displayName:
+              type: string
+            avatarUrl:
+              type: string
+              nullable: true
+        status:
+          $ref: '#/components/schemas/JoinRequestStatus'
+        decidedBy:
+          type: string
+          format: uuid
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PostApprovalStatus:
+      type: string
+      enum: [pending, approved, declined]
+
+    PostApprovalResponse:
+      type: object
+      required: [id, orgId, postId, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        postId:
+          type: string
+          format: uuid
+        submittedBy:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PostApprovalStatus'
+        decidedBy:
+          type: string
+          format: uuid
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        post:
+          $ref: '#/components/schemas/PostResponse'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Guardians (COPPA)
+    # ------------------------------------------------------------------
+
+    InviteGuardianRequest:
+      type: object
+      required: [email, relationshipType]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        relationshipType:
+          type: string
+          enum: [parent, legal_guardian]
+
+    GuardianLinkResponse:
+      type: object
+      required:
+        - id
+        - guardian
+        - relationshipType
+        - isPrimary
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        guardian:
+          type: object
+          required: [id, displayName, avatarUrl]
+          properties:
+            id:
+              type: string
+              format: uuid
+            displayName:
+              type: string
+            avatarUrl:
+              type: string
+              nullable: true
+        relationshipType:
+          type: string
+          enum: [parent, legal_guardian]
+        isPrimary:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, active, revoked]
+        consentGrantedAt:
+          type: string
+          format: date-time
+          nullable: true
+        consentMethod:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ChildLinkResponse:
+      type: object
+      required:
+        - id
+        - child
+        - relationshipType
+        - isPrimary
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        child:
+          type: object
+          required: [id, displayName, avatarUrl, dateOfBirth]
+          properties:
+            id:
+              type: string
+              format: uuid
+            displayName:
+              type: string
+            avatarUrl:
+              type: string
+              nullable: true
+            dateOfBirth:
+              type: string
+              format: date
+              nullable: true
+              description: >
+                COPPA-restricted PII. Returned only to the child themselves or
+                their linked guardians; other callers will receive null or a
+                403 from the enclosing endpoint.
+        relationshipType:
+          type: string
+          enum: [parent, legal_guardian]
+        isPrimary:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, active, revoked]
+        consentGrantedAt:
+          type: string
+          format: date-time
+          nullable: true
+        consentMethod:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------------
+    # Messaging contact search
+    # ------------------------------------------------------------------
+
+    ConversationContactResult:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        relationship:
+          type: string
+          description: Optional hint about why this contact is eligible (e.g., teammate, follower).
+
   responses:
     BadRequest:
       description: Validation error — malformed body, invalid params, or constraint violation
@@ -4360,12 +6502,6 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
       description: Resource already exists (e.g., duplicate slug)
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    NotImplemented:
-      description: Endpoint is defined but not yet implemented
       content:
         application/json:
           schema:
@@ -4521,3 +6657,44 @@ components:
       required: true
       schema:
         type: string
+    JoinLinkToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string
+    CommentId:
+      name: commentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TagId:
+      name: tagId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ApprovalId:
+      name: approvalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LinkId:
+      name: linkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid

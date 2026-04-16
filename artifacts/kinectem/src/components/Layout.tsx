@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useGetUserById } from "@workspace/api-client-react";
+import { useGetLoggedInUser } from "@workspace/api-client-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,11 +12,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { STUB_USER_ID } from "@/lib/me";
 import { getInitials } from "@/lib/format";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { data: currentUser } = useGetUserById(STUB_USER_ID);
+  const { data: currentUser } = useGetLoggedInUser();
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
 

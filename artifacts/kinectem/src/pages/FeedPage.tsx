@@ -1,8 +1,8 @@
 import { Link } from "wouter";
 import {
-  useGetUserById,
+  useGetLoggedInUser,
   useListOrganizations,
-  useListOrgPosts,
+  useListFeed,
   useListUserOrganizations,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,19 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Building2 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { getInitials } from "@/lib/format";
-import { STUB_USER_ID } from "@/lib/me";
 
 export default function FeedPage() {
-  const { data: me } = useGetUserById(STUB_USER_ID);
-  const { data: myOrgs } = useListUserOrganizations(STUB_USER_ID);
+  const { data: me } = useGetLoggedInUser();
+  const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
+    query: { enabled: !!me?.id } as never,
+  });
   const { data: orgs } = useListOrganizations();
-
-  const featuredOrgId = orgs?.data?.[0]?.id;
-  const { data: posts, isLoading: postsLoading } = useListOrgPosts(
-    featuredOrgId ?? "",
-    undefined,
-    { query: { enabled: !!featuredOrgId } as never },
-  );
+  const { data: feed, isLoading: feedLoading } = useListFeed();
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
 
@@ -90,32 +85,21 @@ export default function FeedPage() {
       {/* Center feed */}
       <div className="space-y-4">
         <h2 className="text-2xl font-black tracking-tight">Latest Activity</h2>
-        {!featuredOrgId ? (
-          orgs ? (
-            <Card className="rounded-xl border border-border">
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                No posts yet. Follow an organization to see updates here.
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <Skeleton className="h-48 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
-            </>
-          )
-        ) : postsLoading ? (
+        {feedLoading ? (
           <>
             <Skeleton className="h-48 rounded-xl" />
             <Skeleton className="h-48 rounded-xl" />
           </>
-        ) : !posts || posts.data.length === 0 ? (
+        ) : !feed || feed.data.length === 0 ? (
           <Card className="rounded-xl border border-border">
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              No posts yet.
+              Your feed is quiet. Follow organizations or athletes to see updates here.
             </CardContent>
           </Card>
         ) : (
-          posts.data.map((post) => <PostCard key={post.id} post={post} />)
+          feed.data.map((post: (typeof feed.data)[number]) => (
+            <PostCard key={post.id} post={post} />
+          ))
         )}
       </div>
 

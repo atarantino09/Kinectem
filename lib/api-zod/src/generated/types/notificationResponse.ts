@@ -9,11 +9,17 @@ import type { NotificationResponseData } from "./notificationResponseData";
 
 export interface NotificationResponse {
   id: string;
+  /** Open-ended notification type. Known values today include `roster_invite`, `post_reaction`, `comment`, `follow`, `guardian_invite`, `consent_granted`, `consent_revoked`, plus moderation events. Treat unknown values as "generic notification" — new types may be added without a spec bump.
+   */
   type: string;
   title: string;
   /** @nullable */
   body?: string | null;
-  /** @nullable */
+  /**
+   * Type-specific payload. Shape varies per `type` — consult the Notifications doc (or the controller) for the shape matching a given type. Do not assume fixed keys are present.
+
+   * @nullable
+   */
   data?: NotificationResponseData;
   isRead: boolean;
   /** @nullable */

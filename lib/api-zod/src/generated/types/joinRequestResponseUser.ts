@@ -5,9 +5,13 @@
  * Youth sports recruiting platform API
  * OpenAPI spec version: 0.1.0
  */
-import type { ErrorResponse } from "./errorResponse";
 
 /**
- * Endpoint is defined but not yet implemented
+ * @nullable
  */
-export type NotImplementedResponse = ErrorResponse;
+export type JoinRequestResponseUser = {
+  id?: string;
+  displayName?: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+} | null;

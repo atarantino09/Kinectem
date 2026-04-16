@@ -23,6 +23,16 @@ export interface PostResponse {
   context: PostContext;
   assets: PostAssetResponse[];
   isEdited: boolean;
+  /** @minimum 0 */
+  reactionCount: number;
+  hasReacted: boolean;
+  /** @minimum 0 */
+  commentCount: number;
+  /**
+   * Display name of the most recent reactor (if any), for "X and N others reacted" UI hints.
+   * @nullable
+   */
+  recentReactorName?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -5,8 +5,8 @@
  * Youth sports recruiting platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { TagResponse } from "./tagResponse";
 
-export type SetUserCoverPhotoBody = {
-  /** ID of a confirmed image asset owned by the user. */
-  assetId: string;
+export type ListPostTags200 = {
+  tags?: TagResponse[];
 };

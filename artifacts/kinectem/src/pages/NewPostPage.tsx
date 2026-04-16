@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
   useCreatePost,
+  useGetLoggedInUser,
   useListUserOrganizations,
   type CreatePostRequest,
 } from "@workspace/api-client-react";
@@ -18,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, FileText, Play } from "lucide-react";
-import { STUB_USER_ID } from "@/lib/me";
 import { useToast } from "@/hooks/use-toast";
 
 export default function NewPostPage() {
@@ -35,7 +35,10 @@ export default function NewPostPage() {
   const [body, setBody] = useState("");
   const [orgId, setOrgId] = useState<string>("");
 
-  const { data: myOrgs } = useListUserOrganizations(STUB_USER_ID);
+  const { data: me } = useGetLoggedInUser();
+  const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
+    query: { enabled: !!me?.id } as never,
+  });
   const createPost = useCreatePost();
 
   const isShort = postType === "short";

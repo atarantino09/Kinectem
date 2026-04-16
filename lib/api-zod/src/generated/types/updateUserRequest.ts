@@ -7,16 +7,25 @@
  */
 
 export interface UpdateUserRequest {
+  /** @maxLength 100 */
+  firstName?: string;
+  /** @maxLength 100 */
+  lastName?: string;
+  /** ISO 8601 date (YYYY-MM-DD). */
+  dateOfBirth?: Date;
   /**
    * @maxLength 1000
    * @nullable
    */
   bio?: string | null;
-  /** @nullable */
-  avatarUrl?: string | null;
   /**
    * @maxLength 100
    * @nullable
    */
   nickname?: string | null;
+  /**
+   * @maxLength 50
+   * @nullable
+   */
+  level?: string | null;
 }

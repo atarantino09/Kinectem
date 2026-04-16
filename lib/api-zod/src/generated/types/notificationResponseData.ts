@@ -7,6 +7,8 @@
  */
 
 /**
+ * Type-specific payload. Shape varies per `type` — consult the Notifications doc (or the controller) for the shape matching a given type. Do not assume fixed keys are present.
+
  * @nullable
  */
 export type NotificationResponseData = { [key: string]: unknown } | null;

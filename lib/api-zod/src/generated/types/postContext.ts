@@ -12,4 +12,19 @@ export interface PostContext {
   id: string;
   /** @nullable */
   name?: string | null;
+  /**
+   * URL slug for org or team contexts; omitted for user context.
+   * @nullable
+   */
+  slug?: string | null;
+  /**
+   * Parent org slug for team contexts only.
+   * @nullable
+   */
+  orgSlug?: string | null;
+  /**
+   * Signed S3 URL resolved at read time for org/team avatars.
+   * @nullable
+   */
+  avatarUrl?: string | null;
 }

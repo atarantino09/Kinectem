@@ -55,18 +55,121 @@ export type PrivateUserResponse = PublicUserResponse & {
 };
 
 export interface UpdateUserRequest {
+  /** @maxLength 100 */
+  firstName?: string;
+  /** @maxLength 100 */
+  lastName?: string;
+  /** ISO 8601 date (YYYY-MM-DD). */
+  dateOfBirth?: string;
   /**
    * @maxLength 1000
    * @nullable
    */
   bio?: string | null;
-  /** @nullable */
-  avatarUrl?: string | null;
   /**
    * @maxLength 100
    * @nullable
    */
   nickname?: string | null;
+  /**
+   * @maxLength 50
+   * @nullable
+   */
+  level?: string | null;
+}
+
+export interface SetAssetIdRequest {
+  /** UUID of a confirmed asset owned by the caller. */
+  assetId: string;
+}
+
+export interface UpdateUserSportsRequest {
+  /** @maxItems 5 */
+  sports: string[];
+}
+
+export interface UserSportsResponse {
+  sports: string[];
+}
+
+/**
+ * Free-form settings bag. Known keys below; clients may receive additional keys in the future.
+ */
+export interface UserSettingsResponse {
+  share_to_facebook_default?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Strict — unknown keys rejected with 400.
+ */
+export interface UpdateUserSettingsRequest {
+  share_to_facebook_default?: boolean;
+}
+
+export type UserTeamMembershipResponseRole =
+  (typeof UserTeamMembershipResponseRole)[keyof typeof UserTeamMembershipResponseRole];
+
+export const UserTeamMembershipResponseRole = {
+  owner: "owner",
+  admin: "admin",
+  author: "author",
+  member: "member",
+} as const;
+
+export type UserTeamMembershipResponsePosition =
+  (typeof UserTeamMembershipResponsePosition)[keyof typeof UserTeamMembershipResponsePosition];
+
+export const UserTeamMembershipResponsePosition = {
+  player: "player",
+  coach: "coach",
+  assistant_coach: "assistant_coach",
+  manager: "manager",
+  parent: "parent",
+} as const;
+
+export type UserTeamMembershipResponseStatus =
+  (typeof UserTeamMembershipResponseStatus)[keyof typeof UserTeamMembershipResponseStatus];
+
+export const UserTeamMembershipResponseStatus = {
+  pending: "pending",
+  active: "active",
+} as const;
+
+export interface TeamOrganizationEmbed {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface UserTeamMembershipResponse {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamSlug: string;
+  /** @nullable */
+  teamAvatarUrl?: string | null;
+  organization: TeamOrganizationEmbed;
+  role: UserTeamMembershipResponseRole;
+  position: UserTeamMembershipResponsePosition;
+  status: UserTeamMembershipResponseStatus;
+  seasonId: string;
+  /** @nullable */
+  seasonName?: string | null;
+  joinedAt: string;
+}
+
+export interface PaginationMeta {
+  /** @nullable */
+  nextCursor?: string | null;
+  hasMore: boolean;
+  /** @nullable */
+  totalCount?: number | null;
+}
+
+export interface PaginatedUserTeamMembershipsResponse {
+  data: UserTeamMembershipResponse[];
+  pagination: PaginationMeta;
 }
 
 export type CreatePhoneRequestType =
@@ -314,14 +417,6 @@ export interface UpdateMemberRoleRequest {
   role: UpdateMemberRoleRequestRole;
 }
 
-export interface PaginationMeta {
-  /** @nullable */
-  nextCursor?: string | null;
-  hasMore: boolean;
-  /** @nullable */
-  totalCount?: number | null;
-}
-
 export interface PaginatedOrganizationsResponse {
   data: OrganizationResponse[];
   pagination: PaginationMeta;
@@ -353,6 +448,7 @@ export type PostContextType =
 export const PostContextType = {
   user: "user",
   organization: "organization",
+  team: "team",
 } as const;
 
 export interface PostContext {
@@ -360,6 +456,21 @@ export interface PostContext {
   id: string;
   /** @nullable */
   name?: string | null;
+  /**
+   * URL slug for org or team contexts; omitted for user context.
+   * @nullable
+   */
+  slug?: string | null;
+  /**
+   * Parent org slug for team contexts only.
+   * @nullable
+   */
+  orgSlug?: string | null;
+  /**
+   * Signed S3 URL resolved at read time for org/team avatars.
+   * @nullable
+   */
+  avatarUrl?: string | null;
 }
 
 export interface PostAssetResponse {
@@ -383,6 +494,16 @@ export interface PostResponse {
   context: PostContext;
   assets: PostAssetResponse[];
   isEdited: boolean;
+  /** @minimum 0 */
+  reactionCount: number;
+  hasReacted: boolean;
+  /** @minimum 0 */
+  commentCount: number;
+  /**
+   * Display name of the most recent reactor (if any), for "X and N others reacted" UI hints.
+   * @nullable
+   */
+  recentReactorName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -679,17 +800,25 @@ export interface ConsentRequestResponse {
 }
 
 /**
+ * Type-specific payload. Shape varies per `type` — consult the Notifications doc (or the controller) for the shape matching a given type. Do not assume fixed keys are present.
+
  * @nullable
  */
 export type NotificationResponseData = { [key: string]: unknown } | null;
 
 export interface NotificationResponse {
   id: string;
+  /** Open-ended notification type. Known values today include `roster_invite`, `post_reaction`, `comment`, `follow`, `guardian_invite`, `consent_granted`, `consent_revoked`, plus moderation events. Treat unknown values as "generic notification" — new types may be added without a spec bump.
+   */
   type: string;
   title: string;
   /** @nullable */
   body?: string | null;
-  /** @nullable */
+  /**
+   * Type-specific payload. Shape varies per `type` — consult the Notifications doc (or the controller) for the shape matching a given type. Do not assume fixed keys are present.
+
+   * @nullable
+   */
   data?: NotificationResponseData;
   isRead: boolean;
   /** @nullable */
@@ -846,12 +975,6 @@ export interface PaginatedConversations {
 export interface PaginatedMessages {
   data: (MessageResponse | DeletedMessageStub)[];
   pagination: PaginationMeta;
-}
-
-export interface TeamOrganizationEmbed {
-  id: string;
-  name: string;
-  slug: string;
 }
 
 export type TeamSeasonResponseStatus =
@@ -1276,6 +1399,465 @@ export interface TeamSearchSection {
   pagination: SearchSectionPagination;
 }
 
+export interface FeedAuthor {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl: string | null;
+}
+
+export type FeedContextType =
+  (typeof FeedContextType)[keyof typeof FeedContextType];
+
+export const FeedContextType = {
+  user: "user",
+  organization: "organization",
+  team: "team",
+} as const;
+
+export interface FeedContext {
+  type: FeedContextType;
+  id: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  slug?: string | null;
+  /** @nullable */
+  orgSlug?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export interface FeedPostAsset {
+  id: string;
+  fileType: string;
+  url: string;
+  /** @minimum 0 */
+  displayOrder: number;
+}
+
+export type FeedPostPostType =
+  (typeof FeedPostPostType)[keyof typeof FeedPostPostType];
+
+export const FeedPostPostType = {
+  short: "short",
+  long: "long",
+} as const;
+
+export interface FeedPost {
+  id: string;
+  postType: FeedPostPostType;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  body?: string | null;
+  /** True when description or body was truncated in the feed page */
+  bodyTruncated: boolean;
+  isEdited: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  author: FeedAuthor;
+  context: FeedContext;
+  assets: FeedPostAsset[];
+  /** @minimum 0 */
+  reactionCount: number;
+  hasReacted: boolean;
+  /** @minimum 0 */
+  commentCount: number;
+  /**
+   * Display name of the most recent reactor, for "X and N others reacted" UI.
+   * @nullable
+   */
+  recentReactorName?: string | null;
+}
+
+export interface FeedResponse {
+  data: FeedPost[];
+  pagination: PaginationMeta;
+}
+
+export type AddReactionRequestReactionType =
+  (typeof AddReactionRequestReactionType)[keyof typeof AddReactionRequestReactionType];
+
+export const AddReactionRequestReactionType = {
+  like: "like",
+} as const;
+
+export interface AddReactionRequest {
+  reactionType?: AddReactionRequestReactionType;
+}
+
+export interface ReactorListItem {
+  id: string;
+  displayName: string;
+  /**
+   * Suppressed (null) for under-13 reactors unless the requester is self.
+   * @nullable
+   */
+  avatarUrl: string | null;
+}
+
+export interface PaginatedReactors {
+  data: ReactorListItem[];
+  pagination: PaginationMeta;
+}
+
+export interface CreateCommentRequest {
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  body: string;
+}
+
+export interface CommentAuthor {
+  /**
+   * Null when the author's user row has been deleted.
+   * @nullable
+   */
+  id: string | null;
+  displayName: string;
+  /** @nullable */
+  avatarUrl: string | null;
+}
+
+export interface CommentResponse {
+  id: string;
+  postId: string;
+  body: string;
+  author: CommentAuthor;
+  /** @minimum 0 */
+  reactionCount: number;
+  hasReacted: boolean;
+  /** @nullable */
+  recentReactorName: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedComments {
+  data: CommentResponse[];
+  pagination: PaginationMeta;
+}
+
+export type TagDirection = (typeof TagDirection)[keyof typeof TagDirection];
+
+export const TagDirection = {
+  upward: "upward",
+  downward: "downward",
+  lateral: "lateral",
+} as const;
+
+export type TaggedEntityType =
+  (typeof TaggedEntityType)[keyof typeof TaggedEntityType];
+
+export const TaggedEntityType = {
+  user: "user",
+  team: "team",
+  organization: "organization",
+} as const;
+
+export type TagStatus = (typeof TagStatus)[keyof typeof TagStatus];
+
+export const TagStatus = {
+  pending: "pending",
+  approved: "approved",
+  declined: "declined",
+  removed: "removed",
+} as const;
+
+export type CreateTagsRequestTagsItem = {
+  taggedEntityType: TaggedEntityType;
+  taggedEntityId: string;
+  direction?: TagDirection;
+};
+
+export interface CreateTagsRequest {
+  /** @minItems 1 */
+  tags: CreateTagsRequestTagsItem[];
+}
+
+export interface TagResponse {
+  id: string;
+  postId: string;
+  taggedEntityType: TaggedEntityType;
+  taggedEntityId: string;
+  direction: TagDirection;
+  status: TagStatus;
+  /** @nullable */
+  approverId: string | null;
+  /**
+   * The tagger's user ID. Visible only to the approver or the tagged party.
+   * @nullable
+   */
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JoinLinkResponse {
+  token: string;
+  teamId: string;
+  /** @nullable */
+  expiresAt: string | null;
+  createdAt?: string;
+}
+
+export type JoinLinkPreviewResponseTeam = {
+  id: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** @nullable */
+  organizationName?: string | null;
+  /** @nullable */
+  orgSlug?: string | null;
+};
+
+export interface JoinLinkPreviewResponse {
+  team: JoinLinkPreviewResponseTeam;
+}
+
+export type InvitePreviewResponseInvite = {
+  teamId: string;
+  teamName: string;
+  /** @nullable */
+  teamAvatarUrl?: string | null;
+  /** @nullable */
+  organizationName?: string | null;
+  /** @nullable */
+  orgSlug?: string | null;
+  role: string;
+  /** @nullable */
+  invitedBy?: string | null;
+  /** @nullable */
+  expiresAt?: string | null;
+};
+
+export interface InvitePreviewResponse {
+  invite: InvitePreviewResponseInvite;
+}
+
+export type PostPreviewResponsePostType =
+  (typeof PostPreviewResponsePostType)[keyof typeof PostPreviewResponsePostType];
+
+export const PostPreviewResponsePostType = {
+  short: "short",
+  long: "long",
+} as const;
+
+/**
+ * @nullable
+ */
+export type PostPreviewResponseAuthor = {
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+} | null;
+
+export interface PostPreviewResponse {
+  id: string;
+  postType: PostPreviewResponsePostType;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /**
+   * May be truncated for long-form posts.
+   * @nullable
+   */
+  body?: string | null;
+  /** @nullable */
+  author?: PostPreviewResponseAuthor;
+  context?: FeedContext;
+  /** @nullable */
+  ogImageUrl?: string | null;
+  createdAt: string;
+}
+
+export type JoinRequestStatus =
+  (typeof JoinRequestStatus)[keyof typeof JoinRequestStatus];
+
+export const JoinRequestStatus = {
+  pending: "pending",
+  approved: "approved",
+  declined: "declined",
+  withdrawn: "withdrawn",
+} as const;
+
+/**
+ * Role to grant to the joining user. Defaults to `member`.
+ */
+export type ApproveJoinRequestBodyRole =
+  (typeof ApproveJoinRequestBodyRole)[keyof typeof ApproveJoinRequestBodyRole];
+
+export const ApproveJoinRequestBodyRole = {
+  admin: "admin",
+  member: "member",
+} as const;
+
+/**
+ * Optional body for approving an org join request.
+ */
+export interface ApproveJoinRequestBody {
+  /** Role to grant to the joining user. Defaults to `member`. */
+  role?: ApproveJoinRequestBodyRole;
+}
+
+/**
+ * @nullable
+ */
+export type JoinRequestResponseUser = {
+  id?: string;
+  displayName?: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+} | null;
+
+export interface JoinRequestResponse {
+  id: string;
+  orgId: string;
+  userId: string;
+  /** @nullable */
+  user?: JoinRequestResponseUser;
+  status: JoinRequestStatus;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type PostApprovalStatus =
+  (typeof PostApprovalStatus)[keyof typeof PostApprovalStatus];
+
+export const PostApprovalStatus = {
+  pending: "pending",
+  approved: "approved",
+  declined: "declined",
+} as const;
+
+export interface PostApprovalResponse {
+  id: string;
+  orgId: string;
+  postId: string;
+  submittedBy?: string;
+  status: PostApprovalStatus;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  post?: PostResponse;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type InviteGuardianRequestRelationshipType =
+  (typeof InviteGuardianRequestRelationshipType)[keyof typeof InviteGuardianRequestRelationshipType];
+
+export const InviteGuardianRequestRelationshipType = {
+  parent: "parent",
+  legal_guardian: "legal_guardian",
+} as const;
+
+export interface InviteGuardianRequest {
+  /** @maxLength 255 */
+  email: string;
+  relationshipType: InviteGuardianRequestRelationshipType;
+}
+
+export type GuardianLinkResponseGuardian = {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl: string | null;
+};
+
+export type GuardianLinkResponseRelationshipType =
+  (typeof GuardianLinkResponseRelationshipType)[keyof typeof GuardianLinkResponseRelationshipType];
+
+export const GuardianLinkResponseRelationshipType = {
+  parent: "parent",
+  legal_guardian: "legal_guardian",
+} as const;
+
+export type GuardianLinkResponseStatus =
+  (typeof GuardianLinkResponseStatus)[keyof typeof GuardianLinkResponseStatus];
+
+export const GuardianLinkResponseStatus = {
+  pending: "pending",
+  active: "active",
+  revoked: "revoked",
+} as const;
+
+export interface GuardianLinkResponse {
+  id: string;
+  guardian: GuardianLinkResponseGuardian;
+  relationshipType: GuardianLinkResponseRelationshipType;
+  isPrimary: boolean;
+  status: GuardianLinkResponseStatus;
+  /** @nullable */
+  consentGrantedAt?: string | null;
+  /** @nullable */
+  consentMethod?: string | null;
+  createdAt: string;
+}
+
+export type ChildLinkResponseChild = {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl: string | null;
+  /**
+   * COPPA-restricted PII. Returned only to the child themselves or their linked guardians; other callers will receive null or a 403 from the enclosing endpoint.
+
+   * @nullable
+   */
+  dateOfBirth: string | null;
+};
+
+export type ChildLinkResponseRelationshipType =
+  (typeof ChildLinkResponseRelationshipType)[keyof typeof ChildLinkResponseRelationshipType];
+
+export const ChildLinkResponseRelationshipType = {
+  parent: "parent",
+  legal_guardian: "legal_guardian",
+} as const;
+
+export type ChildLinkResponseStatus =
+  (typeof ChildLinkResponseStatus)[keyof typeof ChildLinkResponseStatus];
+
+export const ChildLinkResponseStatus = {
+  pending: "pending",
+  active: "active",
+  revoked: "revoked",
+} as const;
+
+export interface ChildLinkResponse {
+  id: string;
+  child: ChildLinkResponseChild;
+  relationshipType: ChildLinkResponseRelationshipType;
+  isPrimary: boolean;
+  status: ChildLinkResponseStatus;
+  /** @nullable */
+  consentGrantedAt?: string | null;
+  /** @nullable */
+  consentMethod?: string | null;
+  createdAt: string;
+}
+
+export interface ConversationContactResult {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl: string | null;
+  /** Optional hint about why this contact is eligible (e.g., teammate, follower). */
+  relationship?: string;
+}
+
 /**
  * Validation error — malformed body, invalid params, or constraint violation
  */
@@ -1312,11 +1894,6 @@ export type UnprocessableEntityResponse = ErrorResponse;
 export type ConflictResponse = ErrorResponse;
 
 /**
- * Endpoint is defined but not yet implemented
- */
-export type NotImplementedResponse = ErrorResponse;
-
-/**
  * Unhandled server error
  */
 export type InternalServerErrorResponse = ErrorResponse;
@@ -1345,10 +1922,28 @@ export type SearchUsers200 = {
   data: UserSearchResult[];
 };
 
-export type SetUserCoverPhotoBody = {
-  /** ID of a confirmed image asset owned by the user. */
-  assetId: string;
+export type ListUserTeamsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+  includeTotal?: IncludeTotalParameter;
+  status?: ListUserTeamsStatus;
+  seasonId?: string;
 };
+
+export type ListUserTeamsStatus =
+  (typeof ListUserTeamsStatus)[keyof typeof ListUserTeamsStatus];
+
+export const ListUserTeamsStatus = {
+  active: "active",
+  pending: "pending",
+} as const;
 
 export type ListUserOrganizationsParams = {
   /**
@@ -1594,6 +2189,159 @@ export const ListRosterInvitesStatus = {
   withdrawn: "withdrawn",
   resolved: "resolved",
 } as const;
+
+export type ListFeedParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListPostReactorsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListPostCommentsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCommentReactorsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type CreatePostTags201 = {
+  tags?: TagResponse[];
+};
+
+export type ListPostTags200 = {
+  tags?: TagResponse[];
+};
+
+export type ListPendingTagsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListPendingTags200 = {
+  data?: TagResponse[];
+  pagination?: PaginationMeta;
+};
+
+export type ListTeamPostsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListOrgJoinRequestsParams = {
+  /**
+   * Filter by request status. Defaults to `pending`.
+   */
+  status?: JoinRequestStatus;
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListOrgJoinRequests200 = {
+  data?: JoinRequestResponse[];
+  pagination?: PaginationMeta;
+};
+
+export type ListOrgPostApprovalsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListOrgPostApprovals200 = {
+  data?: PostApprovalResponse[];
+  pagination?: PaginationMeta;
+};
+
+export type ListUserGuardians200 = {
+  data?: GuardianLinkResponse[];
+};
+
+export type InviteGuardian200 = {
+  message: string;
+};
+
+export type ListUserChildren200 = {
+  data?: ChildLinkResponse[];
+};
+
+export type SearchConversationContactsParams = {
+  /**
+   * Search query (min 1 character)
+   * @minLength 1
+   * @maxLength 100
+   */
+  q: string;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type SearchConversationContacts200 = {
+  data?: ConversationContactResult[];
+};
 
 export type CrossEntitySearchParams = {
   /**

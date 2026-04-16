@@ -36,6 +36,8 @@ export const SearchUsersResponse = zod.object({
 });
 
 /**
+ * Returns either a `PrivateUserResponse` (when the caller is viewing their own profile, a linked guardian, or has permission to see private fields) or a `PublicUserResponse` (everyone else). The variants share all public fields; the private variant adds caller-only fields such as email and age-gated metadata. UI clients can treat the response as `PublicUserResponse` with optional private fields. A discriminator will be added in a future spec version.
+
  * @summary Get user profile
  */
 export const GetUserByIdParams = zod.object({
@@ -110,14 +112,26 @@ export const UpdateUserParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
+export const updateUserBodyFirstNameMax = 100;
+
+export const updateUserBodyLastNameMax = 100;
+
 export const updateUserBodyBioMax = 1000;
 
 export const updateUserBodyNicknameMax = 100;
 
+export const updateUserBodyLevelMax = 50;
+
 export const UpdateUserBody = zod.object({
+  firstName: zod.string().max(updateUserBodyFirstNameMax).optional(),
+  lastName: zod.string().max(updateUserBodyLastNameMax).optional(),
+  dateOfBirth: zod.coerce
+    .date()
+    .optional()
+    .describe("ISO 8601 date (YYYY-MM-DD)."),
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
-  avatarUrl: zod.string().url().nullish(),
   nickname: zod.string().max(updateUserBodyNicknameMax).nullish(),
+  level: zod.string().max(updateUserBodyLevelMax).nullish(),
 });
 
 export const updateUserResponseOneNicknameMax = 100;
@@ -164,7 +178,7 @@ export const SetUserCoverPhotoBody = zod.object({
   assetId: zod
     .string()
     .uuid()
-    .describe("ID of a confirmed image asset owned by the user."),
+    .describe("UUID of a confirmed asset owned by the caller."),
 });
 
 export const setUserCoverPhotoResponseOneNicknameMax = 100;
@@ -243,6 +257,252 @@ export const DeleteUserCoverPhotoResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
     }),
+  );
+
+/**
+ * Sets the user's avatar to a confirmed image asset they own.
+ * @summary Set user avatar
+ */
+export const SetUserAvatarParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const SetUserAvatarBody = zod.object({
+  assetId: zod
+    .string()
+    .uuid()
+    .describe("UUID of a confirmed asset owned by the caller."),
+});
+
+export const setUserAvatarResponseOneNicknameMax = 100;
+
+export const setUserAvatarResponseOneBioMax = 1000;
+
+export const SetUserAvatarResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    nickname: zod.string().max(setUserAvatarResponseOneNicknameMax).nullish(),
+    bio: zod.string().max(setUserAvatarResponseOneBioMax).nullish(),
+    avatarUrl: zod.string().url().nullish(),
+    coverPhotoUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+      ),
+    isOwnProfile: zod.boolean(),
+    isFollowing: zod.boolean().optional(),
+    isConnection: zod.boolean().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      email: zod.string().email(),
+      dateOfBirth: zod.coerce.date().nullish(),
+    }),
+  );
+
+/**
+ * Removes the user's asset-backed avatar. The stored legacy URL (Clerk) is retained. Returns the updated user profile.
+ * @summary Remove user asset-backed avatar
+ */
+export const DeleteUserAvatarParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const deleteUserAvatarResponseOneNicknameMax = 100;
+
+export const deleteUserAvatarResponseOneBioMax = 1000;
+
+export const DeleteUserAvatarResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    nickname: zod
+      .string()
+      .max(deleteUserAvatarResponseOneNicknameMax)
+      .nullish(),
+    bio: zod.string().max(deleteUserAvatarResponseOneBioMax).nullish(),
+    avatarUrl: zod.string().url().nullish(),
+    coverPhotoUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+      ),
+    isOwnProfile: zod.boolean(),
+    isFollowing: zod.boolean().optional(),
+    isConnection: zod.boolean().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      email: zod.string().email(),
+      dateOfBirth: zod.coerce.date().nullish(),
+    }),
+  );
+
+/**
+ * @summary List the user's sports (self only)
+ */
+export const GetUserSportsParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const GetUserSportsResponse = zod.object({
+  sports: zod.array(zod.string()),
+});
+
+/**
+ * Full-replace semantics — the submitted array overwrites the stored list.
+ * @summary Replace the user's sports list (self only)
+ */
+export const UpdateUserSportsParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const updateUserSportsBodySportsMax = 5;
+
+export const UpdateUserSportsBody = zod.object({
+  sports: zod.array(zod.string()).max(updateUserSportsBodySportsMax),
+});
+
+export const UpdateUserSportsResponse = zod.object({
+  sports: zod.array(zod.string()),
+});
+
+/**
+ * @summary List teams the user belongs to
+ */
+export const ListUserTeamsParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const listUserTeamsQueryCursorMax = 500;
+
+export const listUserTeamsQueryLimitDefault = 20;
+export const listUserTeamsQueryLimitMax = 50;
+
+export const listUserTeamsQueryIncludeTotalDefault = false;
+
+export const ListUserTeamsQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listUserTeamsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listUserTeamsQueryLimitMax)
+    .default(listUserTeamsQueryLimitDefault),
+  includeTotal: zod.coerce
+    .boolean()
+    .default(listUserTeamsQueryIncludeTotalDefault),
+  status: zod.enum(["active", "pending"]).optional(),
+  seasonId: zod.coerce.string().uuid().optional(),
+});
+
+export const ListUserTeamsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      teamId: zod.string().uuid(),
+      teamName: zod.string(),
+      teamSlug: zod.string(),
+      teamAvatarUrl: zod.string().url().nullish(),
+      organization: zod.object({
+        id: zod.string().uuid(),
+        name: zod.string(),
+        slug: zod.string(),
+      }),
+      role: zod.enum(["owner", "admin", "author", "member"]),
+      position: zod.enum([
+        "player",
+        "coach",
+        "assistant_coach",
+        "manager",
+        "parent",
+      ]),
+      status: zod.enum(["pending", "active"]),
+      seasonId: zod.string().uuid(),
+      seasonName: zod.string().nullish(),
+      joinedAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * @summary Get the authenticated user's full profile
+ */
+export const getLoggedInUserResponseOneNicknameMax = 100;
+
+export const getLoggedInUserResponseOneBioMax = 1000;
+
+export const GetLoggedInUserResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    nickname: zod.string().max(getLoggedInUserResponseOneNicknameMax).nullish(),
+    bio: zod.string().max(getLoggedInUserResponseOneBioMax).nullish(),
+    avatarUrl: zod.string().url().nullish(),
+    coverPhotoUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+      ),
+    isOwnProfile: zod.boolean(),
+    isFollowing: zod.boolean().optional(),
+    isConnection: zod.boolean().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      email: zod.string().email(),
+      dateOfBirth: zod.coerce.date().nullish(),
+    }),
+  );
+
+/**
+ * @summary Get the authenticated user's settings bag
+ */
+export const GetMySettingsResponse = zod
+  .object({
+    share_to_facebook_default: zod.boolean().optional(),
+  })
+  .describe(
+    "Free-form settings bag. Known keys below; clients may receive additional keys in the future.",
+  );
+
+/**
+ * Unknown keys are rejected with 400 (strict Zod schema). Empty body returns the current settings unchanged.
+
+ * @summary Shallow-merge a patch into the authenticated user's settings bag
+ */
+export const UpdateMySettingsBody = zod
+  .object({
+    share_to_facebook_default: zod.boolean().optional(),
+  })
+  .describe("Strict — unknown keys rejected with 400.");
+
+export const UpdateMySettingsResponse = zod
+  .object({
+    share_to_facebook_default: zod.boolean().optional(),
+  })
+  .describe(
+    "Free-form settings bag. Known keys below; clients may receive additional keys in the future.",
   );
 
 /**
@@ -521,6 +781,23 @@ export const AddMemberBody = zod.object({
 });
 
 /**
+ * Step 1 of the 3-step asset upload flow:
+
+1. `POST /assets/upload` — this endpoint. Returns `{ assetId, uploadUrl, uploadHeaders, expiresIn }`.
+2. `PUT <uploadUrl>` — upload the binary **directly to the signed storage URL**
+   (Supabase / S3-compatible). This request does NOT go through the Kinectem
+   API. Use the exact headers from `uploadHeaders` (typically `Content-Type`
+   matching `fileType`). The URL is valid for `expiresIn` seconds.
+3. `POST /assets/{assetId}/confirm` — confirm the upload is complete so the
+   backend can verify the object and mark the asset `confirmed`.
+
+Once confirmed, reference the asset by `assetId` elsewhere in the API
+(e.g. `SetAssetIdRequest` for `PUT /users/{userId}/avatar`,
+`PUT /organizations/{orgId}/avatar`, `PUT /teams/{teamId}/avatar`, or as
+entries in `assetIds` on `CreatePostRequest`).
+
+Requires an adult or consented-minor user.
+
  * @summary Request a presigned URL for asset upload
  */
 export const requestUploadBodyFileNameMax = 255;
@@ -634,6 +911,10 @@ export const GetPostParams = zod.object({
   postId: zod.coerce.string().uuid(),
 });
 
+export const getPostResponseReactionCountMin = 0;
+
+export const getPostResponseCommentCountMin = 0;
+
 export const GetPostResponse = zod.object({
   id: zod.string().uuid(),
   postType: zod.enum(["short", "long"]),
@@ -646,9 +927,22 @@ export const GetPostResponse = zod.object({
     avatarUrl: zod.string().url().nullish(),
   }),
   context: zod.object({
-    type: zod.enum(["user", "organization"]),
+    type: zod.enum(["user", "organization", "team"]),
     id: zod.string().uuid(),
     name: zod.string().nullish(),
+    slug: zod
+      .string()
+      .nullish()
+      .describe("URL slug for org or team contexts; omitted for user context."),
+    orgSlug: zod
+      .string()
+      .nullish()
+      .describe("Parent org slug for team contexts only."),
+    avatarUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe("Signed S3 URL resolved at read time for org\/team avatars."),
   }),
   assets: zod.array(
     zod.object({
@@ -659,6 +953,15 @@ export const GetPostResponse = zod.object({
     }),
   ),
   isEdited: zod.boolean(),
+  reactionCount: zod.number().min(getPostResponseReactionCountMin),
+  hasReacted: zod.boolean(),
+  commentCount: zod.number().min(getPostResponseCommentCountMin),
+  recentReactorName: zod
+    .string()
+    .nullish()
+    .describe(
+      'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -688,6 +991,10 @@ export const UpdatePostBody = zod.object({
     .optional(),
 });
 
+export const updatePostResponseReactionCountMin = 0;
+
+export const updatePostResponseCommentCountMin = 0;
+
 export const UpdatePostResponse = zod.object({
   id: zod.string().uuid(),
   postType: zod.enum(["short", "long"]),
@@ -700,9 +1007,22 @@ export const UpdatePostResponse = zod.object({
     avatarUrl: zod.string().url().nullish(),
   }),
   context: zod.object({
-    type: zod.enum(["user", "organization"]),
+    type: zod.enum(["user", "organization", "team"]),
     id: zod.string().uuid(),
     name: zod.string().nullish(),
+    slug: zod
+      .string()
+      .nullish()
+      .describe("URL slug for org or team contexts; omitted for user context."),
+    orgSlug: zod
+      .string()
+      .nullish()
+      .describe("Parent org slug for team contexts only."),
+    avatarUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe("Signed S3 URL resolved at read time for org\/team avatars."),
   }),
   assets: zod.array(
     zod.object({
@@ -713,6 +1033,15 @@ export const UpdatePostResponse = zod.object({
     }),
   ),
   isEdited: zod.boolean(),
+  reactionCount: zod.number().min(updatePostResponseReactionCountMin),
+  hasReacted: zod.boolean(),
+  commentCount: zod.number().min(updatePostResponseCommentCountMin),
+  recentReactorName: zod
+    .string()
+    .nullish()
+    .describe(
+      'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -770,6 +1099,10 @@ export const ListOrgPostsQueryParams = zod.object({
     .default(listOrgPostsQueryIncludeTotalDefault),
 });
 
+export const listOrgPostsResponseDataItemReactionCountMin = 0;
+
+export const listOrgPostsResponseDataItemCommentCountMin = 0;
+
 export const ListOrgPostsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -784,9 +1117,26 @@ export const ListOrgPostsResponse = zod.object({
         avatarUrl: zod.string().url().nullish(),
       }),
       context: zod.object({
-        type: zod.enum(["user", "organization"]),
+        type: zod.enum(["user", "organization", "team"]),
         id: zod.string().uuid(),
         name: zod.string().nullish(),
+        slug: zod
+          .string()
+          .nullish()
+          .describe(
+            "URL slug for org or team contexts; omitted for user context.",
+          ),
+        orgSlug: zod
+          .string()
+          .nullish()
+          .describe("Parent org slug for team contexts only."),
+        avatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
       }),
       assets: zod.array(
         zod.object({
@@ -797,6 +1147,19 @@ export const ListOrgPostsResponse = zod.object({
         }),
       ),
       isEdited: zod.boolean(),
+      reactionCount: zod
+        .number()
+        .min(listOrgPostsResponseDataItemReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod
+        .number()
+        .min(listOrgPostsResponseDataItemCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -1023,6 +1386,10 @@ export const ListUserPostsQueryParams = zod.object({
     .default(listUserPostsQueryIncludeTotalDefault),
 });
 
+export const listUserPostsResponseDataItemReactionCountMin = 0;
+
+export const listUserPostsResponseDataItemCommentCountMin = 0;
+
 export const ListUserPostsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -1037,9 +1404,26 @@ export const ListUserPostsResponse = zod.object({
         avatarUrl: zod.string().url().nullish(),
       }),
       context: zod.object({
-        type: zod.enum(["user", "organization"]),
+        type: zod.enum(["user", "organization", "team"]),
         id: zod.string().uuid(),
         name: zod.string().nullish(),
+        slug: zod
+          .string()
+          .nullish()
+          .describe(
+            "URL slug for org or team contexts; omitted for user context.",
+          ),
+        orgSlug: zod
+          .string()
+          .nullish()
+          .describe("Parent org slug for team contexts only."),
+        avatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
       }),
       assets: zod.array(
         zod.object({
@@ -1050,6 +1434,19 @@ export const ListUserPostsResponse = zod.object({
         }),
       ),
       isEdited: zod.boolean(),
+      reactionCount: zod
+        .number()
+        .min(listUserPostsResponseDataItemReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod
+        .number()
+        .min(listUserPostsResponseDataItemCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -1345,10 +1742,19 @@ export const ListNotificationsResponse = zod.object({
   data: zod.array(
     zod.object({
       id: zod.string().uuid(),
-      type: zod.string(),
+      type: zod
+        .string()
+        .describe(
+          'Open-ended notification type. Known values today include `roster_invite`, `post_reaction`, `comment`, `follow`, `guardian_invite`, `consent_granted`, `consent_revoked`, plus moderation events. Treat unknown values as \"generic notification\" — new types may be added without a spec bump.\n',
+        ),
       title: zod.string(),
       body: zod.string().nullish(),
-      data: zod.record(zod.string(), zod.unknown()).nullish(),
+      data: zod
+        .record(zod.string(), zod.unknown())
+        .nullish()
+        .describe(
+          "Type-specific payload. Shape varies per `type` — consult the Notifications doc (or the controller) for the shape matching a given type. Do not assume fixed keys are present.\n",
+        ),
       isRead: zod.boolean(),
       readAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
@@ -1362,13 +1768,14 @@ export const ListNotificationsResponse = zod.object({
 });
 
 /**
- * Returns the total number of unread messages across all of the authenticated user's conversations.
- * @summary Get total unread message count
+ * @summary Get unread notification count
  */
-export const getUnreadCountResponseUnreadCountMinOne = 0;
+export const getUnreadNotificationCountResponseUnreadCountMin = 0;
 
-export const GetUnreadCountResponse = zod.object({
-  unreadCount: zod.number().min(getUnreadCountResponseUnreadCountMinOne),
+export const GetUnreadNotificationCountResponse = zod.object({
+  unreadCount: zod
+    .number()
+    .min(getUnreadNotificationCountResponseUnreadCountMin),
 });
 
 /**
@@ -1380,10 +1787,19 @@ export const MarkNotificationAsReadParams = zod.object({
 
 export const MarkNotificationAsReadResponse = zod.object({
   id: zod.string().uuid(),
-  type: zod.string(),
+  type: zod
+    .string()
+    .describe(
+      'Open-ended notification type. Known values today include `roster_invite`, `post_reaction`, `comment`, `follow`, `guardian_invite`, `consent_granted`, `consent_revoked`, plus moderation events. Treat unknown values as \"generic notification\" — new types may be added without a spec bump.\n',
+    ),
   title: zod.string(),
   body: zod.string().nullish(),
-  data: zod.record(zod.string(), zod.unknown()).nullish(),
+  data: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Type-specific payload. Shape varies per `type` — consult the Notifications doc (or the controller) for the shape matching a given type. Do not assume fixed keys are present.\n",
+    ),
   isRead: zod.boolean(),
   readAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
@@ -1535,6 +1951,16 @@ export const ListConversationsResponse = zod.object({
     hasMore: zod.boolean(),
     totalCount: zod.number().nullish(),
   }),
+});
+
+/**
+ * Returns the total number of unread messages across all of the authenticated user's conversations.
+ * @summary Get total unread message count
+ */
+export const getUnreadMessageCountResponseUnreadCountMin = 0;
+
+export const GetUnreadMessageCountResponse = zod.object({
+  unreadCount: zod.number().min(getUnreadMessageCountResponseUnreadCountMin),
 });
 
 /**
@@ -2338,6 +2764,1380 @@ export const DeclineRosterInviteResponse = zod.object({
     "withdrawn",
     "resolved",
   ]),
+});
+
+/**
+ * Returns a paginated unified feed assembled from the user's own posts, followed users/orgs/teams, and member orgs/teams. COPPA rule: minor-authored posts are excluded at query time.
+
+ * @summary Home feed for the authenticated user
+ */
+export const listFeedQueryCursorMax = 500;
+
+export const listFeedQueryLimitDefault = 20;
+export const listFeedQueryLimitMax = 50;
+
+export const ListFeedQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listFeedQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listFeedQueryLimitMax)
+    .default(listFeedQueryLimitDefault),
+});
+
+export const listFeedResponseDataItemAssetsItemDisplayOrderMin = 0;
+
+export const listFeedResponseDataItemReactionCountMin = 0;
+
+export const listFeedResponseDataItemCommentCountMin = 0;
+
+export const ListFeedResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      postType: zod.enum(["short", "long"]),
+      title: zod.string().nullish(),
+      description: zod.string().nullish(),
+      body: zod.string().nullish(),
+      bodyTruncated: zod
+        .boolean()
+        .describe(
+          "True when description or body was truncated in the feed page",
+        ),
+      isEdited: zod.boolean(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+      author: zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().nullable(),
+      }),
+      context: zod.object({
+        type: zod.enum(["user", "organization", "team"]),
+        id: zod.string().uuid(),
+        name: zod.string().nullish(),
+        slug: zod.string().nullish(),
+        orgSlug: zod.string().nullish(),
+        avatarUrl: zod.string().nullish(),
+      }),
+      assets: zod.array(
+        zod.object({
+          id: zod.string().uuid(),
+          fileType: zod.string(),
+          url: zod.string().url(),
+          displayOrder: zod
+            .number()
+            .min(listFeedResponseDataItemAssetsItemDisplayOrderMin),
+        }),
+      ),
+      reactionCount: zod.number().min(listFeedResponseDataItemReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod.number().min(listFeedResponseDataItemCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor, for \"X and N others reacted\" UI.',
+        ),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * Idempotent. Calling twice with the same user is a no-op. Requires adult or consented-minor user.
+ * @summary Add or upsert a reaction on a post
+ */
+export const AddPostReactionParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const addPostReactionBodyReactionTypeDefault = `like`;
+
+export const AddPostReactionBody = zod.object({
+  reactionType: zod
+    .enum(["like"])
+    .default(addPostReactionBodyReactionTypeDefault),
+});
+
+/**
+ * Idempotent. Calling when no reaction exists is a no-op.
+ * @summary Remove the current user's reaction from a post
+ */
+export const RemovePostReactionParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+/**
+ * @summary List users who reacted to a post (paginated)
+ */
+export const ListPostReactorsParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const listPostReactorsQueryCursorMax = 500;
+
+export const listPostReactorsQueryLimitDefault = 20;
+export const listPostReactorsQueryLimitMax = 50;
+
+export const ListPostReactorsQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listPostReactorsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listPostReactorsQueryLimitMax)
+    .default(listPostReactorsQueryLimitDefault),
+});
+
+export const ListPostReactorsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      displayName: zod.string(),
+      avatarUrl: zod
+        .string()
+        .nullable()
+        .describe(
+          "Suppressed (null) for under-13 reactors unless the requester is self.",
+        ),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * Requires adult or consented-minor user.
+ * @summary Create a comment on a post
+ */
+export const CreatePostCommentParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const createPostCommentBodyBodyMax = 500;
+
+export const CreatePostCommentBody = zod.object({
+  body: zod.string().min(1).max(createPostCommentBodyBodyMax),
+});
+
+/**
+ * @summary List comments for a post (paginated, oldest first)
+ */
+export const ListPostCommentsParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const listPostCommentsQueryCursorMax = 500;
+
+export const listPostCommentsQueryLimitDefault = 20;
+export const listPostCommentsQueryLimitMax = 50;
+
+export const ListPostCommentsQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listPostCommentsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listPostCommentsQueryLimitMax)
+    .default(listPostCommentsQueryLimitDefault),
+});
+
+export const listPostCommentsResponseDataItemReactionCountMin = 0;
+
+export const ListPostCommentsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      postId: zod.string().uuid(),
+      body: zod.string(),
+      author: zod.object({
+        id: zod
+          .string()
+          .uuid()
+          .nullable()
+          .describe("Null when the author's user row has been deleted."),
+        displayName: zod.string(),
+        avatarUrl: zod.string().nullable(),
+      }),
+      reactionCount: zod
+        .number()
+        .min(listPostCommentsResponseDataItemReactionCountMin),
+      hasReacted: zod.boolean(),
+      recentReactorName: zod.string().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * Requires adult or consented-minor user. Only the comment author or a moderator can delete.
+ * @summary Soft-delete a comment
+ */
+export const DeletePostCommentParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+  commentId: zod.coerce.string().uuid(),
+});
+
+/**
+ * @summary List users who reacted to a comment (paginated)
+ */
+export const ListCommentReactorsParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+  commentId: zod.coerce.string().uuid(),
+});
+
+export const listCommentReactorsQueryCursorMax = 500;
+
+export const listCommentReactorsQueryLimitDefault = 20;
+export const listCommentReactorsQueryLimitMax = 50;
+
+export const ListCommentReactorsQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listCommentReactorsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listCommentReactorsQueryLimitMax)
+    .default(listCommentReactorsQueryLimitDefault),
+});
+
+export const ListCommentReactorsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      displayName: zod.string(),
+      avatarUrl: zod
+        .string()
+        .nullable()
+        .describe(
+          "Suppressed (null) for under-13 reactors unless the requester is self.",
+        ),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * Idempotent. Requires adult or consented-minor user.
+ * @summary Add or upsert a reaction on a comment
+ */
+export const AddCommentReactionParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+  commentId: zod.coerce.string().uuid(),
+});
+
+export const addCommentReactionBodyReactionTypeDefault = `like`;
+
+export const AddCommentReactionBody = zod.object({
+  reactionType: zod
+    .enum(["like"])
+    .default(addCommentReactionBodyReactionTypeDefault),
+});
+
+/**
+ * @summary Remove the current user's reaction from a comment
+ */
+export const RemoveCommentReactionParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+  commentId: zod.coerce.string().uuid(),
+});
+
+/**
+ * @summary Propose one or more content tags on a post
+ */
+export const CreatePostTagsParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const CreatePostTagsBody = zod.object({
+  tags: zod
+    .array(
+      zod.object({
+        taggedEntityType: zod.enum(["user", "team", "organization"]),
+        taggedEntityId: zod.string().uuid(),
+        direction: zod.enum(["upward", "downward", "lateral"]).optional(),
+      }),
+    )
+    .min(1),
+});
+
+/**
+ * @summary List tags on a post
+ */
+export const ListPostTagsParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const ListPostTagsResponse = zod.object({
+  tags: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        postId: zod.string().uuid(),
+        taggedEntityType: zod.enum(["user", "team", "organization"]),
+        taggedEntityId: zod.string().uuid(),
+        direction: zod.enum(["upward", "downward", "lateral"]),
+        status: zod.enum(["pending", "approved", "declined", "removed"]),
+        approverId: zod.string().uuid().nullable(),
+        createdBy: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "The tagger's user ID. Visible only to the approver or the tagged party.",
+          ),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * Returns the pending-tag queue for the caller (tags on entities they own or moderate). Requires adult or consented-minor user.
+
+ * @summary List tags pending moderation for the authenticated approver
+ */
+export const listPendingTagsQueryCursorMax = 500;
+
+export const listPendingTagsQueryLimitDefault = 20;
+export const listPendingTagsQueryLimitMax = 50;
+
+export const ListPendingTagsQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listPendingTagsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listPendingTagsQueryLimitMax)
+    .default(listPendingTagsQueryLimitDefault),
+});
+
+export const ListPendingTagsResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        postId: zod.string().uuid(),
+        taggedEntityType: zod.enum(["user", "team", "organization"]),
+        taggedEntityId: zod.string().uuid(),
+        direction: zod.enum(["upward", "downward", "lateral"]),
+        status: zod.enum(["pending", "approved", "declined", "removed"]),
+        approverId: zod.string().uuid().nullable(),
+        createdBy: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "The tagger's user ID. Visible only to the approver or the tagged party.",
+          ),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      }),
+    )
+    .optional(),
+  pagination: zod
+    .object({
+      nextCursor: zod.string().nullish(),
+      hasMore: zod.boolean(),
+      totalCount: zod.number().nullish(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Approve a pending tag
+ */
+export const ApproveTagParams = zod.object({
+  tagId: zod.coerce.string().uuid(),
+});
+
+export const ApproveTagResponse = zod.object({
+  id: zod.string().uuid(),
+  postId: zod.string().uuid(),
+  taggedEntityType: zod.enum(["user", "team", "organization"]),
+  taggedEntityId: zod.string().uuid(),
+  direction: zod.enum(["upward", "downward", "lateral"]),
+  status: zod.enum(["pending", "approved", "declined", "removed"]),
+  approverId: zod.string().uuid().nullable(),
+  createdBy: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "The tagger's user ID. Visible only to the approver or the tagged party.",
+    ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Decline a pending tag
+ */
+export const DeclineTagParams = zod.object({
+  tagId: zod.coerce.string().uuid(),
+});
+
+export const DeclineTagResponse = zod.object({
+  id: zod.string().uuid(),
+  postId: zod.string().uuid(),
+  taggedEntityType: zod.enum(["user", "team", "organization"]),
+  taggedEntityId: zod.string().uuid(),
+  direction: zod.enum(["upward", "downward", "lateral"]),
+  status: zod.enum(["pending", "approved", "declined", "removed"]),
+  approverId: zod.string().uuid().nullable(),
+  createdBy: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "The tagger's user ID. Visible only to the approver or the tagged party.",
+    ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Remove a tag (author or tagged party only)
+ */
+export const RemoveTagParams = zod.object({
+  tagId: zod.coerce.string().uuid(),
+});
+
+/**
+ * @summary List posts created in the context of a team (paginated)
+ */
+export const ListTeamPostsParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+export const listTeamPostsQueryCursorMax = 500;
+
+export const listTeamPostsQueryLimitDefault = 20;
+export const listTeamPostsQueryLimitMax = 50;
+
+export const ListTeamPostsQueryParams = zod.object({
+  cursor: zod.coerce.string().max(listTeamPostsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listTeamPostsQueryLimitMax)
+    .default(listTeamPostsQueryLimitDefault),
+});
+
+export const listTeamPostsResponseDataItemReactionCountMin = 0;
+
+export const listTeamPostsResponseDataItemCommentCountMin = 0;
+
+export const ListTeamPostsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      postType: zod.enum(["short", "long"]),
+      title: zod.string().nullish(),
+      description: zod.string().nullish(),
+      body: zod.string().nullish(),
+      author: zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().url().nullish(),
+      }),
+      context: zod.object({
+        type: zod.enum(["user", "organization", "team"]),
+        id: zod.string().uuid(),
+        name: zod.string().nullish(),
+        slug: zod
+          .string()
+          .nullish()
+          .describe(
+            "URL slug for org or team contexts; omitted for user context.",
+          ),
+        orgSlug: zod
+          .string()
+          .nullish()
+          .describe("Parent org slug for team contexts only."),
+        avatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+      }),
+      assets: zod.array(
+        zod.object({
+          id: zod.string().uuid(),
+          fileType: zod.string(),
+          url: zod.string().url().nullish(),
+          displayOrder: zod.number(),
+        }),
+      ),
+      isEdited: zod.boolean(),
+      reactionCount: zod
+        .number()
+        .min(listTeamPostsResponseDataItemReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod
+        .number()
+        .min(listTeamPostsResponseDataItemCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * @summary Set a team's avatar from a confirmed asset
+ */
+export const SetTeamAvatarParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+export const SetTeamAvatarBody = zod.object({
+  assetId: zod
+    .string()
+    .uuid()
+    .describe("UUID of a confirmed asset owned by the caller."),
+});
+
+export const setTeamAvatarResponseFollowerCountMin = 0;
+
+export const SetTeamAvatarResponse = zod.object({
+  id: zod.string().uuid(),
+  organization: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    slug: zod.string(),
+  }),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  sport: zod.string().nullish(),
+  level: zod.string().nullish(),
+  avatarUrl: zod.string().url().nullish(),
+  currentSeason: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      name: zod.string().optional(),
+      startDate: zod.coerce.date().nullish(),
+      endDate: zod.coerce.date().nullish(),
+      status: zod.enum(["active", "completed"]).optional(),
+      createdAt: zod.coerce.date().optional(),
+    })
+    .nullish()
+    .describe("The team's current active season, or null if none."),
+  followerCount: zod.number().min(setTeamAvatarResponseFollowerCountMin),
+  isFollowing: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Remove a team's avatar
+ */
+export const DeleteTeamAvatarParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+/**
+ * Returns the active rotating join link (token) for a team. Creates one if none exists.
+ * @summary Get or create the current join link for a team
+ */
+export const GetOrCreateTeamJoinLinkParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+export const GetOrCreateTeamJoinLinkResponse = zod.object({
+  token: zod.string(),
+  teamId: zod.string().uuid(),
+  expiresAt: zod.coerce.date().nullable(),
+  createdAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Join a team via a join-link token
+ */
+export const AcceptTeamJoinLinkParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const AcceptTeamJoinLinkResponse = zod.object({
+  id: zod.string().uuid(),
+  userId: zod.string().uuid(),
+  displayName: zod.string(),
+  avatarUrl: zod.string().url().nullish(),
+  teamId: zod.string().uuid(),
+  seasonId: zod.string().uuid(),
+  role: zod.enum(["owner", "admin", "member"]),
+  position: zod.enum([
+    "player",
+    "coach",
+    "assistant_coach",
+    "manager",
+    "parent",
+  ]),
+  status: zod.enum(["pending", "active"]),
+  joinedAt: zod.coerce.date(),
+});
+
+/**
+ * Used by the marketing/join landing page before the user signs in. Rate-limited.
+ * @summary Preview a team join-link (public, unauthenticated)
+ */
+export const PreviewTeamJoinLinkParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const PreviewTeamJoinLinkResponse = zod.object({
+  team: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    avatarUrl: zod.string().nullish(),
+    organizationName: zod.string().nullish(),
+    orgSlug: zod.string().nullish(),
+  }),
+});
+
+/**
+ * @summary Set an organization's avatar from a confirmed asset
+ */
+export const SetOrgAvatarParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const SetOrgAvatarBody = zod.object({
+  assetId: zod
+    .string()
+    .uuid()
+    .describe("UUID of a confirmed asset owned by the caller."),
+});
+
+export const SetOrgAvatarResponse = zod.object({
+  id: zod.string().uuid(),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  website: zod.string().url().nullish(),
+  isMember: zod.boolean(),
+  role: zod.enum(["owner", "admin", "member"]).nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Remove an organization's avatar
+ */
+export const DeleteOrgAvatarParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+/**
+ * @summary Request to join an organization
+ */
+export const CreateOrgJoinRequestParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+/**
+ * Returns the join-request queue for an organization. Defaults to `status=pending`; pass `status` to see decided requests.
+
+ * @summary List join requests for an organization (admin)
+ */
+export const ListOrgJoinRequestsParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const listOrgJoinRequestsQueryCursorMax = 500;
+
+export const listOrgJoinRequestsQueryLimitDefault = 20;
+export const listOrgJoinRequestsQueryLimitMax = 50;
+
+export const ListOrgJoinRequestsQueryParams = zod.object({
+  status: zod
+    .enum(["pending", "approved", "declined", "withdrawn"])
+    .optional()
+    .describe("Filter by request status. Defaults to `pending`."),
+  cursor: zod.coerce.string().max(listOrgJoinRequestsQueryCursorMax).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listOrgJoinRequestsQueryLimitMax)
+    .default(listOrgJoinRequestsQueryLimitDefault),
+});
+
+export const ListOrgJoinRequestsResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        orgId: zod.string().uuid(),
+        userId: zod.string().uuid(),
+        user: zod
+          .object({
+            id: zod.string().uuid().optional(),
+            displayName: zod.string().optional(),
+            avatarUrl: zod.string().nullish(),
+          })
+          .nullish(),
+        status: zod.enum(["pending", "approved", "declined", "withdrawn"]),
+        decidedBy: zod.string().uuid().nullish(),
+        decidedAt: zod.coerce.date().nullish(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date().optional(),
+      }),
+    )
+    .optional(),
+  pagination: zod
+    .object({
+      nextCursor: zod.string().nullish(),
+      hasMore: zod.boolean(),
+      totalCount: zod.number().nullish(),
+    })
+    .optional(),
+});
+
+/**
+ * Approves the request and adds the user to the organization. An optional `role` in the body promotes the joiner to `admin`; defaults to `member` when omitted.
+
+ * @summary Approve a pending org join request
+ */
+export const ApproveOrgJoinRequestParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  requestId: zod.coerce.string().uuid(),
+});
+
+export const ApproveOrgJoinRequestBody = zod
+  .object({
+    role: zod
+      .enum(["admin", "member"])
+      .optional()
+      .describe("Role to grant to the joining user. Defaults to `member`."),
+  })
+  .describe("Optional body for approving an org join request.");
+
+export const ApproveOrgJoinRequestResponse = zod.object({
+  id: zod.string().uuid(),
+  orgId: zod.string().uuid(),
+  userId: zod.string().uuid(),
+  user: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      displayName: zod.string().optional(),
+      avatarUrl: zod.string().nullish(),
+    })
+    .nullish(),
+  status: zod.enum(["pending", "approved", "declined", "withdrawn"]),
+  decidedBy: zod.string().uuid().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Decline a pending org join request
+ */
+export const DeclineOrgJoinRequestParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  requestId: zod.coerce.string().uuid(),
+});
+
+export const DeclineOrgJoinRequestResponse = zod.object({
+  id: zod.string().uuid(),
+  orgId: zod.string().uuid(),
+  userId: zod.string().uuid(),
+  user: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      displayName: zod.string().optional(),
+      avatarUrl: zod.string().nullish(),
+    })
+    .nullish(),
+  status: zod.enum(["pending", "approved", "declined", "withdrawn"]),
+  decidedBy: zod.string().uuid().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Withdraw a pending join request (requester only)
+ */
+export const WithdrawOrgJoinRequestParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  requestId: zod.coerce.string().uuid(),
+});
+
+export const WithdrawOrgJoinRequestResponse = zod.object({
+  id: zod.string().uuid(),
+  orgId: zod.string().uuid(),
+  userId: zod.string().uuid(),
+  user: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      displayName: zod.string().optional(),
+      avatarUrl: zod.string().nullish(),
+    })
+    .nullish(),
+  status: zod.enum(["pending", "approved", "declined", "withdrawn"]),
+  decidedBy: zod.string().uuid().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary List post-approval queue for an organization (admin)
+ */
+export const ListOrgPostApprovalsParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const listOrgPostApprovalsQueryCursorMax = 500;
+
+export const listOrgPostApprovalsQueryLimitDefault = 20;
+export const listOrgPostApprovalsQueryLimitMax = 50;
+
+export const ListOrgPostApprovalsQueryParams = zod.object({
+  cursor: zod.coerce
+    .string()
+    .max(listOrgPostApprovalsQueryCursorMax)
+    .optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listOrgPostApprovalsQueryLimitMax)
+    .default(listOrgPostApprovalsQueryLimitDefault),
+});
+
+export const listOrgPostApprovalsResponseDataItemPostReactionCountMin = 0;
+
+export const listOrgPostApprovalsResponseDataItemPostCommentCountMin = 0;
+
+export const ListOrgPostApprovalsResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        orgId: zod.string().uuid(),
+        postId: zod.string().uuid(),
+        submittedBy: zod.string().uuid().optional(),
+        status: zod.enum(["pending", "approved", "declined"]),
+        decidedBy: zod.string().uuid().nullish(),
+        decidedAt: zod.coerce.date().nullish(),
+        post: zod
+          .object({
+            id: zod.string().uuid(),
+            postType: zod.enum(["short", "long"]),
+            title: zod.string().nullish(),
+            description: zod.string().nullish(),
+            body: zod.string().nullish(),
+            author: zod.object({
+              id: zod.string().uuid(),
+              displayName: zod.string(),
+              avatarUrl: zod.string().url().nullish(),
+            }),
+            context: zod.object({
+              type: zod.enum(["user", "organization", "team"]),
+              id: zod.string().uuid(),
+              name: zod.string().nullish(),
+              slug: zod
+                .string()
+                .nullish()
+                .describe(
+                  "URL slug for org or team contexts; omitted for user context.",
+                ),
+              orgSlug: zod
+                .string()
+                .nullish()
+                .describe("Parent org slug for team contexts only."),
+              avatarUrl: zod
+                .string()
+                .url()
+                .nullish()
+                .describe(
+                  "Signed S3 URL resolved at read time for org\/team avatars.",
+                ),
+            }),
+            assets: zod.array(
+              zod.object({
+                id: zod.string().uuid(),
+                fileType: zod.string(),
+                url: zod.string().url().nullish(),
+                displayOrder: zod.number(),
+              }),
+            ),
+            isEdited: zod.boolean(),
+            reactionCount: zod
+              .number()
+              .min(listOrgPostApprovalsResponseDataItemPostReactionCountMin),
+            hasReacted: zod.boolean(),
+            commentCount: zod
+              .number()
+              .min(listOrgPostApprovalsResponseDataItemPostCommentCountMin),
+            recentReactorName: zod
+              .string()
+              .nullish()
+              .describe(
+                'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+              ),
+            createdAt: zod.coerce.date(),
+            updatedAt: zod.coerce.date(),
+          })
+          .optional(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date().optional(),
+      }),
+    )
+    .optional(),
+  pagination: zod
+    .object({
+      nextCursor: zod.string().nullish(),
+      hasMore: zod.boolean(),
+      totalCount: zod.number().nullish(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Approve a pending post for publication under the organization
+ */
+export const ApproveOrgPostApprovalParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  approvalId: zod.coerce.string().uuid(),
+});
+
+export const approveOrgPostApprovalResponsePostReactionCountMin = 0;
+
+export const approveOrgPostApprovalResponsePostCommentCountMin = 0;
+
+export const ApproveOrgPostApprovalResponse = zod.object({
+  id: zod.string().uuid(),
+  orgId: zod.string().uuid(),
+  postId: zod.string().uuid(),
+  submittedBy: zod.string().uuid().optional(),
+  status: zod.enum(["pending", "approved", "declined"]),
+  decidedBy: zod.string().uuid().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  post: zod
+    .object({
+      id: zod.string().uuid(),
+      postType: zod.enum(["short", "long"]),
+      title: zod.string().nullish(),
+      description: zod.string().nullish(),
+      body: zod.string().nullish(),
+      author: zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().url().nullish(),
+      }),
+      context: zod.object({
+        type: zod.enum(["user", "organization", "team"]),
+        id: zod.string().uuid(),
+        name: zod.string().nullish(),
+        slug: zod
+          .string()
+          .nullish()
+          .describe(
+            "URL slug for org or team contexts; omitted for user context.",
+          ),
+        orgSlug: zod
+          .string()
+          .nullish()
+          .describe("Parent org slug for team contexts only."),
+        avatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+      }),
+      assets: zod.array(
+        zod.object({
+          id: zod.string().uuid(),
+          fileType: zod.string(),
+          url: zod.string().url().nullish(),
+          displayOrder: zod.number(),
+        }),
+      ),
+      isEdited: zod.boolean(),
+      reactionCount: zod
+        .number()
+        .min(approveOrgPostApprovalResponsePostReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod
+        .number()
+        .min(approveOrgPostApprovalResponsePostCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    })
+    .optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Decline a pending post
+ */
+export const DeclineOrgPostApprovalParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  approvalId: zod.coerce.string().uuid(),
+});
+
+export const declineOrgPostApprovalResponsePostReactionCountMin = 0;
+
+export const declineOrgPostApprovalResponsePostCommentCountMin = 0;
+
+export const DeclineOrgPostApprovalResponse = zod.object({
+  id: zod.string().uuid(),
+  orgId: zod.string().uuid(),
+  postId: zod.string().uuid(),
+  submittedBy: zod.string().uuid().optional(),
+  status: zod.enum(["pending", "approved", "declined"]),
+  decidedBy: zod.string().uuid().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  post: zod
+    .object({
+      id: zod.string().uuid(),
+      postType: zod.enum(["short", "long"]),
+      title: zod.string().nullish(),
+      description: zod.string().nullish(),
+      body: zod.string().nullish(),
+      author: zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().url().nullish(),
+      }),
+      context: zod.object({
+        type: zod.enum(["user", "organization", "team"]),
+        id: zod.string().uuid(),
+        name: zod.string().nullish(),
+        slug: zod
+          .string()
+          .nullish()
+          .describe(
+            "URL slug for org or team contexts; omitted for user context.",
+          ),
+        orgSlug: zod
+          .string()
+          .nullish()
+          .describe("Parent org slug for team contexts only."),
+        avatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+      }),
+      assets: zod.array(
+        zod.object({
+          id: zod.string().uuid(),
+          fileType: zod.string(),
+          url: zod.string().url().nullish(),
+          displayOrder: zod.number(),
+        }),
+      ),
+      isEdited: zod.boolean(),
+      reactionCount: zod
+        .number()
+        .min(declineOrgPostApprovalResponsePostReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod
+        .number()
+        .min(declineOrgPostApprovalResponsePostCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    })
+    .optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * Returns the guardians linked to the given child. Visibility restricted to self or linked guardians.
+ * @summary List guardian links for a child user
+ */
+export const ListUserGuardiansParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const ListUserGuardiansResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        guardian: zod.object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().nullable(),
+        }),
+        relationshipType: zod.enum(["parent", "legal_guardian"]),
+        isPrimary: zod.boolean(),
+        status: zod.enum(["pending", "active", "revoked"]),
+        consentGrantedAt: zod.coerce.date().nullish(),
+        consentMethod: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * Creates a pending guardian link and triggers a consent-request email to the provided address. Only the child themselves, an existing primary guardian, or a platform admin may invite.
+
+ * @summary Invite a guardian for a child user (COPPA)
+ */
+export const InviteGuardianParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const inviteGuardianBodyEmailMax = 255;
+
+export const InviteGuardianBody = zod.object({
+  email: zod.string().email().max(inviteGuardianBodyEmailMax),
+  relationshipType: zod.enum(["parent", "legal_guardian"]),
+});
+
+export const InviteGuardianResponse = zod.object({
+  message: zod.string(),
+});
+
+/**
+ * @summary List child user links for a guardian
+ */
+export const ListUserChildrenParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const ListUserChildrenResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        child: zod.object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().nullable(),
+          dateOfBirth: zod.coerce
+            .date()
+            .nullable()
+            .describe(
+              "COPPA-restricted PII. Returned only to the child themselves or their linked guardians; other callers will receive null or a 403 from the enclosing endpoint.\n",
+            ),
+        }),
+        relationshipType: zod.enum(["parent", "legal_guardian"]),
+        isPrimary: zod.boolean(),
+        status: zod.enum(["pending", "active", "revoked"]),
+        consentGrantedAt: zod.coerce.date().nullish(),
+        consentMethod: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * The invited guardian accepts the link. Marks the link active and records consent.
+ * @summary Accept a pending guardian invitation
+ */
+export const AcceptGuardianLinkParams = zod.object({
+  linkId: zod.coerce.string().uuid(),
+});
+
+export const AcceptGuardianLinkResponse = zod.object({
+  id: zod.string().uuid(),
+  guardian: zod.object({
+    id: zod.string().uuid(),
+    displayName: zod.string(),
+    avatarUrl: zod.string().nullable(),
+  }),
+  relationshipType: zod.enum(["parent", "legal_guardian"]),
+  isPrimary: zod.boolean(),
+  status: zod.enum(["pending", "active", "revoked"]),
+  consentGrantedAt: zod.coerce.date().nullish(),
+  consentMethod: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Decline a pending guardian invitation
+ */
+export const DeclineGuardianLinkParams = zod.object({
+  linkId: zod.coerce.string().uuid(),
+});
+
+/**
+ * Either the guardian or the child (or primary guardian) may remove a link. Primary guardian cannot be removed if it is the last guardian.
+
+ * @summary Remove a guardian link
+ */
+export const RemoveGuardianLinkParams = zod.object({
+  linkId: zod.coerce.string().uuid(),
+});
+
+/**
+ * Only the current primary guardian can transfer the primary role to another active link.
+ * @summary Transfer the primary-guardian flag to this link
+ */
+export const TransferPrimaryGuardianParams = zod.object({
+  linkId: zod.coerce.string().uuid(),
+});
+
+export const TransferPrimaryGuardianResponse = zod.object({
+  id: zod.string().uuid(),
+  guardian: zod.object({
+    id: zod.string().uuid(),
+    displayName: zod.string(),
+    avatarUrl: zod.string().nullable(),
+  }),
+  relationshipType: zod.enum(["parent", "legal_guardian"]),
+  isPrimary: zod.boolean(),
+  status: zod.enum(["pending", "active", "revoked"]),
+  consentGrantedAt: zod.coerce.date().nullish(),
+  consentMethod: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * Returns users the authenticated user may start a DM with, matching a query string. Used to populate the new-conversation composer.
+
+ * @summary Search the caller's eligible messaging contacts
+ */
+export const searchConversationContactsQueryQMax = 100;
+
+export const searchConversationContactsQueryLimitDefault = 20;
+export const searchConversationContactsQueryLimitMax = 50;
+
+export const SearchConversationContactsQueryParams = zod.object({
+  q: zod.coerce
+    .string()
+    .min(1)
+    .max(searchConversationContactsQueryQMax)
+    .describe("Search query (min 1 character)"),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(searchConversationContactsQueryLimitMax)
+    .default(searchConversationContactsQueryLimitDefault),
+});
+
+export const SearchConversationContactsResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().nullable(),
+        relationship: zod
+          .string()
+          .optional()
+          .describe(
+            "Optional hint about why this contact is eligible (e.g., teammate, follower).",
+          ),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * Powers the invite landing page before the invitee signs in. Rate-limited.
+ * @summary Preview a roster invite token (public, unauthenticated)
+ */
+export const PreviewRosterInviteParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const PreviewRosterInviteResponse = zod.object({
+  invite: zod.object({
+    teamId: zod.string().uuid(),
+    teamName: zod.string(),
+    teamAvatarUrl: zod.string().nullish(),
+    organizationName: zod.string().nullish(),
+    orgSlug: zod.string().nullish(),
+    role: zod.string(),
+    invitedBy: zod.string().nullish(),
+    expiresAt: zod.coerce.date().nullish(),
+  }),
+});
+
+/**
+ * @summary Public preview of a post (used for social share unfurling and the public post page)
+ */
+export const GetPostPreviewParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const GetPostPreviewResponse = zod.object({
+  id: zod.string().uuid(),
+  postType: zod.enum(["short", "long"]),
+  title: zod.string().nullish(),
+  description: zod.string().nullish(),
+  body: zod
+    .string()
+    .nullish()
+    .describe("May be truncated for long-form posts."),
+  author: zod
+    .object({
+      displayName: zod.string().nullish(),
+      avatarUrl: zod.string().nullish(),
+    })
+    .nullish(),
+  context: zod
+    .object({
+      type: zod.enum(["user", "organization", "team"]),
+      id: zod.string().uuid(),
+      name: zod.string().nullish(),
+      slug: zod.string().nullish(),
+      orgSlug: zod.string().nullish(),
+      avatarUrl: zod.string().nullish(),
+    })
+    .optional(),
+  ogImageUrl: zod.string().url().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Generated Open Graph preview image for a post
+ */
+export const GetPostOgImageParams = zod.object({
+  postId: zod.coerce.string().uuid(),
 });
 
 /**

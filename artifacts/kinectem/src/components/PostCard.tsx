@@ -3,11 +3,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Play, FileText } from "lucide-react";
-import type { PostResponse } from "@workspace/api-client-react";
+import type { PostResponse, FeedPost } from "@workspace/api-client-react";
 import { timeAgo } from "@/lib/format";
 import { getInitials } from "@/lib/format";
 
-export function PostCard({ post }: { post: PostResponse }) {
+export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const label = isShort ? "Highlight" : "Game Recap";

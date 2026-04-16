@@ -12,4 +12,5 @@ export type PostContextType =
 export const PostContextType = {
   user: "user",
   organization: "organization",
+  team: "team",
 } as const;
