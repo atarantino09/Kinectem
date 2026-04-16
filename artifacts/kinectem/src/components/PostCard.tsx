@@ -1,13 +1,21 @@
 import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Play, FileText } from "lucide-react";
-import type { PostResponse, FeedPost } from "@workspace/api-client-react";
-import { timeAgo } from "@/lib/format";
-import { getInitials } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Play, FileText, Heart, MessageSquare } from "lucide-react";
+import {
+  useAddPostReaction,
+  useRemovePostReaction,
+  getListFeedQueryKey,
+  type PostResponse,
+  type FeedPost,
+} from "@workspace/api-client-react";
+import { timeAgo, getInitials } from "@/lib/format";
 
 export function PostCard({ post }: { post: PostResponse | FeedPost }) {
+  const qc = useQueryClient();
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const label = isShort ? "Highlight" : "Game Recap";
@@ -16,6 +24,25 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
     : "bg-blue-50 text-blue-700";
 
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
+
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+  const addReaction = useAddPostReaction({
+    mutation: { onSuccess: invalidate },
+  });
+  const removeReaction = useRemovePostReaction({
+    mutation: { onSuccess: invalidate },
+  });
+
+  const onToggleReaction = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (post.hasReacted) {
+      removeReaction.mutate({ postId: post.id });
+    } else {
+      addReaction.mutate({ postId: post.id, data: { reactionType: "like" } });
+    }
+  };
 
   return (
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
@@ -71,6 +98,38 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             </div>
           </div>
         </Link>
+
+        <div className="px-5 py-3 border-t border-border/60 flex items-center gap-2">
+          <Button
+            variant={post.hasReacted ? "default" : "outline"}
+            size="sm"
+            onClick={onToggleReaction}
+            disabled={addReaction.isPending || removeReaction.isPending}
+            className="font-bold gap-1.5 h-8"
+            data-testid={`button-reaction-${post.id}`}
+          >
+            <Heart
+              className={`w-3.5 h-3.5 ${post.hasReacted ? "fill-current" : ""}`}
+            />
+            {post.reactionCount}
+          </Button>
+          <Link href={`/posts/${post.id}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold gap-1.5 h-8"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              {post.commentCount}
+            </Button>
+          </Link>
+          {post.recentReactorName && post.reactionCount > 0 && (
+            <span className="text-xs text-muted-foreground ml-1 truncate">
+              {post.recentReactorName}
+              {post.reactionCount > 1 ? ` +${post.reactionCount - 1}` : ""}
+            </span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

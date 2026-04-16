@@ -24,7 +24,10 @@ header injected by the React fetch mutator.
 - `artifacts/api-server` — Prism mock; `prefix-spec.mjs` rewrites the spec to add the
   `/api/v1` prefix, then Prism boots on `$PORT`.
 - `artifacts/kinectem` — the web app. Pages: Feed, Search, Organizations list,
-  Organization, Team, User profile, Post, NewPost.
+  Organization, Team, User profile, Post, NewPost. Header has a notifications bell
+  (`useGetUnreadNotificationCount` + `useListNotifications`). Post cards in the
+  feed have inline like + comment-count buttons (reaction-toggle invalidates
+  `getListFeedQueryKey()`).
 - `artifacts/mockup-sandbox` — design sandbox.
 
 ## Key Commands

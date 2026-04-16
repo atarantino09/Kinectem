@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getInitials } from "@/lib/format";
+import { NotificationsBell } from "@/components/NotificationsBell";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser } = useGetLoggedInUser();
@@ -85,6 +86,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <NotificationsBell />
 
           {currentUser && (
             <Link href={`/users/${currentUser.id}`} className="shrink-0">
