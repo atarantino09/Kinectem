@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Play, FileText } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 import { PostInteractions } from "@/components/PostInteractions";
+import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
@@ -114,6 +115,8 @@ export default function PostPage() {
       )}
 
       <PostInteractions post={post} />
+
+      {!isShort && <GamePhotoAlbum postId={postId} />}
     </article>
   );
 }
