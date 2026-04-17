@@ -1,9 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { useGetLoggedInUser } from "@workspace/api-client-react";
+import {
+  useGetLoggedInUser,
+  useGetUnreadMessageCount,
+} from "@workspace/api-client-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy } from "lucide-react";
+import { Search, Plus, Home, Building2, Trophy, Mail, Tag } from "lucide-react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -17,6 +20,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser } = useGetLoggedInUser();
+  const { data: unreadMsgs } = useGetUnreadMessageCount();
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
 
@@ -64,6 +68,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Building2 className="w-4 h-4 mr-2" /> Orgs
               </Button>
             </Link>
+            <Link href="/messages">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="font-semibold relative"
+                data-testid="link-messages"
+              >
+                <Mail className="w-4 h-4 mr-2" /> Inbox
+                {(unreadMsgs?.unreadCount ?? 0) > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">
+                    {(unreadMsgs?.unreadCount ?? 0) > 9
+                      ? "9+"
+                      : unreadMsgs?.unreadCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
           </nav>
 
           <DropdownMenu>
@@ -83,6 +104,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setLocation("/organizations")}>
                 <Building2 className="w-4 h-4 mr-2" /> Browse Orgs
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setLocation("/tags/pending")}>
+                <Tag className="w-4 h-4 mr-2" /> Pending Tags
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Building2 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
+import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { getInitials } from "@/lib/format";
 
 export default function UserProfilePage() {
@@ -65,7 +66,9 @@ export default function UserProfilePage() {
               )}
             </div>
           </div>
-          {!user.isOwnProfile && (
+          {user.isOwnProfile && "email" in user ? (
+            <EditProfileDialog user={user} />
+          ) : (
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6">
               {user.isFollowing ? "Following" : "Follow"}
             </Button>

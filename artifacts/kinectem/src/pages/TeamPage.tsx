@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Shield, Trophy, UserPlus } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/format";
+import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 
 export default function TeamPage() {
   const params = useParams<{ teamId: string }>();
@@ -186,6 +187,8 @@ export default function TeamPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <TeamAdminPanel teamId={teamId} />
     </div>
   );
 }

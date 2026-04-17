@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Users, ChevronRight } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
+import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
@@ -85,6 +86,10 @@ export default function OrganizationPage() {
           </div>
         )}
       </div>
+
+      {(organization.role === "admin" || organization.role === "owner") && (
+        <OrgAdminPanel orgId={orgId} />
+      )}
 
       {/* Teams */}
       <section>

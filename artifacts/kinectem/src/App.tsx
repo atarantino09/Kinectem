@@ -12,6 +12,8 @@ import UserProfilePage from "@/pages/UserProfilePage";
 import PostPage from "@/pages/PostPage";
 import NewPostPage from "@/pages/NewPostPage";
 import SearchPage from "@/pages/SearchPage";
+import MessagesPage from "@/pages/MessagesPage";
+import PendingTagsPage from "@/pages/PendingTagsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +36,9 @@ function Router() {
           <Switch>
             <Route path="/" component={FeedPage} />
             <Route path="/search" component={SearchPage} />
+            <Route path="/messages/:conversationId" component={MessagesPage} />
+            <Route path="/messages" component={MessagesPage} />
+            <Route path="/tags/pending" component={PendingTagsPage} />
             <Route path="/organizations" component={OrganizationsListPage} />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
             <Route path="/teams/:teamId" component={TeamPage} />
