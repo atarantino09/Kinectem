@@ -19,6 +19,52 @@ if (doc && typeof doc === "object" && doc.paths && typeof doc.paths === "object"
   doc.paths = newPaths;
 }
 
+const HUMAN_PHOTOS = [
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces",
+  "https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces",
+];
+
+const TEAM_PHOTOS = [
+  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1607627000458-210e8d2bdb1d?w=600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1551958219-acbc608c6377?w=600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1526232761682-d26e03ac148e?w=600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&h=600&fit=crop",
+];
+
+const ORG_LOGOS = [
+  "https://images.unsplash.com/photo-1565992441121-4367c2967103?w=400&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=400&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=400&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=400&fit=crop",
+];
+
+const FIELD_PHOTOS = [
+  "https://images.unsplash.com/photo-1486286701208-1d58e9338013?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1552667466-07770ae110d0?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1518604666860-9ed391f76460?w=1600&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=1600&h=600&fit=crop",
+];
+
+const ACTION_PHOTOS = [
+  "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1556009896-d3e35c4d2dc1?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1543351611-58f69d7c1781?w=1200&h=800&fit=crop",
+];
+
 const POOLS = {
   firstName: ["Marcus", "Jordan", "Tyler", "Daniela", "Chris", "Lisa", "Samira", "Aaron", "Maya", "Devon", "Kai", "Riley", "Quinn", "Avery"],
   lastName: ["Rivera", "Bennett", "Chen", "Davis", "Patel", "Nguyen", "Brooks", "Silva", "Walker", "Hayes", "Reed", "Foster", "Carter"],
@@ -102,33 +148,59 @@ const pick = (arr) => arr[pickIdx++ % arr.length];
 
 const SKIP_KEYS = new Set(["id", "createdAt", "updatedAt", "type", "status", "role", "direction", "kind", "format", "mimeType"]);
 
-function injectExamples(node, parentKey = null) {
+function pickImage(propertyKey, schemaName) {
+  const sn = (schemaName || "").toLowerCase();
+  if (propertyKey === "coverPhotoUrl") return pick(FIELD_PHOTOS);
+  if (propertyKey === "avatarUrl") {
+    if (sn.includes("team")) return pick(TEAM_PHOTOS);
+    if (sn.includes("organization") || sn.includes("org")) return pick(ORG_LOGOS);
+    return pick(HUMAN_PHOTOS);
+  }
+  if (propertyKey === "url" && sn.includes("asset")) return pick(ACTION_PHOTOS);
+  if (propertyKey === "thumbnailUrl" || propertyKey === "previewUrl")
+    return pick(ACTION_PHOTOS);
+  return null;
+}
+
+function injectExamples(node, parentKey = null, schemaName = null) {
   if (Array.isArray(node)) {
-    node.forEach((n) => injectExamples(n, parentKey));
+    node.forEach((n) => injectExamples(n, parentKey, schemaName));
     return;
   }
   if (!node || typeof node !== "object") return;
 
-  if (node.type === "string" && !("example" in node) && !("enum" in node) && !("const" in node) && parentKey && !SKIP_KEYS.has(parentKey)) {
-    const pool = POOLS[parentKey];
-    if (pool) {
-      node.example = pick(pool);
+  if (
+    node.type === "string" &&
+    !("example" in node) &&
+    !("enum" in node) &&
+    !("const" in node) &&
+    parentKey &&
+    !SKIP_KEYS.has(parentKey)
+  ) {
+    const img = pickImage(parentKey, schemaName);
+    if (img) {
+      node.example = img;
+    } else {
+      const pool = POOLS[parentKey];
+      if (pool) node.example = pick(pool);
     }
   }
 
   if (node.properties && typeof node.properties === "object") {
     for (const [k, v] of Object.entries(node.properties)) {
-      injectExamples(v, k);
+      injectExamples(v, k, schemaName);
     }
   }
   for (const [k, v] of Object.entries(node)) {
     if (k === "properties") continue;
-    if (v && typeof v === "object") injectExamples(v, k);
+    if (v && typeof v === "object") injectExamples(v, k, schemaName);
   }
 }
 
 if (doc && doc.components && doc.components.schemas) {
-  injectExamples(doc.components.schemas);
+  for (const [name, schema] of Object.entries(doc.components.schemas)) {
+    injectExamples(schema, null, name);
+  }
 }
 if (doc && doc.paths) injectExamples(doc.paths);
 
