@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node prefix-spec.mjs && prism mock -d -h 0.0.0.0 -p ${PORT} .openapi-prefixed.yaml",
+    "dev": "node prefix-spec.mjs && prism mock -h 0.0.0.0 -p ${PORT} .openapi-prefixed.yaml",
     "build": "echo 'mock server: no build step'",
-    "start": "node prefix-spec.mjs && prism mock -d -h 0.0.0.0 -p ${PORT} .openapi-prefixed.yaml",
+    "start": "node prefix-spec.mjs && prism mock -h 0.0.0.0 -p ${PORT} .openapi-prefixed.yaml",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -18,7 +18,8 @@
     "drizzle-orm": "catalog:",
     "express": "^5",
     "pino": "^9",
-    "pino-http": "^10"
+    "pino-http": "^10",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
