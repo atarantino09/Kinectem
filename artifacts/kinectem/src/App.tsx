@@ -14,6 +14,7 @@ import NewPostPage from "@/pages/NewPostPage";
 import SearchPage from "@/pages/SearchPage";
 import MessagesPage from "@/pages/MessagesPage";
 import PendingTagsPage from "@/pages/PendingTagsPage";
+import LoginPage from "@/pages/LoginPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,7 +28,8 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Switch>
-      {/* Fullscreen creators (no layout) */}
+      {/* Fullscreen routes (no layout) */}
+      <Route path="/login" component={LoginPage} />
       <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}

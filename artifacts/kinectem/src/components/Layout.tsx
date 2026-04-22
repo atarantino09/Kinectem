@@ -6,8 +6,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy, Mail, Tag } from "lucide-react";
+import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat } from "lucide-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +25,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { data: unreadMsgs } = useGetUnreadMessageCount();
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
+  const qc = useQueryClient();
+
+  const handleLogout = async () => {
+    try {
+      await customFetch("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // ignore
+    }
+    await qc.invalidateQueries();
+    setLocation("/login");
+  };
 
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,14 +127,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <NotificationsBell />
 
           {currentUser && (
-            <Link href={`/users/${currentUser.id}`} className="shrink-0">
-              <Avatar className="w-9 h-9 border border-border hover:ring-2 hover:ring-primary transition-all">
-                {currentUser.avatarUrl && <AvatarImage src={currentUser.avatarUrl} />}
-                <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-                  {getInitials(displayName)}
-                </AvatarFallback>
-              </Avatar>
-            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  data-testid="btn-user-menu"
+                >
+                  <Avatar className="w-9 h-9 border border-border hover:ring-2 hover:ring-primary transition-all">
+                    {currentUser.avatarUrl && <AvatarImage src={currentUser.avatarUrl} />}
+                    <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
+                      {getInitials(displayName)}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <div className="px-2 py-1.5">
+                  <p className="font-bold text-sm truncate">{displayName}</p>
+                  {currentUser.email && (
+                    <p className="text-xs text-muted-foreground truncate">{currentUser.email}</p>
+                  )}
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setLocation(`/users/${currentUser.id}`)}>
+                  <UserCircle className="w-4 h-4 mr-2" /> View profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setLocation("/login")}>
+                  <Repeat className="w-4 h-4 mr-2" /> Switch user
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={handleLogout} data-testid="btn-logout">
+                  <LogOut className="w-4 h-4 mr-2" /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </header>

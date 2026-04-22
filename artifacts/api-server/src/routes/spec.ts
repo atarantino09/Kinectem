@@ -1,0 +1,944 @@
+import { Router, type IRouter, type Request, type Response } from "express";
+import {
+  db,
+  users,
+  organizations,
+  organizationAdmins,
+  teams,
+  rosterEntries,
+  rosterInvites,
+  articles,
+  highlights,
+  notifications,
+} from "@workspace/db";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { z } from "zod";
+import { asyncHandler } from "../lib/async-handler";
+import {
+  createSession,
+  destroySession,
+  setSessionCookie,
+  clearSessionCookie,
+  SESSION_COOKIE,
+  requireAuth,
+} from "../lib/auth";
+import {
+  toPublicUser,
+  toPrivateUser,
+  toOrganization,
+  toMember,
+  toTeam,
+  toTeamMember,
+  toInvite,
+  toNotification,
+  articleToPost,
+  highlightToPost,
+  paginate,
+  emptyPagination,
+  splitName,
+  parsePostId,
+} from "../lib/spec-helpers";
+
+const router: IRouter = Router();
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+router.get("/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Auth (custom — not in spec)
+// ---------------------------------------------------------------------------
+const LoginBody = z.object({ userId: z.string().uuid() });
+const SignupBody = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1).optional().default(""),
+  role: z.enum(["athlete", "coach", "admin", "parent"]),
+  email: z.string().email().optional().nullable(),
+  dateOfBirth: z.string().optional().nullable(),
+  parentId: z.string().uuid().optional().nullable(),
+});
+
+router.post(
+  "/auth/login",
+  asyncHandler(async (req, res) => {
+    const body = LoginBody.parse(req.body);
+    const [user] = await db.select().from(users).where(eq(users.id, body.userId)).limit(1);
+    if (!user) return notFound(res);
+    const sess = await createSession(user.id);
+    setSessionCookie(res, sess.id, sess.expiresAt);
+    res.json(toPrivateUser(user));
+  }),
+);
+
+router.post(
+  "/auth/signup",
+  asyncHandler(async (req, res) => {
+    const body = SignupBody.parse(req.body);
+    const dob = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
+    if (dob) {
+      const ageYears = (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000);
+      if (ageYears < 13 && !body.parentId) {
+        res
+          .status(400)
+          .json({ error: "Players under 13 require a parent or guardian account." });
+        return;
+      }
+    }
+    if (body.email) {
+      const [exists] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
+      if (exists) {
+        res.status(409).json({ error: "Email already in use" });
+        return;
+      }
+    }
+    const [created] = await db
+      .insert(users)
+      .values({
+        name: `${body.firstName} ${body.lastName}`.trim(),
+        role: body.role,
+        email: body.email ?? undefined,
+        dateOfBirth: dob ?? undefined,
+        parentId: body.parentId ?? undefined,
+      })
+      .returning();
+    const sess = await createSession(created.id);
+    setSessionCookie(res, sess.id, sess.expiresAt);
+    res.status(201).json(toPrivateUser(created));
+  }),
+);
+
+router.post(
+  "/auth/logout",
+  asyncHandler(async (req, res) => {
+    const token = req.cookies?.[SESSION_COOKIE];
+    if (token) await destroySession(token);
+    clearSessionCookie(res);
+    res.status(204).end();
+  }),
+);
+
+router.get(
+  "/auth/users",
+  asyncHandler(async (_req, res) => {
+    const rows = await db.select().from(users).orderBy(users.role, users.name).limit(100);
+    res.json(
+      rows.map((u) => {
+        const { firstName, lastName } = splitName(u.name);
+        return {
+          id: u.id,
+          firstName,
+          lastName,
+          role: u.role,
+          email: u.email ?? null,
+          avatarUrl: u.avatarUrl ?? null,
+          sport: u.sport ?? null,
+          position: u.position ?? null,
+        };
+      }),
+    );
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Current user
+// ---------------------------------------------------------------------------
+
+async function getOrFallbackUser(req: Request) {
+  if (req.sessionUser) return req.sessionUser;
+  const [fallback] = await db.select().from(users).where(eq(users.role, "athlete")).limit(1);
+  return fallback ?? null;
+}
+
+router.get(
+  "/users/me",
+  asyncHandler(async (req, res) => {
+    const u = await getOrFallbackUser(req);
+    if (!u) return notFound(res);
+    res.json(toPrivateUser(u));
+  }),
+);
+
+router.get(
+  "/users/me/settings",
+  asyncHandler(async (_req, res) => {
+    res.json({ share_to_facebook_default: false });
+  }),
+);
+
+router.patch(
+  "/users/me/settings",
+  asyncHandler(async (req, res) => {
+    res.json({ share_to_facebook_default: !!req.body?.share_to_facebook_default });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/users",
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query["q"] === "string" ? req.query["q"] : "";
+    const rows = q
+      ? await db
+          .select()
+          .from(users)
+          .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
+          .limit(20)
+      : await db.select().from(users).limit(20);
+    res.json({
+      data: rows.map((u) => ({
+        id: u.id,
+        entityType: "user",
+        displayName: u.name,
+        avatarUrl: u.avatarUrl ?? null,
+        nickname: null,
+      })),
+      pagination: emptyPagination(),
+    });
+  }),
+);
+
+router.get(
+  "/users/:userId",
+  asyncHandler(async (req, res) => {
+    const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
+    if (!u) return notFound(res);
+    const me = await getOrFallbackUser(req);
+    const isOwnProfile = me?.id === u.id;
+    if (isOwnProfile) {
+      res.json(toPrivateUser(u));
+    } else {
+      res.json(toPublicUser(u, { isOwnProfile: false, isFollowing: false }));
+    }
+  }),
+);
+
+router.patch(
+  "/users/:userId",
+  asyncHandler(async (req, res) => {
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, req.params.userId))
+      .limit(1);
+    if (!existing) return notFound(res);
+    const body = req.body ?? {};
+    const updates: Partial<typeof users.$inferInsert> = {};
+    if (body.firstName || body.lastName) {
+      const cur = splitName(existing.name);
+      updates.name = `${body.firstName ?? cur.firstName} ${body.lastName ?? cur.lastName}`.trim();
+    }
+    if (body.bio !== undefined) updates.bio = body.bio;
+    const [updated] = Object.keys(updates).length
+      ? await db.update(users).set(updates).where(eq(users.id, existing.id)).returning()
+      : [existing];
+    res.json(toPrivateUser(updated));
+  }),
+);
+
+router.get(
+  "/users/:userId/posts",
+  asyncHandler(async (req, res) => {
+    // Posts authored by user or where user is tagged. Simple: tagged.
+    const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
+    if (!u) return notFound(res);
+
+    const arts = await db
+      .select({
+        a: articles,
+        team: teams,
+        org: organizations,
+        author: users,
+      })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(eq(articles.authorId, u.id), eq(articles.status, "published")))
+      .orderBy(desc(articles.createdAt))
+      .limit(20);
+
+    const posts = arts.map((row) =>
+      articleToPost(row.a, { team: row.team, org: row.org, author: row.author }),
+    );
+    res.json(paginate(posts));
+  }),
+);
+
+router.get(
+  "/users/:userId/organizations",
+  asyncHandler(async (req, res) => {
+    const orgRows = await db
+      .selectDistinct({ org: organizations })
+      .from(rosterEntries)
+      .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(rosterEntries.userId, req.params.userId));
+    const adminRows = await db
+      .select({ org: organizations })
+      .from(organizationAdmins)
+      .innerJoin(organizations, eq(organizationAdmins.organizationId, organizations.id))
+      .where(eq(organizationAdmins.userId, req.params.userId));
+    const seen = new Set<string>();
+    const all = [...orgRows, ...adminRows].filter((r) => {
+      if (seen.has(r.org.id)) return false;
+      seen.add(r.org.id);
+      return true;
+    });
+    const data = all.map((r) =>
+      toOrganization(r.org, { isMember: true, role: "member" }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+router.get(
+  "/users/:userId/teams",
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .select({ r: rosterEntries, t: teams, org: organizations })
+      .from(rosterEntries)
+      .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(rosterEntries.userId, req.params.userId));
+    const data = rows.map((r) => ({
+      id: r.r.id,
+      teamId: r.t.id,
+      teamName: r.t.name,
+      teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
+      teamAvatarUrl: r.t.logoUrl ?? null,
+      organization: { id: r.org.id, name: r.org.name, slug: r.org.name.toLowerCase().replace(/\s+/g, "-") },
+      role: r.r.role === "coach" ? "admin" : ("member" as const),
+      position: r.r.role === "player" ? "player" : "coach",
+      status: r.r.status === "accepted" ? "active" : "pending",
+      seasonId: r.t.id,
+      seasonName: r.t.season ?? null,
+      joinedAt: r.r.createdAt.toISOString(),
+    }));
+    res.json(paginate(data));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Organizations
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/organizations",
+  asyncHandler(async (_req, res) => {
+    const rows = await db.select().from(organizations).limit(50);
+    const data = rows.map((o) => toOrganization(o));
+    res.json(paginate(data));
+  }),
+);
+
+router.post(
+  "/organizations",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    const [org] = await db
+      .insert(organizations)
+      .values({
+        name,
+        description: req.body?.description ?? undefined,
+        createdById: me.id,
+      })
+      .returning();
+    await db
+      .insert(organizationAdmins)
+      .values({ organizationId: org.id, userId: me.id })
+      .onConflictDoNothing();
+    res.status(201).json(toOrganization(org, { isMember: true, role: "owner" }));
+  }),
+);
+
+router.get(
+  "/organizations/:orgId",
+  asyncHandler(async (req, res) => {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const me = await getOrFallbackUser(req);
+    let role: "owner" | "admin" | "member" | null = null;
+    let isMember = false;
+    if (me) {
+      const [admin] = await db
+        .select()
+        .from(organizationAdmins)
+        .where(
+          and(
+            eq(organizationAdmins.organizationId, org.id),
+            eq(organizationAdmins.userId, me.id),
+          ),
+        )
+        .limit(1);
+      if (admin) {
+        role = org.createdById === me.id ? "owner" : "admin";
+        isMember = true;
+      }
+    }
+    res.json(toOrganization(org, { isMember, role }));
+  }),
+);
+
+router.get(
+  "/organizations/:orgId/members",
+  asyncHandler(async (req, res) => {
+    const adminRows = await db
+      .select({ u: users, joinedAt: organizationAdmins.createdAt })
+      .from(organizationAdmins)
+      .innerJoin(users, eq(organizationAdmins.userId, users.id))
+      .where(eq(organizationAdmins.organizationId, req.params.orgId));
+    const data = adminRows.map((r, i) =>
+      toMember(r.u, i === 0 ? "owner" : "admin", r.joinedAt),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+router.get(
+  "/organizations/:orgId/teams",
+  asyncHandler(async (req, res) => {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const teamRows = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.organizationId, org.id));
+    const data = await Promise.all(
+      teamRows.map(async (t) => {
+        const [{ count }] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(rosterEntries)
+          .where(eq(rosterEntries.teamId, t.id));
+        return toTeam(t, org, { memberCount: count });
+      }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+router.get(
+  "/organizations/:orgId/posts",
+  asyncHandler(async (req, res) => {
+    const teamIds = (
+      await db.select({ id: teams.id }).from(teams).where(eq(teams.organizationId, req.params.orgId))
+    ).map((t) => t.id);
+    if (teamIds.length === 0) return res.json(paginate([]));
+    const rows = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(eq(articles.status, "published"), eq(organizations.id, req.params.orgId)))
+      .orderBy(desc(articles.createdAt))
+      .limit(20);
+    const data = rows.map((r) =>
+      articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+// Stub: org join requests, post approvals, follow, privacy
+router.get("/organizations/:orgId/join-requests", (_req, res) => res.json(paginate([])));
+router.get("/organizations/:orgId/post-approvals", (_req, res) => res.json(paginate([])));
+router.post("/organizations/:orgId/join-requests/:id/approve", (_req, res) => res.json({ status: "approved" }));
+router.post("/organizations/:orgId/join-requests/:id/decline", (_req, res) => res.json({ status: "declined" }));
+router.post("/organizations/:orgId/post-approvals/:id/approve", (_req, res) => res.json({ status: "approved" }));
+router.post("/organizations/:orgId/post-approvals/:id/decline", (_req, res) => res.json({ status: "declined" }));
+router.post("/organizations/:orgId/follow", (_req, res) => res.json({ followerId: "me", orgId: _req.params.orgId, createdAt: new Date().toISOString() }));
+router.delete("/organizations/:orgId/follow", (_req, res) => res.status(204).end());
+router.get("/organizations/:orgId/privacy", (_req, res) =>
+  res.json({ orgId: _req.params.orgId, settings: {} }),
+);
+
+// ---------------------------------------------------------------------------
+// Teams
+// ---------------------------------------------------------------------------
+
+router.post(
+  "/organizations/:orgId/teams",
+  asyncHandler(async (req, res) => {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) return res.status(400).json({ error: "name required" });
+    const [team] = await db
+      .insert(teams)
+      .values({
+        organizationId: org.id,
+        name,
+        sport: req.body?.sport ?? undefined,
+        level: req.body?.level ?? undefined,
+        season: req.body?.season?.name ?? undefined,
+      })
+      .returning();
+    res.status(201).json(toTeam(team, org, { memberCount: 0 }));
+  }),
+);
+
+router.get(
+  "/teams/:teamId",
+  asyncHandler(async (req, res) => {
+    const [t] = await db.select().from(teams).where(eq(teams.id, req.params.teamId)).limit(1);
+    if (!t) return notFound(res);
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, t.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rosterEntries)
+      .where(eq(rosterEntries.teamId, t.id));
+    res.json(toTeam(t, org, { memberCount: count }));
+  }),
+);
+
+router.get(
+  "/teams/:teamId/members",
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .select({ r: rosterEntries, u: users })
+      .from(rosterEntries)
+      .innerJoin(users, eq(rosterEntries.userId, users.id))
+      .where(eq(rosterEntries.teamId, req.params.teamId));
+    const data = rows.map((r) => toTeamMember(r.r, r.u));
+    res.json(paginate(data));
+  }),
+);
+
+router.get(
+  "/teams/:teamId/invites",
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .select({ i: rosterInvites, u: users })
+      .from(rosterInvites)
+      .leftJoin(users, eq(rosterInvites.invitedById, users.id))
+      .where(eq(rosterInvites.teamId, req.params.teamId));
+    const data = rows.map((r) => toInvite(r.i, r.u));
+    res.json(paginate(data));
+  }),
+);
+
+router.post(
+  "/teams/:teamId/join-link",
+  asyncHandler(async (req, res) => {
+    const teamId = req.params.teamId;
+    const token = `join-${teamId.slice(0, 8)}`;
+    res.json({
+      token,
+      teamId,
+      expiresAt: null,
+      createdAt: new Date().toISOString(),
+    });
+  }),
+);
+
+router.get(
+  "/teams/:teamId/seasons",
+  asyncHandler(async (req, res) => {
+    const [t] = await db.select().from(teams).where(eq(teams.id, req.params.teamId)).limit(1);
+    if (!t) return notFound(res);
+    res.json(
+      paginate([
+        {
+          id: t.id,
+          name: t.season ?? "Current Season",
+          startDate: null,
+          endDate: null,
+          status: "active" as const,
+          createdAt: t.createdAt.toISOString(),
+        },
+      ]),
+    );
+  }),
+);
+
+router.post("/teams/:teamId/follow", (_req, res) =>
+  res.json({ followerId: "me", teamId: _req.params.teamId, createdAt: new Date().toISOString() }),
+);
+router.delete("/teams/:teamId/follow", (_req, res) => res.status(204).end());
+
+// ---------------------------------------------------------------------------
+// Posts
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/feed",
+  asyncHandler(async (_req, res) => {
+    const arts = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(eq(articles.status, "published"))
+      .orderBy(desc(articles.createdAt))
+      .limit(10);
+    const hls = await db
+      .select({ h: highlights, team: teams, org: organizations, uploader: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .orderBy(desc(highlights.createdAt))
+      .limit(10);
+    const items = [
+      ...arts.map((r) =>
+        articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
+      ),
+      ...hls.map((r) =>
+        highlightToPost(r.h, { team: r.team, org: r.org, author: r.uploader }),
+      ),
+    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    res.json(paginate(items));
+  }),
+);
+
+router.get(
+  "/posts/:postId",
+  asyncHandler(async (req, res) => {
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "article") {
+      const [row] = await db
+        .select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(eq(articles.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      res.json(articleToPost(row.a, { team: row.team, org: row.org, author: row.author }));
+      return;
+    }
+    const [row] = await db
+      .select({ h: highlights, team: teams, org: organizations, uploader: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(eq(highlights.id, parsed.id))
+      .limit(1);
+    if (!row) return notFound(res);
+    res.json(highlightToPost(row.h, { team: row.team, org: row.org, author: row.uploader }));
+  }),
+);
+
+router.get("/posts/:postId/comments", (_req, res) => res.json(paginate([])));
+router.post("/posts/:postId/comments", (req, res) => {
+  res.status(201).json({
+    id: `comment-${Date.now()}`,
+    postId: req.params.postId,
+    body: req.body?.body ?? "",
+    author: { id: "me", displayName: "You", avatarUrl: null },
+    reactionCount: 0,
+    hasReacted: false,
+    recentReactorName: null,
+    createdAt: new Date().toISOString(),
+  });
+});
+router.delete("/posts/:postId/comments/:commentId", (_req, res) => res.status(204).end());
+router.post("/posts/:postId/reactions", (_req, res) => res.status(204).end());
+router.delete("/posts/:postId/reactions", (_req, res) => res.status(204).end());
+router.get("/posts/:postId/tags", (_req, res) => res.json({ data: [], pagination: emptyPagination() }));
+
+router.post(
+  "/posts",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const body = req.body ?? {};
+    // Spec uses organizationId; we pick first team in that org as a default context.
+    let teamId: string | undefined = body.context?.id ?? body.teamId;
+    if (!teamId && body.organizationId) {
+      const [firstTeam] = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.organizationId, body.organizationId))
+        .limit(1);
+      teamId = firstTeam?.id;
+    }
+    if (!teamId) {
+      const [anyTeam] = await db.select().from(teams).limit(1);
+      teamId = anyTeam?.id;
+    }
+    if (!teamId) return res.status(400).json({ error: "no team context available" });
+    if (body.postType === "long") {
+      const [a] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: me.id,
+          title: body.title ?? "Untitled",
+          summary: body.description ?? undefined,
+          body: body.body ?? "",
+          status: "published",
+          publishedAt: new Date(),
+        })
+        .returning();
+      const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+      const [org] = team
+        ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+        : [null];
+      if (!team || !org) return notFound(res);
+      res.status(201).json(articleToPost(a, { team, org, author: me }));
+      return;
+    }
+    const [h] = await db
+      .insert(highlights)
+      .values({
+        teamId,
+        uploaderId: me.id,
+        title: body.title ?? "Untitled",
+        description: body.description ?? undefined,
+        videoUrl: body.assets?.[0]?.url ?? "",
+      })
+      .returning();
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    const [org] = team
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
+    if (!team || !org) return notFound(res);
+    res.status(201).json(highlightToPost(h, { team, org, author: me }));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/notifications",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json(paginate([]));
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, me.id))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+    res.json(paginate(rows.map(toNotification)));
+  }),
+);
+
+router.get(
+  "/notifications/unread-count",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json({ unreadCount: 0 });
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, me.id), eq(notifications.read, false)));
+    res.json({ unreadCount: count });
+  }),
+);
+
+router.post(
+  "/notifications/:notificationId/read",
+  asyncHandler(async (req, res) => {
+    await db
+      .update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.id, req.params.notificationId));
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/notifications/read-all",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json({ markedCount: 0 });
+    const result = await db
+      .update(notifications)
+      .set({ read: true })
+      .where(and(eq(notifications.userId, me.id), eq(notifications.read, false)))
+      .returning({ id: notifications.id });
+    res.json({ markedCount: result.length });
+  }),
+);
+
+router.get("/notifications/email-preference", (_req, res) =>
+  res.json({ emailOptOut: false }),
+);
+router.put("/notifications/email-preference", (req, res) =>
+  res.json({ emailOptOut: !!req.body?.emailOptOut }),
+);
+
+// ---------------------------------------------------------------------------
+// Conversations / Messages (stubs)
+// ---------------------------------------------------------------------------
+
+router.get("/conversations", (_req, res) => res.json(paginate([])));
+router.get("/conversations/unread-count", (_req, res) => res.json({ unreadCount: 0 }));
+router.post("/conversations", (req, res) => {
+  res.status(201).json({
+    id: `conv-${Date.now()}`,
+    type: "direct",
+    participant: { id: req.body?.recipientId, type: "user", displayName: "User", avatarUrl: null },
+    unreadCount: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+});
+router.get("/conversations/:id", (req, res) => {
+  res.json({
+    id: req.params.id,
+    type: "direct",
+    participant: { id: "u", type: "user", displayName: "User", avatarUrl: null },
+    unreadCount: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+});
+router.delete("/conversations/:id", (_req, res) => res.status(204).end());
+router.get("/conversations/:id/messages", (_req, res) => res.json(paginate([])));
+router.post("/conversations/:id/messages", (req, res) => {
+  res.status(201).json({
+    id: `msg-${Date.now()}`,
+    senderId: "me",
+    senderDisplayName: "You",
+    senderAvatarUrl: null,
+    body: req.body?.body ?? "",
+    assets: [],
+    createdAt: new Date().toISOString(),
+  });
+});
+router.post("/conversations/:id/read", (_req, res) => res.status(204).end());
+
+// ---------------------------------------------------------------------------
+// Tags (pending) — stubs
+// ---------------------------------------------------------------------------
+
+router.get("/tags/pending", (_req, res) => res.json(paginate([])));
+router.post("/tags/:tagId/approve", (req, res) =>
+  res.json({ id: req.params.tagId, status: "approved" }),
+);
+router.post("/tags/:tagId/decline", (req, res) =>
+  res.json({ id: req.params.tagId, status: "declined" }),
+);
+router.delete("/tags/:tagId", (_req, res) => res.status(204).end());
+
+// ---------------------------------------------------------------------------
+// Search (cross-entity)
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/search",
+  asyncHandler(async (req, res) => {
+    const q = (typeof req.query["q"] === "string" ? req.query["q"] : "").trim();
+    if (!q) {
+      return res.json({
+        users: { data: [], pagination: emptyPagination() },
+        organizations: { data: [], pagination: emptyPagination() },
+        teams: { data: [], pagination: emptyPagination() },
+      });
+    }
+    const [userRows, orgRows, teamRows] = await Promise.all([
+      db.select().from(users).where(ilike(users.name, `%${q}%`)).limit(10),
+      db.select().from(organizations).where(ilike(organizations.name, `%${q}%`)).limit(10),
+      db.select().from(teams).where(ilike(teams.name, `%${q}%`)).limit(10),
+    ]);
+    res.json({
+      users: {
+        data: userRows.map((u) => ({
+          id: u.id,
+          entityType: "user",
+          displayName: u.name,
+          avatarUrl: u.avatarUrl ?? null,
+          nickname: null,
+        })),
+        pagination: emptyPagination(),
+      },
+      organizations: {
+        data: orgRows.map((o) => ({
+          entityType: "organization" as const,
+          id: o.id,
+          name: o.name,
+          slug: o.name.toLowerCase().replace(/\s+/g, "-"),
+          avatarUrl: o.logoUrl ?? null,
+        })),
+        pagination: emptyPagination(),
+      },
+      teams: {
+        data: await Promise.all(
+          teamRows.map(async (t) => {
+            const [org] = await db
+              .select()
+              .from(organizations)
+              .where(eq(organizations.id, t.organizationId))
+              .limit(1);
+            return {
+              entityType: "team" as const,
+              id: t.id,
+              name: t.name,
+              slug: t.name.toLowerCase().replace(/\s+/g, "-"),
+              avatarUrl: t.logoUrl ?? null,
+              organizationName: org?.name ?? null,
+              organizationSlug: org ? org.name.toLowerCase().replace(/\s+/g, "-") : null,
+            };
+          }),
+        ),
+        pagination: emptyPagination(),
+      },
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Misc stubs (consent, guardians, assets, follows, privacy, phones, addresses)
+// ---------------------------------------------------------------------------
+
+router.get("/consent/status", (_req, res) => res.json({ status: "none" }));
+router.post("/consent/requests", (_req, res) => res.status(201).json({ status: "pending" }));
+router.get("/users/:userId/guardians", (_req, res) => res.json({ data: [] }));
+router.get("/users/:userId/children", (_req, res) => res.json({ data: [] }));
+router.post("/users/:userId/follow", (_req, res) => res.json({ followerId: "me", followingId: _req.params.userId, createdAt: new Date().toISOString() }));
+router.delete("/users/:userId/follow", (_req, res) => res.status(204).end());
+router.get("/users/:userId/followers", (_req, res) => res.json(paginate([])));
+router.get("/users/:userId/following", (_req, res) => res.json(paginate([])));
+router.get("/users/:userId/privacy", (_req, res) => res.json({ userId: _req.params.userId, settings: {} }));
+router.get("/users/:userId/sports", (_req, res) => res.json({ sports: [] }));
+router.post("/assets/upload", (_req, res) =>
+  res.status(201).json({ assetId: `asset-${Date.now()}`, uploadUrl: "https://example.invalid", expiresIn: 600 }),
+);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function notFound(res: Response) {
+  return res.status(404).json({ error: "Not found" });
+}
+
+// Suppress unused warning for requireAuth (kept for future use)
+void requireAuth;
+
+export default router;
