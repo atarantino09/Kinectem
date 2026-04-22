@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, Video } from "lucide-react";
 import {
   useAddPostReaction,
   useRemovePostReaction,
@@ -27,6 +27,9 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
   const allImages = (post.assets ?? []).filter((a) =>
     a.fileType?.startsWith("image/"),
+  );
+  const videoAsset = (post.assets ?? []).find((a) =>
+    a.fileType?.startsWith("video/"),
   );
 
   const invalidate = () =>
@@ -122,6 +125,9 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 postId={post.id}
               />
             )}
+            {!isShort && videoAsset?.url && (
+              <VideoEmbed url={videoAsset.url} />
+            )}
           </div>
         </div>
 
@@ -158,6 +164,69 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function getYouTubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1) || null;
+    if (u.hostname.endsWith("youtube.com")) {
+      if (u.pathname === "/watch") return u.searchParams.get("v");
+      if (u.pathname.startsWith("/embed/")) return u.pathname.split("/")[2] ?? null;
+      if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/")[2] ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getVimeoId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.endsWith("vimeo.com")) return null;
+    const id = u.pathname.split("/").filter(Boolean)[0];
+    return /^\d+$/.test(id ?? "") ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function VideoEmbed({ url }: { url: string }) {
+  const ytId = getYouTubeId(url);
+  const vimeoId = getVimeoId(url);
+  const embedSrc = ytId
+    ? `https://www.youtube.com/embed/${ytId}`
+    : vimeoId
+      ? `https://player.vimeo.com/video/${vimeoId}`
+      : null;
+
+  if (embedSrc) {
+    return (
+      <div className="mt-3 rounded-lg overflow-hidden border border-border bg-black aspect-video">
+        <iframe
+          src={embedSrc}
+          title="Video highlight"
+          className="w-full h-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-muted text-sm font-bold text-primary"
+    >
+      <Video className="w-4 h-4" />
+      <span className="truncate">{url}</span>
+    </a>
   );
 }
 
