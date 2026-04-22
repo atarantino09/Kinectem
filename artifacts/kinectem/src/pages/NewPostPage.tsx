@@ -151,11 +151,11 @@ export default function NewPostPage() {
         });
         await customFetch(`/posts/${draftId}/publish`, { method: "POST" });
         toast({ title: "Published!" });
-        setLocation(`/posts/${draftId}`);
+        setLocation(initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`);
       } else {
         const result = await createPost.mutateAsync({ data: buildPayload() });
         toast({ title: "Posted!" });
-        setLocation(`/posts/${result.id}`);
+        setLocation(initialTeamId ? `/teams/${initialTeamId}` : `/posts/${result.id}`);
       }
     } catch {
       toast({ title: "Failed to post", variant: "destructive" });
