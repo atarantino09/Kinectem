@@ -1,0 +1,804 @@
+# Kinectem — User Flows & Product Logic
+**Version:** v1.8 — For engineering review  
+**Date:** April 20, 2026  
+**Audience:** Full-stack engineering (frontend + backend)
+
+---
+
+## Table of contents
+
+1. [Product overview](#1-product-overview)
+2. [User roles](#2-user-roles)
+3. [Role permission matrix](#3-role-permission-matrix)
+4. [Author role — trusted parent author](#4-author-role--trusted-parent-author)
+5. [Sign-up flow](#5-sign-up-flow)
+6. [Organization & team setup](#6-organization--team-setup)
+7. [Roster management](#7-roster-management)
+8. [Multi-team membership](#8-multi-team-membership)
+9. [Content creation — game recaps & highlights](#9-content-creation--game-recaps--highlights)
+10. [Co-authoring & draft management](#10-co-authoring--draft-management)
+11. [Tag management](#11-tag-management)
+12. [Tag ownership rules](#12-tag-ownership-rules)
+13. [Notification system](#13-notification-system)
+14. [Parent & guardian flows](#14-parent--guardian-flows)
+15. [Invite-driven parent onboarding](#15-invite-driven-parent-onboarding)
+16. [Content types — articles vs team posts](#16-content-types--articles-vs-team-posts)
+17. [Article creation & collaborative photo album](#17-article-creation--collaborative-photo-album)
+18. [Open questions](#18-open-questions)
+
+---
+
+## 1. Product overview
+
+Kinectem is a social media platform for youth athletes, modeled conceptually after LinkedIn but purpose-built for the sports ecosystem. It connects players, coaches, organization admins, and parents within a structured hierarchy of organizations, teams, and individual profiles.
+
+Core principles:
+- Every user has a single individual profile regardless of how many teams or orgs they belong to
+- Players own their content footprint — they control what appears on their profile
+- Content created by teams (recaps, highlights) flows to individual profiles only through an explicit tag and approval system
+- The platform has a hard safety layer for players aged 13 and under, requiring parental linkage and guardian co-notification
+
+---
+
+## 2. User roles
+
+Every user signs up as an individual and selects exactly one role during onboarding. Roles determine what actions a user can take and what UI surfaces they see.
+
+| Role | Description |
+|---|---|
+| **Player** | Youth athlete. Builds an individual profile, gets rostered to teams, receives and manages content tags. |
+| **Coach** | Sport coach. Builds a profile, can be rostered to teams, can create org pages, can create and co-author game recaps. |
+| **Admin** | Organization or team administrator. Can create org pages, create team pages, manage rosters, and create or co-author game recaps. |
+| **Parent** | Guardian of a player. Can create org pages. Must link to a child's account if the child is 13 or younger. Has a guardian dashboard with visibility and messaging controls. |
+
+---
+
+## 3. Role permission matrix
+
+The author role is a **per-team permission modifier** that can be assigned to a parent by a team or org admin. It is not a standalone role — it extends the parent role with article creation rights only. See section 4 for full details.
+
+| Action | Player | Coach | Admin | Parent | Parent + author |
+|---|---|---|---|---|---|
+| Create individual profile | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Create organization page | — | ✓ | ✓ | ✓ | ✓ |
+| Create team page | — | ✓ (if org admin) | ✓ | ✓ (if org admin) | ✓ (if org admin) |
+| Add / remove roster members | — | ✓ (their team) | ✓ | — | — |
+| Assign author role to a parent | — | — | ✓ | — | — |
+| Edit team or org page settings | — | — | ✓ | — | — |
+| Create team post | ✓ | ✓ | ✓ | ✓ | ✓ |
+| React and comment on posts | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Delete any post or comment | — | — | ✓ | — | — |
+| Create game recap article | — | ✓ | ✓ | — | ✓ |
+| Tag rostered players in articles | — | ✓ | ✓ | — | ✓ |
+| Save drafts and co-author articles | — | ✓ | ✓ | — | ✓ |
+| Create and seed photo albums | — | ✓ | ✓ | — | ✓ |
+| Approve album photo contributions | — | ✓ | ✓ | — | ✓ |
+| Contribute photos to an album | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Approve / decline own tags | ✓ | ✓ | ✓ | — | — |
+| Remove live tags from own profile | ✓ | ✓ | ✓ | — | — |
+| Act on child's tags (≤13) | — | — | — | ✓ | ✓ |
+| Access guardian dashboard | — | — | — | ✓ (if child ≤13) | ✓ (if child ≤13) |
+
+---
+
+## 4. Author role — trusted parent author
+
+### 4.1 Overview
+
+The author role allows a team or org admin to grant a trusted parent the ability to create game recap articles on behalf of the team. It is designed for situations where a coach does not want to write recaps themselves but trusts a parent in the community to do so.
+
+The author role is a **per-team permission modifier on the parent role** — not a new standalone role. The parent retains all their existing permissions and gains only article creation rights. They receive no roster management, settings access, or other admin capabilities.
+
+### 4.2 Who can assign the author role
+
+- **Team admin** — can assign the author role to any parent linked to a rostered player on their team. Scoped to that team only.
+- **Org admin** — can assign the author role to a parent across any team within the organization.
+- Coaches cannot assign the author role.
+
+### 4.3 Eligibility
+
+A parent must meet both conditions to be eligible for the author role on a team:
+1. They have a parent account on Kinectem
+2. They are linked to at least one player who is an active (accepted) roster member on that team
+
+### 4.4 Assignment flow
+
+1. Team or org admin opens the team's member settings
+2. Locates the parent in the linked members list
+3. Assigns the author role — a single toggle or permission flag per team
+4. Parent receives an in-app and push notification: "You've been given author access on [Team Name]"
+5. Article creation is immediately unlocked for that parent on that team
+
+### 4.5 What the author role unlocks
+
+The following permissions are added to the parent's existing access, scoped to the team where the role was assigned:
+
+- Create game recap articles
+- Tag rostered players within articles
+- Save article drafts with auto-save
+- Invite co-authors (admins and coaches) to a draft
+- Create and seed photo albums attached to articles
+- Approve or reject community photo contributions to their article's album
+- Receive album contribution approval notifications
+
+### 4.6 What the author role does not grant
+
+The author role explicitly does not grant:
+
+- Roster management (adding or removing members)
+- The ability to assign or revoke roles for others
+- Access to team or org page settings
+- The ability to delete other members' posts or comments
+- Any permissions on teams where the author role has not been assigned
+
+### 4.7 Co-authoring with admins and coaches
+
+A parent author can collaborate on articles with team admins and coaches through the standard co-authoring flow. Any co-author can invite them to an existing draft, or they can invite co-authors into their own draft. All edits are attributed to the individual author.
+
+### 4.8 Role revocation
+
+The author role remains active for as long as the parent is a member of the team. There are exactly two ways it ends:
+
+1. **Admin removes it** — a team admin or org admin explicitly revokes the author role at any time. The parent receives an in-app notification and loses article creation access immediately.
+
+2. **Parent leaves the team** — if the parent leaves the team for any reason (voluntarily, removed by admin, or account deactivated), the author role ends with their membership.
+
+In both cases:
+- The parent receives an in-app notification that their author access for that team has ended
+- Any in-progress drafts remain in the team draft list, accessible to team admins and coaches
+- Published articles they created remain live and are unaffected
+
+### 4.8 Role revocation
+
+The author role remains active for as long as the parent is a member of the team. There are exactly two ways it ends:
+
+1. **Admin removes it** — a team admin or org admin explicitly revokes the author role at any time. The parent receives an in-app notification and loses article creation access immediately.
+
+2. **Parent leaves the team** — if the parent leaves the team for any reason (voluntarily, removed by admin, or account deactivated), the author role ends with their membership.
+
+In both cases:
+- The parent receives an in-app notification that their author access for that team has ended
+- Any in-progress drafts remain in the team draft list, accessible to team admins and coaches
+- Published articles they created remain live and are unaffected
+
+**The linked player's roster status has no bearing on the parent's author role.** A parent retains author access regardless of whether their child is active, pending, or removed from the roster — as long as the parent themselves remains a team member.
+
+### 4.9 Admin nudge — linked player removed
+
+When a parent author's linked player is removed from the team roster, the system sends an informational notification to all team admins. This is a nudge only — no action is taken automatically and the parent's author role remains fully active.
+
+Notification content:
+> "[Player name] has been removed from [Team name]. [Parent name], who is linked to this player, currently has author access on this team. You can remove their author role in team settings if needed."
+
+- The admin can choose to remove the author role, leave it in place, or take no action
+- The parent is not notified of this admin nudge
+- If the linked player is re-added to the roster at a later date, no further nudge is sent — the author role was never affected
+
+**Re-assignment:**
+- Author access does not carry over between teams under any circumstances
+- If a parent joins a new team, the author role must be explicitly re-assigned by a team or org admin on that team
+- There is no automatic reinstatement, even within the same organization
+
+---
+
+## 5. Sign-up flow
+
+### 4.1 Entry
+- User downloads Kinectem and creates an account via email or social OAuth
+- User selects a role: **Player**, **Coach**, **Admin**, or **Parent**
+- Role selection is made once at sign-up; changing role post sign-up is a separate admin flow (TBD)
+
+### 4.2 Role-specific profile setup
+
+**Player**
+- Fields: name, sport(s), position, graduation year, bio
+- Status after setup: profile active, visible to network, awaiting roster invites
+
+**Coach**
+- Fields: name, sport(s), school or club, level (varsity / JV / recreational / travel), bio
+- Status after setup: profile active, can create org pages immediately
+
+**Admin**
+- Fields: name, organization name, sport(s), level, bio
+- Status after setup: profile active, can create org pages immediately
+
+**Parent**
+- Fields: name, contact info
+- Age gate: system checks linked child's age
+  - If child is **13 or younger** → parent must link to child's account before accessing full features. Guardian dashboard activated.
+  - If child is **over 13** → linking is optional, no gate
+
+### 4.3 Invite-driven sign-up
+- A non-Kinectem user who receives a roster invite link follows a modified sign-up flow
+- They complete standard sign-up but the invite pre-loads their role (Player or Coach) and pre-assigns them to the roster slot
+- On completing sign-up, they land on the team roster in **pending** state and receive a notification to accept or decline
+
+---
+
+## 6. Organization & team setup
+
+### 5.1 Who can create an organization page
+- Coaches, admins, and parents can all create organization pages
+- There is no limit on the number of org pages a user can create or administer
+
+### 5.2 Creating an organization page
+Fields required:
+- Organization name
+- Sport(s)
+- Logo / avatar
+- Description
+- Admin roles (additional users granted org-level admin access)
+
+### 5.3 Creating a team page
+- Team pages are created inside an organization page and are always linked to their parent org
+- A single organization can have unlimited team pages
+- Fields required:
+  - Team name
+  - Season (e.g. Fall 2026)
+  - Level (varsity / JV / travel / recreational / etc.)
+- Team pages inherit the org's sport but can be overridden per team
+
+### 5.4 Team admin roles
+- The org creator is automatically a team admin for all teams under that org
+- Additional team admins can be assigned per team
+- Team admins have full content and roster management rights for their assigned team(s)
+
+---
+
+## 7. Roster management
+
+### 6.1 Adding a player or coach to a roster
+Team admins and coaches can add members to a roster in two ways:
+
+**Path A — Existing Kinectem user**
+1. Admin searches for user by name or username
+2. Admin adds them to the roster
+3. System sends an in-app notification to the user
+4. User appears on roster in **pending** state
+5. User approves or declines (see 6.2)
+
+**Path B — Non-Kinectem user**
+1. Admin enters the user's email or phone number
+2. System generates a unique invite link tied to that roster slot
+3. Invite is sent via email or SMS
+4. Invitee clicks the link, completes sign-up
+5. On sign-up completion, they are placed on the roster in **pending** state
+6. They receive an in-app notification to approve or decline (see 6.2)
+
+### 6.2 Roster approval flow
+- Every user added to a roster — by search or invite — must explicitly accept before being considered an active roster member
+- **Pending state:** user appears on the team roster with a "pending" badge. Visible to team admins and coaches, not publicly visible as a confirmed member
+- **Accept:** user is moved to active roster. Their profile is linked to the team. Content tagged to them by this team can now flow to their profile
+- **Decline:** request is archived. Admin receives a notification. Admin may re-invite; the user must approve any new invitation
+- There is no expiry on pending invites unless manually withdrawn by the admin (expiry behavior TBD)
+
+### 6.3 Roster removal
+- Admins can remove a player or coach from a roster at any time
+- On removal: the user is no longer an active roster member
+- Previously tagged content remains on the removed user's profile unless they manually remove the tag
+- The removed user retains full tag management rights over all content tagged during their active roster period
+
+---
+
+## 8. Multi-team membership
+
+- A player or coach can be on multiple rosters across multiple teams and multiple organizations simultaneously
+- There is no limit on the number of rosters a single user can be on
+- Each roster membership is independent — accepting or declining one has no effect on others
+- Content tagged to a user from each team flows to a single unified profile content tab
+- The content tab on a player's profile is filterable by team and by organization
+- Content only flows to a player's profile from teams where their roster status is **accepted**. Pending or declined rosters produce no content flow
+
+---
+
+## 9. Content creation — game recaps & highlights
+
+### 8.1 Who can create content
+- Team admins and rostered coaches can create game recaps and upload highlights
+- Content creation is scoped to their team — a coach cannot post on behalf of a team they are not rostered to or admin of
+
+### 8.2 Game recap article
+Fields:
+- Title
+- Date of game
+- Opponent
+- Score
+- Body text (rich text editor)
+- Media attachments — photos and/or highlight clips (optional)
+- Tagged players (see 8.4)
+
+### 8.3 Highlight clip upload
+Fields:
+- Video file upload
+- Title
+- Notes / description
+- Tagged players (see 8.4)
+
+### 8.4 Player tagging
+- Authors can tag any player or coach who is an **active (accepted) member** of the team roster at the time of publishing
+- Tags can be applied inline within body text and/or attached directly to media clips
+- Each tag creates a pending notification for the tagged user (see section 12)
+- Tagged content does not appear on a player's profile until they approve the tag
+- Tagging is roster-scoped — authors cannot tag users outside their team's active roster
+
+### 8.5 Content destinations on publish
+When a recap or highlight is published, it appears in:
+1. The **team page** — content feed
+2. The **organization page** — aggregated content feed
+3. Each **tagged player's profile** — content tab (after tag approval)
+4. The **feeds of followers** of the team and organization
+
+---
+
+## 10. Co-authoring & draft management
+
+### 9.1 Draft creation
+- Any team admin or rostered coach can initiate a new game recap draft
+- Drafts are auto-saved continuously — every edit is persisted immediately, no manual save required
+- Drafts are visible to all team admins and coaches for that team, not just the creator
+
+### 9.2 Inviting co-authors
+- The draft creator can invite additional team admins or coaches as co-authors
+- Co-authors can edit the body, add media, and tag players
+- All co-authors are listed on the draft
+- All edits by any co-author are auto-saved and attributed
+
+### 9.3 Draft states
+| State | Description |
+|---|---|
+| **Draft** | In progress. Auto-saved. Visible to team admins and coaches. Not publicly visible. |
+| **Published** | Live. Visible on team page, org page, and flowing to tagged player profiles. |
+
+- There is no review / approval step between draft and published — any co-author or admin can publish
+- Post-publish editing behavior is TBD (see open questions)
+
+### 9.4 Draft persistence
+- Drafts are stored indefinitely until published or manually deleted
+- Any team admin or coach can pick up and continue an existing draft
+- If the original author leaves the team, the draft remains accessible to remaining admins and coaches
+
+---
+
+## 11. Tag management
+
+### 10.1 Tag manager screen
+- Accessible from the player's profile settings under "My tags"
+- Shows all tags across every team and organization the player is or has been associated with
+- Filterable by: all teams, specific org, specific team, content type (recap / highlight), status (pending / live)
+
+### 10.2 Pending tags
+- A pending tag is a tag applied to published content that the player has not yet acted on
+- Pending tags appear in the tag manager with full context:
+  - Content title and type
+  - Team and organization name
+  - Coach or admin who tagged them
+  - Content preview
+  - Approve and decline actions
+- Tapping "approve" or "decline" in the notification deep-links directly to the relevant pending tag in the tag manager
+
+### 10.3 Live tags
+- A live tag is a tag the player has approved — the associated content appears on their profile
+- Live tags can be removed at any time with a single action ("Remove from profile")
+- Removal is immediate — no admin approval required
+- On removal, the admin who created the tag receives a silent notification
+- The original content (recap or highlight) remains intact on the team page and org page — only the connection to the player's profile is severed
+
+### 10.4 Tag actions summary
+| Action | Result |
+|---|---|
+| Approve pending tag | Content added to player profile. Tag moves to live state. |
+| Decline pending tag | Content never appears on player profile. Tag archived. Admin notified. |
+| Remove live tag | Content removed from player profile. Tag archived. Admin notified. |
+
+---
+
+## 12. Tag ownership rules
+
+These are the core invariants of the tagging system. They must be enforced at both the API and UI layers.
+
+1. **Content persists after roster removal.** If a player is removed from a team, any content tagged to them during their active roster period remains on their profile unless they manually remove it.
+
+2. **Tags are removable at any time.** A player can remove any live tag at any point, regardless of current roster status or time elapsed since publishing.
+
+3. **Original content is never affected by tag removal.** Removing or declining a tag only affects the player's profile. The source content (recap / highlight) on the team and org page is not modified.
+
+4. **No re-tag without player consent.** If a player declines or removes a tag, the admin or coach cannot re-tag them on that same piece of content without the player actively approving a new tag request. Admins cannot force a tag onto a player's profile.
+
+5. **Content flows only from accepted rosters.** Tags from a team only become actionable (pending notification sent) once the player has accepted that team's roster invite. Content tagged to a player while they were pending does not retroactively appear — the player must approve each tag individually.
+
+6. **Tagging is roster-scoped.** An author can only tag users who are active members of the team's roster at the time of publishing.
+
+---
+
+## 13. Notification system
+
+### 12.1 Trigger events
+All notifications fire immediately on the triggering action.
+
+| Trigger | Recipient(s) | Notification type |
+|---|---|---|
+| New tag on published content | Tagged player | Push, in-app, email |
+| New tag — player is ≤13 | Tagged player + linked parent | Push, in-app, email |
+| Roster invite sent (existing user) | Invited user | Push, in-app, email |
+| Roster invite sent (new user) | Invited user (on sign-up) | In-app on first launch |
+| Co-author added to draft | Added co-author | Push, in-app |
+| Player declines a tag | Admin / coach who tagged | In-app |
+| Player removes a live tag | Admin / coach who tagged | In-app (silent) |
+| Roster invite accepted | Team admin | In-app |
+| Roster invite declined | Team admin | In-app |
+| Author role assigned to parent | Parent | Push, in-app |
+| Author role revoked by admin | Parent | Push, in-app |
+| Parent author leaves the team | Parent (role ended) | In-app |
+| Linked player of a parent author removed from roster | Team admins (nudge only) | In-app |
+
+### 12.2 Notification content
+Each tag notification includes:
+- Content title and type (recap / highlight)
+- Team and organization name
+- Name of the coach or admin who tagged them
+- Preview of the content
+- Deep link that opens the tag manager directly to the pending tag
+
+### 12.3 Player notification preferences
+Players can configure per-channel preferences:
+- Push notifications — on / off
+- Email notifications — on / off
+- In-app notifications — always on (cannot be disabled)
+- Per-team toggle — mute all notifications from a specific team
+
+### 12.4 Under-13 notification routing
+- When a player aged 13 or under is tagged, both the player and their linked parent receive the notification simultaneously
+- The parent can approve or decline the tag on the child's behalf from the guardian dashboard
+- If the parent acts first, the player's pending tag is resolved and no further action is needed from the player
+
+---
+
+## 14. Parent & guardian flows
+
+### 13.1 Parent account setup
+- Parents select the "Parent" role at sign-up
+- If their child is 13 or younger, they must link to the child's Kinectem account before accessing full features
+- Linking is done by searching for the child's account or via an invite from the child's account
+
+### 13.2 Guardian dashboard
+- Activated when a parent is linked to a child aged 13 or under
+- Controls available:
+  - Visibility settings for the child's profile (public / connections only / private)
+  - Messaging controls (who can message the child)
+  - Tag approval — parent can approve or decline tags on the child's behalf
+  - View all pending and live tags on the child's profile
+
+### 13.3 Parent org creation
+- Parents can create organization pages (e.g. a parent-run club or recreational league)
+- They have full org admin rights including team creation, roster management, and team admin assignment
+- Parents cannot create or publish game recap content directly — that is scoped to coaches and admins
+
+---
+
+## 15. Invite-driven parent onboarding
+
+This flow covers the most common new-user entry path: a parent who receives a roster invite link from a team admin and signs up for the first time. The flow is distinct from standard sign-up and must be treated as a separate onboarding surface.
+
+### 14.1 Overview
+
+When an admin adds a player to a roster using an email or phone number, the system generates a unique invite link tied to that roster slot. The recipient is most commonly a parent, but for older teams it may be the player themselves. The flow defaults to the parent path but gives the recipient a clear option to identify as a player and follow a leaner onboarding path.
+
+Both paths converge at the same outcome: an athlete confirmed on the roster, landing on the team page.
+
+### 14.2 Invite receipt and role prompt
+
+1. Admin enters an email or phone number when adding a player to the roster
+2. System generates a unique invite link scoped to that roster slot
+3. Invite is sent via email or SMS containing:
+   - Team name and organization
+   - Coach or admin name
+   - A clear call to action linking to the invite flow
+4. Recipient taps the link — opens the app or web experience with invite context and team details pre-loaded
+5. Recipient is shown a **role prompt screen** before any account creation:
+
+> **"Who is signing up?"**
+> - **I am a parent** *(default, visually highlighted, labeled "recommended")*
+> - **I am a player** *(for older athletes)*
+
+- The default selection is Parent — the recipient can proceed without changing it
+- Selecting Player switches to the shorter player path (see 14.5)
+- This screen appears for new users only. Existing users who log in are routed based on their existing role.
+
+**Branch: existing Kinectem account**
+- Recipient is prompted to log in
+- Invite context is preserved through authentication
+- Existing users skip the role prompt and proceed directly to roster confirmation (their profile is already set up)
+
+### 14.3 Parent path — Step 1: Create parent profile
+
+- After selecting "I am a parent" and creating an account (email or OAuth), the parent completes their own profile first
+- This step is mandatory and cannot be skipped
+- **UI progress indicator:** `Your profile (1/3) → Athlete profile (2/3) → Confirm roster (3/3)`
+- Fields:
+  - Full name
+  - Contact info (email, phone)
+- On completion: parent account is active. Guardian dashboard is staged pending athlete age confirmation in Step 2.
+
+### 14.4 Parent path — Step 2: Create athlete profile
+
+- Parent creates the athlete profile for their child
+- Fields:
+  - Athlete full name
+  - Sport(s)
+  - Position
+  - Graduation year
+  - Bio (optional)
+- On completion: athlete profile is created and automatically linked to the parent account
+- If the athlete is **13 or younger**: guardian dashboard is activated. Parent gains visibility and messaging controls over the athlete's profile.
+
+**Multi-athlete option:**
+- After completing an athlete profile, the parent is shown: **"Add another athlete"**
+- Selecting this loops back to the athlete profile creation step
+- The parent can create as many athlete profiles as needed in a single session
+- All created profiles are listed in a review summary before proceeding to Step 3
+- There is no limit on the number of athlete profiles created per session
+
+### 14.5 Player path — Step 1: Create player profile
+
+- After selecting "I am a player" and creating an account (email or OAuth), the player completes their own profile directly
+- No parent profile step, no athlete creation loop
+- **UI progress indicator:** `Your profile (1/2) → Confirm roster (2/2)`
+- Fields:
+  - Full name
+  - Sport(s)
+  - Position
+  - Graduation year
+  - Bio (optional)
+- On completion: player profile is active and linked to the pending roster slot
+
+### 14.6 Roster confirmation (both paths)
+
+- Recipient is shown a confirmation screen with:
+  - Team name and organization
+  - Coach or admin who sent the invite
+  - Which athlete profile is being rostered (parent path: pre-selected based on invite, confirmable; player path: the player's own profile)
+- Recipient chooses **Accept** or **Decline**
+
+**Accept:**
+- Athlete is moved from pending to active roster member
+- Profile is publicly linked to the team
+- Admin receives an in-app notification
+- The pending badge on the roster clears
+- User lands on the team page
+
+**Decline:**
+- Invite is archived
+- Admin is notified and may re-invite
+- All accounts and profiles created during the session **remain active** — nothing is deleted on decline
+
+### 14.7 Key implementation rules
+
+- **Role prompt, not auto-assignment:** the invite landing screen presents a role choice defaulting to Parent. The role is not silently forced — the player path must be accessible without friction.
+- **Invite context persistence:** the invite token must survive OAuth redirects and app store install flows. Deferred deep linking is required for recipients who do not have the app installed.
+- **Roster slot pre-assignment:** the invite link is tied to a specific roster slot. Multiple invites to the same email from different teams resolve independently.
+- **Athlete profile ownership:** athlete profiles created by a parent are linked to the parent account. If the athlete later creates their own Kinectem account, a profile merge or linking flow is required (TBD — see open questions).
+- **Profile persistence on decline:** declining the roster invite does not delete any accounts or profiles. All created profiles remain accessible.
+- **Existing user routing:** recipients who already have a Kinectem account bypass the role prompt and profile creation steps entirely, proceeding directly to roster confirmation.
+
+---
+
+## 16. Content types — articles vs team posts
+
+Kinectem has two distinct content types available inside a team. They serve different purposes, have different permission levels, and behave differently across the platform. Engineers should treat these as separate content entities with separate schemas — not variations of the same model.
+
+### 15.1 Content type overview
+
+| | Game recap article | Team post |
+|---|---|---|
+| **Created by** | Team admin or coach only | Any accepted team member |
+| **Format** | Structured — title, score, opponent, date, rich text body | Unstructured — short text, optional single media attach |
+| **Player tagging** | Yes — tags flow to player profiles and require approval | Mention only (@name) — notification only, no profile flow |
+| **Photo album** | Collaborative moderated album attached to article | Single photo or video attach only, no album |
+| **Co-authoring** | Yes — shared draft, multiple authors | No — single author |
+| **Draft / auto-save** | Yes | No — post or discard |
+| **Reactions** | No | Yes |
+| **Comments** | No | Yes — threaded |
+| **Visible on** | Team page, org page, tagged player profiles, followers' feeds | Team page only |
+| **Approval required** | Album media contributions only | No — goes live immediately |
+| **Purpose** | Official game record, recruiting visibility, org archive | Team communication, quick updates, community feel |
+
+### 15.2 Game recap article
+
+A game recap article is an **official, structured record** created by team leadership. It is the primary content type for documenting games and events. Because it surfaces on the organization page and on tagged player profiles, it carries recruiting and legacy value beyond the team itself.
+
+Key characteristics:
+- Admin and coach only — players and parents cannot create articles
+- Contains structured game metadata (score, opponent, date) alongside free-form body text
+- Player tags in articles generate pending tag notifications and flow to player profiles upon approval
+- Supports a collaborative, moderated photo album (see section 16)
+- Supports co-authoring and auto-saved drafts
+- Surfaces everywhere: team page, org page, tagged player profiles, and followers' feeds
+- Does not support reactions or comments — it is a record, not a conversation
+
+### 15.3 Team post
+
+A team post is a **lightweight, conversational update** open to any accepted team member. It is scoped entirely to the team page and is designed for quick communication — a coach sharing practice times, a parent posting a game-day photo, a player hyping up the squad before a match.
+
+Key characteristics:
+- Any accepted team member can post: players, coaches, admins, and parents linked to a rostered player
+- Short text with an optional single photo or video attach — no structured fields, no album
+- Supports @mentions which send a notification to the mentioned member but have no profile flow
+- Goes live immediately — no draft, no approval queue, no co-authoring
+- Supports reactions and threaded comments from team members
+- Visible on the team page only — does not surface on the org page or any player profile
+- Team admins can delete any post or comment; authors can delete their own
+
+### 15.4 Mention vs tag — key distinction
+
+These two concepts must be implemented differently and should not share the same underlying mechanism:
+
+| | @mention (team post) | Player tag (article) |
+|---|---|---|
+| **Trigger** | Type @ in post body | Select from roster in article editor |
+| **Scope** | Any team member | Active roster members only |
+| **Notification** | In-app notification to mentioned user | Pending tag notification — requires approve/decline |
+| **Profile impact** | None | Content appears on player's profile after approval |
+| **Removable** | No player action needed | Player can remove tag at any time |
+| **Admin re-use** | Can mention same person again freely | Cannot re-tag after player removes or declines without consent |
+
+### 15.5 Team post flow
+
+1. Any accepted team member opens the team page and taps the compose button
+2. Writes short text — optional @mention of a team member
+3. Optionally attaches a single photo or video
+4. Taps post — content goes live immediately on the team page
+5. Team members can react with an emoji or leave a threaded comment
+6. The post author or a team admin can delete the post at any time
+
+---
+
+## 17. Article creation & collaborative photo album
+
+### 16.1 Overview
+
+When a team admin or rostered coach creates a game recap article, they can attach a collaborative photo album directly to it. The admin seeds the album with their own photos (auto-approved), then opens the album for contributions from rostered players and linked parents. All community-submitted photos and videos enter an approval queue — admins and co-authors must approve each item before it becomes visible in the album. This gives the team a living, community-built record of the game while keeping the admin in full control of what is published.
+
+### 16.2 Who can create articles
+
+- Team admins and rostered coaches with publish rights
+- Creation is scoped to their team — authors cannot post on behalf of a team they are not a member of
+- Co-authors (additional team admins or coaches) can be invited to collaborate on a draft before publishing (see section 9)
+
+### 16.3 Article creation flow
+
+**Step 1 — Article content**
+Fields:
+- Title
+- Date of game
+- Opponent
+- Score
+- Body text (rich text editor)
+
+**Step 2 — Tag rostered players**
+- Authors can tag any active roster member inline within the body text
+- Tags are roster-scoped — only active members of the team can be tagged
+- Each tag generates a pending notification for the tagged player (see section 12)
+
+**Step 3 — Create and attach photo album**
+- Author creates a named album and attaches it to the article
+- Album name is editable at any point after creation
+- An article can have one attached album (multiple album support TBD — see open questions)
+- The album is created at this step even if no photos are uploaded yet
+
+**Step 4 — Admin seed photos (optional)**
+- Author can upload their own photos or videos directly into the album during article creation
+- Admin-uploaded content is auto-approved and goes live immediately on publish — it does not enter the approval queue
+- Supported media types: photos (JPEG, PNG, HEIC), videos (MP4, MOV) — size limits TBD
+
+**Step 5 — Set contribution access**
+- Author configures who can submit photos to the album:
+  - Rostered players (active accepted members)
+  - Parents / guardians linked to a rostered player
+  - Both (default)
+- Contribution access can be opened or closed at any time after publishing
+
+**Step 6 — Draft and publish**
+- Article is auto-saved continuously through all steps
+- Co-authors can edit any step before publishing
+- On publish:
+  - Article goes live on the team page, org page, and followers' feeds
+  - Tagged players receive pending tag notifications
+  - The album opens for community contributions immediately
+  - Admin and co-authors receive their first approval queue notification if any contributions arrive
+
+### 16.4 Community photo contributions
+
+**Who can contribute:**
+- Rostered players with accepted roster status on the team linked to the article
+- Parents or guardians who are linked to an accepted rostered player on that team
+- Contributors cannot submit to albums on articles from teams they are not connected to
+
+**Contribution flow:**
+1. Contributor opens the article and taps the album
+2. They see live (approved) photos and a submit button
+3. Contributor selects one or more photos or videos from their camera roll, captures in-app, or uploads a file
+4. On submission, each item enters the approval queue immediately
+5. Contributor sees a "pending approval" state on their submitted items — they are not visible to others until approved
+6. Contributor receives a notification when their item is approved or rejected
+
+**Contributor limits:** Maximum number of items per contributor per album is TBD (see open questions).
+
+### 16.5 Approval queue
+
+**Who can approve:**
+- The article author (admin or coach who created it)
+- Any co-author on the article
+- Any team admin for that team
+
+**Notification behavior:**
+- When new items enter the approval queue, all approvers receive a push and in-app notification
+- Multiple uploads arriving in a short window are batched into a single notification: "X photos and videos are awaiting approval on [Article Title]"
+- Notification deep-links directly to the approval queue for that article's album
+
+**Approval queue interface:**
+- Each item is shown with a full preview, the contributor's name, and the submission date/time
+- Actions per item: **Approve** or **Reject**
+- Bulk actions available: approve all, reject all, select multiple
+- Queue is shared across all approvers — if one approver acts on an item, it is resolved for all
+
+**On approval:**
+- Photo or video is added to the album immediately
+- Visible to all viewers of the article
+- Contributor receives a notification that their item was approved
+- Content surfaces on the team page, org page, and in followers' feeds as an album update
+
+**On rejection:**
+- Photo or video is not added to the album
+- Contributor receives a notification that their item was not approved
+- The rejected file is archived — the contributor cannot resubmit the same file
+- No reason for rejection is required (optional rejection note field TBD)
+
+### 16.6 Album lifecycle rules
+
+1. **Admin content is always auto-approved.** Photos and videos uploaded by the article author or any co-author bypass the queue entirely and go live immediately.
+2. **Community content always requires approval.** No player or parent upload goes live without an explicit approve action from an admin or author. This applies regardless of the contributor's role or roster status.
+3. **Contribution access can be toggled.** Admins can close the album to new submissions at any time without affecting already-approved content.
+4. **Rejected files cannot be resubmitted.** The same file from the same contributor is blocked from re-entry. A contributor may submit a different photo or video.
+5. **Album content is tied to the article.** If the article is deleted, the album and all approved content are removed (deletion behavior TBD — see open questions).
+6. **Approved content surfaces in feeds.** Each batch of approved photos generates a feed update for team and org followers — not one notification per photo.
+
+### 16.7 Notification triggers — album specific
+
+| Trigger | Recipient | Type |
+|---|---|---|
+| New item(s) submitted to approval queue | All article approvers | Push, in-app |
+| Item approved | Contributing player or parent | In-app |
+| Item rejected | Contributing player or parent | In-app |
+| Album opened for contributions (on article publish) | Rostered players + linked parents | Push, in-app |
+| New approved photos added to album | Team + org followers | In-app (feed update) |
+
+---
+
+## 18. Open questions
+
+The following decisions were raised during flow design and are not yet resolved. Engineering should flag dependencies before building the affected systems.
+
+| # | Question | Affects |
+|---|---|---|
+| 1 | Can a player change their role (e.g. Player → Coach) after sign-up? If so, what is the migration path? | Auth, profile schema |
+| 2 | Is there a comment or suggestion system within recap drafts (Google Docs-style), or is direct editing sufficient for v1? | Draft / co-authoring UI |
+| 3 | When a recap is published, are all co-authors credited publicly on the post, or just the team / org? | Content schema, post UI |
+| 4 | Can admins edit or delete a published recap? If so, what happens to tags already approved by players? | Content management, tag state |
+| 5 | Do pending roster invites expire? If so, after how long? | Roster / invite system |
+| 6 | Should the tag manager show a history of declined and removed tags, or only current pending and live tags? | Tag manager UI, data retention |
+| 7 | Can a parent create org pages without being linked to a child account? | Org creation permissions |
+| 8 | Is there a draft expiry or cleanup policy for abandoned drafts? | Draft storage |
+| 9 | Should the per-team notification mute also suppress parent guardian notifications for that team? | Notification routing |
+| 10 | What is the flow for a player who was tagged while their roster was pending — do they receive a batch of pending tags on acceptance, or are pre-acceptance tags surfaced separately? | Tag state, notification timing |
+
+| 11 | If an athlete created by a parent later signs up independently on Kinectem, how are the two profiles merged or linked? | Profile schema, auth |
+| 12 | If a parent creates multiple athlete profiles during onboarding but only one is tied to the current roster invite, can the other athlete profiles also be submitted to that roster, or must they receive separate invites? | Roster invite logic, onboarding UX |
+
+| 17 | Should team posts have an admin moderation/pre-approval setting that some team admins may want to enable (e.g. for younger teams)? | Team post settings, moderation |
+| 18 | ~~Should the team admin receive a notification when a parent author leaves the team?~~ **Resolved in v1.8** — admin receives an informational nudge when the linked player is removed; no automatic action taken. | Notification system, author role |
+| 14 | Is there a maximum number of photos or videos a single contributor can submit per album? | Contribution limits, storage |
+| 15 | What happens to the album and its approved content if the parent article is deleted or unpublished? | Content lifecycle, data retention |
+
+---
+
+*Document generated from product flow sessions. Last updated April 20, 2026.*
