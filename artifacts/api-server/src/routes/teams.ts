@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, teams, organizations, rosterEntries, users, articles, highlights } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
-import { CreateTeamBody, AddRosterEntryBody } from "@workspace/api-zod";
+import { CreateTeamBody, AddRosterEntryBody } from "../lib/schemas";
 import { toTeam, toOrganization, toRosterEntry, toUser, toArticle, toHighlight } from "../lib/serializers";
 
 const router: IRouter = Router();

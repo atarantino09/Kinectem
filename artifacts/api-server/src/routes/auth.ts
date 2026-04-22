@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, users } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
-import { LoginBody, SignupBody } from "@workspace/api-zod";
+import { LoginBody, SignupBody } from "../lib/schemas";
 import { toUser } from "../lib/serializers";
 import { createSession, destroySession, setSessionCookie, clearSessionCookie, SESSION_COOKIE } from "../lib/auth";
 

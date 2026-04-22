@@ -3,7 +3,7 @@ import { db, rosterInvites, rosterEntries, teams, organizations, users, notifica
 import { eq, and, desc } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
 import { requireAuth, createSession, setSessionCookie } from "../lib/auth";
-import { CreateTeamInviteBody, AcceptInviteBody } from "@workspace/api-zod";
+import { CreateTeamInviteBody, AcceptInviteBody } from "../lib/schemas";
 import { toRosterInvite, toTeam, toOrganization, toUser, toRosterEntry } from "../lib/serializers";
 import { canManageTeam } from "../lib/permissions";
 import { randomUUID } from "crypto";

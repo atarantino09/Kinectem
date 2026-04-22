@@ -27,6 +27,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(loadSession);
 
-app.use("/api", router);
+app.get("/api/healthz", (_req, res) => {
+  res.json({ ok: true });
+});
+app.use("/api/v1", router);
 
 export default app;

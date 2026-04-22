@@ -3,7 +3,7 @@ import { db, organizations, teams, rosterEntries, articles, highlights } from "@
 import { eq, desc, sql, inArray } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
 import { toOrganization, toTeamSummary } from "../lib/serializers";
-import { CreateOrganizationBody } from "@workspace/api-zod";
+import { CreateOrganizationBody } from "../lib/schemas";
 
 const router: IRouter = Router();
 

@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node prefix-spec.mjs && prism mock -h 0.0.0.0 -p ${PORT} .openapi-prefixed.yaml",
-    "build": "echo 'mock server: no build step'",
-    "start": "node prefix-spec.mjs && prism mock -h 0.0.0.0 -p ${PORT} .openapi-prefixed.yaml",
+    "dev": "tsx watch src/index.ts",
+    "build": "node build.mjs",
+    "start": "node dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@stoplight/prism-cli": "^5.14.2",
     "@workspace/api-zod": "workspace:*",
+    "zod": "catalog:",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
@@ -29,6 +30,7 @@
     "esbuild": "^0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
-    "thread-stream": "3.1.0"
+    "thread-stream": "3.1.0",
+    "tsx": "^4.21.0"
   }
 }

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, highlights, highlightTags, users, teams, articles } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
-import { CreateHighlightBody } from "@workspace/api-zod";
+import { CreateHighlightBody } from "../lib/schemas";
 import { toHighlight, toArticle, toUser } from "../lib/serializers";
 
 const router: IRouter = Router();
