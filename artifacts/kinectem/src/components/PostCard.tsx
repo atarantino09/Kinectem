@@ -25,6 +25,9 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
     : "bg-blue-50 text-blue-700";
 
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
+  const allImages = (post.assets ?? []).filter((a) =>
+    a.fileType?.startsWith("image/"),
+  );
 
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
@@ -97,17 +100,6 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               </div>
             </Link>
           )}
-          {!isShort && firstImage?.url && (
-            <Link href={`/posts/${post.id}`}>
-              <div className="bg-muted cursor-pointer">
-                <img
-                  src={firstImage.url}
-                  alt={post.title ?? ""}
-                  className="w-full max-h-[420px] object-cover"
-                />
-              </div>
-            </Link>
-          )}
           <div className="px-5 py-4">
             {post.title && (
               <Link href={`/posts/${post.id}`}>
@@ -123,6 +115,12 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             )}
             {!isShort && post.body && (
               <RecapExcerpt body={post.body} postId={post.id} />
+            )}
+            {!isShort && allImages.length > 0 && (
+              <PhotoAlbum
+                images={allImages.map((a) => a.url)}
+                postId={post.id}
+              />
             )}
           </div>
         </div>
@@ -160,6 +158,64 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const initial = images.slice(0, 4);
+  const rest = images.slice(4);
+  const hasMore = rest.length > 0;
+  const visible = expanded ? images : initial;
+
+  return (
+    <div className="mt-3">
+      <div className="grid grid-cols-4 gap-1.5">
+        {visible.map((src, i) => {
+          const isLastTile = !expanded && hasMore && i === initial.length - 1;
+          return (
+            <button
+              key={`${postId}-img-${i}`}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isLastTile) setExpanded(true);
+              }}
+              className="relative aspect-square rounded-lg overflow-hidden bg-muted border border-border group"
+              data-testid={`photo-tile-${postId}-${i}`}
+            >
+              <img
+                src={src}
+                alt={`Photo ${i + 1}`}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {isLastTile && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                  <span className="text-white font-black text-lg">
+                    +{rest.length}
+                  </span>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {expanded && hasMore && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+          className="mt-2 text-xs font-bold text-muted-foreground hover:underline"
+          data-testid={`button-collapse-photos-${postId}`}
+        >
+          Show fewer photos
+        </button>
+      )}
+    </div>
   );
 }
 

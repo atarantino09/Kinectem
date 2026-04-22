@@ -260,16 +260,25 @@ interface PostExtras {
 }
 
 export function articleToPost(a: ArticleRow, extras: PostExtras) {
-  const assets = a.coverImageUrl
-    ? [
-        {
-          id: `cover-${a.id}`,
-          fileType: "image/jpeg",
-          url: a.coverImageUrl,
-          displayOrder: 0,
-        },
-      ]
-    : [];
+  const photos = Array.isArray(a.photoUrls) && a.photoUrls.length > 0
+    ? a.photoUrls
+    : a.coverImageUrl
+      ? [a.coverImageUrl]
+      : [];
+  const assets = photos.map((url, i) => ({
+    id: `photo-${a.id}-${i}`,
+    fileType: "image/jpeg",
+    url,
+    displayOrder: i,
+  }));
+  if (a.videoUrl) {
+    assets.push({
+      id: `video-${a.id}`,
+      fileType: "video/mp4",
+      url: a.videoUrl,
+      displayOrder: assets.length,
+    });
+  }
   return basePost({
     id: articlePostId(a.id),
     postType: "long" as const,
