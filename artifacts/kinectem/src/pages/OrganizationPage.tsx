@@ -64,6 +64,20 @@ export default function OrganizationPage() {
                     </span>
                   </>
                 )}
+                {((organization as { city?: string | null }).city ||
+                  (organization as { state?: string | null }).state) && (
+                  <>
+                    <span className="opacity-50">•</span>
+                    <span className="font-medium">
+                      {[
+                        (organization as { city?: string | null }).city,
+                        (organization as { state?: string | null }).state,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>

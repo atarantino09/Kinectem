@@ -37,6 +37,8 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   sport: text("sport"),
   location: text("location"),
+  city: text("city"),
+  state: text("state"),
   description: text("description"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),

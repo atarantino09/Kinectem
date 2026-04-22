@@ -124,6 +124,8 @@ export function toOrganization(
     slug: slugify(o.name),
     description: o.description ?? null,
     website: null as string | null,
+    city: o.city ?? null,
+    state: o.state ?? null,
     isMember: opts.isMember ?? false,
     role: opts.role ?? null,
     createdAt: o.createdAt.toISOString(),

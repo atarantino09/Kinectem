@@ -350,6 +350,8 @@ router.post(
       .values({
         name,
         description: req.body?.description ?? undefined,
+        city: req.body?.city ?? undefined,
+        state: req.body?.state ?? undefined,
         createdById: me.id,
       })
       .returning();

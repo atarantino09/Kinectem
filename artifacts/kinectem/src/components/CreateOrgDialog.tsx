@@ -42,6 +42,8 @@ export function CreateOrgDialog({
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [website, setWebsite] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
 
   const createOrg = useCreateOrganization();
@@ -51,6 +53,8 @@ export function CreateOrgDialog({
     setSlug("");
     setDescription("");
     setWebsite("");
+    setCity("");
+    setState("");
     setSlugDirty(false);
   };
 
@@ -73,7 +77,9 @@ export function CreateOrgDialog({
           slug: finalSlug,
           description: description.trim() || undefined,
           website: website.trim() || undefined,
-        },
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+        } as never,
       });
       toast({ title: "Organization created!" });
       await qc.invalidateQueries({ queryKey: getListOrganizationsQueryKey() });
@@ -129,6 +135,35 @@ export function CreateOrgDialog({
               <p className="text-xs text-muted-foreground">
                 kinectem.com/<span className="font-mono">{slug || "your-org"}</span>
               </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="org-city" className="font-bold">
+                  City
+                </Label>
+                <Input
+                  id="org-city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Westfield"
+                  data-testid="input-org-city"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="org-state" className="font-bold">
+                  State
+                </Label>
+                <Input
+                  id="org-state"
+                  value={state}
+                  onChange={(e) =>
+                    setState(e.target.value.toUpperCase().slice(0, 2))
+                  }
+                  placeholder="NJ"
+                  maxLength={2}
+                  data-testid="input-org-state"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="org-desc" className="font-bold">
