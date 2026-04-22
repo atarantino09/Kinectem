@@ -67,10 +67,10 @@ export default function GuardianPage() {
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const rows = await customFetch<SearchUser[]>(
-          `/api/v1/users?q=${encodeURIComponent(query.trim())}`,
+        const r = await customFetch<{ data: SearchUser[] }>(
+          `/api/v1/users?role=athlete&q=${encodeURIComponent(query.trim())}`,
         );
-        setResults(rows.filter((u) => u.role === "athlete"));
+        setResults(r.data ?? []);
       } catch {
         setResults([]);
       } finally {

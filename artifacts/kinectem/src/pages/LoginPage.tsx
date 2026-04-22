@@ -63,10 +63,10 @@ export default function LoginPage() {
     }
     const t = setTimeout(async () => {
       try {
-        const rows = await customFetch<DemoUser[]>(
-          `/api/v1/users?q=${encodeURIComponent(parentQuery.trim())}`,
+        const r = await customFetch<{ data: DemoUser[] }>(
+          `/api/v1/users?role=parent&q=${encodeURIComponent(parentQuery.trim())}`,
         );
-        setParentResults(rows.filter((u) => u.role === "parent"));
+        setParentResults(r.data ?? []);
       } catch {
         setParentResults([]);
       }

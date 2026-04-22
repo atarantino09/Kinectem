@@ -244,9 +244,9 @@ export default function TeamPage() {
           <div className="flex items-start gap-5 mb-3">
             <div className="relative shrink-0">
               <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
-                {(team.avatarUrl || (org as { avatarUrl?: string | null } | undefined)?.avatarUrl) ? (
+                {(team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl) ? (
                   <img
-                    src={team.avatarUrl || (org as { avatarUrl?: string | null } | undefined)?.avatarUrl || ""}
+                    src={team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl || ""}
                     alt={team.name}
                     className="w-full h-full object-cover"
                     data-testid="img-team-photo"

@@ -190,21 +190,31 @@ router.get(
   "/users",
   asyncHandler(async (req, res) => {
     const q = typeof req.query["q"] === "string" ? req.query["q"] : "";
-    const rows = q
+    const roleFilter =
+      typeof req.query["role"] === "string" ? req.query["role"] : "";
+    let rows = q
       ? await db
           .select()
           .from(users)
           .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
-          .limit(20)
-      : await db.select().from(users).limit(20);
+          .limit(40)
+      : await db.select().from(users).limit(40);
+    if (roleFilter) rows = rows.filter((u) => u.role === roleFilter);
     res.json({
-      data: rows.map((u) => ({
-        id: u.id,
-        entityType: "user",
-        displayName: u.name,
-        avatarUrl: u.avatarUrl ?? null,
-        nickname: null,
-      })),
+      data: rows.slice(0, 20).map((u) => {
+        const { firstName, lastName } = splitName(u.name);
+        return {
+          id: u.id,
+          entityType: "user",
+          displayName: u.name,
+          firstName,
+          lastName,
+          role: u.role,
+          email: u.email ?? null,
+          avatarUrl: u.avatarUrl ?? null,
+          nickname: null,
+        };
+      }),
       pagination: emptyPagination(),
     });
   }),
@@ -590,6 +600,25 @@ router.get(
 router.patch(
   "/teams/:teamId",
   asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "unauthorized" });
+    const [existing] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    if (!existing) return notFound(res);
+    const [adminRow] = await db
+      .select()
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, existing.organizationId),
+          eq(organizationAdmins.userId, me.id),
+        ),
+      )
+      .limit(1);
+    if (!adminRow) return res.status(403).json({ error: "forbidden" });
     const body = req.body ?? {};
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name.trim();
