@@ -28,7 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper } from "lucide-react";
+import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper, Users } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/format";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
@@ -300,7 +300,7 @@ export default function TeamPage() {
               {team.name}
             </h1>
           </div>
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             {team.sport && (
               <div className="font-bold text-foreground flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-md text-sm">
                 <Trophy className="w-4 h-4 text-amber-500" />
@@ -312,7 +312,45 @@ export default function TeamPage() {
                 {team.level}
               </div>
             )}
-            <div className="ml-auto">
+            <a
+              href="#roster"
+              className="font-bold text-foreground flex items-center gap-1.5 bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-md text-sm cursor-pointer"
+              data-testid="link-roster-summary"
+            >
+              <Users className="w-4 h-4 text-primary" />
+              {players.length} Players
+              {staff.length > 0 && (
+                <span className="text-muted-foreground font-semibold">
+                  · {staff.length} Staff
+                </span>
+              )}
+            </a>
+            <div className="ml-auto flex items-center gap-2 flex-wrap">
+              {isAdmin && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    onClick={() => setInviteOpen(true)}
+                    data-testid="btn-header-invite"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                    Invite
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    asChild
+                  >
+                    <a href="#admin-tools" data-testid="btn-header-admin-tools">
+                      <Shield className="w-3.5 h-3.5 mr-1.5" />
+                      Admin Tools
+                    </a>
+                  </Button>
+                </>
+              )}
               <Button className="bg-primary text-primary-foreground font-bold rounded-full px-5">
                 {team.isFollowing ? "Following" : "Follow"} ({team.followerCount})
               </Button>
@@ -365,7 +403,7 @@ export default function TeamPage() {
         )}
       </section>
 
-      <Tabs defaultValue="roster">
+      <Tabs defaultValue="roster" id="roster">
         <TabsList>
           <TabsTrigger value="roster" className="font-bold">
             Roster
@@ -514,7 +552,11 @@ export default function TeamPage() {
         onOpenChange={setInviteOpen}
       />
 
-      <TeamAdminPanel teamId={teamId} />
+      {isAdmin && (
+        <div id="admin-tools" className="scroll-mt-20">
+          <TeamAdminPanel teamId={teamId} />
+        </div>
+      )}
     </div>
   );
 }
