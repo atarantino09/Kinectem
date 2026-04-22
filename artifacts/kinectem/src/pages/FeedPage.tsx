@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useGetLoggedInUser,
   useListOrganizations,
   useListFeed,
   useListUserOrganizations,
+  useListUserTeams,
   useListOrgTeams,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +23,18 @@ export default function FeedPage() {
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
     query: { enabled: !!me?.id } as never,
   });
+  const { data: myTeams } = useListUserTeams(me?.id ?? "", undefined, {
+    query: { enabled: !!me?.id } as never,
+  });
+  const memberTeamsByOrg = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>();
+    for (const t of myTeams?.data ?? []) {
+      const arr = map.get(t.organization.id) ?? [];
+      arr.push({ id: t.teamId, name: t.teamName });
+      map.set(t.organization.id, arr);
+    }
+    return map;
+  }, [myTeams]);
   const { data: orgs } = useListOrganizations();
   const { data: feed, isLoading: feedLoading } = useListFeed();
   const [openOrgId, setOpenOrgId] = useState<string | null>(null);
@@ -80,15 +93,21 @@ export default function FeedPage() {
                 Your Organizations
               </h4>
               <div className="space-y-1">
-                {myOrgs.data.map((org) => (
-                  <OrgRow
-                    key={org.id}
-                    orgId={org.id}
-                    orgName={org.name}
-                    isOpen={openOrgId === org.id}
-                    onClick={() => handleOrgClick(org.id)}
-                  />
-                ))}
+                {myOrgs.data.map((org) => {
+                  const isOrgAdmin =
+                    org.role === "owner" || org.role === "admin";
+                  return (
+                    <OrgRow
+                      key={org.id}
+                      orgId={org.id}
+                      orgName={org.name}
+                      isOpen={openOrgId === org.id}
+                      onClick={() => handleOrgClick(org.id)}
+                      isOrgAdmin={isOrgAdmin}
+                      memberTeams={memberTeamsByOrg.get(org.id) ?? []}
+                    />
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -166,16 +185,23 @@ function OrgRow({
   orgName,
   isOpen,
   onClick,
+  isOrgAdmin,
+  memberTeams,
 }: {
   orgId: string;
   orgName: string;
   isOpen: boolean;
   onClick: () => void;
+  isOrgAdmin: boolean;
+  memberTeams: { id: string; name: string }[];
 }) {
   const { data: teamsResp } = useListOrgTeams(orgId, undefined, {
-    query: { enabled: isOpen } as never,
+    query: { enabled: isOpen && isOrgAdmin } as never,
   });
-  const teams = teamsResp?.data ?? [];
+  const teams = isOrgAdmin
+    ? (teamsResp?.data ?? []).map((t) => ({ id: t.id, name: t.name }))
+    : memberTeams;
+  const isLoading = isOrgAdmin && teamsResp === undefined;
   return (
     <div>
       <button
@@ -204,7 +230,7 @@ function OrgRow({
       </button>
       {isOpen && (
         <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
-          {teamsResp === undefined ? (
+          {isLoading ? (
             <p className="text-xs text-muted-foreground py-1.5 italic">
               Loading…
             </p>
