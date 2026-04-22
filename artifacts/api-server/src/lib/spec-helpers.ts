@@ -139,7 +139,7 @@ export function toOrganization(
 }
 
 export function toOrganizationEmbed(o: OrgRow) {
-  return { id: o.id, name: o.name, slug: slugify(o.name) };
+  return { id: o.id, name: o.name, slug: slugify(o.name), avatarUrl: o.logoUrl ?? null };
 }
 
 export function toMember(u: UserRow, role: "owner" | "admin" | "member", joinedAt: Date) {

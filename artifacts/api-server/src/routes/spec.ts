@@ -587,6 +587,39 @@ router.get(
   }),
 );
 
+router.patch(
+  "/teams/:teamId",
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    const patch: Record<string, unknown> = {};
+    if (typeof body.name === "string") patch.name = body.name.trim();
+    if (typeof body.sport === "string") patch.sport = body.sport;
+    if (typeof body.level === "string") patch.level = body.level;
+    if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
+    if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ error: "no updatable fields" });
+    }
+    const [t] = await db
+      .update(teams)
+      .set(patch)
+      .where(eq(teams.id, req.params.teamId))
+      .returning();
+    if (!t) return notFound(res);
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, t.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rosterEntries)
+      .where(eq(rosterEntries.teamId, t.id));
+    res.json(toTeam(t, org, { memberCount: count }));
+  }),
+);
+
 router.get(
   "/teams/:teamId/members",
   asyncHandler(async (req, res) => {

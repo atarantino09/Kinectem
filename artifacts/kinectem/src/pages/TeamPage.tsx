@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,6 +12,8 @@ import {
   useGetLoggedInUser,
   getListTeamMembersQueryKey,
   getListRosterInvitesQueryKey,
+  getGetTeamByIdQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +40,8 @@ export default function TeamPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: team, isLoading } = useGetTeamById(teamId);
   const { data: membersResp } = useListTeamMembers(teamId);
@@ -97,6 +101,42 @@ export default function TeamPage() {
       toast({ title: "Welcome to the team!" });
     } catch {
       toast({ title: "Failed to accept", variant: "destructive" });
+    }
+  };
+
+  const onPickPhoto = () => fileInputRef.current?.click();
+
+  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please pick an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > 1_500_000) {
+      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      await customFetch(`/api/v1/teams/${teamId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: dataUrl }),
+      });
+      await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
+      toast({ title: "Team photo updated" });
+    } catch {
+      toast({ title: "Failed to upload photo", variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -201,9 +241,53 @@ export default function TeamPage() {
               </Badge>
             )}
           </div>
-          <h1 className="text-4xl font-black tracking-tight leading-tight mb-3">
-            {team.name}
-          </h1>
+          <div className="flex items-start gap-5 mb-3">
+            <div className="relative shrink-0">
+              <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
+                {(team.avatarUrl || (org as { avatarUrl?: string | null } | undefined)?.avatarUrl) ? (
+                  <img
+                    src={team.avatarUrl || (org as { avatarUrl?: string | null } | undefined)?.avatarUrl || ""}
+                    alt={team.name}
+                    className="w-full h-full object-cover"
+                    data-testid="img-team-photo"
+                  />
+                ) : (
+                  <span className="text-2xl font-black text-primary">
+                    {team.name.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {isAdmin && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onPhotoChange}
+                    data-testid="input-team-photo"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="absolute -bottom-2 left-1/2 -translate-x-1/2 h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
+                    onClick={onPickPhoto}
+                    disabled={uploading}
+                    data-testid="btn-upload-team-photo"
+                  >
+                    {uploading
+                      ? "Uploading..."
+                      : team.avatarUrl
+                        ? "Change"
+                        : "Upload"}
+                  </Button>
+                </>
+              )}
+            </div>
+            <h1 className="text-4xl font-black tracking-tight leading-tight">
+              {team.name}
+            </h1>
+          </div>
           <div className="flex items-center gap-4 flex-wrap">
             {team.sport && (
               <div className="font-bold text-foreground flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-md text-sm">
