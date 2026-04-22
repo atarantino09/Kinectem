@@ -6,7 +6,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText } from "lucide-react";
+import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -135,6 +135,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 <FileText className="w-4 h-4 mr-2" /> My Drafts
               </DropdownMenuItem>
+              {currentUser?.role === "parent" && (
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/family")}
+                  data-testid="menu-family"
+                >
+                  <Users className="w-4 h-4 mr-2" /> Family
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <CreateOrgDialog open={createOrgOpen} onOpenChange={setCreateOrgOpen} />

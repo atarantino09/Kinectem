@@ -45,6 +45,38 @@ export default function LoginPage() {
   const [role, setRole] = useState<"athlete" | "coach" | "admin" | "parent">("athlete");
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
+  const [parentId, setParentId] = useState<string | null>(null);
+  const [parentQuery, setParentQuery] = useState("");
+  const [parentResults, setParentResults] = useState<DemoUser[]>([]);
+
+  const isUnder13 = (() => {
+    if (!dob) return false;
+    const ms = Date.now() - new Date(dob).getTime();
+    return ms / (365.25 * 24 * 3600 * 1000) < 13;
+  })();
+
+  useEffect(() => {
+    if (!isUnder13 || role !== "athlete") return;
+    if (parentQuery.trim().length < 2) {
+      setParentResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const rows = await customFetch<DemoUser[]>(
+          `/api/v1/users?q=${encodeURIComponent(parentQuery.trim())}`,
+        );
+        setParentResults(rows.filter((u) => u.role === "parent"));
+      } catch {
+        setParentResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [parentQuery, isUnder13, role]);
+
+  const selectedParent = users.find((u) => u.id === parentId)
+    ?? parentResults.find((u) => u.id === parentId)
+    ?? null;
 
   useEffect(() => {
     customFetch<DemoUser[]>("/api/v1/auth/users")
@@ -75,6 +107,11 @@ export default function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
+      if (role === "athlete" && isUnder13 && !parentId) {
+        throw new Error(
+          "Athletes under 13 must link a parent or guardian account.",
+        );
+      }
       await customFetch("/api/v1/auth/signup", {
         method: "POST",
         body: JSON.stringify({
@@ -83,6 +120,7 @@ export default function LoginPage() {
           role,
           email: email || null,
           dateOfBirth: dob || null,
+          parentId: parentId || null,
         }),
       });
       await qc.invalidateQueries();
@@ -233,6 +271,92 @@ export default function LoginPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Athletes under 13 will be prompted to link a parent or guardian account.
                     </p>
+                  </div>
+                )}
+
+                {role === "athlete" && isUnder13 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                        Parent gate
+                      </div>
+                    </div>
+                    <p className="text-xs text-amber-900">
+                      Because this athlete is under 13, you need to link a
+                      parent or guardian account before continuing.
+                    </p>
+                    {selectedParent ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-white p-2">
+                        <Avatar className="w-8 h-8 border border-border">
+                          {selectedParent.avatarUrl && (
+                            <AvatarImage src={selectedParent.avatarUrl} />
+                          )}
+                          <AvatarFallback className="bg-slate-900 text-white font-bold text-[10px]">
+                            {getInitials(
+                              `${selectedParent.firstName} ${selectedParent.lastName}`,
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate">
+                            {selectedParent.firstName} {selectedParent.lastName}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {selectedParent.email ?? "Parent / Guardian"}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setParentId(null)}
+                        >
+                          Change
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Input
+                          value={parentQuery}
+                          onChange={(e) => setParentQuery(e.target.value)}
+                          placeholder="Search for parent's account by name..."
+                          data-testid="input-parent-search"
+                        />
+                        {parentQuery.trim().length >= 2 &&
+                          (parentResults.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              No parent accounts match. Ask your guardian to
+                              create an account first.
+                            </p>
+                          ) : (
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                              {parentResults.map((p) => (
+                                <button
+                                  type="button"
+                                  key={p.id}
+                                  onClick={() => setParentId(p.id)}
+                                  data-testid={`btn-pick-parent-${p.id}`}
+                                  className="w-full flex items-center gap-2 p-2 rounded-lg border border-border hover-elevate text-left"
+                                >
+                                  <Avatar className="w-7 h-7 border border-border">
+                                    {p.avatarUrl && (
+                                      <AvatarImage src={p.avatarUrl} />
+                                    )}
+                                    <AvatarFallback className="bg-slate-900 text-white font-bold text-[10px]">
+                                      {getInitials(
+                                        `${p.firstName} ${p.lastName}`,
+                                      )}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm font-bold">
+                                    {p.firstName} {p.lastName}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                      </>
+                    )}
                   </div>
                 )}
 

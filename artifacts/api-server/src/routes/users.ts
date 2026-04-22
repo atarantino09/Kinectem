@@ -19,6 +19,63 @@ router.get(
 );
 
 router.get(
+  "/users/me/children",
+  asyncHandler(async (req, res) => {
+    if (!req.sessionUser) return res.status(401).json({ error: "Not authenticated" });
+    const rows = await db
+      .select()
+      .from(users)
+      .where(eq(users.parentId, req.sessionUser.id));
+    res.json({ data: rows.map((u) => ({ ...toUser(u), requireTagConsent: u.requireTagConsent })) });
+  }),
+);
+
+router.post(
+  "/users/me/children",
+  asyncHandler(async (req, res) => {
+    if (!req.sessionUser) return res.status(401).json({ error: "Not authenticated" });
+    if (req.sessionUser.role !== "parent") {
+      return res.status(403).json({ error: "Only parent accounts can link children" });
+    }
+    const childId = String(req.body?.childId ?? "").trim();
+    if (!childId) return res.status(400).json({ error: "childId required" });
+    const [child] = await db.select().from(users).where(eq(users.id, childId)).limit(1);
+    if (!child) return res.status(404).json({ error: "User not found" });
+    if (child.parentId && child.parentId !== req.sessionUser.id) {
+      return res.status(409).json({ error: "Already linked to another guardian" });
+    }
+    const [updated] = await db
+      .update(users)
+      .set({ parentId: req.sessionUser.id })
+      .where(eq(users.id, childId))
+      .returning();
+    res.status(201).json({ ...toUser(updated), requireTagConsent: updated.requireTagConsent });
+  }),
+);
+
+router.patch(
+  "/users/me/children/:childId/visibility",
+  asyncHandler(async (req, res) => {
+    if (!req.sessionUser) return res.status(401).json({ error: "Not authenticated" });
+    const [child] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, req.params.childId))
+      .limit(1);
+    if (!child || child.parentId !== req.sessionUser.id) {
+      return res.status(404).json({ error: "Child not found" });
+    }
+    const requireTagConsent = !!req.body?.requireTagConsent;
+    const [updated] = await db
+      .update(users)
+      .set({ requireTagConsent })
+      .where(eq(users.id, child.id))
+      .returning();
+    res.json({ ...toUser(updated), requireTagConsent: updated.requireTagConsent });
+  }),
+);
+
+router.get(
   "/users",
   asyncHandler(async (req, res) => {
     const q = typeof req.query["q"] === "string" ? req.query["q"] : undefined;

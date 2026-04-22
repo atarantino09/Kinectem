@@ -1463,6 +1463,103 @@ router.patch(
 );
 
 // ---------------------------------------------------------------------------
+// Parent / Guardian — children management
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/users/me/children",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const rows = await db
+      .select()
+      .from(users)
+      .where(eq(users.parentId, me.id));
+    res.json({
+      data: rows.map((u) => {
+        const [first, ...rest] = u.name.split(" ");
+        return {
+          id: u.id,
+          firstName: first ?? u.name,
+          lastName: rest.join(" "),
+          role: u.role,
+          email: u.email ?? null,
+          avatarUrl: u.avatarUrl ?? null,
+          requireTagConsent: u.requireTagConsent,
+        };
+      }),
+    });
+  }),
+);
+
+router.post(
+  "/users/me/children",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (me.role !== "parent") {
+      return res
+        .status(403)
+        .json({ error: "Only parent accounts can link children" });
+    }
+    const childId = String(req.body?.childId ?? "").trim();
+    if (!childId) return res.status(400).json({ error: "childId required" });
+    const [child] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, childId))
+      .limit(1);
+    if (!child) return res.status(404).json({ error: "User not found" });
+    if (child.parentId && child.parentId !== me.id) {
+      return res
+        .status(409)
+        .json({ error: "Already linked to another guardian" });
+    }
+    const [updated] = await db
+      .update(users)
+      .set({ parentId: me.id })
+      .where(eq(users.id, childId))
+      .returning();
+    const [first, ...rest] = updated.name.split(" ");
+    res.status(201).json({
+      id: updated.id,
+      firstName: first ?? updated.name,
+      lastName: rest.join(" "),
+      role: updated.role,
+      email: updated.email ?? null,
+      avatarUrl: updated.avatarUrl ?? null,
+      requireTagConsent: updated.requireTagConsent,
+    });
+  }),
+);
+
+router.patch(
+  "/users/me/children/:childId/visibility",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [child] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, req.params.childId))
+      .limit(1);
+    if (!child || child.parentId !== me.id) {
+      return res.status(404).json({ error: "Child not found" });
+    }
+    const requireTagConsent = !!req.body?.requireTagConsent;
+    const [updated] = await db
+      .update(users)
+      .set({ requireTagConsent })
+      .where(eq(users.id, child.id))
+      .returning();
+    res.json({
+      id: updated.id,
+      requireTagConsent: updated.requireTagConsent,
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Search (cross-entity)
 // ---------------------------------------------------------------------------
 
