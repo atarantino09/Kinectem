@@ -844,6 +844,23 @@ router.post(
     if (!invite) return notFound(res);
     if (invite.status !== "pending")
       return res.status(409).json({ error: "Invite no longer pending" });
+
+    // Player invites are addressed to the parent / guardian. The accepting
+    // user does NOT become a player; instead they're prompted to add their
+    // child(ren) as players on the roster.
+    const isPlayerInvite = invite.position === "player";
+    if (isPlayerInvite) {
+      await db
+        .update(rosterInvites)
+        .set({ status: "accepted" })
+        .where(eq(rosterInvites.id, invite.id));
+      return res.status(200).json({
+        requiresChildSetup: true,
+        teamId: invite.teamId,
+        inviteId: invite.id,
+      });
+    }
+
     const [entry] = await db
       .insert(rosterEntries)
       .values({
@@ -859,6 +876,62 @@ router.post(
       .set({ status: "accepted" })
       .where(eq(rosterInvites.id, invite.id));
     res.status(201).json(toTeamMember(entry, me));
+  }),
+);
+
+// After a parent accepts a player invite, they add 1+ children as players.
+router.post(
+  "/invites/:token/children",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [invite] = await db
+      .select()
+      .from(rosterInvites)
+      .where(eq(rosterInvites.token, req.params.token))
+      .limit(1);
+    if (!invite) return notFound(res);
+    if (invite.position !== "player") {
+      return res
+        .status(400)
+        .json({ error: "Only player invites support adding children" });
+    }
+    const firstName = String(req.body?.firstName ?? "").trim();
+    const lastName = String(req.body?.lastName ?? "").trim();
+    if (!firstName || !lastName) {
+      return res
+        .status(400)
+        .json({ error: "firstName and lastName required" });
+    }
+    const [child] = await db
+      .insert(users)
+      .values({
+        name: `${firstName} ${lastName}`,
+        role: "athlete",
+        email: null,
+        parentId: me.id,
+        requireTagConsent: true,
+      })
+      .returning();
+    const [entry] = await db
+      .insert(rosterEntries)
+      .values({
+        teamId: invite.teamId,
+        userId: child.id,
+        role: "player",
+        status: "accepted",
+        position: "player",
+      })
+      .returning();
+    res.status(201).json({
+      child: {
+        id: child.id,
+        firstName,
+        lastName,
+        avatarUrl: child.avatarUrl ?? null,
+      },
+      member: toTeamMember(entry, child),
+    });
   }),
 );
 

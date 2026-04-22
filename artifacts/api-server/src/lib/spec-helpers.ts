@@ -223,6 +223,8 @@ export function toTeamMember(r: RosterRow, u: UserRow) {
 export function toInvite(i: InviteRow, invitedBy: UserRow | null) {
   return {
     id: i.id,
+    token: i.token,
+    invitedName: i.invitedName ?? null,
     email: i.invitedEmail,
     position: rosterPositionToSpec(i.role, i.position) as
       | "player"

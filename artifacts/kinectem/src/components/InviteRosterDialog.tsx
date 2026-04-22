@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Search, Mail, UserCheck } from "lucide-react";
+import { Loader2, Search, Mail, UserCheck, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
 
@@ -246,24 +246,6 @@ export function InviteRosterDialog({
           <TabsContent value="email" className="mt-4">
             <form onSubmit={onSendInvite} className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="font-bold">Email address</Label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="newplayer@example.com"
-                  data-testid="input-invite-email"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="font-bold">Name (optional)</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Player name"
-                />
-              </div>
-              <div className="space-y-1.5">
                 <Label className="font-bold">Position</Label>
                 <Select value={emailPosition} onValueChange={setEmailPosition}>
                   <SelectTrigger>
@@ -277,6 +259,49 @@ export function InviteRosterDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              {emailPosition === "player" && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <Shield className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>
+                    <span className="font-bold">This invite goes to the parent.</span>{" "}
+                    They'll create a guardian account, then add their child(ren) to the roster — they can add more than one if siblings play on the team.
+                  </p>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label className="font-bold">
+                  {emailPosition === "player"
+                    ? "Parent / guardian email"
+                    : "Email address"}
+                </Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={
+                    emailPosition === "player"
+                      ? "parent@example.com"
+                      : "name@example.com"
+                  }
+                  data-testid="input-invite-email"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="font-bold">
+                  {emailPosition === "player"
+                    ? "Player's name (optional)"
+                    : "Name (optional)"}
+                </Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={
+                    emailPosition === "player"
+                      ? "Child's name"
+                      : "Recipient name"
+                  }
+                />
               </div>
               <DialogFooter>
                 <Button

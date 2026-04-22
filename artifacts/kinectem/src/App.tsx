@@ -17,6 +17,7 @@ import PendingTagsPage from "@/pages/PendingTagsPage";
 import DraftsPage from "@/pages/DraftsPage";
 import MyTagsPage from "@/pages/MyTagsPage";
 import GuardianPage from "@/pages/GuardianPage";
+import InviteAcceptPage from "@/pages/InviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
 
 const queryClient = new QueryClient({
@@ -33,6 +34,7 @@ function Router() {
     <Switch>
       {/* Fullscreen routes (no layout) */}
       <Route path="/login" component={LoginPage} />
+      <Route path="/invites/:token" component={InviteAcceptPage} />
       <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}
