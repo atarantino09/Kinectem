@@ -186,15 +186,32 @@ export default function InviteAcceptPage() {
             </div>
           )}
           {!me && (
-            <p className="text-sm text-muted-foreground">
-              You'll need to{" "}
-              <Link href="/login" className="font-bold text-primary hover:underline">
-                sign in or create an account
-              </Link>{" "}
-              before accepting.
-            </p>
+            <div className="space-y-2">
+              <Link
+                href={`/login?signup=${isPlayerInvite ? "parent" : "user"}&returnTo=${encodeURIComponent(`/invites/${token}`)}`}
+              >
+                <Button
+                  size="lg"
+                  className="w-full font-bold rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
+                  data-testid="btn-create-guardian"
+                >
+                  {isPlayerInvite
+                    ? "Create a guardian account"
+                    : "Create your account"}
+                </Button>
+              </Link>
+              <p className="text-xs text-center text-muted-foreground">
+                Already on Kinectem?{" "}
+                <Link
+                  href={`/login?returnTo=${encodeURIComponent(`/invites/${token}`)}`}
+                  className="font-bold text-primary hover:underline"
+                >
+                  Sign in
+                </Link>
+              </p>
+            </div>
           )}
-          {!accepted ? (
+          {me && !accepted ? (
             <Button
               size="lg"
               onClick={onAccept}
@@ -204,11 +221,9 @@ export default function InviteAcceptPage() {
             >
               {accepting
                 ? "Accepting..."
-                : me
-                  ? `Accept invite${isPlayerInvite ? " as guardian" : ""}`
-                  : "Sign in to accept"}
+                : `Accept invite${isPlayerInvite ? " as guardian" : ""}`}
             </Button>
-          ) : !needsChildSetup ? (
+          ) : me && accepted && !needsChildSetup ? (
             <div className="flex items-center justify-center gap-2 text-sm text-emerald-700">
               <CheckCircle2 className="w-4 h-4" />
               <span className="font-bold">Invite accepted</span>

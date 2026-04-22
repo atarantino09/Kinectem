@@ -85,7 +85,7 @@ export const rosterInvites = pgTable("roster_invites", {
   id: uuid("id").primaryKey().defaultRandom(),
   token: text("token").notNull().unique(),
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
-  invitedEmail: text("invited_email").notNull(),
+  invitedEmail: text("invited_email"),
   invitedName: text("invited_name"),
   role: rosterRoleEnum("role").notNull(),
   position: text("position"),

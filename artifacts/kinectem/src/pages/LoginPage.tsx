@@ -30,10 +30,19 @@ interface DemoUser {
 
 type Mode = "signin" | "signup";
 
+function readQueryParam(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(name);
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
-  const [mode, setMode] = useState<Mode>("signin");
+  const initialSignup = readQueryParam("signup");
+  const returnTo = readQueryParam("returnTo");
+  const [mode, setMode] = useState<Mode>(
+    initialSignup ? "signup" : "signin",
+  );
   const [users, setUsers] = useState<DemoUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -42,7 +51,9 @@ export default function LoginPage() {
   // Sign-up form
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [role, setRole] = useState<"athlete" | "coach" | "admin" | "parent">("athlete");
+  const [role, setRole] = useState<"athlete" | "coach" | "admin" | "parent">(
+    initialSignup === "parent" ? "parent" : "athlete",
+  );
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
   const [parentId, setParentId] = useState<string | null>(null);
@@ -94,7 +105,7 @@ export default function LoginPage() {
         body: JSON.stringify({ userId }),
       });
       await qc.invalidateQueries();
-      setLocation("/");
+      setLocation(returnTo || "/");
     } catch (e) {
       setError((e as Error)?.message ?? "Login failed");
     } finally {
@@ -124,7 +135,7 @@ export default function LoginPage() {
         }),
       });
       await qc.invalidateQueries();
-      setLocation("/");
+      setLocation(returnTo || "/");
     } catch (err) {
       setError((err as Error)?.message ?? "Sign-up failed");
     } finally {

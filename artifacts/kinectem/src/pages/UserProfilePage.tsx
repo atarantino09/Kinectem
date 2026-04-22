@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Building2, Tag } from "lucide-react";
+import { Building2, Tag, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { getInitials } from "@/lib/format";
@@ -113,6 +113,56 @@ export default function UserProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Linked accounts (parent ↔ child) */}
+      {(() => {
+        const linked = (user as { linkedAccounts?: { parents?: Array<{ id: string; firstName: string; lastName: string; role: string; avatarUrl: string | null }>; children?: Array<{ id: string; firstName: string; lastName: string; role: string; avatarUrl: string | null }> } }).linkedAccounts;
+        const parents = linked?.parents ?? [];
+        const children = linked?.children ?? [];
+        if (parents.length === 0 && children.length === 0) return null;
+        const all = [
+          ...parents.map((p) => ({ ...p, relation: "Parent / Guardian" as const })),
+          ...children.map((c) => ({ ...c, relation: "Child" as const })),
+        ];
+        return (
+          <section>
+            <h2 className="text-xl font-black tracking-tight mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" /> Family
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {all.map((m) => {
+                const name = `${m.firstName} ${m.lastName}`.trim();
+                return (
+                  <Link key={`${m.relation}-${m.id}`} href={`/users/${m.id}`}>
+                    <Card
+                      className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+                      data-testid={`card-linked-${m.id}`}
+                    >
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <Avatar className="w-10 h-10">
+                          {m.avatarUrl && <AvatarImage src={m.avatarUrl} />}
+                          <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
+                            {getInitials(name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm truncate">{name}</p>
+                          <Badge
+                            variant="outline"
+                            className="mt-1 text-[10px] uppercase tracking-wider font-bold"
+                          >
+                            {m.relation}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Organizations */}
       {orgs.length > 0 && (

@@ -32,7 +32,7 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
   });
 
   const fullLink = linkToken
-    ? `${window.location.origin}${import.meta.env.BASE_URL}join/${linkToken}`
+    ? `${window.location.origin}${import.meta.env.BASE_URL}invites/${linkToken}`
     : null;
 
   const onCopy = () => {

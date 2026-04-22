@@ -15,7 +15,7 @@ import {
   highlightTags,
   notifications,
 } from "@workspace/db";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import {
@@ -227,11 +227,62 @@ router.get(
     if (!u) return notFound(res);
     const me = await getOrFallbackUser(req);
     const isOwnProfile = me?.id === u.id;
-    if (isOwnProfile) {
-      res.json(toPrivateUser(u));
-    } else {
-      res.json(toPublicUser(u, { isOwnProfile: false, isFollowing: false }));
+
+    // Linked accounts (parent ↔ child) are sensitive on a youth-sports
+    // product. Only show them to: the user themself, their linked parents
+    // or children, or an org admin of an organization that the profile
+    // user belongs to.
+    let canSeeFamily = isOwnProfile;
+    if (!canSeeFamily && me) {
+      if (me.parentId === u.id || u.parentId === me.id) {
+        canSeeFamily = true;
+      } else {
+        // Org admin of any org that owns a team the profile user is on.
+        const sharedAdmin = await db
+          .select({ id: organizationAdmins.organizationId })
+          .from(organizationAdmins)
+          .innerJoin(teams, eq(teams.organizationId, organizationAdmins.organizationId))
+          .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+          .where(
+            and(
+              eq(organizationAdmins.userId, me.id),
+              eq(rosterEntries.userId, u.id),
+            ),
+          )
+          .limit(1);
+        if (sharedAdmin.length > 0) canSeeFamily = true;
+      }
     }
+
+    let linkedAccounts: { parents: unknown[]; children: unknown[] } | undefined;
+    if (canSeeFamily) {
+      const parentRows = u.parentId
+        ? await db.select().from(users).where(eq(users.id, u.parentId)).limit(1)
+        : [];
+      const childRows = await db
+        .select()
+        .from(users)
+        .where(eq(users.parentId, u.id));
+      const toLinked = (row: typeof users.$inferSelect) => {
+        const { firstName, lastName } = splitName(row.name);
+        return {
+          id: row.id,
+          firstName,
+          lastName,
+          role: row.role,
+          avatarUrl: row.avatarUrl ?? null,
+        };
+      };
+      linkedAccounts = {
+        parents: parentRows.map(toLinked),
+        children: childRows.map(toLinked),
+      };
+    }
+
+    const base = isOwnProfile
+      ? toPrivateUser(u)
+      : toPublicUser(u, { isOwnProfile: false, isFollowing: false });
+    res.json({ ...base, linkedAccounts });
   }),
 );
 
@@ -850,10 +901,15 @@ router.post(
     // child(ren) as players on the roster.
     const isPlayerInvite = invite.position === "player";
     if (isPlayerInvite) {
-      await db
-        .update(rosterInvites)
-        .set({ status: "accepted" })
-        .where(eq(rosterInvites.id, invite.id));
+      // Email-targeted player invites are single-use (mark accepted).
+      // Email-less shareable links stay pending so multiple guardians can
+      // use the same link to add their kids.
+      if (invite.invitedEmail) {
+        await db
+          .update(rosterInvites)
+          .set({ status: "accepted" })
+          .where(eq(rosterInvites.id, invite.id));
+      }
       return res.status(200).json({
         requiresChildSetup: true,
         teamId: invite.teamId,
@@ -954,13 +1010,60 @@ router.get(
 router.post(
   "/teams/:teamId/join-link",
   asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
     const teamId = req.params.teamId;
-    const token = `join-${teamId.slice(0, 8)}`;
+    // Only org admins of the owning organization can mint join links.
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team) return notFound(res);
+    const [adminRow] = await db
+      .select()
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, team.organizationId),
+          eq(organizationAdmins.userId, me.id),
+        ),
+      )
+      .limit(1);
+    if (!adminRow) return res.status(403).json({ error: "Not a team admin" });
+    // Reuse a pending email-less player invite for this team if one exists,
+    // so admins always share a stable parent-onboarding link.
+    const [existing] = await db
+      .select()
+      .from(rosterInvites)
+      .where(
+        and(
+          eq(rosterInvites.teamId, teamId),
+          eq(rosterInvites.status, "pending"),
+          isNull(rosterInvites.invitedEmail),
+        ),
+      )
+      .limit(1);
+    let token = existing?.token;
+    let createdAt = existing?.createdAt ?? new Date();
+    if (!existing) {
+      const newToken = `join-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+      const [row] = await db
+        .insert(rosterInvites)
+        .values({
+          token: newToken,
+          teamId,
+          invitedEmail: null,
+          invitedName: null,
+          role: "player",
+          position: "player",
+          invitedById: me?.id ?? null,
+        })
+        .returning();
+      token = row.token;
+      createdAt = row.createdAt;
+    }
     res.json({
       token,
       teamId,
       expiresAt: null,
-      createdAt: new Date().toISOString(),
+      createdAt: createdAt.toISOString(),
     });
   }),
 );
