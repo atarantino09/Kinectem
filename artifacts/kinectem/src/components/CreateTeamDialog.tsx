@@ -35,7 +35,6 @@ function slugify(s: string) {
     .slice(0, 50);
 }
 
-const LEVELS = ["varsity", "jv", "travel", "recreational", "club"];
 const SPORTS = [
   "Soccer",
   "Basketball",
@@ -64,7 +63,7 @@ export function CreateTeamDialog({
   const [slugDirty, setSlugDirty] = useState(false);
   const [description, setDescription] = useState("");
   const [sport, setSport] = useState<string>("");
-  const [level, setLevel] = useState<string>("");
+  const [league, setLeague] = useState<string>("");
   const [seasonName, setSeasonName] = useState("");
 
   const createTeam = useCreateTeam();
@@ -75,7 +74,7 @@ export function CreateTeamDialog({
     setSlugDirty(false);
     setDescription("");
     setSport("");
-    setLevel("");
+    setLeague("");
     setSeasonName("");
   };
 
@@ -100,7 +99,7 @@ export function CreateTeamDialog({
           slug: finalSlug,
           description: description.trim() || undefined,
           sport: sport || undefined,
-          level: level || undefined,
+          level: league.trim() || undefined,
           season: { name: finalSeason },
         },
       });
@@ -172,19 +171,16 @@ export function CreateTeamDialog({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="font-bold">Level</Label>
-                <Select value={level} onValueChange={setLevel}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pick level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEVELS.map((l) => (
-                      <SelectItem key={l} value={l} className="capitalize">
-                        {l}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="team-league" className="font-bold">
+                  League
+                </Label>
+                <Input
+                  id="team-league"
+                  value={league}
+                  onChange={(e) => setLeague(e.target.value)}
+                  placeholder="e.g. NJYS Premier"
+                  data-testid="input-team-league"
+                />
               </div>
             </div>
             <div className="space-y-1.5">
