@@ -15,6 +15,7 @@ import SearchPage from "@/pages/SearchPage";
 import MessagesPage from "@/pages/MessagesPage";
 import PendingTagsPage from "@/pages/PendingTagsPage";
 import DraftsPage from "@/pages/DraftsPage";
+import MyTagsPage from "@/pages/MyTagsPage";
 import LoginPage from "@/pages/LoginPage";
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ function Router() {
             <Route path="/messages" component={MessagesPage} />
             <Route path="/tags/pending" component={PendingTagsPage} />
             <Route path="/drafts" component={DraftsPage} />
+            <Route path="/me/tags" component={MyTagsPage} />
             <Route path="/organizations" component={OrganizationsListPage} />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
             <Route path="/teams/:teamId" component={TeamPage} />

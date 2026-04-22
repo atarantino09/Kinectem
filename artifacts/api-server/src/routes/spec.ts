@@ -9,7 +9,9 @@ import {
   rosterInvites,
   articles,
   articleAuthors,
+  articleTags,
   highlights,
+  highlightTags,
   notifications,
 } from "@workspace/db";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
@@ -39,6 +41,8 @@ import {
   emptyPagination,
   splitName,
   parsePostId,
+  articlePostId,
+  highlightPostId,
 } from "../lib/spec-helpers";
 
 const router: IRouter = Router();
@@ -1250,7 +1254,118 @@ router.post("/tags/:tagId/approve", (req, res) =>
 router.post("/tags/:tagId/decline", (req, res) =>
   res.json({ id: req.params.tagId, status: "declined" }),
 );
+
+// ---------------------------------------------------------------------------
+// Tag management (player-removable tags)
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/users/me/tags",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json({ data: [] });
+    const aRows = await db
+      .select({
+        t: articleTags,
+        a: articles,
+        team: teams,
+        org: organizations,
+      })
+      .from(articleTags)
+      .innerJoin(articles, eq(articleTags.articleId, articles.id))
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(articleTags.userId, me.id))
+      .orderBy(desc(articleTags.createdAt));
+    const hRows = await db
+      .select({
+        t: highlightTags,
+        h: highlights,
+        team: teams,
+        org: organizations,
+      })
+      .from(highlightTags)
+      .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(highlightTags.userId, me.id))
+      .orderBy(desc(highlightTags.createdAt));
+    const data = [
+      ...aRows.map((r) => ({
+        id: r.t.id,
+        kind: "article" as const,
+        postId: articlePostId(r.a.id),
+        title: r.a.title ?? "Untitled",
+        teamName: r.team.name,
+        orgName: r.org.name,
+        createdAt: r.t.createdAt.toISOString(),
+      })),
+      ...hRows.map((r) => ({
+        id: r.t.id,
+        kind: "highlight" as const,
+        postId: highlightPostId(r.h.id),
+        title: r.h.title ?? "Highlight",
+        teamName: r.team.name,
+        orgName: r.org.name,
+        createdAt: r.t.createdAt.toISOString(),
+      })),
+    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    res.json({ data });
+  }),
+);
+
+router.delete(
+  "/article-tags/:tagId",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [t] = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.id, req.params.tagId))
+      .limit(1);
+    if (!t) return res.status(204).end();
+    if (t.userId !== me.id)
+      return res.status(403).json({ error: "Not your tag" });
+    await db.delete(articleTags).where(eq(articleTags.id, t.id));
+    res.status(204).end();
+  }),
+);
+
+router.delete(
+  "/highlight-tags/:tagId",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [t] = await db
+      .select()
+      .from(highlightTags)
+      .where(eq(highlightTags.id, req.params.tagId))
+      .limit(1);
+    if (!t) return res.status(204).end();
+    if (t.userId !== me.id)
+      return res.status(403).json({ error: "Not your tag" });
+    await db.delete(highlightTags).where(eq(highlightTags.id, t.id));
+    res.status(204).end();
+  }),
+);
+
 router.delete("/tags/:tagId", (_req, res) => res.status(204).end());
+
+router.patch(
+  "/users/me/tag-consent",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const requireTagConsent = !!req.body?.requireTagConsent;
+    const [updated] = await db
+      .update(users)
+      .set({ requireTagConsent })
+      .where(eq(users.id, me.id))
+      .returning();
+    res.json({ requireTagConsent: updated.requireTagConsent });
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Search (cross-entity)

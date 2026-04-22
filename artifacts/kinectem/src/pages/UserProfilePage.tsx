@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Building2 } from "lucide-react";
+import { Building2, Tag } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { getInitials } from "@/lib/format";
@@ -56,7 +56,17 @@ export default function UserProfilePage() {
               </AvatarFallback>
             </Avatar>
             {user.isOwnProfile && "email" in user ? (
-              <div className="mt-14">
+              <div className="mt-14 flex items-center gap-2">
+                <Link href="/me/tags">
+                  <Button
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    data-testid="link-manage-tags"
+                  >
+                    <Tag className="w-4 h-4 mr-1.5" />
+                    Manage Tags
+                  </Button>
+                </Link>
                 <EditProfileDialog user={user} />
               </div>
             ) : (
