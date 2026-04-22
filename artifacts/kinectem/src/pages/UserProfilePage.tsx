@@ -1,9 +1,18 @@
+import { useState, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import {
   useGetUserById,
   useListUserPosts,
   useListUserOrganizations,
+  useListUserTeams,
 } from "@workspace/api-client-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +29,16 @@ export default function UserProfilePage() {
   const { data: user, isLoading } = useGetUserById(userId);
   const { data: postsResp } = useListUserPosts(userId);
   const { data: orgsResp } = useListUserOrganizations(userId);
+  const { data: teamsResp } = useListUserTeams(userId);
+  const [teamFilter, setTeamFilter] = useState<string>("all");
+
+  const allPosts = postsResp?.data ?? [];
+  const posts = useMemo(() => {
+    if (teamFilter === "all") return allPosts;
+    return allPosts.filter(
+      (p) => p.context?.type === "team" && p.context.id === teamFilter,
+    );
+  }, [allPosts, teamFilter]);
 
   if (isLoading || !user) {
     return (
@@ -31,8 +50,8 @@ export default function UserProfilePage() {
   }
 
   const displayName = `${user.firstName} ${user.lastName}`;
-  const posts = postsResp?.data ?? [];
   const orgs = orgsResp?.data ?? [];
+  const teams = teamsResp?.data ?? [];
 
   return (
     <div className="space-y-6">
@@ -130,7 +149,27 @@ export default function UserProfilePage() {
 
       {/* Posts */}
       <section>
-        <h2 className="text-xl font-black tracking-tight mb-4">Posts</h2>
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <h2 className="text-xl font-black tracking-tight">Posts</h2>
+          {teams.length > 0 && (
+            <Select value={teamFilter} onValueChange={setTeamFilter}>
+              <SelectTrigger
+                className="w-56 font-bold"
+                data-testid="select-team-filter"
+              >
+                <SelectValue placeholder="All teams" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All teams</SelectItem>
+                {teams.map((t) => (
+                  <SelectItem key={t.teamId} value={t.teamId}>
+                    {t.teamName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <div className="space-y-3">
           {posts.length > 0 ? (
             posts.map((p) => <PostCard key={p.id} post={p} />)
