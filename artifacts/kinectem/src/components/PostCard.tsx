@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,10 +82,10 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           </Badge>
         </div>
 
-        <Link href={`/posts/${post.id}`}>
-          <div className="cursor-pointer">
-            {isShort && firstImage?.url && (
-              <div className="h-72 brand-gradient-dark relative flex items-center justify-center group">
+        <div>
+          {isShort && firstImage?.url && (
+            <Link href={`/posts/${post.id}`}>
+              <div className="h-72 brand-gradient-dark relative flex items-center justify-center group cursor-pointer">
                 <img
                   src={firstImage.url}
                   alt={post.title ?? ""}
@@ -94,21 +95,37 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                   <Play className="w-6 h-6 text-white ml-1" fill="currentColor" />
                 </div>
               </div>
-            )}
-            <div className="px-5 py-4 hover:bg-muted/40">
-              {post.title && (
-                <h3 className="font-black text-xl tracking-tight leading-tight mb-2">
+            </Link>
+          )}
+          {!isShort && firstImage?.url && (
+            <Link href={`/posts/${post.id}`}>
+              <div className="bg-muted cursor-pointer">
+                <img
+                  src={firstImage.url}
+                  alt={post.title ?? ""}
+                  className="w-full max-h-[420px] object-cover"
+                />
+              </div>
+            </Link>
+          )}
+          <div className="px-5 py-4">
+            {post.title && (
+              <Link href={`/posts/${post.id}`}>
+                <h3 className="font-black text-xl tracking-tight leading-tight mb-2 hover:underline cursor-pointer">
                   {post.title}
                 </h3>
-              )}
-              {post.description && (
-                <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
-                  {post.description}
-                </p>
-              )}
-            </div>
+              </Link>
+            )}
+            {post.description && (
+              <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-2">
+                {post.description}
+              </p>
+            )}
+            {!isShort && post.body && (
+              <RecapExcerpt body={post.body} postId={post.id} />
+            )}
           </div>
-        </Link>
+        </div>
 
         <div className="px-5 py-3 border-t border-border/60 flex items-center gap-2">
           <Button
@@ -143,5 +160,51 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function RecapExcerpt({ body, postId }: { body: string; postId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const PREVIEW_CHARS = 280;
+  const isLong = body.length > PREVIEW_CHARS;
+  const visible = expanded || !isLong ? body : body.slice(0, PREVIEW_CHARS).trimEnd() + "…";
+  return (
+    <div className="text-sm leading-relaxed whitespace-pre-wrap mt-1">
+      {visible}
+      {isLong && !expanded && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setExpanded(true);
+            }}
+            className="font-bold text-primary hover:underline"
+            data-testid={`button-see-more-${postId}`}
+          >
+            See more
+          </button>
+        </>
+      )}
+      {isLong && expanded && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setExpanded(false);
+            }}
+            className="font-bold text-muted-foreground hover:underline"
+            data-testid={`button-see-less-${postId}`}
+          >
+            See less
+          </button>
+        </>
+      )}
+    </div>
   );
 }
