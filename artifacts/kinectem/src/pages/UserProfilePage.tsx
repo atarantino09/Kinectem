@@ -47,32 +47,34 @@ export default function UserProfilePage() {
             />
           )}
         </div>
-        <div className="px-6 pb-6 -mt-12 flex items-end justify-between gap-4 flex-wrap">
-          <div className="flex items-end gap-4">
+        <div className="px-6 pb-6 -mt-12">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <Avatar className="w-24 h-24 border-4 border-card shadow-lg">
               {user.avatarUrl && <AvatarImage src={user.avatarUrl} />}
               <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-2xl">
                 {getInitials(displayName)}
               </AvatarFallback>
             </Avatar>
-            <div className="pb-2">
-              <h1 className="text-3xl font-black tracking-tight leading-none">
-                {displayName}
-              </h1>
-              {user.nickname && (
-                <p className="text-sm font-bold text-primary uppercase tracking-wider mt-2">
-                  @{user.nickname}
-                </p>
-              )}
-            </div>
+            {user.isOwnProfile && "email" in user ? (
+              <div className="mt-14">
+                <EditProfileDialog user={user} />
+              </div>
+            ) : (
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6 mt-14">
+                {user.isFollowing ? "Following" : "Follow"}
+              </Button>
+            )}
           </div>
-          {user.isOwnProfile && "email" in user ? (
-            <EditProfileDialog user={user} />
-          ) : (
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6">
-              {user.isFollowing ? "Following" : "Follow"}
-            </Button>
-          )}
+          <div className="mt-3">
+            <h1 className="text-3xl font-black tracking-tight leading-none">
+              {displayName}
+            </h1>
+            {user.nickname && (
+              <p className="text-sm font-bold text-primary uppercase tracking-wider mt-2">
+                @{user.nickname}
+              </p>
+            )}
+          </div>
         </div>
         {user.bio && (
           <div className="px-6 pb-6">
