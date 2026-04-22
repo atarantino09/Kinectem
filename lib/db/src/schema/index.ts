@@ -4,7 +4,7 @@ import { relations } from "drizzle-orm";
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent"]);
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
-export const articleStatusEnum = pgEnum("article_status", ["draft", "published"]);
+export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);
 export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
 
 export const users = pgTable("users", {

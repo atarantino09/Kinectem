@@ -19,6 +19,11 @@ import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import {
+  canCreateRecap,
+  canManageOrganization,
+  canManageTeam,
+} from "../lib/permissions";
+import {
   createSession,
   destroySession,
   setSessionCookie,
@@ -559,11 +564,93 @@ router.get(
 
 // Stub: org join requests, post approvals, follow, privacy
 router.get("/organizations/:orgId/join-requests", (_req, res) => res.json(paginate([])));
-router.get("/organizations/:orgId/post-approvals", (_req, res) => res.json(paginate([])));
 router.post("/organizations/:orgId/join-requests/:id/approve", (_req, res) => res.json({ status: "approved" }));
 router.post("/organizations/:orgId/join-requests/:id/decline", (_req, res) => res.json({ status: "declined" }));
-router.post("/organizations/:orgId/post-approvals/:id/approve", (_req, res) => res.json({ status: "approved" }));
-router.post("/organizations/:orgId/post-approvals/:id/decline", (_req, res) => res.json({ status: "declined" }));
+
+router.get(
+  "/organizations/:orgId/post-approvals",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const isAdmin = await canManageOrganization(me.id, req.params.orgId);
+    if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+    const rows = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(
+        and(
+          eq(articles.status, "pending_approval"),
+          eq(organizations.id, req.params.orgId),
+        ),
+      )
+      .orderBy(desc(articles.createdAt));
+    res.json(
+      paginate(
+        rows.map((r) => {
+          const post = articleToPost(r.a, {
+            team: r.team,
+            org: r.org,
+            author: r.author,
+          });
+          return {
+            id: post.id,
+            orgId: r.org.id,
+            postId: post.id,
+            submittedBy: r.author?.id ?? null,
+            status: "pending" as const,
+            decidedBy: null,
+            decidedAt: null,
+            post,
+            createdAt: r.a.createdAt.toISOString(),
+            updatedAt: r.a.updatedAt.toISOString(),
+          };
+        }),
+      ),
+    );
+  }),
+);
+
+async function transitionApproval(
+  req: Request,
+  res: Response,
+  next: "published" | "draft",
+) {
+  const me = await getOrFallbackUser(req);
+  if (!me) return res.status(401).json({ error: "Not authenticated" });
+  const isAdmin = await canManageOrganization(me.id, req.params.orgId);
+  if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+  const parsed = parsePostId(req.params.id);
+  if (!parsed || parsed.kind !== "article") return notFound(res);
+  const [a] = await db
+    .select()
+    .from(articles)
+    .where(eq(articles.id, parsed.id))
+    .limit(1);
+  if (!a || a.status !== "pending_approval") return notFound(res);
+  // Confirm the article belongs to a team in this org.
+  const [t] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
+  if (!t || t.organizationId !== req.params.orgId) return notFound(res);
+  await db
+    .update(articles)
+    .set({
+      status: next,
+      publishedAt: next === "published" ? new Date() : null,
+    })
+    .where(eq(articles.id, a.id));
+  res.json({ status: next === "published" ? "approved" : "declined" });
+}
+
+router.post(
+  "/organizations/:orgId/post-approvals/:id/approve",
+  asyncHandler((req, res) => transitionApproval(req, res, "published")),
+);
+router.post(
+  "/organizations/:orgId/post-approvals/:id/decline",
+  asyncHandler((req, res) => transitionApproval(req, res, "draft")),
+);
 router.post(
   "/organizations/:orgId/follow",
   asyncHandler(async (req, res) => {
@@ -737,6 +824,8 @@ router.post(
     if (!userId) return res.status(400).json({ error: "userId required" });
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return res.status(403).json({ error: "Team coaches or org admins only" });
     const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!u) return notFound(res);
     const positionRaw = String(req.body?.position ?? "player");
@@ -840,6 +929,10 @@ router.post(
     const me = await getOrFallbackUser(req);
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const teamId = req.params.teamId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return res.status(403).json({ error: "Team coaches or org admins only" });
     const email = String(req.body?.email ?? "").trim();
     if (!email) return res.status(400).json({ error: "email required" });
     const positionRaw = String(req.body?.position ?? "player");
@@ -1144,6 +1237,12 @@ router.get(
         .where(eq(articles.id, parsed.id))
         .limit(1);
       if (!row) return notFound(res);
+      if (row.a.status !== "published") {
+        const me = await getOrFallbackUser(req);
+        const isAuthor = !!me && row.a.authorId === me.id;
+        const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
+        if (!isAuthor && !isOrgAdmin) return notFound(res);
+      }
       res.json(articleToPost(row.a, { team: row.team, org: row.org, author: row.author }));
       return;
     }
@@ -1201,6 +1300,22 @@ router.post(
     if (!teamId) return res.status(400).json({ error: "no team context available" });
     if (body.postType === "long") {
       const isDraft = body.status === "draft";
+      const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+      const [org] = team
+        ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+        : [null];
+      if (!team || !org) return notFound(res);
+      const allowed = await canCreateRecap(me.id, team);
+      if (!allowed)
+        return res
+          .status(403)
+          .json({ error: "Only admins, coaches, and authors can create game recaps" });
+      const isAdmin = await canManageOrganization(me.id, team.organizationId);
+      const status: "draft" | "pending_approval" | "published" = isDraft
+        ? "draft"
+        : isAdmin
+          ? "published"
+          : "pending_approval";
       const [a] = await db
         .insert(articles)
         .values({
@@ -1209,16 +1324,15 @@ router.post(
           title: body.title ?? "Untitled",
           summary: body.description ?? undefined,
           body: body.body ?? "",
-          status: isDraft ? "draft" : "published",
-          publishedAt: isDraft ? null : new Date(),
+          status,
+          publishedAt: status === "published" ? new Date() : null,
         })
         .returning();
-      const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
-      const [org] = team
-        ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
-        : [null];
-      if (!team || !org) return notFound(res);
-      res.status(201).json(articleToPost(a, { team, org, author: me }));
+      res.status(201).json({
+        ...articleToPost(a, { team, org, author: me }),
+        approvalStatus: status,
+        requiresApproval: status === "pending_approval",
+      });
       return;
     }
     const [h] = await db
@@ -1343,11 +1457,30 @@ router.post(
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!a) return notFound(res);
-    if (a.authorId !== me.id)
+    const [coAuthor] = a.authorId === me.id
+      ? [null]
+      : await db
+          .select()
+          .from(articleAuthors)
+          .where(
+            and(
+              eq(articleAuthors.articleId, a.id),
+              eq(articleAuthors.userId, me.id),
+            ),
+          )
+          .limit(1);
+    if (a.authorId !== me.id && !coAuthor)
       return res.status(403).json({ error: "Only the author can publish" });
+    const [teamRow] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
+    if (!teamRow) return notFound(res);
+    const isAdmin = await canManageOrganization(me.id, teamRow.organizationId);
+    const newStatus = isAdmin ? "published" : "pending_approval";
     const [updated] = await db
       .update(articles)
-      .set({ status: "published", publishedAt: new Date() })
+      .set({
+        status: newStatus,
+        publishedAt: newStatus === "published" ? new Date() : null,
+      })
       .where(eq(articles.id, a.id))
       .returning();
     const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);

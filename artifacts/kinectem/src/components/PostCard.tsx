@@ -48,22 +48,33 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
       <CardContent className="p-0">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
-          <div className="flex items-center gap-3">
-            <Avatar className="w-10 h-10">
-              {post.author.avatarUrl && <AvatarImage src={post.author.avatarUrl} />}
-              <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
-                {getInitials(post.author.displayName)}
+          <Link
+            href={
+              post.context.type === "team"
+                ? `/teams/${post.context.id}`
+                : `/organizations/${post.context.id}`
+            }
+            className="flex items-center gap-3 min-w-0"
+          >
+            <Avatar className="w-10 h-10 rounded-lg">
+              {post.context.avatarUrl && (
+                <AvatarImage src={post.context.avatarUrl} />
+              )}
+              <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-black rounded-lg">
+                {getInitials(post.context.name ?? post.context.type)}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <p className="font-bold text-sm">{post.author.displayName}</p>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">
-                {post.context.name ?? post.context.type} • {timeAgo(post.createdAt)}
+            <div className="min-w-0">
+              <p className="font-bold text-sm truncate">
+                {post.context.name ?? post.context.type}
+              </p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5 truncate">
+                {post.author.displayName} • {timeAgo(post.createdAt)}
               </p>
             </div>
-          </div>
+          </Link>
           <Badge
-            className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest`}
+            className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest shrink-0`}
           >
             <Icon className="w-3 h-3 mr-1 inline" />
             {label}

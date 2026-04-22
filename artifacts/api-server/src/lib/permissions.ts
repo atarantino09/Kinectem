@@ -60,6 +60,28 @@ export async function isTeamMember(userId: string, teamId: string): Promise<bool
   return Boolean(row);
 }
 
+export async function canCreateRecap(
+  userId: string,
+  team: Team,
+): Promise<boolean> {
+  // Org admins and team coaches can always author recaps.
+  if (await canManageTeam(userId, team)) return true;
+  // Parents/members granted the explicit "author" position can also author.
+  const [authorEntry] = await db
+    .select()
+    .from(rosterEntries)
+    .where(
+      and(
+        eq(rosterEntries.teamId, team.id),
+        eq(rosterEntries.userId, userId),
+        eq(rosterEntries.status, "accepted"),
+        eq(rosterEntries.position, "author"),
+      ),
+    )
+    .limit(1);
+  return Boolean(authorEntry);
+}
+
 export async function isOrgMember(userId: string, organizationId: string): Promise<boolean> {
   if (await canManageOrganization(userId, organizationId)) return true;
   const [row] = await db

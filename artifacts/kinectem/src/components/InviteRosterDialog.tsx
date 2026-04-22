@@ -35,7 +35,8 @@ const POSITIONS = [
   { value: "coach", label: "Head Coach" },
   { value: "assistant_coach", label: "Assistant Coach" },
   { value: "manager", label: "Team Manager" },
-  { value: "parent", label: "Parent" },
+  { value: "parent", label: "Parent / Guardian" },
+  { value: "author", label: "Author (Game Recaps)" },
 ] as const;
 
 type SearchUser = {
@@ -266,6 +267,15 @@ export function InviteRosterDialog({
                   <p>
                     <span className="font-bold">This invite goes to the parent.</span>{" "}
                     They'll create a guardian account, then add their child(ren) to the roster — they can add more than one if siblings play on the team.
+                  </p>
+                </div>
+              )}
+              {emailPosition === "author" && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <Shield className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>
+                    <span className="font-bold">Authors can write game recap articles.</span>{" "}
+                    This is a parent role with one extra permission. Their recaps go to an admin for approval before they post.
                   </p>
                 </div>
               )}
