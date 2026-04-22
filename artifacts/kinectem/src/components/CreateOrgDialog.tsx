@@ -3,7 +3,9 @@ import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateOrganization,
+  useGetLoggedInUser,
   getListOrganizationsQueryKey,
+  getListUserOrganizationsQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -47,6 +49,7 @@ export function CreateOrgDialog({
   const [slugDirty, setSlugDirty] = useState(false);
 
   const createOrg = useCreateOrganization();
+  const { data: me } = useGetLoggedInUser();
 
   const reset = () => {
     setName("");
@@ -82,7 +85,14 @@ export function CreateOrgDialog({
         } as never,
       });
       toast({ title: "Organization created!" });
-      await qc.invalidateQueries({ queryKey: getListOrganizationsQueryKey() });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getListOrganizationsQueryKey() }),
+        me?.id
+          ? qc.invalidateQueries({
+              queryKey: getListUserOrganizationsQueryKey(me.id),
+            })
+          : Promise.resolve(),
+      ]);
       reset();
       onOpenChange(false);
       setLocation(`/organizations/${org.id}`);
