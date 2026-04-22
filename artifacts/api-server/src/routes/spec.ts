@@ -25,6 +25,7 @@ import {
 import {
   toPublicUser,
   toPrivateUser,
+  displayName,
   toOrganization,
   toMember,
   toTeam,
@@ -540,6 +541,209 @@ router.get(
       .where(eq(rosterInvites.teamId, req.params.teamId));
     const data = rows.map((r) => toInvite(r.i, r.u));
     res.json(paginate(data));
+  }),
+);
+
+// Add a known Kinectem user directly to the roster (in pending state by default).
+router.post(
+  "/teams/:teamId/members",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const teamId = req.params.teamId;
+    const userId = String(req.body?.userId ?? "");
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) return notFound(res);
+    const positionRaw = String(req.body?.position ?? "player");
+    const dbRole: "player" | "coach" =
+      positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
+    const [existing] = await db
+      .select()
+      .from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, userId)))
+      .limit(1);
+    let entry = existing;
+    if (!entry) {
+      [entry] = await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId,
+          role: dbRole,
+          status: "pending",
+          position: positionRaw === "coach" ? null : positionRaw,
+        })
+        .returning();
+      await db.insert(notifications).values({
+        userId,
+        kind: "roster_invite",
+        message: `${displayName(me)} added you to ${t.name}. Tap to accept or decline.`,
+        link: `/teams/${teamId}`,
+      });
+    }
+    res.status(201).json(toTeamMember(entry, u));
+  }),
+);
+
+router.delete(
+  "/teams/:teamId/members/:memberId",
+  asyncHandler(async (req, res) => {
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.id, req.params.memberId),
+          eq(rosterEntries.teamId, req.params.teamId),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/teams/:teamId/members/:memberId/accept",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.id, req.params.memberId),
+          eq(rosterEntries.teamId, req.params.teamId),
+        ),
+      )
+      .limit(1);
+    if (!entry) return notFound(res);
+    if (entry.userId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    const [updated] = await db
+      .update(rosterEntries)
+      .set({ status: "accepted" })
+      .where(eq(rosterEntries.id, entry.id))
+      .returning();
+    res.json(toTeamMember(updated, me));
+  }),
+);
+
+router.post(
+  "/teams/:teamId/members/:memberId/decline",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.id, req.params.memberId),
+          eq(rosterEntries.teamId, req.params.teamId),
+        ),
+      )
+      .limit(1);
+    if (!entry) return notFound(res);
+    if (entry.userId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
+    res.status(204).end();
+  }),
+);
+
+// Email invite — creates a pending rosterInvite with a token.
+router.post(
+  "/teams/:teamId/invites",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const teamId = req.params.teamId;
+    const email = String(req.body?.email ?? "").trim();
+    if (!email) return res.status(400).json({ error: "email required" });
+    const positionRaw = String(req.body?.position ?? "player");
+    const dbRole: "player" | "coach" =
+      positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
+    const token = `inv-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+    const [invite] = await db
+      .insert(rosterInvites)
+      .values({
+        token,
+        teamId,
+        invitedEmail: email,
+        invitedName: req.body?.name ?? null,
+        role: dbRole,
+        position: positionRaw === "coach" ? null : positionRaw,
+        invitedById: me.id,
+      })
+      .returning();
+    res.status(201).json(toInvite(invite, me));
+  }),
+);
+
+// Token-based invite lookup + acceptance for the email-link flow.
+router.get(
+  "/invites/:token",
+  asyncHandler(async (req, res) => {
+    const [row] = await db
+      .select({ i: rosterInvites, t: teams, org: organizations })
+      .from(rosterInvites)
+      .innerJoin(teams, eq(rosterInvites.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(rosterInvites.token, req.params.token))
+      .limit(1);
+    if (!row) return notFound(res);
+    res.json({
+      invite: toInvite(row.i, null),
+      team: { id: row.t.id, name: row.t.name },
+      organization: { id: row.org.id, name: row.org.name },
+    });
+  }),
+);
+
+router.post(
+  "/invites/:token/accept",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [invite] = await db
+      .select()
+      .from(rosterInvites)
+      .where(eq(rosterInvites.token, req.params.token))
+      .limit(1);
+    if (!invite) return notFound(res);
+    if (invite.status !== "pending")
+      return res.status(409).json({ error: "Invite no longer pending" });
+    const [entry] = await db
+      .insert(rosterEntries)
+      .values({
+        teamId: invite.teamId,
+        userId: me.id,
+        role: invite.role,
+        status: "accepted",
+        position: invite.position,
+      })
+      .returning();
+    await db
+      .update(rosterInvites)
+      .set({ status: "accepted" })
+      .where(eq(rosterInvites.id, invite.id));
+    res.status(201).json(toTeamMember(entry, me));
+  }),
+);
+
+// User search — returns up to 25 users matching name or email.
+router.get(
+  "/users",
+  asyncHandler(async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (q.length < 2) return res.json(paginate([]));
+    const like = `%${q}%`;
+    const rows = await db
+      .select()
+      .from(users)
+      .where(or(ilike(users.name, like), ilike(users.email, like)))
+      .limit(25);
+    res.json(paginate(rows.map((u) => toPublicUser(u))));
   }),
 );
 
