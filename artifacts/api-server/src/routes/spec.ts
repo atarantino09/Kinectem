@@ -8,6 +8,7 @@ import {
   rosterEntries,
   rosterInvites,
   articles,
+  articleAuthors,
   highlights,
   notifications,
 } from "@workspace/db";
@@ -895,6 +896,7 @@ router.post(
     }
     if (!teamId) return res.status(400).json({ error: "no team context available" });
     if (body.postType === "long") {
+      const isDraft = body.status === "draft";
       const [a] = await db
         .insert(articles)
         .values({
@@ -903,8 +905,8 @@ router.post(
           title: body.title ?? "Untitled",
           summary: body.description ?? undefined,
           body: body.body ?? "",
-          status: "published",
-          publishedAt: new Date(),
+          status: isDraft ? "draft" : "published",
+          publishedAt: isDraft ? null : new Date(),
         })
         .returning();
       const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -931,6 +933,204 @@ router.post(
       : [null];
     if (!team || !org) return notFound(res);
     res.status(201).json(highlightToPost(h, { team, org, author: me }));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Drafts & co-authors
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/drafts",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json(paginate([]));
+    const owned = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(eq(articles.status, "draft"), eq(articles.authorId, me.id)))
+      .orderBy(desc(articles.createdAt));
+    const coRows = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articleAuthors)
+      .innerJoin(articles, eq(articleAuthors.articleId, articles.id))
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(eq(articles.status, "draft"), eq(articleAuthors.userId, me.id)));
+    const seen = new Set<string>();
+    const all = [...owned, ...coRows].filter((r) => {
+      if (seen.has(r.a.id)) return false;
+      seen.add(r.a.id);
+      return true;
+    });
+    const data = all.map((r) =>
+      articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+router.patch(
+  "/posts/:postId",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed || parsed.kind !== "article") return notFound(res);
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (!a) return notFound(res);
+    const isAuthor = a.authorId === me.id;
+    const [coAuthor] = isAuthor
+      ? [null]
+      : await db
+          .select()
+          .from(articleAuthors)
+          .where(
+            and(
+              eq(articleAuthors.articleId, a.id),
+              eq(articleAuthors.userId, me.id),
+            ),
+          )
+          .limit(1);
+    if (!isAuthor && !coAuthor)
+      return res.status(403).json({ error: "Not an author" });
+    const body = req.body ?? {};
+    const updates: Record<string, unknown> = {};
+    if (typeof body.title === "string") updates["title"] = body.title;
+    if (typeof body.description === "string") updates["summary"] = body.description;
+    if (typeof body.body === "string") updates["body"] = body.body;
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ error: "no changes" });
+    const [updated] = await db
+      .update(articles)
+      .set(updates)
+      .where(eq(articles.id, a.id))
+      .returning();
+    const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
+    const [org] = team
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
+    const [author] = updated.authorId
+      ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
+      : [null];
+    if (!team || !org) return notFound(res);
+    res.json(articleToPost(updated, { team, org, author }));
+  }),
+);
+
+router.post(
+  "/posts/:postId/publish",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed || parsed.kind !== "article") return notFound(res);
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.authorId !== me.id)
+      return res.status(403).json({ error: "Only the author can publish" });
+    const [updated] = await db
+      .update(articles)
+      .set({ status: "published", publishedAt: new Date() })
+      .where(eq(articles.id, a.id))
+      .returning();
+    const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
+    const [org] = team
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
+    if (!team || !org) return notFound(res);
+    res.json(articleToPost(updated, { team, org, author: me }));
+  }),
+);
+
+router.get(
+  "/posts/:postId/co-authors",
+  asyncHandler(async (req, res) => {
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed || parsed.kind !== "article") return notFound(res);
+    const rows = await db
+      .select({ u: users })
+      .from(articleAuthors)
+      .innerJoin(users, eq(articleAuthors.userId, users.id))
+      .where(eq(articleAuthors.articleId, parsed.id));
+    res.json({
+      data: rows.map((r) => ({
+        id: r.u.id,
+        firstName: r.u.firstName,
+        lastName: r.u.lastName,
+        avatarUrl: r.u.avatarUrl,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/posts/:postId/co-authors",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed || parsed.kind !== "article") return notFound(res);
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.authorId !== me.id)
+      return res.status(403).json({ error: "Only the author can add co-authors" });
+    const userId = String(req.body?.userId ?? "");
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    await db
+      .insert(articleAuthors)
+      .values({ articleId: a.id, userId })
+      .onConflictDoNothing();
+    await db.insert(notifications).values({
+      userId,
+      kind: "mention",
+      message: `${me.firstName} ${me.lastName} added you as a co-author on "${a.title ?? "Untitled"}"`,
+      link: `/posts/${a.id}`,
+    });
+    res.status(201).json({ ok: true });
+  }),
+);
+
+router.delete(
+  "/posts/:postId/co-authors/:userId",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed || parsed.kind !== "article") return notFound(res);
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.authorId !== me.id && me.id !== req.params.userId)
+      return res.status(403).json({ error: "Forbidden" });
+    await db
+      .delete(articleAuthors)
+      .where(
+        and(
+          eq(articleAuthors.articleId, a.id),
+          eq(articleAuthors.userId, req.params.userId),
+        ),
+      );
+    res.status(204).end();
   }),
 );
 

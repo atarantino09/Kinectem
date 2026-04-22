@@ -6,7 +6,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat } from "lucide-react";
+import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -128,6 +128,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setLocation("/tags/pending")}>
                 <Tag className="w-4 h-4 mr-2" /> Pending Tags
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setLocation("/drafts")}
+                data-testid="menu-drafts"
+              >
+                <FileText className="w-4 h-4 mr-2" /> My Drafts
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

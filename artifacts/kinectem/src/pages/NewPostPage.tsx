@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
+  customFetch,
   useCreatePost,
   useGetLoggedInUser,
   useListUserOrganizations,
@@ -18,15 +19,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, FileText, Play } from "lucide-react";
+import { ArrowLeft, FileText, Play, Save, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+type DraftPayload = {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  body?: string | null;
+};
 
 export default function NewPostPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const params = new URLSearchParams(search);
-  const initialType =
-    params.get("type") === "short" ? "short" : "long";
+  const initialType = params.get("type") === "short" ? "short" : "long";
+  const initialDraftId = params.get("draftId");
   const { toast } = useToast();
 
   const [postType, setPostType] = useState<"short" | "long">(initialType);
@@ -34,6 +42,9 @@ export default function NewPostPage() {
   const [description, setDescription] = useState("");
   const [body, setBody] = useState("");
   const [orgId, setOrgId] = useState<string>("");
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const { data: me } = useGetLoggedInUser();
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
@@ -41,39 +52,129 @@ export default function NewPostPage() {
   });
   const createPost = useCreatePost();
 
+  // Load existing draft
+  useEffect(() => {
+    if (!initialDraftId) return;
+    customFetch<DraftPayload>(`/posts/${initialDraftId}`, { method: "GET" })
+      .then((d) => {
+        setTitle(d.title ?? "");
+        setDescription(d.description ?? "");
+        setBody(d.body ?? "");
+        setPostType("long");
+      })
+      .catch(() => {
+        toast({ title: "Couldn't load draft", variant: "destructive" });
+      });
+  }, [initialDraftId, toast]);
+
+  // Auto-save (debounced) when we already have a draft id
+  const debouncedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!draftId) return;
+    if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
+    debouncedRef.current = window.setTimeout(async () => {
+      try {
+        setSaving(true);
+        await customFetch(`/posts/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title || "Untitled",
+            description,
+            body,
+          }),
+        });
+        setSavedAt(new Date());
+      } catch {
+        // ignore
+      } finally {
+        setSaving(false);
+      }
+    }, 1200);
+    return () => {
+      if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
+    };
+  }, [title, description, body, draftId]);
+
   const isShort = postType === "short";
   const heading = isShort ? "New Highlight" : "New Game Recap";
   const Icon = isShort ? Play : FileText;
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const buildPayload = (status?: "draft"): CreatePostRequest => ({
+    postType,
+    title: title.trim() || undefined,
+    description: description.trim() || undefined,
+    body: !isShort && body.trim() ? body.trim() : undefined,
+    organizationId: orgId || undefined,
+    ...(status ? ({ status } as object) : {}),
+  });
+
+  const onPublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() && !description.trim()) {
-      toast({
-        title: "Add a title or description",
-        variant: "destructive",
-      });
+      toast({ title: "Add a title or description", variant: "destructive" });
       return;
     }
-    const payload: CreatePostRequest = {
-      postType,
-      title: title.trim() || undefined,
-      description: description.trim() || undefined,
-      body: !isShort && body.trim() ? body.trim() : undefined,
-      organizationId: orgId || undefined,
-    };
     try {
-      const result = await createPost.mutateAsync({ data: payload });
-      toast({ title: "Posted!" });
-      setLocation(`/posts/${result.id}`);
+      if (draftId) {
+        await customFetch(`/posts/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || "Untitled",
+            description,
+            body,
+          }),
+        });
+        await customFetch(`/posts/${draftId}/publish`, { method: "POST" });
+        toast({ title: "Published!" });
+        setLocation(`/posts/${draftId}`);
+      } else {
+        const result = await createPost.mutateAsync({ data: buildPayload() });
+        toast({ title: "Posted!" });
+        setLocation(`/posts/${result.id}`);
+      }
     } catch {
       toast({ title: "Failed to post", variant: "destructive" });
+    }
+  };
+
+  const onSaveDraft = async () => {
+    if (!title.trim() && !description.trim() && !body.trim()) {
+      toast({ title: "Nothing to save yet", variant: "destructive" });
+      return;
+    }
+    try {
+      setSaving(true);
+      if (draftId) {
+        await customFetch(`/posts/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || "Untitled",
+            description,
+            body,
+          }),
+        });
+      } else {
+        const result = await createPost.mutateAsync({
+          data: buildPayload("draft"),
+        });
+        setDraftId(result.id);
+      }
+      setSavedAt(new Date());
+      toast({ title: "Draft saved" });
+    } catch {
+      toast({ title: "Couldn't save draft", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="border-b border-border bg-card">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -84,55 +185,87 @@ export default function NewPostPage() {
           </Button>
           <div className="flex items-center gap-2 text-sm font-bold">
             <Icon className="w-4 h-4" />
-            {heading}
+            {draftId ? "Editing Draft" : heading}
           </div>
-          <Button
-            type="submit"
-            form="new-post-form"
-            disabled={createPost.isPending}
-            className="font-bold rounded-full"
-          >
-            {createPost.isPending ? "Posting…" : "Post"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {!isShort && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onSaveDraft}
+                disabled={saving}
+                className="font-bold rounded-full"
+                data-testid="button-save-draft"
+              >
+                <Save className="w-3.5 h-3.5 mr-1.5" />
+                {saving ? "Saving…" : "Save Draft"}
+              </Button>
+            )}
+            <Button
+              type="submit"
+              form="new-post-form"
+              disabled={createPost.isPending}
+              className="font-bold rounded-full"
+              data-testid="button-publish"
+            >
+              {createPost.isPending
+                ? "Posting…"
+                : draftId
+                  ? "Publish"
+                  : "Post"}
+            </Button>
+          </div>
         </div>
+        {draftId && savedAt && (
+          <div className="max-w-3xl mx-auto px-4 pb-2 text-[11px] text-muted-foreground flex items-center gap-1.5 font-semibold">
+            <Check className="w-3 h-3 text-emerald-600" />
+            Saved {savedAt.toLocaleTimeString()}
+          </div>
+        )}
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
         <Card className="rounded-xl border border-border shadow-sm">
           <CardContent className="p-6">
-            <form id="new-post-form" onSubmit={onSubmit} className="space-y-5">
-              <div>
-                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                  Post Type
-                </Label>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPostType("long")}
-                    className={`px-4 py-3 rounded-lg border-2 text-sm font-bold flex items-center justify-center gap-2 ${
-                      postType === "long"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-muted-foreground"
-                    }`}
-                  >
-                    <FileText className="w-4 h-4" /> Game Recap
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPostType("short")}
-                    className={`px-4 py-3 rounded-lg border-2 text-sm font-bold flex items-center justify-center gap-2 ${
-                      postType === "short"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-muted-foreground"
-                    }`}
-                  >
-                    <Play className="w-4 h-4" /> Highlight
-                  </button>
+            <form id="new-post-form" onSubmit={onPublish} className="space-y-5">
+              {!draftId && (
+                <div>
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Post Type
+                  </Label>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPostType("long")}
+                      className={`px-4 py-3 rounded-lg border-2 text-sm font-bold flex items-center justify-center gap-2 ${
+                        postType === "long"
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border text-muted-foreground"
+                      }`}
+                    >
+                      <FileText className="w-4 h-4" /> Game Recap
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPostType("short")}
+                      className={`px-4 py-3 rounded-lg border-2 text-sm font-bold flex items-center justify-center gap-2 ${
+                        postType === "short"
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border text-muted-foreground"
+                      }`}
+                    >
+                      <Play className="w-4 h-4" /> Highlight
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
-                <Label htmlFor="title" className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                <Label
+                  htmlFor="title"
+                  className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+                >
                   Title
                 </Label>
                 <Input
@@ -146,11 +279,15 @@ export default function NewPostPage() {
                   }
                   className="mt-2 text-lg font-bold"
                   maxLength={200}
+                  data-testid="input-title"
                 />
               </div>
 
               <div>
-                <Label htmlFor="description" className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                <Label
+                  htmlFor="description"
+                  className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+                >
                   Description
                 </Label>
                 <Textarea
@@ -160,12 +297,16 @@ export default function NewPostPage() {
                   placeholder="A short summary..."
                   className="mt-2"
                   rows={3}
+                  data-testid="input-description"
                 />
               </div>
 
               {!isShort && (
                 <div>
-                  <Label htmlFor="body" className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  <Label
+                    htmlFor="body"
+                    className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+                  >
                     Recap
                   </Label>
                   <Textarea
@@ -174,11 +315,12 @@ export default function NewPostPage() {
                     onChange={(e) => setBody(e.target.value)}
                     placeholder="Tell the story of the game..."
                     className="mt-2 min-h-[260px]"
+                    data-testid="input-body"
                   />
                 </div>
               )}
 
-              {myOrgs && myOrgs.data.length > 0 && (
+              {!draftId && myOrgs && myOrgs.data.length > 0 && (
                 <div>
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                     Post On Behalf Of
@@ -200,7 +342,137 @@ export default function NewPostPage() {
             </form>
           </CardContent>
         </Card>
+
+        {draftId && (
+          <CoAuthorsSection postId={draftId} myId={me?.id ?? ""} />
+        )}
       </main>
     </div>
+  );
+}
+
+function CoAuthorsSection({ postId, myId }: { postId: string; myId: string }) {
+  const { toast } = useToast();
+  const [coAuthors, setCoAuthors] = useState<
+    { id: string; firstName: string; lastName: string }[]
+  >([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<
+    { id: string; displayName: string }[]
+  >([]);
+
+  const refresh = () =>
+    customFetch<{ data: typeof coAuthors }>(`/posts/${postId}/co-authors`, {
+      method: "GET",
+    }).then((res) => setCoAuthors(res.data ?? []));
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId]);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      customFetch<{ data: typeof results }>(
+        `/users?q=${encodeURIComponent(query.trim())}`,
+        { method: "GET" },
+      )
+        .then((res) => setResults(res.data ?? []))
+        .catch(() => setResults([]));
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  const add = async (userId: string) => {
+    try {
+      await customFetch(`/posts/${postId}/co-authors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      setQuery("");
+      setResults([]);
+      await refresh();
+      toast({ title: "Co-author added" });
+    } catch {
+      toast({ title: "Couldn't add co-author", variant: "destructive" });
+    }
+  };
+
+  const remove = async (userId: string) => {
+    try {
+      await customFetch(`/posts/${postId}/co-authors/${userId}`, {
+        method: "DELETE",
+      });
+      await refresh();
+    } catch {
+      toast({ title: "Couldn't remove", variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card className="mt-6 rounded-xl border border-border shadow-sm">
+      <CardContent className="p-6">
+        <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">
+          Co-authors
+        </h3>
+        {coAuthors.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">
+            No co-authors yet.
+          </p>
+        ) : (
+          <div className="space-y-2 mb-3">
+            {coAuthors.map((u) => (
+              <div
+                key={u.id}
+                className="flex items-center justify-between gap-2 p-2 rounded-md border border-border bg-muted/30"
+              >
+                <span className="text-sm font-bold">
+                  {u.firstName} {u.lastName}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => remove(u.id)}
+                  className="h-7 px-2 text-xs"
+                  data-testid={`button-remove-coauthor-${u.id}`}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search teammates to add as co-author..."
+            data-testid="input-search-coauthor"
+          />
+          {results.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-md z-10 max-h-56 overflow-y-auto">
+              {results
+                .filter((u) => u.id !== myId && !coAuthors.some((c) => c.id === u.id))
+                .map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => add(u.id)}
+                    className="w-full text-left p-2 hover:bg-muted text-sm font-semibold"
+                    data-testid={`button-add-coauthor-${u.id}`}
+                  >
+                    {u.displayName}
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
