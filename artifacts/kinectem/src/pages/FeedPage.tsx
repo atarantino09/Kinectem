@@ -33,7 +33,7 @@ export default function FeedPage() {
     const map = new Map<string, { id: string; name: string }[]>();
     for (const t of myTeams?.data ?? []) {
       const arr = map.get(t.organization.id) ?? [];
-      arr.push({ id: t.id, name: t.name });
+      arr.push({ id: t.teamId, name: t.teamName });
       map.set(t.organization.id, arr);
     }
     return map;
