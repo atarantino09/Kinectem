@@ -19,12 +19,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getInitials } from "@/lib/format";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser } = useGetLoggedInUser();
   const { data: unreadMsgs } = useGetUnreadMessageCount();
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
+  const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const qc = useQueryClient();
 
   const handleLogout = async () => {
@@ -115,6 +117,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Plus className="w-4 h-4 mr-2" /> Highlight Clip
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => setCreateOrgOpen(true)}
+                data-testid="menu-create-org"
+              >
+                <Building2 className="w-4 h-4 mr-2" /> New Organization
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setLocation("/organizations")}>
                 <Building2 className="w-4 h-4 mr-2" /> Browse Orgs
               </DropdownMenuItem>
@@ -123,6 +131,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <CreateOrgDialog open={createOrgOpen} onOpenChange={setCreateOrgOpen} />
 
           <NotificationsBell />
 

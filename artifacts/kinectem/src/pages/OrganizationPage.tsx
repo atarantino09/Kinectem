@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import {
   useGetOrganizationById,
@@ -9,14 +10,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, ChevronRight } from "lucide-react";
+import { Building2, Users, ChevronRight, Plus } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
+import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params.orgId;
+  const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
   const { data: postsResp } = useListOrgPosts(orgId);
@@ -95,10 +98,27 @@ export default function OrganizationPage() {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-black tracking-tight">Teams</h2>
-          <span className="text-sm font-bold text-muted-foreground">
-            {teams.length} teams
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-bold text-muted-foreground">
+              {teams.length} teams
+            </span>
+            {(organization.role === "admin" || organization.role === "owner") && (
+              <Button
+                size="sm"
+                onClick={() => setCreateTeamOpen(true)}
+                className="font-bold rounded-full"
+                data-testid="btn-add-team"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add team
+              </Button>
+            )}
+          </div>
         </div>
+        <CreateTeamDialog
+          orgId={orgId}
+          open={createTeamOpen}
+          onOpenChange={setCreateTeamOpen}
+        />
         {teams.length === 0 ? (
           <Card className="rounded-xl border border-border">
             <CardContent className="p-8 text-center">
