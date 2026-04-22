@@ -80,7 +80,9 @@ export default function TeamPage() {
   const allMembers = membersResp?.data ?? [];
   const players = allMembers.filter((m) => m.position === "player");
   const staff = allMembers.filter((m) => m.position !== "player");
-  const invites = (invitesResp?.data ?? []).filter((i) => i.status === "pending");
+  const invites = (invitesResp?.data ?? []).filter(
+    (i) => i.status === "pending" && !!i.email,
+  );
 
   const isAdmin = org?.role === "owner" || org?.role === "admin";
   const seasonId = team.currentSeason?.id ?? team.id;
