@@ -1,11 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useGetLoggedInUser,
   useListOrganizations,
   useListFeed,
   useListUserOrganizations,
-  useListUserTeams,
+  useListOrgTeams,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,22 +22,9 @@ export default function FeedPage() {
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
     query: { enabled: !!me?.id } as never,
   });
-  const { data: myTeams } = useListUserTeams(me?.id ?? "", undefined, {
-    query: { enabled: !!me?.id } as never,
-  });
   const { data: orgs } = useListOrganizations();
   const { data: feed, isLoading: feedLoading } = useListFeed();
   const [openOrgId, setOpenOrgId] = useState<string | null>(null);
-
-  const teamsByOrg = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }[]>();
-    for (const t of myTeams?.data ?? []) {
-      const arr = map.get(t.organization.id) ?? [];
-      arr.push({ id: t.teamId, name: t.teamName });
-      map.set(t.organization.id, arr);
-    }
-    return map;
-  }, [myTeams]);
 
   const handleOrgClick = (orgId: string) => {
     if (openOrgId === orgId) {
@@ -93,60 +80,15 @@ export default function FeedPage() {
                 Your Organizations
               </h4>
               <div className="space-y-1">
-                {myOrgs.data.map((org) => {
-                  const teams = teamsByOrg.get(org.id) ?? [];
-                  const isOpen = openOrgId === org.id;
-                  return (
-                    <div key={org.id}>
-                      <button
-                        type="button"
-                        onClick={() => handleOrgClick(org.id)}
-                        data-testid={`button-org-${org.id}`}
-                        className="w-full flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer py-1.5 px-1 rounded-md hover:bg-muted/50 text-left"
-                        title={
-                          isOpen
-                            ? "Click again to open organization"
-                            : "Click to view teams"
-                        }
-                      >
-                        <ChevronRight
-                          className={`w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0 ${
-                            isOpen ? "rotate-90" : ""
-                          }`}
-                        />
-                        <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="truncate flex-1">{org.name}</span>
-                        {teams.length > 0 && (
-                          <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                            {teams.length}
-                          </span>
-                        )}
-                      </button>
-                      {isOpen && (
-                        <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
-                          {teams.length === 0 ? (
-                            <p className="text-xs text-muted-foreground py-1.5 italic">
-                              No teams yet
-                            </p>
-                          ) : (
-                            teams.map((t) => (
-                              <Link
-                                key={t.id}
-                                href={`/teams/${t.id}`}
-                                data-testid={`link-team-${t.id}`}
-                              >
-                                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer py-1.5 px-1.5 rounded-md hover:bg-muted/50">
-                                  <Users className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">{t.name}</span>
-                                </div>
-                              </Link>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {myOrgs.data.map((org) => (
+                  <OrgRow
+                    key={org.id}
+                    orgId={org.id}
+                    orgName={org.name}
+                    isOpen={openOrgId === org.id}
+                    onClick={() => handleOrgClick(org.id)}
+                  />
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -215,6 +157,77 @@ export default function FeedPage() {
           </Card>
         )}
       </aside>
+    </div>
+  );
+}
+
+function OrgRow({
+  orgId,
+  orgName,
+  isOpen,
+  onClick,
+}: {
+  orgId: string;
+  orgName: string;
+  isOpen: boolean;
+  onClick: () => void;
+}) {
+  const { data: teamsResp } = useListOrgTeams(orgId, undefined, {
+    query: { enabled: isOpen } as never,
+  });
+  const teams = teamsResp?.data ?? [];
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onClick}
+        data-testid={`button-org-${orgId}`}
+        className="w-full flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer py-1.5 px-1 rounded-md hover:bg-muted/50 text-left"
+        title={
+          isOpen
+            ? "Click again to open organization"
+            : "Click to view teams"
+        }
+      >
+        <ChevronRight
+          className={`w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0 ${
+            isOpen ? "rotate-90" : ""
+          }`}
+        />
+        <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <span className="truncate flex-1">{orgName}</span>
+        {isOpen && teams.length > 0 && (
+          <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+            {teams.length}
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
+          {teamsResp === undefined ? (
+            <p className="text-xs text-muted-foreground py-1.5 italic">
+              Loading…
+            </p>
+          ) : teams.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-1.5 italic">
+              No teams yet
+            </p>
+          ) : (
+            teams.map((t) => (
+              <Link
+                key={t.id}
+                href={`/teams/${t.id}`}
+                data-testid={`link-team-${t.id}`}
+              >
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer py-1.5 px-1.5 rounded-md hover:bg-muted/50">
+                  <Users className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{t.name}</span>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
