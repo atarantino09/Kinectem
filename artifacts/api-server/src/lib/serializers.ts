@@ -91,6 +91,8 @@ export function toArticle(
     snippet: a.summary ?? undefined,
     body: a.body,
     coverImageUrl: a.coverImageUrl ?? undefined,
+    videoUrl: a.videoUrl ?? undefined,
+    photoUrls: a.photoUrls ?? undefined,
     status: a.status,
     publishedAt: a.publishedAt ?? undefined,
     createdAt: a.createdAt,

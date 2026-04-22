@@ -1358,6 +1358,9 @@ router.post(
         : isAdmin
           ? "published"
           : "pending_approval";
+      const photoUrls: string[] = Array.isArray(body.photoUrls)
+        ? body.photoUrls.filter((u: unknown) => typeof u === "string")
+        : [];
       const [a] = await db
         .insert(articles)
         .values({
@@ -1366,6 +1369,9 @@ router.post(
           title: body.title ?? "Untitled",
           summary: body.description ?? undefined,
           body: body.body ?? "",
+          coverImageUrl: body.coverImageUrl ?? photoUrls[0] ?? null,
+          videoUrl: body.videoUrl ?? null,
+          photoUrls: photoUrls.length > 0 ? photoUrls : null,
           status,
           publishedAt: status === "published" ? new Date() : null,
         })
@@ -1467,6 +1473,15 @@ router.patch(
     if (typeof body.title === "string") updates["title"] = body.title;
     if (typeof body.description === "string") updates["summary"] = body.description;
     if (typeof body.body === "string") updates["body"] = body.body;
+    if (typeof body.coverImageUrl === "string" || body.coverImageUrl === null)
+      updates["coverImageUrl"] = body.coverImageUrl;
+    if (typeof body.videoUrl === "string" || body.videoUrl === null)
+      updates["videoUrl"] = body.videoUrl;
+    if (Array.isArray(body.photoUrls)) {
+      const arr = body.photoUrls.filter((u: unknown) => typeof u === "string");
+      updates["photoUrls"] = arr.length > 0 ? arr : null;
+      if (!("coverImageUrl" in updates)) updates["coverImageUrl"] = arr[0] ?? null;
+    }
     if (Object.keys(updates).length === 0)
       return res.status(400).json({ error: "no changes" });
     const [updated] = await db

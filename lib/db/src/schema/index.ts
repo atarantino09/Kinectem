@@ -104,6 +104,8 @@ export const articles = pgTable("articles", {
   summary: text("summary"),
   body: text("body").notNull().default(""),
   coverImageUrl: text("cover_image_url"),
+  videoUrl: text("video_url"),
+  photoUrls: text("photo_urls").array(),
   opponentName: text("opponent_name"),
   teamScore: integer("team_score"),
   opponentScore: integer("opponent_score"),

@@ -19,7 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, FileText, Play, Save, Check } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Play,
+  Save,
+  Check,
+  ImagePlus,
+  X,
+  Video,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type DraftPayload = {
@@ -40,27 +49,32 @@ export default function NewPostPage() {
 
   const [postType, setPostType] = useState<"short" | "long">(initialType);
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [body, setBody] = useState("");
   const [orgId, setOrgId] = useState<string>("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [videoUrl, setVideoUrl] = useState("");
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
 
   const { data: me } = useGetLoggedInUser();
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
-    query: { enabled: !!me?.id } as never,
+    query: { enabled: !!me?.id && !initialTeamId } as never,
   });
   const createPost = useCreatePost();
+  const lockedToTeam = !!initialTeamId;
 
   // Load existing draft
   useEffect(() => {
     if (!initialDraftId) return;
-    customFetch<DraftPayload>(`/posts/${initialDraftId}`, { method: "GET" })
+    customFetch<
+      DraftPayload & { videoUrl?: string | null; photoUrls?: string[] | null }
+    >(`/posts/${initialDraftId}`, { method: "GET" })
       .then((d) => {
         setTitle(d.title ?? "");
-        setDescription(d.description ?? "");
         setBody(d.body ?? "");
+        setVideoUrl(d.videoUrl ?? "");
+        setPhotos(Array.isArray(d.photoUrls) ? d.photoUrls : []);
         setPostType("long");
       })
       .catch(() => {
@@ -81,8 +95,9 @@ export default function NewPostPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: title || "Untitled",
-            description,
             body,
+            videoUrl: videoUrl || null,
+            photoUrls: photos,
           }),
         });
         setSavedAt(new Date());
@@ -95,7 +110,7 @@ export default function NewPostPage() {
     return () => {
       if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     };
-  }, [title, description, body, draftId]);
+  }, [title, body, videoUrl, photos, draftId]);
 
   const isShort = postType === "short";
   const heading = isShort ? "New Highlight" : "New Game Recap";
@@ -104,19 +119,22 @@ export default function NewPostPage() {
   const buildPayload = (status?: "draft"): CreatePostRequest => ({
     postType,
     title: title.trim() || undefined,
-    description: description.trim() || undefined,
     body: !isShort && body.trim() ? body.trim() : undefined,
     organizationId: orgId || undefined,
     ...(initialTeamId
       ? ({ context: { type: "team", id: initialTeamId } } as object)
       : {}),
+    ...(photos.length > 0
+      ? ({ photoUrls: photos, coverImageUrl: photos[0] } as object)
+      : {}),
+    ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
     ...(status ? ({ status } as object) : {}),
   });
 
   const onPublish = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() && !description.trim()) {
-      toast({ title: "Add a title or description", variant: "destructive" });
+    if (!title.trim()) {
+      toast({ title: "Add a title", variant: "destructive" });
       return;
     }
     try {
@@ -126,8 +144,9 @@ export default function NewPostPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: title.trim() || "Untitled",
-            description,
             body,
+            videoUrl: videoUrl || null,
+            photoUrls: photos,
           }),
         });
         await customFetch(`/posts/${draftId}/publish`, { method: "POST" });
@@ -144,7 +163,7 @@ export default function NewPostPage() {
   };
 
   const onSaveDraft = async () => {
-    if (!title.trim() && !description.trim() && !body.trim()) {
+    if (!title.trim() && !body.trim() && photos.length === 0 && !videoUrl.trim()) {
       toast({ title: "Nothing to save yet", variant: "destructive" });
       return;
     }
@@ -156,8 +175,9 @@ export default function NewPostPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: title.trim() || "Untitled",
-            description,
             body,
+            videoUrl: videoUrl || null,
+            photoUrls: photos,
           }),
         });
       } else {
@@ -233,7 +253,7 @@ export default function NewPostPage() {
         <Card className="rounded-xl border border-border shadow-sm">
           <CardContent className="p-6">
             <form id="new-post-form" onSubmit={onPublish} className="space-y-5">
-              {!draftId && (
+              {!draftId && !lockedToTeam && (
                 <div>
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                     Post Type
@@ -287,24 +307,6 @@ export default function NewPostPage() {
                 />
               </div>
 
-              <div>
-                <Label
-                  htmlFor="description"
-                  className="text-xs font-black uppercase tracking-widest text-muted-foreground"
-                >
-                  Description
-                </Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="A short summary..."
-                  className="mt-2"
-                  rows={3}
-                  data-testid="input-description"
-                />
-              </div>
-
               {!isShort && (
                 <div>
                   <Label
@@ -324,7 +326,14 @@ export default function NewPostPage() {
                 </div>
               )}
 
-              {!draftId && myOrgs && myOrgs.data.length > 0 && (
+              <MediaSection
+                photos={photos}
+                onPhotosChange={setPhotos}
+                videoUrl={videoUrl}
+                onVideoUrlChange={setVideoUrl}
+              />
+
+              {!draftId && !lockedToTeam && myOrgs && myOrgs.data.length > 0 && (
                 <div>
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                     Post On Behalf Of
@@ -478,5 +487,128 @@ function CoAuthorsSection({ postId, myId }: { postId: string; myId: string }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function MediaSection({
+  photos,
+  onPhotosChange,
+  videoUrl,
+  onVideoUrlChange,
+}: {
+  photos: string[];
+  onPhotosChange: (next: string[]) => void;
+  videoUrl: string;
+  onVideoUrlChange: (next: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const onFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const readers = Array.from(files)
+      .filter((f) => f.type.startsWith("image/"))
+      .map(
+        (f) =>
+          new Promise<string>((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result));
+            r.onerror = reject;
+            r.readAsDataURL(f);
+          }),
+      );
+    const next = await Promise.all(readers);
+    onPhotosChange([...photos, ...next]);
+  };
+
+  const removeAt = (idx: number) => {
+    onPhotosChange(photos.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="space-y-4 pt-2 border-t border-border">
+      <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+        Media
+      </Label>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold flex items-center gap-1.5">
+            <ImagePlus className="w-4 h-4" /> Photos
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="font-bold rounded-full"
+            onClick={() => inputRef.current?.click()}
+            data-testid="button-add-photos"
+          >
+            <ImagePlus className="w-3.5 h-3.5 mr-1.5" /> Add Photos
+          </Button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              onFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        {photos.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            No photos yet. The first photo becomes the cover image.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map((src, i) => (
+              <div
+                key={i}
+                className="relative rounded-lg overflow-hidden border border-border aspect-square bg-muted"
+              >
+                <img
+                  src={src}
+                  alt={`Photo ${i + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {i === 0 && (
+                  <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded">
+                    Cover
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeAt(i)}
+                  className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-1"
+                  data-testid={`button-remove-photo-${i}`}
+                  aria-label="Remove photo"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <Label
+          htmlFor="videoUrl"
+          className="text-sm font-bold flex items-center gap-1.5"
+        >
+          <Video className="w-4 h-4" /> Video Highlight Link
+        </Label>
+        <Input
+          id="videoUrl"
+          value={videoUrl}
+          onChange={(e) => onVideoUrlChange(e.target.value)}
+          placeholder="Paste a YouTube, Vimeo, or other video link"
+          className="mt-2"
+          data-testid="input-video-url"
+        />
+      </div>
+    </div>
   );
 }
