@@ -28,10 +28,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper, Users } from "lucide-react";
+import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper, Users, Pencil } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/format";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
+import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { PostCard } from "@/components/PostCard";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -43,6 +44,7 @@ export default function TeamPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [expanded, setExpanded] = useState<"posts" | "roster" | "admin">(
     "posts",
@@ -256,9 +258,9 @@ export default function TeamPage() {
               </Badge>
             )}
           </div>
-          <div className="flex items-start gap-5 mb-3">
+          <div className="flex items-start gap-6 mb-3">
             <div className="relative shrink-0">
-              <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
+              <div className="w-36 h-36 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
                 {(team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl) ? (
                   <img
                     src={team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl || ""}
@@ -267,7 +269,7 @@ export default function TeamPage() {
                     data-testid="img-team-photo"
                   />
                 ) : (
-                  <span className="text-2xl font-black text-primary">
+                  <span className="text-5xl font-black text-primary">
                     {team.name.slice(0, 2).toUpperCase()}
                   </span>
                 )}
@@ -285,7 +287,7 @@ export default function TeamPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="absolute -bottom-2 left-1/2 -translate-x-1/2 h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
+                    className="absolute -bottom-3 left-1/2 -translate-x-1/2 h-7 px-3 text-xs font-bold rounded-full whitespace-nowrap"
                     onClick={onPickPhoto}
                     disabled={uploading}
                     data-testid="btn-upload-team-photo"
@@ -299,9 +301,25 @@ export default function TeamPage() {
                 </>
               )}
             </div>
-            <h1 className="text-4xl font-black tracking-tight leading-tight">
-              {team.name}
-            </h1>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-3 flex-wrap">
+                <h1 className="text-4xl font-black tracking-tight leading-tight">
+                  {team.name}
+                </h1>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-3 font-bold rounded-full mt-2"
+                    onClick={() => setEditOpen(true)}
+                    data-testid="btn-edit-team"
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    Edit
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {team.sport && (
@@ -556,6 +574,18 @@ export default function TeamPage() {
         seasonId={seasonId}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
+      />
+
+      <EditTeamDialog
+        team={{
+          id: team.id,
+          name: team.name,
+          description: team.description,
+          sport: team.sport,
+          level: team.level,
+        }}
+        open={editOpen}
+        onOpenChange={setEditOpen}
       />
 
     </div>

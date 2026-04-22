@@ -804,6 +804,7 @@ router.patch(
     if (typeof body.name === "string") patch.name = body.name.trim();
     if (typeof body.sport === "string") patch.sport = body.sport;
     if (typeof body.level === "string") patch.level = body.level;
+    if (typeof body.description === "string") patch.description = body.description;
     if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
     if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
     if (Object.keys(patch).length === 0) {

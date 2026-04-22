@@ -146,21 +146,38 @@ export default function OrganizationPage() {
               <Link key={team.id} href={`/teams/${team.id}`}>
                 <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
                   <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      {team.sport && (
-                        <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider">
-                          {team.sport}
-                        </Badge>
-                      )}
-                      {team.level && (
-                        <span className="text-xs font-bold text-muted-foreground">
-                          {team.level}
-                        </span>
-                      )}
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center shrink-0">
+                        {team.avatarUrl ? (
+                          <img
+                            src={team.avatarUrl}
+                            alt={team.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-2xl font-black text-primary">
+                            {team.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start mb-1.5 gap-2 flex-wrap">
+                          {team.sport && (
+                            <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider">
+                              {team.sport}
+                            </Badge>
+                          )}
+                          {team.level && (
+                            <span className="text-xs font-bold text-muted-foreground">
+                              {team.level}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-bold text-base group-hover:text-primary transition-colors">
+                          {team.name}
+                        </h3>
+                      </div>
                     </div>
-                    <h3 className="font-bold text-base mb-2 group-hover:text-primary transition-colors">
-                      {team.name}
-                    </h3>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         <Users className="w-3.5 h-3.5" />{" "}
