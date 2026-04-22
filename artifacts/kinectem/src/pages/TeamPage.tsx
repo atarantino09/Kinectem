@@ -44,6 +44,9 @@ export default function TeamPage() {
   const { toast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [expanded, setExpanded] = useState<"posts" | "roster" | "admin">(
+    "posts",
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: team, isLoading } = useGetTeamById(teamId);
@@ -312,44 +315,39 @@ export default function TeamPage() {
                 {team.level}
               </div>
             )}
-            <a
-              href="#roster"
-              className="font-bold text-foreground flex items-center gap-1.5 bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-md text-sm cursor-pointer"
-              data-testid="link-roster-summary"
-            >
-              <Users className="w-4 h-4 text-primary" />
-              {players.length} Players
-              {staff.length > 0 && (
-                <span className="text-muted-foreground font-semibold">
-                  · {staff.length} Staff
-                </span>
-              )}
-            </a>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant={expanded === "posts" ? "default" : "outline"}
+                className="font-bold rounded-full"
+                onClick={() => setExpanded("posts")}
+                data-testid="btn-toggle-posts"
+              >
+                <Newspaper className="w-3.5 h-3.5 mr-1.5" />
+                Recent Posts
+              </Button>
+              <Button
+                size="sm"
+                variant={expanded === "roster" ? "default" : "outline"}
+                className="font-bold rounded-full"
+                onClick={() => setExpanded("roster")}
+                data-testid="btn-toggle-roster"
+              >
+                <Users className="w-3.5 h-3.5 mr-1.5" />
+                Roster ({players.length}
+                {staff.length > 0 ? ` · ${staff.length}` : ""})
+              </Button>
               {isAdmin && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="font-bold rounded-full"
-                    onClick={() => setInviteOpen(true)}
-                    data-testid="btn-header-invite"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                    Invite
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="font-bold rounded-full"
-                    asChild
-                  >
-                    <a href="#admin-tools" data-testid="btn-header-admin-tools">
-                      <Shield className="w-3.5 h-3.5 mr-1.5" />
-                      Admin Tools
-                    </a>
-                  </Button>
-                </>
+                <Button
+                  size="sm"
+                  variant={expanded === "admin" ? "default" : "outline"}
+                  className="font-bold rounded-full"
+                  onClick={() => setExpanded("admin")}
+                  data-testid="btn-toggle-admin"
+                >
+                  <Shield className="w-3.5 h-3.5 mr-1.5" />
+                  Admin Tools
+                </Button>
               )}
               <Button className="bg-primary text-primary-foreground font-bold rounded-full px-5">
                 {team.isFollowing ? "Following" : "Follow"} ({team.followerCount})
@@ -364,6 +362,7 @@ export default function TeamPage() {
         </CardContent>
       </Card>
 
+      {expanded === "posts" && (
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
@@ -402,8 +401,10 @@ export default function TeamPage() {
           </div>
         )}
       </section>
+      )}
 
-      <Tabs defaultValue="roster" id="roster">
+      {expanded === "roster" && (
+      <Tabs defaultValue="roster">
         <TabsList>
           <TabsTrigger value="roster" className="font-bold">
             Roster
@@ -544,6 +545,11 @@ export default function TeamPage() {
           </TabsContent>
         )}
       </Tabs>
+      )}
+
+      {expanded === "admin" && isAdmin && (
+        <TeamAdminPanel teamId={teamId} />
+      )}
 
       <InviteRosterDialog
         teamId={teamId}
@@ -552,11 +558,6 @@ export default function TeamPage() {
         onOpenChange={setInviteOpen}
       />
 
-      {isAdmin && (
-        <div id="admin-tools" className="scroll-mt-20">
-          <TeamAdminPanel teamId={teamId} />
-        </div>
-      )}
     </div>
   );
 }
