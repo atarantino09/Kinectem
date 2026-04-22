@@ -540,6 +540,40 @@ router.get(
 );
 
 router.get(
+  "/teams/:teamId/posts",
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(eq(articles.status, "published"), eq(articles.teamId, req.params.teamId)))
+      .orderBy(desc(articles.createdAt))
+      .limit(20);
+    const articleData = rows.map((r) =>
+      articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
+    );
+    const hRows = await db
+      .select({ h: highlights, team: teams, org: organizations, author: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(eq(highlights.teamId, req.params.teamId))
+      .orderBy(desc(highlights.createdAt))
+      .limit(20);
+    const highlightData = hRows.map((r) =>
+      highlightToPost(r.h, { team: r.team, org: r.org, author: r.author }),
+    );
+    const merged = [...articleData, ...highlightData].sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : -1,
+    );
+    res.json(paginate(merged.slice(0, 20)));
+  }),
+);
+
+router.get(
   "/organizations/:orgId/posts",
   asyncHandler(async (req, res) => {
     const teamIds = (

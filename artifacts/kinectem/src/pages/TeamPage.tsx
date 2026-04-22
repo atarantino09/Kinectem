@@ -28,11 +28,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Shield, Trophy, UserPlus, X, Check, Mail } from "lucide-react";
+import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/format";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
+import { PostCard } from "@/components/PostCard";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import type { PostResponse } from "@workspace/api-client-react";
 
 export default function TeamPage() {
   const params = useParams<{ teamId: string }>();
@@ -68,6 +71,12 @@ export default function TeamPage() {
     mutation: { onSuccess: () => invalidate() },
   });
 
+  const { data: postsResp } = useQuery<{ data: PostResponse[] }>({
+    queryKey: ["team-posts", teamId],
+    queryFn: () => customFetch(`/api/v1/teams/${teamId}/posts`),
+    enabled: !!teamId,
+  });
+
   if (isLoading || !team) {
     return (
       <div className="space-y-4">
@@ -86,6 +95,7 @@ export default function TeamPage() {
 
   const isAdmin = org?.role === "owner" || org?.role === "admin";
   const seasonId = team.currentSeason?.id ?? team.id;
+  const recentPosts = postsResp?.data ?? [];
 
   const onRemove = async (memberId: string, name: string) => {
     if (!confirm(`Remove ${name} from the roster?`)) return;
@@ -315,6 +325,45 @@ export default function TeamPage() {
           )}
         </CardContent>
       </Card>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+            <Newspaper className="w-5 h-5" />
+            Recent Posts
+          </h2>
+          {isAdmin && (
+            <Link href={`/posts/new?type=long&teamId=${teamId}`}>
+              <Button
+                size="sm"
+                className="font-bold rounded-full"
+                data-testid="btn-create-recap"
+              >
+                <FileText className="w-3.5 h-3.5 mr-1.5" />
+                Create Game Recap
+              </Button>
+            </Link>
+          )}
+        </div>
+        {recentPosts.length === 0 ? (
+          <Card className="rounded-xl border border-dashed border-border">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              No posts for this team yet.
+              {isAdmin && (
+                <span className="block mt-1">
+                  Be the first to write a game recap.
+                </span>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {recentPosts.slice(0, 5).map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
+          </div>
+        )}
+      </section>
 
       <Tabs defaultValue="roster">
         <TabsList>

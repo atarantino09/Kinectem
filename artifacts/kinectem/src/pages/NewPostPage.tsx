@@ -35,6 +35,7 @@ export default function NewPostPage() {
   const params = new URLSearchParams(search);
   const initialType = params.get("type") === "short" ? "short" : "long";
   const initialDraftId = params.get("draftId");
+  const initialTeamId = params.get("teamId");
   const { toast } = useToast();
 
   const [postType, setPostType] = useState<"short" | "long">(initialType);
@@ -106,6 +107,9 @@ export default function NewPostPage() {
     description: description.trim() || undefined,
     body: !isShort && body.trim() ? body.trim() : undefined,
     organizationId: orgId || undefined,
+    ...(initialTeamId
+      ? ({ context: { type: "team", id: initialTeamId } } as object)
+      : {}),
     ...(status ? ({ status } as object) : {}),
   });
 
