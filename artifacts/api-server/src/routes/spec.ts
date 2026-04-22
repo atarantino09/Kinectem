@@ -4,6 +4,7 @@ import {
   users,
   organizations,
   organizationAdmins,
+  organizationFollowers,
   teams,
   rosterEntries,
   rosterInvites,
@@ -290,14 +291,27 @@ router.get(
       .from(organizationAdmins)
       .innerJoin(organizations, eq(organizationAdmins.organizationId, organizations.id))
       .where(eq(organizationAdmins.userId, req.params.userId));
+    const followRows = await db
+      .select({ org: organizations })
+      .from(organizationFollowers)
+      .innerJoin(
+        organizations,
+        eq(organizationFollowers.organizationId, organizations.id),
+      )
+      .where(eq(organizationFollowers.userId, req.params.userId));
+    const followedIds = new Set(followRows.map((r) => r.org.id));
     const seen = new Set<string>();
-    const all = [...orgRows, ...adminRows].filter((r) => {
+    const all = [...orgRows, ...adminRows, ...followRows].filter((r) => {
       if (seen.has(r.org.id)) return false;
       seen.add(r.org.id);
       return true;
     });
     const data = all.map((r) =>
-      toOrganization(r.org, { isMember: true, role: "member" }),
+      toOrganization(r.org, {
+        isMember: true,
+        role: "member",
+        isFollowing: followedIds.has(r.org.id),
+      }),
     );
     res.json(paginate(data));
   }),
@@ -364,7 +378,13 @@ router.post(
       .insert(organizationAdmins)
       .values({ organizationId: org.id, userId: me.id })
       .onConflictDoNothing();
-    res.status(201).json(toOrganization(org, { isMember: true, role: "owner" }));
+    await db
+      .insert(organizationFollowers)
+      .values({ organizationId: org.id, userId: me.id })
+      .onConflictDoNothing();
+    res
+      .status(201)
+      .json(toOrganization(org, { isMember: true, role: "owner", isFollowing: true }));
   }),
 );
 
@@ -380,6 +400,7 @@ router.get(
     const me = await getOrFallbackUser(req);
     let role: "owner" | "admin" | "member" | null = null;
     let isMember = false;
+    let isFollowing = false;
     if (me) {
       const [admin] = await db
         .select()
@@ -395,8 +416,19 @@ router.get(
         role = org.createdById === me.id ? "owner" : "admin";
         isMember = true;
       }
+      const [follow] = await db
+        .select()
+        .from(organizationFollowers)
+        .where(
+          and(
+            eq(organizationFollowers.organizationId, org.id),
+            eq(organizationFollowers.userId, me.id),
+          ),
+        )
+        .limit(1);
+      isFollowing = !!follow;
     }
-    res.json(toOrganization(org, { isMember, role }));
+    res.json(toOrganization(org, { isMember, role, isFollowing }));
   }),
 );
 
@@ -471,8 +503,38 @@ router.post("/organizations/:orgId/join-requests/:id/approve", (_req, res) => re
 router.post("/organizations/:orgId/join-requests/:id/decline", (_req, res) => res.json({ status: "declined" }));
 router.post("/organizations/:orgId/post-approvals/:id/approve", (_req, res) => res.json({ status: "approved" }));
 router.post("/organizations/:orgId/post-approvals/:id/decline", (_req, res) => res.json({ status: "declined" }));
-router.post("/organizations/:orgId/follow", (_req, res) => res.json({ followerId: "me", orgId: _req.params.orgId, createdAt: new Date().toISOString() }));
-router.delete("/organizations/:orgId/follow", (_req, res) => res.status(204).end());
+router.post(
+  "/organizations/:orgId/follow",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    await db
+      .insert(organizationFollowers)
+      .values({ organizationId: req.params.orgId, userId: me.id })
+      .onConflictDoNothing();
+    res.json({
+      followerId: me.id,
+      orgId: req.params.orgId,
+      createdAt: new Date().toISOString(),
+    });
+  }),
+);
+router.delete(
+  "/organizations/:orgId/follow",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    await db
+      .delete(organizationFollowers)
+      .where(
+        and(
+          eq(organizationFollowers.organizationId, req.params.orgId),
+          eq(organizationFollowers.userId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
 router.get("/organizations/:orgId/privacy", (_req, res) =>
   res.json({ orgId: _req.params.orgId, settings: {} }),
 );

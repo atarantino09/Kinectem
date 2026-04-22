@@ -116,7 +116,11 @@ export function toPostAuthor(u: UserRow) {
 
 export function toOrganization(
   o: OrgRow,
-  opts: { isMember?: boolean; role?: "owner" | "admin" | "member" | null } = {},
+  opts: {
+    isMember?: boolean;
+    role?: "owner" | "admin" | "member" | null;
+    isFollowing?: boolean;
+  } = {},
 ) {
   return {
     id: o.id,
@@ -128,6 +132,7 @@ export function toOrganization(
     state: o.state ?? null,
     isMember: opts.isMember ?? false,
     role: opts.role ?? null,
+    isFollowing: opts.isFollowing ?? false,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.createdAt.toISOString(),
   };

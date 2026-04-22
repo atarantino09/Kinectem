@@ -52,6 +52,12 @@ export const organizationAdmins = pgTable("organization_admins", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
 
+export const organizationFollowers = pgTable("organization_followers", {
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
+
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
