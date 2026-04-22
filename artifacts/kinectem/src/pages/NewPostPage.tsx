@@ -352,6 +352,34 @@ export default function NewPostPage() {
                   </Select>
                 </div>
               )}
+
+              <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
+                {!isShort && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onSaveDraft}
+                    disabled={saving}
+                    className="font-bold rounded-full"
+                    data-testid="button-save-draft-bottom"
+                  >
+                    <Save className="w-4 h-4 mr-1.5" />
+                    {saving ? "Saving…" : "Save Draft"}
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  disabled={createPost.isPending}
+                  className="font-bold rounded-full"
+                  data-testid="button-publish-bottom"
+                >
+                  {createPost.isPending
+                    ? "Posting…"
+                    : draftId
+                      ? "Publish"
+                      : "Post"}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
