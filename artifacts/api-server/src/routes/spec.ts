@@ -366,19 +366,27 @@ router.get(
       )
       .where(eq(organizationFollowers.userId, req.params.userId));
     const followedIds = new Set(followRows.map((r) => r.org.id));
+    const adminOrgIds = new Set(adminRows.map((r) => r.org.id));
     const seen = new Set<string>();
     const all = [...orgRows, ...adminRows, ...followRows].filter((r) => {
       if (seen.has(r.org.id)) return false;
       seen.add(r.org.id);
       return true;
     });
-    const data = all.map((r) =>
-      toOrganization(r.org, {
+    const data = all.map((r) => {
+      const isAdmin = adminOrgIds.has(r.org.id);
+      const isOwner = r.org.createdById === req.params.userId;
+      const role: "owner" | "admin" | "member" = isOwner
+        ? "owner"
+        : isAdmin
+          ? "admin"
+          : "member";
+      return toOrganization(r.org, {
         isMember: true,
-        role: "member",
+        role,
         isFollowing: followedIds.has(r.org.id),
-      }),
-    );
+      });
+    });
     res.json(paginate(data));
   }),
 );
