@@ -166,7 +166,7 @@ export function toTeam(
     organization: toOrganizationEmbed(org),
     name: t.name,
     slug: slugify(t.name),
-    description: null as string | null,
+    description: t.description ?? null,
     sport: t.sport ?? null,
     level: t.level ?? null,
     avatarUrl: t.logoUrl ?? null,
