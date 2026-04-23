@@ -2,6 +2,7 @@ import { afterAll, beforeEach } from "vitest";
 import { sql } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import { seedIfEmpty } from "../src/lib/seed";
+import { resetAllRateLimits } from "../src/middlewares/rate-limit";
 
 const ALL_TABLES = [
   "article_tags",
@@ -21,6 +22,7 @@ const ALL_TABLES = [
 ];
 
 beforeEach(async () => {
+  resetAllRateLimits();
   await db.execute(
     sql.raw(
       `TRUNCATE TABLE ${ALL_TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`,

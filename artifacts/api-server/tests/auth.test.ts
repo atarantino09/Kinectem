@@ -309,4 +309,54 @@ describe("auth", () => {
   it("uses the documented demo password for seeded users", () => {
     expect(DEMO_PASSWORD).toBeTruthy();
   });
+
+  it("rate-limits repeated failed login attempts for the same email", async () => {
+    const users = await listSeedUsers();
+    const someone = users.find((u) => u.email)!;
+    for (let i = 0; i < 5; i++) {
+      const r = await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: someone.email, password: "wrong-password" });
+      expect(r.status).toBe(401);
+    }
+    const limited = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: someone.email, password: "wrong-password" });
+    expect(limited.status).toBe(429);
+    expect(limited.body.error).toMatch(/too many/i);
+    expect(limited.headers["retry-after"]).toBeDefined();
+  });
+
+  it("does not count successful logins against the limit", async () => {
+    const { user } = await loginAs((u) => u.role === "athlete");
+    // Repeated successful logins should not trigger the limiter.
+    for (let i = 0; i < 7; i++) {
+      const r = await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: user.email, password: DEMO_PASSWORD });
+      expect(r.status).toBe(200);
+    }
+  });
+
+  it("rate-limits password reset requests for the same email", async () => {
+    const email = `reset-throttle-${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      firstName: "Throttle",
+      lastName: "Me",
+      role: "athlete",
+      email,
+      password: "originalpass1",
+    });
+    for (let i = 0; i < 5; i++) {
+      const r = await request(app)
+        .post("/api/v1/auth/password-reset/request")
+        .send({ email });
+      expect(r.status).toBe(200);
+    }
+    const limited = await request(app)
+      .post("/api/v1/auth/password-reset/request")
+      .send({ email });
+    expect(limited.status).toBe(429);
+    expect(limited.body.error).toMatch(/too many/i);
+  });
 });

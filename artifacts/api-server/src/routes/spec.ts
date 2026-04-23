@@ -26,6 +26,7 @@ import {
 } from "@workspace/db";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
+import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import {
@@ -295,8 +296,50 @@ const GuardianResendBody = z.object({
 });
 const GUARDIAN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
+
+const loginLimiter = rateLimit({
+  name: "auth-login",
+  windowMs: FIFTEEN_MINUTES,
+  max: 5,
+  keys: (req) => [ipKey(req), emailKey(req)],
+  skipSuccessfulRequests: true,
+  message:
+    "Too many login attempts. Please wait a few minutes before trying again.",
+});
+
+const signupLimiter = rateLimit({
+  name: "auth-signup",
+  windowMs: ONE_HOUR,
+  max: 10,
+  keys: (req) => [ipKey(req)],
+  message:
+    "Too many signup attempts from this network. Please wait a while before trying again.",
+});
+
+const passwordResetRequestLimiter = rateLimit({
+  name: "auth-password-reset-request",
+  windowMs: ONE_HOUR,
+  max: 5,
+  keys: (req) => [ipKey(req), emailKey(req)],
+  message:
+    "Too many password reset requests. Please wait before requesting another link.",
+});
+
+const passwordResetCompleteLimiter = rateLimit({
+  name: "auth-password-reset-complete",
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+  keys: (req) => [ipKey(req)],
+  skipSuccessfulRequests: true,
+  message:
+    "Too many password reset attempts. Please wait before trying again.",
+});
+
 router.post(
   "/auth/login",
+  loginLimiter,
   asyncHandler(async (req, res) => {
     const body = LoginBody.parse(req.body);
     const [user] = await db
@@ -334,6 +377,7 @@ router.post(
 
 router.post(
   "/auth/signup",
+  signupLimiter,
   asyncHandler(async (req, res) => {
     const body = SignupBody.parse(req.body);
     const dob = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
@@ -415,6 +459,7 @@ router.post(
 
 router.post(
   "/auth/password-reset/request",
+  passwordResetRequestLimiter,
   asyncHandler(async (req, res) => {
     const body = PasswordResetRequestBody.parse(req.body);
     const email = body.email.toLowerCase();
@@ -440,6 +485,7 @@ router.post(
 
 router.post(
   "/auth/password-reset/complete",
+  passwordResetCompleteLimiter,
   asyncHandler(async (req, res) => {
     const body = PasswordResetCompleteBody.parse(req.body);
     const tokenHash = hashToken(body.token);
