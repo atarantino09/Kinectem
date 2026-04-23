@@ -6,6 +6,12 @@ export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
 export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);
 export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
+export const postKindEnum = pgEnum("post_kind", ["article", "highlight"]);
+export const reactionTypeEnum = pgEnum("reaction_type", ["like"]);
+export const conversationTypeEnum = pgEnum("conversation_type", ["direct", "user_to_org", "org_to_org"]);
+export const participantTypeEnum = pgEnum("participant_type", ["user", "organization"]);
+export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "approved", "declined", "withdrawn"]);
+export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "declined", "removed"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -140,14 +146,75 @@ export const articleTags = pgTable("article_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
   articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  taggerUserId: uuid("tagger_user_id").references(() => users.id, { onDelete: "set null" }),
+  status: tagStatusEnum("status").notNull().default("approved"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const highlightTags = pgTable("highlight_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
   highlightId: uuid("highlight_id").references(() => highlights.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  taggerUserId: uuid("tagger_user_id").references(() => users.id, { onDelete: "set null" }),
+  status: tagStatusEnum("status").notNull().default("approved"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const postReactions = pgTable("post_reactions", {
+  postKind: postKindEnum("post_kind").notNull(),
+  postRefId: uuid("post_ref_id").notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  reactionType: reactionTypeEnum("reaction_type").notNull().default("like"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.postKind, t.postRefId, t.userId] }) }));
+
+export const postComments = pgTable("post_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  postKind: postKindEnum("post_kind").notNull(),
+  postRefId: uuid("post_ref_id").notNull(),
+  authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  type: conversationTypeEnum("type").notNull().default("direct"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const conversationParticipants = pgTable("conversation_participants", {
+  conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
+  participantType: participantTypeEnum("participant_type").notNull(),
+  participantId: uuid("participant_id").notNull(),
+  lastReadAt: timestamp("last_read_at"),
+  leftAt: timestamp("left_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.conversationId, t.participantType, t.participantId] }) }));
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
+  senderUserId: uuid("sender_user_id").references(() => users.id, { onDelete: "set null" }),
+  senderOrgId: uuid("sender_org_id").references(() => organizations.id, { onDelete: "set null" }),
+  body: text("body"),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const organizationJoinRequests = pgTable("organization_join_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  status: joinRequestStatusEnum("status").notNull().default("pending"),
+  decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const notifications = pgTable("notifications", {

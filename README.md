@@ -35,7 +35,6 @@
   - [Tags & Consent](#tags--consent)
   - [Parents & Children](#parents--children)
   - [Search](#search)
-  - [Assets](#assets)
   - [Misc & Stubs](#misc--stubs)
 - [Contributing](#contributing)
 - [License](#license)
@@ -242,14 +241,6 @@ In the tables below, paths are relative to the `/api/v1` prefix unless they expl
 | `GET` | `/users/:userId/posts` | Public | Paginated published articles authored by the user. |
 | `GET` | `/users/:userId/organizations` | Public | Orgs the user is a member of, admin of, or follows. |
 | `GET` | `/users/:userId/teams` | Public | Roster entries for the user across all teams (team, org, role, position, status). |
-| `GET` | `/users/:userId/guardians` | Public | _Stub_: returns `{ data: [] }`. |
-| `GET` | `/users/:userId/children` | Public | _Stub_: returns `{ data: [] }`. |
-| `POST` | `/users/:userId/follow` | Public | _Stub_: returns a follow record. |
-| `DELETE` | `/users/:userId/follow` | Public | _Stub_: `204 No Content`. |
-| `GET` | `/users/:userId/followers` | Public | _Stub_: empty paginated list. |
-| `GET` | `/users/:userId/following` | Public | _Stub_: empty paginated list. |
-| `GET` | `/users/:userId/privacy` | Public | _Stub_: returns `{ userId, settings: {} }`. |
-| `GET` | `/users/:userId/sports` | Public | _Stub_: returns `{ sports: [] }`. |
 
 ---
 
@@ -264,9 +255,11 @@ In the tables below, paths are relative to the `/api/v1` prefix unless they expl
 | `GET` | `/organizations/:orgId/teams` | Public | List teams in the organization with member counts. |
 | `POST` | `/organizations/:orgId/teams` | Public | Create a team. Body: `{ name, sport?, level?, season?: { name } }`. |
 | `GET` | `/organizations/:orgId/posts` | Public | Paginated published articles for any team in the org. |
-| `GET` | `/organizations/:orgId/join-requests` | Public | _Stub_: empty paginated list. |
-| `POST` | `/organizations/:orgId/join-requests/:id/approve` | Public | _Stub_: returns `{ status: "approved" }`. |
-| `POST` | `/organizations/:orgId/join-requests/:id/decline` | Public | _Stub_: returns `{ status: "declined" }`. |
+| `GET` | `/organizations/:orgId/join-requests` | Org admin | List pending join requests for the organization. |
+| `POST` | `/organizations/:orgId/join-requests` | Session | Create a join request. Body: `{ requestedRole?: "follower" \| "admin", message? }`. |
+| `POST` | `/organizations/:orgId/join-requests/:id/approve` | Org admin | Approve a join request and add the user as admin or follower based on `requestedRole`. |
+| `POST` | `/organizations/:orgId/join-requests/:id/decline` | Org admin | Decline a join request. |
+| `DELETE` | `/organizations/:orgId/join-requests/:id` | Requester | Withdraw a pending join request. `204 No Content`. |
 | `GET` | `/organizations/:orgId/post-approvals` | Org admin | List articles in the org awaiting approval. |
 | `POST` | `/organizations/:orgId/post-approvals/:id/approve` | Org admin | Approve a pending article (sets `published`, stamps `publishedAt`). |
 | `POST` | `/organizations/:orgId/post-approvals/:id/decline` | Org admin | Decline a pending article (returns it to `draft`). |
@@ -289,8 +282,6 @@ In the tables below, paths are relative to the `/api/v1` prefix unless they expl
 | `POST` | `/teams/:teamId/members/:memberId/decline` | Session (self) | Decline (delete) an own pending roster entry. `204 No Content`. |
 | `GET` | `/teams/:teamId/posts` | Public | Combined paginated feed of published articles + highlights for the team. |
 | `GET` | `/teams/:teamId/seasons` | Public | List seasons for the team (currently a single derived season). |
-| `POST` | `/teams/:teamId/follow` | Public | _Stub_: returns a follow record. |
-| `DELETE` | `/teams/:teamId/follow` | Public | _Stub_: `204 No Content`. |
 | `POST` | `/teams/:teamId/join-link` | Org admin | Create or reuse a shareable parent-onboarding invite token for the team. |
 
 ---
@@ -318,12 +309,12 @@ Posts are addressed by a prefixed id: `article-<uuid>` for long-form recaps and 
 | `POST` | `/posts` | Session | Create a post. Body: `{ postType: "long" \| "short", title?, description?, body?, coverImageUrl?, videoUrl?, photoUrls?, assets?, organizationId?, context? }`. Long posts route through `pending_approval` unless the author is an org admin. |
 | `PATCH` | `/posts/:postId` | Author or co-author | Edit an article post. Updatable: `title`, `description`, `body`, `coverImageUrl`, `videoUrl`, `photoUrls`. |
 | `POST` | `/posts/:postId/publish` | Author or co-author | Publish a draft. Org admins publish immediately; others move to `pending_approval`. |
-| `GET` | `/posts/:postId/comments` | Public | _Stub_: empty paginated list. |
-| `POST` | `/posts/:postId/comments` | Public | _Stub_: echoes the comment back. Body: `{ body }`. |
-| `DELETE` | `/posts/:postId/comments/:commentId` | Public | _Stub_: `204 No Content`. |
-| `POST` | `/posts/:postId/reactions` | Public | _Stub_: `204 No Content`. |
-| `DELETE` | `/posts/:postId/reactions` | Public | _Stub_: `204 No Content`. |
-| `GET` | `/posts/:postId/tags` | Public | _Stub_: empty paginated list. |
+| `GET` | `/posts/:postId/comments` | Public | Paginated comments on a post (newest first), with sender display info. |
+| `POST` | `/posts/:postId/comments` | Session | Add a comment. Body: `{ body }`. Increments `commentCount`. |
+| `DELETE` | `/posts/:postId/comments/:commentId` | Author or org admin | Delete a comment. `204 No Content`. |
+| `POST` | `/posts/:postId/reactions` | Session | Add or change a reaction. Body: `{ type: "like" \| "celebrate" \| "support" \| "insightful" }`. Idempotent per user. |
+| `DELETE` | `/posts/:postId/reactions` | Session | Remove the current user's reaction. `204 No Content`. |
+| `GET` | `/posts/:postId/tags` | Public | List approved tags (article or highlight) on a post with tagger and tagged-user info. |
 
 ---
 
@@ -353,18 +344,18 @@ Posts are addressed by a prefixed id: `article-<uuid>` for long-form recaps and 
 
 ### Conversations & Messages
 
-All conversation endpoints are currently stubs that return shaped placeholder data so the client can be developed against them.
+Direct conversations are persisted in the database. Each direct conversation is keyed by the (sorted) participant pair so opening a thread with the same recipient twice returns the same conversation.
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/conversations` | Public | _Stub_: empty paginated list. |
-| `GET` | `/conversations/unread-count` | Public | _Stub_: `{ unreadCount: 0 }`. |
-| `POST` | `/conversations` | Public | _Stub_: returns a synthesized conversation. Body: `{ recipientId }`. |
-| `GET` | `/conversations/:id` | Public | _Stub_: returns a synthesized conversation. |
-| `DELETE` | `/conversations/:id` | Public | _Stub_: `204 No Content`. |
-| `GET` | `/conversations/:id/messages` | Public | _Stub_: empty paginated list. |
-| `POST` | `/conversations/:id/messages` | Public | _Stub_: echoes the message. Body: `{ body }`. |
-| `POST` | `/conversations/:id/read` | Public | _Stub_: `204 No Content`. |
+| `GET` | `/conversations` | Session | Paginated list of the user's conversations with last-message preview and per-user unread count. |
+| `GET` | `/conversations/unread-count` | Session | `{ unreadCount }` aggregated across the user's conversations. |
+| `POST` | `/conversations` | Session | Open or fetch a direct conversation. Body: `{ recipientId, recipientType?: "user" }`. |
+| `GET` | `/conversations/:id` | Session (participant) | Get a single conversation. |
+| `DELETE` | `/conversations/:id` | Session (participant) | Leave the conversation (sets `leftAt`). `204 No Content`. |
+| `GET` | `/conversations/:id/messages` | Session (participant) | Paginated messages, newest last. |
+| `POST` | `/conversations/:id/messages` | Session (participant) | Send a message. Body: `{ body, assets? }`. |
+| `POST` | `/conversations/:id/read` | Session (participant) | Mark the conversation read up to now. `204 No Content`. |
 
 ---
 
@@ -372,14 +363,12 @@ All conversation endpoints are currently stubs that return shaped placeholder da
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/tags/pending` | Public | _Stub_: empty paginated list. |
-| `POST` | `/tags/:tagId/approve` | Public | _Stub_: `{ id, status: "approved" }`. |
-| `POST` | `/tags/:tagId/decline` | Public | _Stub_: `{ id, status: "declined" }`. |
-| `DELETE` | `/tags/:tagId` | Public | _Stub_: `204 No Content`. |
+| `GET` | `/tags/pending` | Session | Paginated tags pending the current user's approval (article + highlight tags where the user is the tagged subject and `status = "pending"`). |
+| `POST` | `/tags/:tagId/approve` | Session (tagged user) | Approve a pending tag. Returns `{ id, status: "approved" }`. |
+| `POST` | `/tags/:tagId/decline` | Session (tagged user) | Decline a pending tag (sets `status = "declined"`). |
+| `DELETE` | `/tags/:tagId` | Session (tagged user or tagger) | Remove a tag. `204 No Content`. |
 | `DELETE` | `/article-tags/:tagId` | Session (own tag) | Remove an article tag the user owns. `204 No Content`. |
 | `DELETE` | `/highlight-tags/:tagId` | Session (own tag) | Remove a highlight tag the user owns. `204 No Content`. |
-| `GET` | `/consent/status` | Public | _Stub_: `{ status: "none" }`. |
-| `POST` | `/consent/requests` | Public | _Stub_: `{ status: "pending" }`. |
 
 (See also [`/users/me/tags`](#current-user) and [`/users/me/tag-consent`](#current-user).)
 
@@ -399,34 +388,13 @@ See the [Current User](#current-user) section for the parent/child management en
 
 ---
 
-### Assets
-
-| Method | Path | Auth | Description |
-| --- | --- | --- | --- |
-| `POST` | `/assets/upload` | Public | _Stub_: returns `{ assetId, uploadUrl, expiresIn }`. |
-
----
-
 ### Misc & Stubs
 
-The following endpoints exist as forward-compatible stubs and do not yet persist state:
+The following endpoints still return shaped placeholder data and do not yet persist state:
 
-- `GET /organizations/:orgId/join-requests`, `POST .../approve`, `POST .../decline`
-- `GET /organizations/:orgId/privacy`
-- `POST /teams/:teamId/follow`, `DELETE /teams/:teamId/follow`
-- `GET /posts/:postId/comments`, `POST .../comments`, `DELETE .../comments/:commentId`
-- `POST /posts/:postId/reactions`, `DELETE /posts/:postId/reactions`
-- `GET /posts/:postId/tags`
-- `GET /tags/pending`, `POST /tags/:tagId/approve`, `POST /tags/:tagId/decline`, `DELETE /tags/:tagId`
-- `GET /conversations*` and `POST /conversations*` (entire group)
-- `GET /consent/status`, `POST /consent/requests`
-- `GET /users/:userId/guardians`, `GET /users/:userId/children`
-- `POST /users/:userId/follow`, `DELETE /users/:userId/follow`
-- `GET /users/:userId/followers`, `GET /users/:userId/following`
-- `GET /users/:userId/privacy`, `GET /users/:userId/sports`
-- `POST /assets/upload`
+- `GET /organizations/:orgId/privacy` — returns `{ orgId, settings: {} }`.
 
-These return realistically-shaped responses so that the web client can render against them while the backing implementation is built out.
+All other previously-stubbed endpoints (post comments and reactions, post tag listings, tag approval, conversations and messages, organization join requests) are now backed by real database tables. Endpoints that the web client did not use (legacy follow/follower stubs, `/users/:userId/guardians|children|privacy|sports`, `/teams/:teamId/follow`, `/assets/upload`, `/consent/*`) have been removed.
 
 ---
 

@@ -14,8 +14,14 @@ import {
   highlights,
   highlightTags,
   notifications,
+  postReactions,
+  postComments,
+  conversations,
+  conversationParticipants,
+  messages,
+  organizationJoinRequests,
 } from "@workspace/db";
-import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import {
@@ -50,7 +56,198 @@ import {
   parsePostId,
   articlePostId,
   highlightPostId,
+  toComment,
+  toConversation,
+  toMessage,
+  toJoinRequest,
 } from "../lib/spec-helpers";
+
+// ---------------------------------------------------------------------------
+// Post stats loader (reactions + comments aggregated for a set of posts)
+// ---------------------------------------------------------------------------
+
+interface PostStats {
+  reactionCount: number;
+  hasReacted: boolean;
+  commentCount: number;
+  recentReactorName: string | null;
+}
+
+function statsKey(kind: "article" | "highlight", refId: string): string {
+  return `${kind}:${refId}`;
+}
+
+async function loadPostStats(
+  meId: string | null,
+  items: Array<{ kind: "article" | "highlight"; refId: string }>,
+): Promise<Map<string, PostStats>> {
+  const map = new Map<string, PostStats>();
+  if (items.length === 0) return map;
+  for (const it of items) {
+    map.set(statsKey(it.kind, it.refId), {
+      reactionCount: 0,
+      hasReacted: false,
+      commentCount: 0,
+      recentReactorName: null,
+    });
+  }
+  const articleIds = items.filter((i) => i.kind === "article").map((i) => i.refId);
+  const highlightIds = items.filter((i) => i.kind === "highlight").map((i) => i.refId);
+
+  const tasks: Promise<unknown>[] = [];
+
+  // Reaction counts + hasReacted for current user
+  if (articleIds.length > 0) {
+    tasks.push(
+      (async () => {
+        const rows = await db
+          .select({
+            postRefId: postReactions.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postReactions)
+          .where(and(eq(postReactions.postKind, "article"), inArray(postReactions.postRefId, articleIds)))
+          .groupBy(postReactions.postRefId);
+        for (const r of rows) {
+          const k = statsKey("article", r.postRefId);
+          const s = map.get(k);
+          if (s) s.reactionCount = Number(r.count);
+        }
+        if (meId) {
+          const my = await db
+            .select({ postRefId: postReactions.postRefId })
+            .from(postReactions)
+            .where(
+              and(
+                eq(postReactions.postKind, "article"),
+                eq(postReactions.userId, meId),
+                inArray(postReactions.postRefId, articleIds),
+              ),
+            );
+          for (const r of my) {
+            const s = map.get(statsKey("article", r.postRefId));
+            if (s) s.hasReacted = true;
+          }
+        }
+        const recent = await db
+          .select({
+            postRefId: postReactions.postRefId,
+            createdAt: postReactions.createdAt,
+            name: users.name,
+          })
+          .from(postReactions)
+          .innerJoin(users, eq(postReactions.userId, users.id))
+          .where(and(eq(postReactions.postKind, "article"), inArray(postReactions.postRefId, articleIds)))
+          .orderBy(desc(postReactions.createdAt));
+        for (const r of recent) {
+          const s = map.get(statsKey("article", r.postRefId));
+          if (s && !s.recentReactorName) s.recentReactorName = r.name;
+        }
+        const cmts = await db
+          .select({
+            postRefId: postComments.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postComments)
+          .where(
+            and(
+              eq(postComments.postKind, "article"),
+              isNull(postComments.deletedAt),
+              inArray(postComments.postRefId, articleIds),
+            ),
+          )
+          .groupBy(postComments.postRefId);
+        for (const c of cmts) {
+          const s = map.get(statsKey("article", c.postRefId));
+          if (s) s.commentCount = Number(c.count);
+        }
+      })(),
+    );
+  }
+  if (highlightIds.length > 0) {
+    tasks.push(
+      (async () => {
+        const rows = await db
+          .select({
+            postRefId: postReactions.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postReactions)
+          .where(and(eq(postReactions.postKind, "highlight"), inArray(postReactions.postRefId, highlightIds)))
+          .groupBy(postReactions.postRefId);
+        for (const r of rows) {
+          const s = map.get(statsKey("highlight", r.postRefId));
+          if (s) s.reactionCount = Number(r.count);
+        }
+        if (meId) {
+          const my = await db
+            .select({ postRefId: postReactions.postRefId })
+            .from(postReactions)
+            .where(
+              and(
+                eq(postReactions.postKind, "highlight"),
+                eq(postReactions.userId, meId),
+                inArray(postReactions.postRefId, highlightIds),
+              ),
+            );
+          for (const r of my) {
+            const s = map.get(statsKey("highlight", r.postRefId));
+            if (s) s.hasReacted = true;
+          }
+        }
+        const recent = await db
+          .select({
+            postRefId: postReactions.postRefId,
+            createdAt: postReactions.createdAt,
+            name: users.name,
+          })
+          .from(postReactions)
+          .innerJoin(users, eq(postReactions.userId, users.id))
+          .where(and(eq(postReactions.postKind, "highlight"), inArray(postReactions.postRefId, highlightIds)))
+          .orderBy(desc(postReactions.createdAt));
+        for (const r of recent) {
+          const s = map.get(statsKey("highlight", r.postRefId));
+          if (s && !s.recentReactorName) s.recentReactorName = r.name;
+        }
+        const cmts = await db
+          .select({
+            postRefId: postComments.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postComments)
+          .where(
+            and(
+              eq(postComments.postKind, "highlight"),
+              isNull(postComments.deletedAt),
+              inArray(postComments.postRefId, highlightIds),
+            ),
+          )
+          .groupBy(postComments.postRefId);
+        for (const c of cmts) {
+          const s = map.get(statsKey("highlight", c.postRefId));
+          if (s) s.commentCount = Number(c.count);
+        }
+      })(),
+    );
+  }
+  await Promise.all(tasks);
+  return map;
+}
+
+function statsFor(
+  map: Map<string, PostStats>,
+  kind: "article" | "highlight",
+  refId: string,
+): PostStats {
+  return (
+    map.get(statsKey(kind, refId)) ?? {
+      reactionCount: 0,
+      hasReacted: false,
+      commentCount: 0,
+      recentReactorName: null,
+    }
+  );
+}
 
 const router: IRouter = Router();
 
@@ -642,10 +839,136 @@ router.get(
   }),
 );
 
-// Stub: org join requests, post approvals, follow, privacy
-router.get("/organizations/:orgId/join-requests", (_req, res) => res.json(paginate([])));
-router.post("/organizations/:orgId/join-requests/:id/approve", (_req, res) => res.json({ status: "approved" }));
-router.post("/organizations/:orgId/join-requests/:id/decline", (_req, res) => res.json({ status: "declined" }));
+// Org join requests
+router.get(
+  "/organizations/:orgId/join-requests",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const isAdmin = await canManageOrganization(me.id, req.params.orgId);
+    if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+    const status = (req.query.status as string | undefined) ?? "pending";
+    const validStatuses = ["pending", "approved", "declined", "withdrawn"] as const;
+    type JRStatus = (typeof validStatuses)[number];
+    const filterStatus: JRStatus = (validStatuses as readonly string[]).includes(status)
+      ? (status as JRStatus)
+      : "pending";
+    const rows = await db
+      .select({ r: organizationJoinRequests, u: users })
+      .from(organizationJoinRequests)
+      .leftJoin(users, eq(organizationJoinRequests.userId, users.id))
+      .where(
+        and(
+          eq(organizationJoinRequests.organizationId, req.params.orgId),
+          eq(organizationJoinRequests.status, filterStatus),
+        ),
+      )
+      .orderBy(desc(organizationJoinRequests.createdAt));
+    res.json(paginate(rows.map((r) => toJoinRequest(r.r, r.u))));
+  }),
+);
+
+router.post(
+  "/organizations/:orgId/join-requests",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [existing] = await db
+      .select()
+      .from(organizationJoinRequests)
+      .where(
+        and(
+          eq(organizationJoinRequests.organizationId, req.params.orgId),
+          eq(organizationJoinRequests.userId, me.id),
+          eq(organizationJoinRequests.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (existing) return res.status(200).json(toJoinRequest(existing, me));
+    const [r] = await db
+      .insert(organizationJoinRequests)
+      .values({ organizationId: req.params.orgId, userId: me.id, status: "pending" })
+      .returning();
+    res.status(201).json(toJoinRequest(r, me));
+  }),
+);
+
+async function decideJoinRequest(
+  req: Request,
+  res: Response,
+  decision: "approved" | "declined",
+) {
+  const me = await getOrFallbackUser(req);
+  if (!me) return res.status(401).json({ error: "Not authenticated" });
+  const isAdmin = await canManageOrganization(me.id, req.params.orgId);
+  if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+  const [r] = await db
+    .select()
+    .from(organizationJoinRequests)
+    .where(eq(organizationJoinRequests.id, req.params.requestId))
+    .limit(1);
+  if (!r || r.organizationId !== req.params.orgId) return notFound(res);
+  if (r.status !== "pending") return res.status(409).json({ error: `Request already ${r.status}` });
+  const [updated] = await db
+    .update(organizationJoinRequests)
+    .set({
+      status: decision,
+      decidedById: me.id,
+      decidedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationJoinRequests.id, r.id))
+    .returning();
+  if (decision === "approved") {
+    const role: "admin" | "member" =
+      req.body?.role === "admin" ? "admin" : "member";
+    if (role === "admin") {
+      await db
+        .insert(organizationAdmins)
+        .values({ organizationId: r.organizationId, userId: r.userId })
+        .onConflictDoNothing();
+    } else {
+      await db
+        .insert(organizationFollowers)
+        .values({ organizationId: r.organizationId, userId: r.userId })
+        .onConflictDoNothing();
+    }
+  }
+  const [u] = await db.select().from(users).where(eq(users.id, r.userId)).limit(1);
+  res.json(toJoinRequest(updated, u ?? null));
+}
+
+router.post(
+  "/organizations/:orgId/join-requests/:requestId/approve",
+  asyncHandler((req, res) => decideJoinRequest(req, res, "approved")),
+);
+router.post(
+  "/organizations/:orgId/join-requests/:requestId/decline",
+  asyncHandler((req, res) => decideJoinRequest(req, res, "declined")),
+);
+router.delete(
+  "/organizations/:orgId/join-requests/:requestId",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [r] = await db
+      .select()
+      .from(organizationJoinRequests)
+      .where(eq(organizationJoinRequests.id, req.params.requestId))
+      .limit(1);
+    if (!r || r.organizationId !== req.params.orgId) return notFound(res);
+    if (r.userId !== me.id)
+      return res.status(403).json({ error: "Only the requester can withdraw" });
+    if (r.status !== "pending")
+      return res.status(409).json({ error: `Request already ${r.status}` });
+    const [updated] = await db
+      .update(organizationJoinRequests)
+      .set({ status: "withdrawn", decidedAt: new Date(), updatedAt: new Date() })
+      .where(eq(organizationJoinRequests.id, r.id))
+      .returning();
+    res.json(toJoinRequest(updated, me));
+  }),
+);
 
 router.get(
   "/organizations/:orgId/post-approvals",
@@ -1301,18 +1624,14 @@ router.get(
   }),
 );
 
-router.post("/teams/:teamId/follow", (_req, res) =>
-  res.json({ followerId: "me", teamId: _req.params.teamId, createdAt: new Date().toISOString() }),
-);
-router.delete("/teams/:teamId/follow", (_req, res) => res.status(204).end());
-
 // ---------------------------------------------------------------------------
 // Posts
 // ---------------------------------------------------------------------------
 
 router.get(
   "/feed",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
     const arts = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
@@ -1330,12 +1649,26 @@ router.get(
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .orderBy(desc(highlights.createdAt))
       .limit(10);
+    const stats = await loadPostStats(me?.id ?? null, [
+      ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+    ]);
     const items = [
       ...arts.map((r) =>
-        articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
+        articleToPost(r.a, {
+          team: r.team,
+          org: r.org,
+          author: r.author,
+          ...statsFor(stats, "article", r.a.id),
+        }),
       ),
       ...hls.map((r) =>
-        highlightToPost(r.h, { team: r.team, org: r.org, author: r.uploader }),
+        highlightToPost(r.h, {
+          team: r.team,
+          org: r.org,
+          author: r.uploader,
+          ...statsFor(stats, "highlight", r.h.id),
+        }),
       ),
     ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     res.json(paginate(items));
@@ -1345,6 +1678,7 @@ router.get(
 router.get(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     if (parsed.kind === "article") {
@@ -1358,12 +1692,21 @@ router.get(
         .limit(1);
       if (!row) return notFound(res);
       if (row.a.status !== "published") {
-        const me = await getOrFallbackUser(req);
         const isAuthor = !!me && row.a.authorId === me.id;
         const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
         if (!isAuthor && !isOrgAdmin) return notFound(res);
       }
-      res.json(articleToPost(row.a, { team: row.team, org: row.org, author: row.author }));
+      const stats = await loadPostStats(me?.id ?? null, [
+        { kind: "article", refId: row.a.id },
+      ]);
+      res.json(
+        articleToPost(row.a, {
+          team: row.team,
+          org: row.org,
+          author: row.author,
+          ...statsFor(stats, "article", row.a.id),
+        }),
+      );
       return;
     }
     const [row] = await db
@@ -1375,27 +1718,172 @@ router.get(
       .where(eq(highlights.id, parsed.id))
       .limit(1);
     if (!row) return notFound(res);
-    res.json(highlightToPost(row.h, { team: row.team, org: row.org, author: row.uploader }));
+    const stats = await loadPostStats(me?.id ?? null, [
+      { kind: "highlight", refId: row.h.id },
+    ]);
+    res.json(
+      highlightToPost(row.h, {
+        team: row.team,
+        org: row.org,
+        author: row.uploader,
+        ...statsFor(stats, "highlight", row.h.id),
+      }),
+    );
   }),
 );
 
-router.get("/posts/:postId/comments", (_req, res) => res.json(paginate([])));
-router.post("/posts/:postId/comments", (req, res) => {
-  res.status(201).json({
-    id: `comment-${Date.now()}`,
-    postId: req.params.postId,
-    body: req.body?.body ?? "",
-    author: { id: "me", displayName: "You", avatarUrl: null },
-    reactionCount: 0,
-    hasReacted: false,
-    recentReactorName: null,
-    createdAt: new Date().toISOString(),
-  });
-});
-router.delete("/posts/:postId/comments/:commentId", (_req, res) => res.status(204).end());
-router.post("/posts/:postId/reactions", (_req, res) => res.status(204).end());
-router.delete("/posts/:postId/reactions", (_req, res) => res.status(204).end());
-router.get("/posts/:postId/tags", (_req, res) => res.json({ data: [], pagination: emptyPagination() }));
+router.get(
+  "/posts/:postId/comments",
+  asyncHandler(async (req, res) => {
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    const rows = await db
+      .select({ c: postComments, author: users })
+      .from(postComments)
+      .leftJoin(users, eq(postComments.authorId, users.id))
+      .where(
+        and(
+          eq(postComments.postKind, parsed.kind),
+          eq(postComments.postRefId, parsed.id),
+          isNull(postComments.deletedAt),
+        ),
+      )
+      .orderBy(asc(postComments.createdAt));
+    res.json(paginate(rows.map((r) => toComment(r.c, r.author))));
+  }),
+);
+
+router.post(
+  "/posts/:postId/comments",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    const body = String(req.body?.body ?? "").trim();
+    if (!body) return res.status(400).json({ error: "Comment body is required" });
+    const [c] = await db
+      .insert(postComments)
+      .values({
+        postKind: parsed.kind,
+        postRefId: parsed.id,
+        authorId: me.id,
+        body,
+      })
+      .returning();
+    res.status(201).json(toComment(c, me));
+  }),
+);
+
+router.delete(
+  "/posts/:postId/comments/:commentId",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [c] = await db
+      .select()
+      .from(postComments)
+      .where(eq(postComments.id, req.params.commentId))
+      .limit(1);
+    if (!c) return notFound(res);
+    if (c.authorId !== me.id)
+      return res.status(403).json({ error: "Only the author can delete this comment" });
+    await db
+      .update(postComments)
+      .set({ deletedAt: new Date() })
+      .where(eq(postComments.id, c.id));
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/posts/:postId/reactions",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    await db
+      .insert(postReactions)
+      .values({
+        postKind: parsed.kind,
+        postRefId: parsed.id,
+        userId: me.id,
+        reactionType: "like",
+      })
+      .onConflictDoNothing();
+    res.status(204).end();
+  }),
+);
+
+router.delete(
+  "/posts/:postId/reactions",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    await db
+      .delete(postReactions)
+      .where(
+        and(
+          eq(postReactions.postKind, parsed.kind),
+          eq(postReactions.postRefId, parsed.id),
+          eq(postReactions.userId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+router.get(
+  "/posts/:postId/tags",
+  asyncHandler(async (req, res) => {
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "article") {
+      const rows = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.articleId, parsed.id))
+        .orderBy(desc(articleTags.createdAt));
+      res.json({
+        tags: rows.map((t) => ({
+          id: t.id,
+          postId: articlePostId(parsed.id),
+          taggedEntityType: "user" as const,
+          taggedEntityId: t.userId,
+          direction: "lateral" as const,
+          status: t.status,
+          approverId: t.userId,
+          createdBy: t.taggerUserId ?? null,
+          createdAt: t.createdAt.toISOString(),
+          updatedAt: t.updatedAt.toISOString(),
+        })),
+      });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(highlightTags)
+      .where(eq(highlightTags.highlightId, parsed.id))
+      .orderBy(desc(highlightTags.createdAt));
+    res.json({
+      tags: rows.map((t) => ({
+        id: t.id,
+        postId: highlightPostId(parsed.id),
+        taggedEntityType: "user" as const,
+        taggedEntityId: t.userId,
+        direction: "lateral" as const,
+        status: t.status,
+        approverId: t.userId,
+        createdBy: t.taggerUserId ?? null,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+      })),
+    });
+  }),
+);
 
 router.post(
   "/posts",
@@ -1774,53 +2262,465 @@ router.put("/notifications/email-preference", (req, res) =>
 // Conversations / Messages (stubs)
 // ---------------------------------------------------------------------------
 
-router.get("/conversations", (_req, res) => res.json(paginate([])));
-router.get("/conversations/unread-count", (_req, res) => res.json({ unreadCount: 0 }));
-router.post("/conversations", (req, res) => {
-  res.status(201).json({
-    id: `conv-${Date.now()}`,
-    type: "direct",
-    participant: { id: req.body?.recipientId, type: "user", displayName: "User", avatarUrl: null },
-    unreadCount: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-});
-router.get("/conversations/:id", (req, res) => {
-  res.json({
-    id: req.params.id,
-    type: "direct",
-    participant: { id: "u", type: "user", displayName: "User", avatarUrl: null },
-    unreadCount: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
-});
-router.delete("/conversations/:id", (_req, res) => res.status(204).end());
-router.get("/conversations/:id/messages", (_req, res) => res.json(paginate([])));
-router.post("/conversations/:id/messages", (req, res) => {
-  res.status(201).json({
-    id: `msg-${Date.now()}`,
-    senderId: "me",
-    senderDisplayName: "You",
-    senderAvatarUrl: null,
-    body: req.body?.body ?? "",
-    assets: [],
-    createdAt: new Date().toISOString(),
-  });
-});
-router.post("/conversations/:id/read", (_req, res) => res.status(204).end());
+async function getOtherParticipant(conversationId: string, meId: string) {
+  const parts = await db
+    .select()
+    .from(conversationParticipants)
+    .where(eq(conversationParticipants.conversationId, conversationId));
+  const others = parts.filter(
+    (p) => !(p.participantType === "user" && p.participantId === meId),
+  );
+  const other = others[0] ?? parts[0];
+  if (!other) return null;
+  if (other.participantType === "user") {
+    const [u] = await db.select().from(users).where(eq(users.id, other.participantId)).limit(1);
+    if (!u) return null;
+    return {
+      id: u.id,
+      type: "user" as const,
+      displayName: displayName(u),
+      avatarUrl: u.avatarUrl ?? null,
+    };
+  }
+  const [o] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, other.participantId))
+    .limit(1);
+  if (!o) return null;
+  return {
+    id: o.id,
+    type: "organization" as const,
+    displayName: o.name,
+    avatarUrl: o.logoUrl ?? null,
+  };
+}
+
+async function loadConversationView(conv: { id: string; type: string; createdAt: Date; updatedAt: Date }, meId: string) {
+  const participant = await getOtherParticipant(conv.id, meId);
+  if (!participant) return null;
+  const [last] = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conv.id))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  let lastSenderName: string | null = null;
+  if (last?.senderUserId) {
+    const [u] = await db.select().from(users).where(eq(users.id, last.senderUserId)).limit(1);
+    lastSenderName = u ? displayName(u) : null;
+  }
+  const [myPart] = await db
+    .select()
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversationId, conv.id),
+        eq(conversationParticipants.participantType, "user"),
+        eq(conversationParticipants.participantId, meId),
+      ),
+    )
+    .limit(1);
+  let unread = 0;
+  if (myPart) {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conv.id),
+          isNull(messages.deletedAt),
+          ne(messages.senderUserId, meId),
+          myPart.lastReadAt
+            ? gt(messages.createdAt, myPart.lastReadAt)
+            : sql`true`,
+        ),
+      );
+    unread = Number(count);
+  }
+  return toConversation(
+    { id: conv.id, type: conv.type as "direct" | "user_to_org" | "org_to_org", createdAt: conv.createdAt, updatedAt: conv.updatedAt },
+    participant,
+    last ?? null,
+    lastSenderName,
+    unread,
+  );
+}
+
+router.get(
+  "/conversations",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json(paginate([]));
+    const myParts = await db
+      .select({ conv: conversations })
+      .from(conversationParticipants)
+      .innerJoin(conversations, eq(conversationParticipants.conversationId, conversations.id))
+      .where(
+        and(
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+          isNull(conversationParticipants.leftAt),
+        ),
+      )
+      .orderBy(desc(conversations.updatedAt));
+    const items = (
+      await Promise.all(myParts.map((r) => loadConversationView(r.conv, me.id)))
+    ).filter((c): c is NonNullable<typeof c> => c !== null);
+    res.json(paginate(items));
+  }),
+);
+
+router.get(
+  "/conversations/unread-count",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json({ unreadCount: 0 });
+    const myParts = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+          isNull(conversationParticipants.leftAt),
+        ),
+      );
+    let total = 0;
+    for (const p of myParts) {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, p.conversationId),
+            isNull(messages.deletedAt),
+            ne(messages.senderUserId, me.id),
+            p.lastReadAt ? gt(messages.createdAt, p.lastReadAt) : sql`true`,
+          ),
+        );
+      total += Number(count);
+    }
+    res.json({ unreadCount: total });
+  }),
+);
+
+router.post(
+  "/conversations",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const recipientId: string | undefined = req.body?.recipientId;
+    const recipientType: "user" | "organization" =
+      req.body?.recipientType === "organization" ? "organization" : "user";
+    if (!recipientId) return res.status(400).json({ error: "recipientId is required" });
+    if (recipientType === "user" && recipientId === me.id)
+      return res.status(400).json({ error: "Cannot start a conversation with yourself" });
+
+    // Look for an existing direct conversation
+    const meParts = await db
+      .select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+        ),
+      );
+    if (meParts.length > 0) {
+      const existing = await db
+        .select({ conv: conversations, part: conversationParticipants })
+        .from(conversationParticipants)
+        .innerJoin(conversations, eq(conversationParticipants.conversationId, conversations.id))
+        .where(
+          and(
+            inArray(
+              conversationParticipants.conversationId,
+              meParts.map((p) => p.conversationId),
+            ),
+            eq(conversationParticipants.participantType, recipientType),
+            eq(conversationParticipants.participantId, recipientId),
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) {
+        const view = await loadConversationView(existing[0].conv, me.id);
+        if (view) return res.json(view);
+      }
+    }
+
+    const convType: "direct" | "user_to_org" | "org_to_org" =
+      recipientType === "organization" ? "user_to_org" : "direct";
+    const [conv] = await db.insert(conversations).values({ type: convType }).returning();
+    await db.insert(conversationParticipants).values([
+      { conversationId: conv.id, participantType: "user", participantId: me.id },
+      { conversationId: conv.id, participantType: recipientType, participantId: recipientId },
+    ]);
+    const view = await loadConversationView(conv, me.id);
+    if (!view) return res.status(500).json({ error: "Failed to load conversation" });
+    res.status(201).json(view);
+  }),
+);
+
+router.get(
+  "/conversations/:id",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [conv] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, req.params.id))
+      .limit(1);
+    if (!conv) return notFound(res);
+    const [iAmIn] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conv.id),
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+        ),
+      )
+      .limit(1);
+    if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
+    const view = await loadConversationView(conv, me.id);
+    if (!view) return notFound(res);
+    res.json(view);
+  }),
+);
+
+router.delete(
+  "/conversations/:id",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    await db
+      .update(conversationParticipants)
+      .set({ leftAt: new Date() })
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, req.params.id),
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+router.get(
+  "/conversations/:id/messages",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [iAmIn] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, req.params.id),
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+        ),
+      )
+      .limit(1);
+    if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
+    const rows = await db
+      .select({ m: messages, sender: users })
+      .from(messages)
+      .leftJoin(users, eq(messages.senderUserId, users.id))
+      .where(eq(messages.conversationId, req.params.id))
+      .orderBy(asc(messages.createdAt));
+    res.json(
+      paginate(
+        rows.map((r) =>
+          toMessage(
+            r.m,
+            r.sender
+              ? {
+                  id: r.sender.id,
+                  displayName: displayName(r.sender),
+                  avatarUrl: r.sender.avatarUrl ?? null,
+                }
+              : null,
+          ),
+        ),
+      ),
+    );
+  }),
+);
+
+router.post(
+  "/conversations/:id/messages",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [iAmIn] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, req.params.id),
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+        ),
+      )
+      .limit(1);
+    if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
+    const body = String(req.body?.body ?? "").trim();
+    if (!body) return res.status(400).json({ error: "Message body is required" });
+    const [m] = await db
+      .insert(messages)
+      .values({
+        conversationId: req.params.id,
+        senderUserId: me.id,
+        body,
+      })
+      .returning();
+    await db
+      .update(conversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(conversations.id, req.params.id));
+    res.status(201).json(
+      toMessage(m, {
+        id: me.id,
+        displayName: displayName(me),
+        avatarUrl: me.avatarUrl ?? null,
+      }),
+    );
+  }),
+);
+
+router.post(
+  "/conversations/:id/read",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    await db
+      .update(conversationParticipants)
+      .set({ lastReadAt: new Date() })
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, req.params.id),
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Tags (pending) — stubs
 // ---------------------------------------------------------------------------
 
-router.get("/tags/pending", (_req, res) => res.json(paginate([])));
-router.post("/tags/:tagId/approve", (req, res) =>
-  res.json({ id: req.params.tagId, status: "approved" }),
+router.get(
+  "/tags/pending",
+  asyncHandler(async (req, res) => {
+    const me = await getOrFallbackUser(req);
+    if (!me) return res.json(paginate([]));
+    const aRows = await db
+      .select()
+      .from(articleTags)
+      .where(and(eq(articleTags.userId, me.id), eq(articleTags.status, "pending")))
+      .orderBy(desc(articleTags.createdAt));
+    const hRows = await db
+      .select()
+      .from(highlightTags)
+      .where(and(eq(highlightTags.userId, me.id), eq(highlightTags.status, "pending")))
+      .orderBy(desc(highlightTags.createdAt));
+    const data = [
+      ...aRows.map((t) => ({
+        id: t.id,
+        postId: articlePostId(t.articleId),
+        taggedEntityType: "user" as const,
+        taggedEntityId: t.userId,
+        direction: "lateral" as const,
+        status: t.status,
+        approverId: t.userId,
+        createdBy: t.taggerUserId ?? null,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+      })),
+      ...hRows.map((t) => ({
+        id: t.id,
+        postId: highlightPostId(t.highlightId),
+        taggedEntityType: "user" as const,
+        taggedEntityId: t.userId,
+        direction: "lateral" as const,
+        status: t.status,
+        approverId: t.userId,
+        createdBy: t.taggerUserId ?? null,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+      })),
+    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    res.json(paginate(data));
+  }),
 );
-router.post("/tags/:tagId/decline", (req, res) =>
-  res.json({ id: req.params.tagId, status: "declined" }),
+
+async function decidePendingTag(
+  req: Request,
+  res: Response,
+  decision: "approved" | "declined",
+) {
+  const me = await getOrFallbackUser(req);
+  if (!me) return res.status(401).json({ error: "Not authenticated" });
+  const tagId = req.params.tagId;
+  const [a] = await db.select().from(articleTags).where(eq(articleTags.id, tagId)).limit(1);
+  if (a) {
+    if (a.userId !== me.id)
+      return res.status(403).json({ error: "Only the tagged user can decide this tag" });
+    const [updated] = await db
+      .update(articleTags)
+      .set({ status: decision, updatedAt: new Date() })
+      .where(eq(articleTags.id, tagId))
+      .returning();
+    return res.json({
+      id: updated.id,
+      postId: articlePostId(updated.articleId),
+      taggedEntityType: "user" as const,
+      taggedEntityId: updated.userId,
+      direction: "lateral" as const,
+      status: updated.status,
+      approverId: updated.userId,
+      createdBy: updated.taggerUserId ?? null,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    });
+  }
+  const [h] = await db.select().from(highlightTags).where(eq(highlightTags.id, tagId)).limit(1);
+  if (!h) return notFound(res);
+  if (h.userId !== me.id)
+    return res.status(403).json({ error: "Only the tagged user can decide this tag" });
+  const [updated] = await db
+    .update(highlightTags)
+    .set({ status: decision, updatedAt: new Date() })
+    .where(eq(highlightTags.id, tagId))
+    .returning();
+  res.json({
+    id: updated.id,
+    postId: highlightPostId(updated.highlightId),
+    taggedEntityType: "user" as const,
+    taggedEntityId: updated.userId,
+    direction: "lateral" as const,
+    status: updated.status,
+    approverId: updated.userId,
+    createdBy: updated.taggerUserId ?? null,
+    createdAt: updated.createdAt.toISOString(),
+    updatedAt: updated.updatedAt.toISOString(),
+  });
+}
+
+router.post(
+  "/tags/:tagId/approve",
+  asyncHandler((req, res) => decidePendingTag(req, res, "approved")),
+);
+router.post(
+  "/tags/:tagId/decline",
+  asyncHandler((req, res) => decidePendingTag(req, res, "declined")),
 );
 
 // ---------------------------------------------------------------------------
@@ -1843,7 +2743,7 @@ router.get(
       .innerJoin(articles, eq(articleTags.articleId, articles.id))
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(articleTags.userId, me.id))
+      .where(and(eq(articleTags.userId, me.id), eq(articleTags.status, "approved")))
       .orderBy(desc(articleTags.createdAt));
     const hRows = await db
       .select({
@@ -1856,7 +2756,7 @@ router.get(
       .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
       .innerJoin(teams, eq(highlights.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(highlightTags.userId, me.id))
+      .where(and(eq(highlightTags.userId, me.id), eq(highlightTags.status, "approved")))
       .orderBy(desc(highlightTags.createdAt));
     const data = [
       ...aRows.map((r) => ({
@@ -2096,24 +2996,6 @@ router.get(
       },
     });
   }),
-);
-
-// ---------------------------------------------------------------------------
-// Misc stubs (consent, guardians, assets, follows, privacy, phones, addresses)
-// ---------------------------------------------------------------------------
-
-router.get("/consent/status", (_req, res) => res.json({ status: "none" }));
-router.post("/consent/requests", (_req, res) => res.status(201).json({ status: "pending" }));
-router.get("/users/:userId/guardians", (_req, res) => res.json({ data: [] }));
-router.get("/users/:userId/children", (_req, res) => res.json({ data: [] }));
-router.post("/users/:userId/follow", (_req, res) => res.json({ followerId: "me", followingId: _req.params.userId, createdAt: new Date().toISOString() }));
-router.delete("/users/:userId/follow", (_req, res) => res.status(204).end());
-router.get("/users/:userId/followers", (_req, res) => res.json(paginate([])));
-router.get("/users/:userId/following", (_req, res) => res.json(paginate([])));
-router.get("/users/:userId/privacy", (_req, res) => res.json({ userId: _req.params.userId, settings: {} }));
-router.get("/users/:userId/sports", (_req, res) => res.json({ sports: [] }));
-router.post("/assets/upload", (_req, res) =>
-  res.status(201).json({ assetId: `asset-${Date.now()}`, uploadUrl: "https://example.invalid", expiresIn: 600 }),
 );
 
 // ---------------------------------------------------------------------------

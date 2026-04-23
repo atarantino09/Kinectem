@@ -7,6 +7,10 @@ import type {
   articles,
   highlights,
   notifications,
+  conversations,
+  messages,
+  postComments,
+  organizationJoinRequests,
 } from "@workspace/db";
 
 type UserRow = typeof users.$inferSelect;
@@ -371,6 +375,122 @@ function basePost(p: {
     hasReacted: p.extras.hasReacted ?? false,
     commentCount: p.extras.commentCount ?? 0,
     recentReactorName: p.extras.recentReactorName ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Conversations & Messages
+// ---------------------------------------------------------------------------
+
+type ConvRow = typeof conversations.$inferSelect;
+type MessageRow = typeof messages.$inferSelect;
+type CommentRow = typeof postComments.$inferSelect;
+type JoinReqRow = typeof organizationJoinRequests.$inferSelect;
+
+export interface ConversationParticipantInfo {
+  id: string;
+  type: "user" | "organization";
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export function toConversation(
+  c: ConvRow,
+  participant: ConversationParticipantInfo,
+  lastMessage: MessageRow | null,
+  lastMessageSenderName: string | null,
+  unreadCount: number,
+) {
+  return {
+    id: c.id,
+    type: c.type,
+    participant: {
+      id: participant.id,
+      type: participant.type,
+      displayName: participant.displayName,
+      avatarUrl: participant.avatarUrl,
+    },
+    lastMessage: lastMessage
+      ? {
+          id: lastMessage.id,
+          senderDisplayName: lastMessageSenderName ?? "Unknown",
+          bodyPreview: lastMessage.deletedAt
+            ? null
+            : (lastMessage.body ?? "").slice(0, 200),
+          hasAttachments: false,
+          createdAt: lastMessage.createdAt.toISOString(),
+        }
+      : undefined,
+    unreadCount,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  };
+}
+
+export function toMessage(
+  m: MessageRow,
+  sender: { id: string; displayName: string; avatarUrl: string | null } | null,
+) {
+  if (m.deletedAt) {
+    return {
+      id: m.id,
+      deleted: true as const,
+      createdAt: m.createdAt.toISOString(),
+    };
+  }
+  return {
+    id: m.id,
+    senderId: sender?.id ?? m.senderUserId ?? "00000000-0000-0000-0000-000000000000",
+    senderDisplayName: sender?.displayName ?? "Unknown",
+    senderAvatarUrl: sender?.avatarUrl ?? null,
+    body: m.body ?? "",
+    assets: [],
+    createdAt: m.createdAt.toISOString(),
+  };
+}
+
+export function toComment(
+  c: CommentRow,
+  author: UserRow | null,
+  reactionCount = 0,
+  hasReacted = false,
+) {
+  return {
+    id: c.id,
+    postId: c.postKind === "article" ? articlePostId(c.postRefId) : highlightPostId(c.postRefId),
+    body: c.deletedAt ? "" : c.body,
+    author: {
+      id: author?.id ?? null,
+      displayName: author ? displayName(author) : "Deleted user",
+      avatarUrl: author?.avatarUrl ?? null,
+    },
+    reactionCount,
+    hasReacted,
+    recentReactorName: null as string | null,
+    createdAt: c.createdAt.toISOString(),
+  };
+}
+
+export function toJoinRequest(
+  r: JoinReqRow,
+  user: UserRow | null,
+) {
+  return {
+    id: r.id,
+    orgId: r.organizationId,
+    userId: r.userId,
+    user: user
+      ? {
+          id: user.id,
+          displayName: displayName(user),
+          avatarUrl: user.avatarUrl ?? null,
+        }
+      : null,
+    status: r.status,
+    decidedBy: r.decidedById ?? null,
+    decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
   };
 }
 
