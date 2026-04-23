@@ -12,7 +12,9 @@ export default function OrganizationsListPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-black tracking-tight">Organizations</h1>
+        <h1 className="text-4xl font-black tracking-tight">
+          <span className="brand-gradient-text">Organizations</span>
+        </h1>
         <p className="text-sm text-muted-foreground mt-1 font-medium">
           Discover clubs, schools, and academies on Kinectem.
         </p>

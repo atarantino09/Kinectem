@@ -47,7 +47,9 @@ export default function ResetPasswordPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-white flex items-center justify-center">
             <Trophy className="w-5 h-5" />
           </div>
-          <span className="font-black text-2xl tracking-tight text-slate-900">Kinectem</span>
+          <span className="font-black text-2xl tracking-tight text-slate-900">
+            Kinect<span className="brand-gradient-text">em</span>
+          </span>
         </div>
 
         {done ? (

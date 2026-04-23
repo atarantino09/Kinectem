@@ -75,7 +75,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               alt="Kinectem"
               className="w-9 h-9 rounded-lg object-cover"
             />
-            <span className="font-black text-xl tracking-tight">Kinectem</span>
+            <span className="font-black text-xl tracking-tight">
+              Kinect<span className="brand-gradient-text">em</span>
+            </span>
           </Link>
 
           <form onSubmit={onSearchSubmit} className="flex-1 max-w-md relative">

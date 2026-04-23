@@ -78,7 +78,7 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 40% 98%;
+  --background: 250 60% 98%;
   --foreground: 222 47% 11%;
   --border: 214 32% 91%;
   --card: 0 0% 100%;
@@ -287,6 +287,21 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+  /* Small uppercase pill — matches the marketing site's "COMING SOON" tag */
+  .brand-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    background: hsl(262 83% 96%);
+    color: hsl(262 60% 45%);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
   .brand-gradient-border {
     position: relative;

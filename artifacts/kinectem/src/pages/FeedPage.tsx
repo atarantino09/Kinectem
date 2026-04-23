@@ -116,7 +116,9 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-black tracking-tight">Latest Activity</h2>
+        <h2 className="text-3xl font-black tracking-tight">
+          Latest <span className="brand-gradient-text">Activity</span>
+        </h2>
         {feedLoading ? (
           <>
             <Skeleton className="h-48 rounded-xl" />
@@ -140,9 +142,9 @@ export default function FeedPage() {
         {orgs && (
           <Card className="rounded-xl border border-border shadow-sm">
             <CardContent className="p-4">
-              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
-                Featured Organizations
-              </h4>
+              <div className="mb-3">
+                <span className="brand-pill">Featured Orgs</span>
+              </div>
               <div className="space-y-3">
                 {orgs.data.slice(0, 5).map((org) => (
                   <Link key={org.id} href={`/organizations/${org.id}`}>

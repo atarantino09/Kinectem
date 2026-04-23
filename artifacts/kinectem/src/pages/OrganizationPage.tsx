@@ -188,7 +188,7 @@ export default function OrganizationPage() {
               )}
             </div>
             <div className="pb-2">
-              <h1 className="text-3xl font-black tracking-tight leading-none">
+              <h1 className="text-4xl font-black tracking-tight leading-none">
                 {organization.name}
               </h1>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium">
