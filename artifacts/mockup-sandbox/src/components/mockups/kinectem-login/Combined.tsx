@@ -26,8 +26,8 @@ function AppleIcon() {
 const ROLES: Array<{ id: "athlete" | "parent" | "coach" | "journalist"; label: string; icon: typeof User; hint: string }> = [
   { id: "athlete", label: "Athlete", icon: User, hint: "I play" },
   { id: "parent", label: "Parent", icon: Users, hint: "My kid plays" },
-  { id: "coach", label: "Coach", icon: Camera, hint: "I coach a team" },
-  { id: "journalist", label: "Journalist", icon: Pencil, hint: "I cover games" },
+  { id: "coach", label: "Coach", icon: Camera, hint: "I coach" },
+  { id: "journalist", label: "Journalist", icon: Pencil, hint: "I cover" },
 ];
 
 export function Combined() {
@@ -36,18 +36,52 @@ export function Combined() {
   const [under13, setUnder13] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-100 via-white to-blue-100 flex items-center justify-center p-6">
-      <div className="w-full max-w-lg">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-white flex items-center justify-center shadow-md shadow-violet-300">
+    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-white text-slate-900">
+      <aside className="relative hidden md:flex flex-col justify-between p-10 bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 text-white overflow-hidden">
+        <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-blue-300/20 blur-3xl" />
+
+        <div className="relative flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
             <Trophy className="w-5 h-5" />
           </div>
-          <span className="font-black text-2xl tracking-tight text-slate-900">Kinectem</span>
+          <span className="font-black text-2xl tracking-tight">Kinectem</span>
         </div>
 
-        <div className="rounded-2xl bg-white shadow-xl shadow-violet-200/50 ring-1 ring-slate-200 overflow-hidden">
-          <div className="grid grid-cols-2 bg-slate-100 p-1 m-3 rounded-xl">
+        <div className="relative space-y-6">
+          <h1 className="font-black tracking-tight text-4xl leading-tight">
+            Where the next generation of athletes gets seen.
+          </h1>
+          <p className="text-white/85 text-lg leading-relaxed max-w-md">
+            Follow your team, share highlights, and connect with coaches,
+            parents, and journalists — all in one place.
+          </p>
+          <div className="flex items-center gap-3 text-sm text-white/80">
+            <div className="flex -space-x-2">
+              <div className="w-8 h-8 rounded-full bg-amber-300 border-2 border-violet-600 flex items-center justify-center text-xs font-black text-amber-900">
+                DO
+              </div>
+              <div className="w-8 h-8 rounded-full bg-emerald-300 border-2 border-violet-600 flex items-center justify-center text-xs font-black text-emerald-900">
+                TC
+              </div>
+              <div className="w-8 h-8 rounded-full bg-pink-300 border-2 border-violet-600 flex items-center justify-center text-xs font-black text-pink-900">
+                MR
+              </div>
+            </div>
+            <span>Joined by 12,400+ athletes this season</span>
+          </div>
+        </div>
+
+        <div className="relative text-xs text-white/70">
+          © 2026 Kinectem · Made for youth sports
+        </div>
+      </aside>
+
+      <main className="flex items-center justify-center p-8 md:p-10">
+        <div className="w-full max-w-md space-y-6">
+          <div className="grid grid-cols-2 bg-slate-100 p-1 rounded-xl">
             <button
+              type="button"
               onClick={() => setTab("signin")}
               className={`h-9 rounded-lg text-sm font-bold transition ${
                 tab === "signin" ? "bg-white text-slate-900 shadow" : "text-slate-500"
@@ -56,6 +90,7 @@ export function Combined() {
               Sign in
             </button>
             <button
+              type="button"
               onClick={() => setTab("signup")}
               className={`h-9 rounded-lg text-sm font-bold transition ${
                 tab === "signup" ? "bg-white text-slate-900 shadow" : "text-slate-500"
@@ -65,142 +100,151 @@ export function Combined() {
             </button>
           </div>
 
-          <div className="px-6 pb-6 pt-2 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-10 rounded-xl font-semibold gap-2 border-slate-200">
-                <GoogleIcon />
-                Google
-              </Button>
-              <Button variant="outline" className="h-10 rounded-xl font-semibold gap-2 bg-black text-white border-black hover:bg-slate-900 hover:text-white">
-                <AppleIcon />
-                Apple
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-200" />
-              <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">or</span>
-              <div className="h-px flex-1 bg-slate-200" />
-            </div>
-
-            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-              {tab === "signup" && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="first-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        First name
-                      </Label>
-                      <Input id="first-c" placeholder="Tyler" className="rounded-xl h-10" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="last-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Last name
-                      </Label>
-                      <Input id="last-c" placeholder="Chen" className="rounded-xl h-10" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      I'm signing up as
-                    </Label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {ROLES.map((r) => {
-                        const Icon = r.icon;
-                        const active = role === r.id;
-                        return (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => setRole(r.id)}
-                            className={`rounded-xl border p-2 flex flex-col items-center gap-1 transition ${
-                              active
-                                ? "border-violet-500 bg-violet-50 text-violet-700 shadow-sm"
-                                : "border-slate-200 hover:border-slate-300 text-slate-600"
-                            }`}
-                          >
-                            <Icon className="w-4 h-4" />
-                            <span className="text-[11px] font-bold leading-tight">{r.label}</span>
-                            <span className="text-[10px] text-slate-400 leading-tight">{r.hint}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="email-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Email
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input id="email-c" type="email" placeholder="you@school.edu" className="rounded-xl h-10 pl-9" />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="pw-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Password
-                  </Label>
-                  {tab === "signin" && (
-                    <button type="button" className="text-xs font-semibold text-violet-600 hover:underline">
-                      Forgot?
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input id="pw-c" type="password" placeholder="••••••••" className="rounded-xl h-10 pl-9" />
-                </div>
-              </div>
-
-              {tab === "signup" && role === "athlete" && (
-                <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={under13}
-                    onChange={(e) => setUnder13(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-300"
-                  />
-                  <span>I'm under 13 years old</span>
-                </label>
-              )}
-
-              {tab === "signup" && role === "athlete" && under13 && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 space-y-2">
-                  <div className="font-bold">Guardian required.</div>
-                  <p>
-                    We'll send a one-time link to your parent or guardian's
-                    email so they can approve and link your account.
-                  </p>
-                  <Input
-                    placeholder="parent@email.com"
-                    className="rounded-lg h-9 bg-white border-amber-300 text-slate-900 text-xs"
-                  />
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
-              >
-                {tab === "signin" ? "Sign in" : "Create account"}
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </form>
+          <div className="space-y-1">
+            <h2 className="font-black tracking-tight text-3xl">
+              {tab === "signin" ? "Welcome back" : "Create your account"}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {tab === "signin"
+                ? "Sign in to keep up with your teams."
+                : "Join Kinectem in less than a minute."}
+            </p>
           </div>
-        </div>
 
-        <p className="text-center text-xs text-slate-500 mt-5">
-          By continuing you agree to our{" "}
-          <a className="font-semibold underline">Terms</a> and{" "}
-          <a className="font-semibold underline">Privacy Policy</a>.
-        </p>
-      </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="outline" className="h-10 rounded-xl font-semibold gap-2 border-slate-200">
+              <GoogleIcon />
+              Google
+            </Button>
+            <Button variant="outline" className="h-10 rounded-xl font-semibold gap-2 bg-black text-white border-black hover:bg-slate-900 hover:text-white">
+              <AppleIcon />
+              Apple
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">or</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+            {tab === "signup" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="first-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      First name
+                    </Label>
+                    <Input id="first-c" placeholder="Tyler" className="rounded-xl h-10" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="last-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      Last name
+                    </Label>
+                    <Input id="last-c" placeholder="Chen" className="rounded-xl h-10" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    I'm signing up as
+                  </Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {ROLES.map((r) => {
+                      const Icon = r.icon;
+                      const active = role === r.id;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setRole(r.id)}
+                          className={`rounded-xl border px-1.5 py-2 flex flex-col items-center gap-1 transition ${
+                            active
+                              ? "border-violet-500 bg-violet-50 text-violet-700 shadow-sm"
+                              : "border-slate-200 hover:border-slate-300 text-slate-600"
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span className="text-[11px] font-bold leading-tight">{r.label}</span>
+                          <span className="text-[10px] text-slate-400 leading-tight">{r.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="email-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input id="email-c" type="email" placeholder="you@school.edu" className="rounded-xl h-10 pl-9" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="pw-c" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Password
+                </Label>
+                {tab === "signin" && (
+                  <button type="button" className="text-xs font-semibold text-violet-600 hover:underline">
+                    Forgot?
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input id="pw-c" type="password" placeholder="••••••••" className="rounded-xl h-10 pl-9" />
+              </div>
+            </div>
+
+            {tab === "signup" && role === "athlete" && (
+              <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={under13}
+                  onChange={(e) => setUnder13(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300"
+                />
+                <span>I'm under 13 years old</span>
+              </label>
+            )}
+
+            {tab === "signup" && role === "athlete" && under13 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 space-y-2">
+                <div className="font-bold">Guardian required.</div>
+                <p>
+                  We'll send a one-time link to your parent or guardian's
+                  email so they can approve and link your account.
+                </p>
+                <Input
+                  placeholder="parent@email.com"
+                  className="rounded-lg h-9 bg-white border-amber-300 text-slate-900 text-xs"
+                />
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+            >
+              {tab === "signin" ? "Sign in" : "Create account"}
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </Button>
+          </form>
+
+          <p className="text-center text-xs text-slate-500">
+            By continuing you agree to our{" "}
+            <a className="font-semibold underline">Terms</a> and{" "}
+            <a className="font-semibold underline">Privacy Policy</a>.
+          </p>
+        </div>
+      </main>
     </div>
   );
 }
