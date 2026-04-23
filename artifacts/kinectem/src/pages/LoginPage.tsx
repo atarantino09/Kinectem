@@ -60,7 +60,6 @@ export default function LoginPage() {
   const [dob, setDob] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianConsent, setGuardianConsent] = useState(false);
-  const [pendingGuardianUrl, setPendingGuardianUrl] = useState<string | null>(null);
 
   // Guardian pending (after sign-in attempt)
   const [guardianPendingMessage, setGuardianPendingMessage] = useState<string>("");
@@ -69,7 +68,6 @@ export default function LoginPage() {
 
   // Forgot
   const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotResetUrl, setForgotResetUrl] = useState<string | null>(null);
 
   const age = ageInYears(dob);
   const isUnder13 = role === "athlete" && age !== null && age < 13;
@@ -169,9 +167,8 @@ export default function LoginPage() {
           guardianEmail: isUnder13 ? guardianEmail.trim().toLowerCase() : null,
           guardianConsent: isUnder13 ? guardianConsent : undefined,
         }),
-      })) as { pendingGuardianConfirmation?: boolean; guardianConfirmUrl?: string };
+      })) as { pendingGuardianConfirmation?: boolean };
       if (res?.pendingGuardianConfirmation) {
-        setPendingGuardianUrl(res.guardianConfirmUrl ?? null);
         setMode("signupPending");
         return;
       }
@@ -195,11 +192,10 @@ export default function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = (await customFetch("/api/v1/auth/password-reset/request", {
+      await customFetch("/api/v1/auth/password-reset/request", {
         method: "POST",
         body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
-      })) as { resetUrl?: string };
-      setForgotResetUrl(res?.resetUrl ?? null);
+      });
       setMode("forgotSent");
     } catch (err) {
       const e = err as { message?: string; body?: { error?: string } };
@@ -589,27 +585,6 @@ export default function LoginPage() {
                   </p>
                 </div>
               </div>
-              {forgotResetUrl && (
-                <div
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-2"
-                  data-testid="block-dev-reset-link"
-                >
-                  <p className="font-bold uppercase tracking-wider text-slate-500">
-                    Demo helper
-                  </p>
-                  <p>
-                    No real email is sent in this environment. Use this link to
-                    set a new password:
-                  </p>
-                  <a
-                    href={forgotResetUrl}
-                    className="block break-all font-mono text-violet-700 hover:underline"
-                    data-testid="link-reset-url"
-                  >
-                    {forgotResetUrl}
-                  </a>
-                </div>
-              )}
               <Button
                 type="button"
                 onClick={() => switchMode("signin")}
@@ -680,24 +655,6 @@ export default function LoginPage() {
                   to {guardianEmail}.
                 </p>
               </div>
-              {pendingGuardianUrl && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-2">
-                  <p className="font-bold uppercase tracking-wider text-slate-500">
-                    Demo helper
-                  </p>
-                  <p>
-                    No real email is sent in this environment. Share this link
-                    with your guardian:
-                  </p>
-                  <a
-                    href={pendingGuardianUrl}
-                    className="block break-all font-mono text-violet-700 hover:underline"
-                    data-testid="link-guardian-url"
-                  >
-                    {pendingGuardianUrl}
-                  </a>
-                </div>
-              )}
               <Button
                 type="button"
                 onClick={() => switchMode("signin")}

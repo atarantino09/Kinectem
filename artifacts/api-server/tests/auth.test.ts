@@ -1,7 +1,42 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
 import { app, listSeedUsers, loginAs, request, DEMO_PASSWORD } from "./helpers";
+const sentEmails: Array<{ to: string; subject: string; text: string }> = [];
+
+vi.mock("../src/lib/email", () => ({
+  isEmailConfigured: () => true,
+  sendEmail: vi.fn(async (m: { to: string; subject: string; text: string }) => {
+    sentEmails.push(m);
+  }),
+  sendPasswordResetEmail: vi.fn(async (to: string, token: string) => {
+    sentEmails.push({
+      to,
+      subject: "Reset your Kinectem password",
+      text: `/reset-password/${token}`,
+    });
+  }),
+  sendGuardianConfirmationEmail: vi.fn(
+    async (to: string, _name: string, token: string) => {
+      sentEmails.push({
+        to,
+        subject: "Guardian confirmation",
+        text: `/guardian-confirm/${token}`,
+      });
+    },
+  ),
+}));
+
+function lastEmailTo(to: string) {
+  for (let i = sentEmails.length - 1; i >= 0; i--) {
+    if (sentEmails[i].to === to) return sentEmails[i];
+  }
+  return undefined;
+}
+
+beforeEach(() => {
+  sentEmails.length = 0;
+});
 
 describe("auth", () => {
   it("lists seeded users", async () => {
@@ -88,13 +123,17 @@ describe("auth", () => {
     });
     expect(signup.status).toBe(201);
     expect(signup.body.pendingGuardianConfirmation).toBe(true);
-    const url: string = signup.body.guardianConfirmUrl;
-    expect(url).toMatch(/^\/guardian-confirm\//);
+    expect(signup.body.guardianConfirmUrl).toBeUndefined();
+
+    const guardianEmailMsg = lastEmailTo(guardianEmail);
+    expect(guardianEmailMsg).toBeDefined();
+    const url = guardianEmailMsg!.text.match(/\/guardian-confirm\/[A-Za-z0-9_-]+/)![0];
 
     const blocked = await request(app)
       .post("/api/v1/auth/login")
       .send({ email, password });
     expect(blocked.status).toBe(403);
+    expect(blocked.body.guardianConfirmUrl).toBeUndefined();
 
     const token = url.split("/").pop()!;
 
@@ -134,7 +173,12 @@ describe("auth", () => {
       guardianConsent: true,
     });
     expect(signup.status).toBe(201);
-    const originalUrl: string = signup.body.guardianConfirmUrl;
+    expect(signup.body.pendingGuardianConfirmation).toBe(true);
+    expect(signup.body.guardianConfirmUrl).toBeUndefined();
+
+    const guardianEmailMsg = lastEmailTo(guardianEmail);
+    expect(guardianEmailMsg).toBeDefined();
+    const originalUrl = guardianEmailMsg!.text.match(/\/guardian-confirm\/[A-Za-z0-9_-]+/)![0];
     const originalToken = originalUrl.split("/").pop()!;
 
     // Login surfaces a structured pending-guardian payload.
@@ -148,7 +192,11 @@ describe("auth", () => {
       .post("/api/v1/auth/guardian-resend")
       .send({ email, password });
     expect(resend.status).toBe(200);
-    const newUrl: string = resend.body.guardianConfirmUrl;
+    expect(resend.body.guardianConfirmUrl).toBeUndefined();
+
+    const resendEmailMsg = lastEmailTo(guardianEmail);
+    expect(resendEmailMsg).toBeDefined();
+    const newUrl = resendEmailMsg!.text.match(/\/guardian-confirm\/[A-Za-z0-9_-]+/)![0];
     expect(newUrl).toMatch(/^\/guardian-confirm\//);
     const newToken = newUrl.split("/").pop()!;
     expect(newToken).not.toBe(originalToken);
@@ -184,7 +232,11 @@ describe("auth", () => {
       guardianConsent: true,
     });
     expect(signup.status).toBe(201);
-    const url: string = signup.body.guardianConfirmUrl;
+    expect(signup.body.guardianConfirmUrl).toBeUndefined();
+
+    const guardianEmailMsg = lastEmailTo(guardianEmail);
+    expect(guardianEmailMsg).toBeDefined();
+    const url = guardianEmailMsg!.text.match(/\/guardian-confirm\/[A-Za-z0-9_-]+/)![0];
     const token = url.split("/").pop()!;
 
     // Manually expire the token in the database.
@@ -266,8 +318,11 @@ describe("auth", () => {
       .post("/api/v1/auth/password-reset/request")
       .send({ email });
     expect(reqRes.status).toBe(200);
-    const url: string = reqRes.body.resetUrl;
-    expect(url).toMatch(/^\/reset-password\//);
+    expect(reqRes.body.resetUrl).toBeUndefined();
+
+    const resetEmailMsg = lastEmailTo(email);
+    expect(resetEmailMsg).toBeDefined();
+    const url = resetEmailMsg!.text.match(/\/reset-password\/[A-Za-z0-9_-]+/)![0];
     const token = url.split("/").pop()!;
 
     const completeRes = await request(app)

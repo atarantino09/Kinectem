@@ -29,6 +29,11 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
+import { logger } from "../lib/logger";
+import {
+  sendGuardianConfirmationEmail,
+  sendPasswordResetEmail,
+} from "../lib/email";
 import {
   canCreateRecap,
   canManageOrganization,
@@ -358,14 +363,10 @@ router.post(
         !user.guardianConfirmTokenExpiresAt ||
         user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
       res.status(403).json({
-        error: expired
-          ? "Your guardian confirmation link has expired. You can send your parent or guardian a new one below."
-          : "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
+        error:
+          "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
         pendingGuardianConfirmation: true,
         guardianConfirmExpired: expired,
-        guardianConfirmUrl: expired
-          ? null
-          : `/guardian-confirm/${user.guardianConfirmToken}`,
       });
       return;
     }
@@ -441,12 +442,18 @@ router.post(
 
     if (guardianRequired) {
       // Account is created but cannot sign in until the guardian confirms.
-      // In a production setting we would email this URL to the guardian; in
-      // this environment we return it so the UI can surface it for testing.
+      try {
+        await sendGuardianConfirmationEmail(
+          body.guardianEmail!.toLowerCase(),
+          created.name,
+          guardianToken!,
+        );
+      } catch (err) {
+        logger.error({ err }, "Failed to send guardian confirmation email");
+      }
       res.status(201).json({
         ...toPrivateUser(created),
         pendingGuardianConfirmation: true,
-        guardianConfirmUrl: `/guardian-confirm/${guardianToken}`,
       });
       return;
     }
@@ -473,12 +480,14 @@ router.post(
     const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
     await db.insert(passwordResets).values({ userId: user.id, tokenHash, expiresAt });
-    // In production, this URL would be emailed. We return it so the UI can
-    // display it for testing in this environment.
+    try {
+      await sendPasswordResetEmail(email, token);
+    } catch (err) {
+      logger.error({ err }, "Failed to send password reset email");
+    }
     res.json({
       ok: true,
       message: "If that email exists, a reset link has been sent.",
-      resetUrl: `/reset-password/${token}`,
     });
   }),
 );
@@ -589,11 +598,20 @@ router.post(
         guardianConfirmTokenExpiresAt: new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS),
       })
       .where(eq(users.id, user.id));
-    // In production this URL would be emailed to user.guardianEmail.
+
+    try {
+      await sendGuardianConfirmationEmail(
+        user.guardianEmail,
+        user.name,
+        newToken,
+      );
+    } catch (err) {
+      logger.error({ err }, "Failed to send guardian confirmation email");
+    }
+
     res.json({
       ok: true,
       guardianEmail: user.guardianEmail,
-      guardianConfirmUrl: `/guardian-confirm/${newToken}`,
     });
   }),
 );
