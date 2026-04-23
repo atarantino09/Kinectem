@@ -4197,6 +4197,7 @@ components:
           type: string
         logoUrl:
           type: string
+          nullable: true
 
     MemberResponse:
       type: object

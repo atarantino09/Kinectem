@@ -727,7 +727,11 @@ router.patch(
     if (typeof body.website === "string") patch.website = body.website;
     if (typeof body.city === "string") patch.city = body.city;
     if (typeof body.state === "string") patch.state = body.state;
-    if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
+    if (typeof body.logoUrl === "string") {
+      patch.logoUrl = body.logoUrl === "" ? null : body.logoUrl;
+    } else if (body.logoUrl === null) {
+      patch.logoUrl = null;
+    }
     if (Object.keys(patch).length === 0) {
       return res.json(toOrganization(existing));
     }

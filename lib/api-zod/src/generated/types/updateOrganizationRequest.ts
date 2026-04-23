@@ -12,5 +12,6 @@ export interface UpdateOrganizationRequest {
   website?: string;
   city?: string;
   state?: string;
-  logoUrl?: string;
+  /** @nullable */
+  logoUrl?: string | null;
 }

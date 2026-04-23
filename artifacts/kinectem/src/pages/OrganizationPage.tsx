@@ -45,6 +45,24 @@ export default function OrganizationPage() {
   }
 
   const onPickPhoto = () => fileInputRef.current?.click();
+  const onRemovePhoto = async () => {
+    setUploading(true);
+    try {
+      await customFetch(`/api/v1/organizations/${orgId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: null }),
+      });
+      await qc.invalidateQueries({
+        queryKey: getGetOrganizationByIdQueryKey(orgId),
+      });
+      toast({ title: "Logo removed" });
+    } catch {
+      toast({ title: "Failed to remove logo", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
   const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -117,20 +135,34 @@ export default function OrganizationPage() {
                     onChange={onPhotoChange}
                     data-testid="input-org-logo"
                   />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="absolute -bottom-3 left-1/2 -translate-x-1/2 h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
-                    onClick={onPickPhoto}
-                    disabled={uploading}
-                    data-testid="btn-upload-org-logo"
-                  >
-                    {uploading
-                      ? "Uploading..."
-                      : organization.avatarUrl
-                        ? "Change"
-                        : "Upload"}
-                  </Button>
+                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
+                      onClick={onPickPhoto}
+                      disabled={uploading}
+                      data-testid="btn-upload-org-logo"
+                    >
+                      {uploading
+                        ? "Working..."
+                        : organization.avatarUrl
+                          ? "Change"
+                          : "Upload"}
+                    </Button>
+                    {organization.avatarUrl && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
+                        onClick={onRemovePhoto}
+                        disabled={uploading}
+                        data-testid="btn-remove-org-logo"
+                      >
+                        Remove logo
+                      </Button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
