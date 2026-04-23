@@ -26,14 +26,18 @@ function requireDocsAccess(req: Request, res: Response, next: NextFunction) {
     next();
     return;
   }
-  if (req.sessionUser) {
-    next();
-    return;
-  }
   const expected = process.env.DOCS_ACCESS_TOKEN;
   const presented = presentedDocsToken(req);
   if (expected && presented && expected === presented) {
     next();
+    return;
+  }
+  if (req.sessionUser) {
+    if (req.sessionUser.role === "admin") {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   res.status(401).json({ error: "Authentication required" });

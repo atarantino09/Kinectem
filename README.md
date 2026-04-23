@@ -111,7 +111,7 @@ The API server reads the following environment variables. Add them via your runt
 | `BASE_PATH` | yes (web) | Public path prefix the Kinectem web client is served under (consumed by `artifacts/kinectem/vite.config.ts`). Vite exposes this to the app at runtime as `import.meta.env.BASE_URL`. |
 | `DATABASE_URL` | yes | Postgres connection string used by `@workspace/db` (Drizzle). |
 | `NODE_ENV` | no | Standard Node environment flag (`development` / `production`). When set to `production`, the interactive API docs (`/api/docs`, `/api/openapi.json`, `/api/openapi.yaml`) are no longer publicly browsable — see [Interactive docs](#interactive-docs). |
-| `DOCS_ACCESS_TOKEN` | no | Optional shared secret for accessing the docs in production without a session. Callers present it via the `x-docs-token` header or `?docs_token=<value>` query string. If unset, only authenticated sessions can reach the docs in production. |
+| `DOCS_ACCESS_TOKEN` | no | Optional shared secret for accessing the docs in production without a session. Callers present it via the `x-docs-token` header or `?docs_token=<value>` query string. If unset, only signed-in admin users can reach the docs in production. |
 
 The web client reads its base path from `BASE_PATH` (build-time, via Vite) and reaches the API through the generated `@workspace/api-client-react` client; no additional client-side secrets are required at build time.
 
@@ -184,10 +184,10 @@ The spec is regenerated automatically on `pnpm --filter @workspace/api-server ru
 
 **Access control.** In development (`NODE_ENV !== "production"`) the docs UI and the raw spec endpoints are open, just as before. In production (`NODE_ENV === "production"`) all three routes are protected and require one of:
 
-- A valid signed-in session (any role) — the request must carry the `kinectem_session` cookie; or
+- A valid signed-in session whose user has the `admin` role — the request must carry the `kinectem_session` cookie; or
 - A shared secret matching the `DOCS_ACCESS_TOKEN` environment variable, presented either as the `x-docs-token` request header or the `docs_token` query string parameter (e.g. `/api/docs?docs_token=…`).
 
-Unauthenticated requests in production receive `401 { "error": "Authentication required" }`. If `DOCS_ACCESS_TOKEN` is unset, only signed-in users can reach the docs in production. When you load `/api/docs?docs_token=…` (without a session), the rendered HTML automatically forwards the same token to its `/api/openapi.json` request, so the interactive UI loads end-to-end.
+Signed-in users without the `admin` role receive `403 { "error": "Forbidden" }`. Unauthenticated requests receive `401 { "error": "Authentication required" }`. If `DOCS_ACCESS_TOKEN` is unset, only admin sessions can reach the docs in production. When you load `/api/docs?docs_token=…` (without a session), the rendered HTML automatically forwards the same token to its `/api/openapi.json` request, so the interactive UI loads end-to-end.
 
 ### Conventions
 
