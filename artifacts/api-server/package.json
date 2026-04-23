@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prefix-spec": "node prefix-spec.mjs",
+    "predev": "node prefix-spec.mjs",
     "dev": "tsx watch src/index.ts",
-    "build": "node build.mjs",
+    "prebuild": "node prefix-spec.mjs",
+    "build": "node build.mjs && cp .openapi-prefixed.yaml dist/.openapi-prefixed.yaml",
     "start": "node dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

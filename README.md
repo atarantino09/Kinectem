@@ -172,6 +172,16 @@ Within the web client (`artifacts/kinectem/src`): standard Vite + React layout w
 
 ## API Reference
 
+### Interactive docs
+
+A live, "try it out" reference is generated from `lib/api-spec/openapi.yaml` and served by the API server itself:
+
+- **Docs UI** (Scalar): [`/api/docs`](http://localhost:8080/api/docs)
+- **OpenAPI (JSON)**: [`/api/openapi.json`](http://localhost:8080/api/openapi.json)
+- **OpenAPI (YAML)**: [`/api/openapi.yaml`](http://localhost:8080/api/openapi.yaml)
+
+The spec is regenerated automatically on `pnpm --filter @workspace/api-server run dev` and `… run build` (via the `prefix-spec.mjs` script, which prefixes every path with `/api/v1` and injects example values). To regenerate it manually, run `pnpm --filter @workspace/api-server run prefix-spec`.
+
 ### Conventions
 
 - **Base URL**: all spec endpoints are mounted under `/api/v1`. A separate liveness endpoint is exposed at `/api/healthz`.
