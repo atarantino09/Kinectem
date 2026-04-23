@@ -30,6 +30,10 @@ export interface PublicUserResponse {
   isOwnProfile: boolean;
   isFollowing?: boolean;
   isConnection?: boolean;
+  /** @minimum 0 */
+  followerCount?: number;
+  /** @minimum 0 */
+  followingCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }

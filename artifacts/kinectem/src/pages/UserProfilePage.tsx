@@ -27,11 +27,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Building2, Tag, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
+import { FollowListDialog } from "@/components/FollowListDialog";
 import { getInitials } from "@/lib/format";
 
 export default function UserProfilePage() {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
+  const [followersOpen, setFollowersOpen] = useState(false);
+  const [followingOpen, setFollowingOpen] = useState(false);
   const { data: user, isLoading } = useGetUserById(userId);
   const { data: postsResp } = useListUserPosts(userId);
   const { data: orgsResp } = useListUserOrganizations(userId);
@@ -134,8 +137,44 @@ export default function UserProfilePage() {
                 @{user.nickname}
               </p>
             )}
+            <div className="flex items-center gap-5 mt-3">
+              <button
+                type="button"
+                onClick={() => setFollowersOpen(true)}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                data-testid="btn-view-user-followers"
+              >
+                <span className="font-black text-foreground">
+                  {(user as { followerCount?: number }).followerCount ?? 0}
+                </span>{" "}
+                Followers
+              </button>
+              <button
+                type="button"
+                onClick={() => setFollowingOpen(true)}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                data-testid="btn-view-user-following"
+              >
+                <span className="font-black text-foreground">
+                  {(user as { followingCount?: number }).followingCount ?? 0}
+                </span>{" "}
+                Following
+              </button>
+            </div>
           </div>
         </div>
+        <FollowListDialog
+          open={followersOpen}
+          onOpenChange={setFollowersOpen}
+          title={`${displayName}'s followers`}
+          variant={{ kind: "user-followers", userId }}
+        />
+        <FollowListDialog
+          open={followingOpen}
+          onOpenChange={setFollowingOpen}
+          title={`${displayName} follows`}
+          variant={{ kind: "user-following", userId }}
+        />
         {user.bio && (
           <div className="px-6 pb-6">
             <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">

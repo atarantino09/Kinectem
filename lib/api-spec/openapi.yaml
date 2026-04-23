@@ -3773,6 +3773,12 @@ components:
           type: boolean
         isConnection:
           type: boolean
+        followerCount:
+          type: integer
+          minimum: 0
+        followingCount:
+          type: integer
+          minimum: 0
         createdAt:
           type: string
           format: date-time
@@ -4148,6 +4154,9 @@ components:
           type: boolean
         isFollowing:
           type: boolean
+        followerCount:
+          type: integer
+          minimum: 0
         role:
           type: string
           nullable: true

@@ -80,7 +80,15 @@ export function paginate<T>(data: T[], totalCount?: number) {
 // Users
 // ---------------------------------------------------------------------------
 
-export function toPublicUser(u: UserRow, opts: { isOwnProfile?: boolean; isFollowing?: boolean } = {}) {
+export function toPublicUser(
+  u: UserRow,
+  opts: {
+    isOwnProfile?: boolean;
+    isFollowing?: boolean;
+    followerCount?: number;
+    followingCount?: number;
+  } = {},
+) {
   const { firstName, lastName } = splitName(u.name);
   return {
     id: u.id,
@@ -93,14 +101,23 @@ export function toPublicUser(u: UserRow, opts: { isOwnProfile?: boolean; isFollo
     isOwnProfile: opts.isOwnProfile ?? false,
     isFollowing: opts.isFollowing ?? false,
     isConnection: false,
+    followerCount: opts.followerCount ?? 0,
+    followingCount: opts.followingCount ?? 0,
     createdAt: u.createdAt.toISOString(),
     updatedAt: u.createdAt.toISOString(),
   };
 }
 
-export function toPrivateUser(u: UserRow) {
+export function toPrivateUser(
+  u: UserRow,
+  opts: { followerCount?: number; followingCount?: number } = {},
+) {
   return {
-    ...toPublicUser(u, { isOwnProfile: true }),
+    ...toPublicUser(u, {
+      isOwnProfile: true,
+      followerCount: opts.followerCount,
+      followingCount: opts.followingCount,
+    }),
     email: u.email ?? "",
     dateOfBirth: u.dateOfBirth ? u.dateOfBirth.toISOString().slice(0, 10) : null,
   };
@@ -124,6 +141,7 @@ export function toOrganization(
     isMember?: boolean;
     role?: "owner" | "admin" | "member" | null;
     isFollowing?: boolean;
+    followerCount?: number;
   } = {},
 ) {
   return {
@@ -138,6 +156,7 @@ export function toOrganization(
     isMember: opts.isMember ?? false,
     role: opts.role ?? null,
     isFollowing: opts.isFollowing ?? false,
+    followerCount: opts.followerCount ?? 0,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.createdAt.toISOString(),
   };

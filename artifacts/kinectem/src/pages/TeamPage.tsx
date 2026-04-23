@@ -43,6 +43,7 @@ import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { PostCard } from "@/components/PostCard";
+import { FollowListDialog } from "@/components/FollowListDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { PostResponse } from "@workspace/api-client-react";
@@ -61,6 +62,7 @@ export default function TeamPage() {
   const [expanded, setExpanded] = useState<"posts" | "roster" | "admin">(
     "posts",
   );
+  const [followersOpen, setFollowersOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: team, isLoading } = useGetTeamById(teamId);
@@ -508,12 +510,27 @@ export default function TeamPage() {
                 disabled={followTeam.isPending || unfollowTeam.isPending}
                 data-testid="btn-follow-team"
               >
-                {team.isFollowing ? "Following" : "Follow"} ({team.followerCount})
+                {team.isFollowing ? "Following" : "Follow"}
+              </Button>
+              <Button
+                variant="outline"
+                className="font-bold rounded-full"
+                onClick={() => setFollowersOpen(true)}
+                data-testid="btn-view-team-followers"
+              >
+                <Users className="w-4 h-4 mr-1.5" />
+                {team.followerCount} Followers
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
+      <FollowListDialog
+        open={followersOpen}
+        onOpenChange={setFollowersOpen}
+        title={`${team.name} followers`}
+        variant={{ kind: "team-followers", teamId }}
+      />
 
       {expanded === "posts" && (
       <section className="space-y-3">

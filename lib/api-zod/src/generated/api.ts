@@ -48,9 +48,17 @@ export const getUserByIdResponseOneOneNicknameMax = 100;
 
 export const getUserByIdResponseOneOneBioMax = 1000;
 
+export const getUserByIdResponseOneOneFollowerCountMin = 0;
+
+export const getUserByIdResponseOneOneFollowingCountMin = 0;
+
 export const getUserByIdResponseTwoNicknameMax = 100;
 
 export const getUserByIdResponseTwoBioMax = 1000;
+
+export const getUserByIdResponseTwoFollowerCountMin = 0;
+
+export const getUserByIdResponseTwoFollowingCountMin = 0;
 
 export const GetUserByIdResponse = zod.union([
   zod
@@ -74,6 +82,14 @@ export const GetUserByIdResponse = zod.union([
       isOwnProfile: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       isConnection: zod.boolean().optional(),
+      followerCount: zod
+        .number()
+        .min(getUserByIdResponseOneOneFollowerCountMin)
+        .optional(),
+      followingCount: zod
+        .number()
+        .min(getUserByIdResponseOneOneFollowingCountMin)
+        .optional(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -100,6 +116,14 @@ export const GetUserByIdResponse = zod.union([
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(getUserByIdResponseTwoFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(getUserByIdResponseTwoFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),
@@ -138,6 +162,10 @@ export const updateUserResponseOneNicknameMax = 100;
 
 export const updateUserResponseOneBioMax = 1000;
 
+export const updateUserResponseOneFollowerCountMin = 0;
+
+export const updateUserResponseOneFollowingCountMin = 0;
+
 export const UpdateUserResponse = zod
   .object({
     id: zod.string().uuid(),
@@ -156,6 +184,14 @@ export const UpdateUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(updateUserResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(updateUserResponseOneFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -185,6 +221,10 @@ export const setUserCoverPhotoResponseOneNicknameMax = 100;
 
 export const setUserCoverPhotoResponseOneBioMax = 1000;
 
+export const setUserCoverPhotoResponseOneFollowerCountMin = 0;
+
+export const setUserCoverPhotoResponseOneFollowingCountMin = 0;
+
 export const SetUserCoverPhotoResponse = zod
   .object({
     id: zod.string().uuid(),
@@ -206,6 +246,14 @@ export const SetUserCoverPhotoResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(setUserCoverPhotoResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(setUserCoverPhotoResponseOneFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -228,6 +276,10 @@ export const deleteUserCoverPhotoResponseOneNicknameMax = 100;
 
 export const deleteUserCoverPhotoResponseOneBioMax = 1000;
 
+export const deleteUserCoverPhotoResponseOneFollowerCountMin = 0;
+
+export const deleteUserCoverPhotoResponseOneFollowingCountMin = 0;
+
 export const DeleteUserCoverPhotoResponse = zod
   .object({
     id: zod.string().uuid(),
@@ -249,6 +301,14 @@ export const DeleteUserCoverPhotoResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(deleteUserCoverPhotoResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(deleteUserCoverPhotoResponseOneFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -278,6 +338,10 @@ export const setUserAvatarResponseOneNicknameMax = 100;
 
 export const setUserAvatarResponseOneBioMax = 1000;
 
+export const setUserAvatarResponseOneFollowerCountMin = 0;
+
+export const setUserAvatarResponseOneFollowingCountMin = 0;
+
 export const SetUserAvatarResponse = zod
   .object({
     id: zod.string().uuid(),
@@ -296,6 +360,14 @@ export const SetUserAvatarResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(setUserAvatarResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(setUserAvatarResponseOneFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -318,6 +390,10 @@ export const deleteUserAvatarResponseOneNicknameMax = 100;
 
 export const deleteUserAvatarResponseOneBioMax = 1000;
 
+export const deleteUserAvatarResponseOneFollowerCountMin = 0;
+
+export const deleteUserAvatarResponseOneFollowingCountMin = 0;
+
 export const DeleteUserAvatarResponse = zod
   .object({
     id: zod.string().uuid(),
@@ -339,6 +415,14 @@ export const DeleteUserAvatarResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(deleteUserAvatarResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(deleteUserAvatarResponseOneFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -448,6 +532,10 @@ export const getLoggedInUserResponseOneNicknameMax = 100;
 
 export const getLoggedInUserResponseOneBioMax = 1000;
 
+export const getLoggedInUserResponseOneFollowerCountMin = 0;
+
+export const getLoggedInUserResponseOneFollowingCountMin = 0;
+
 export const GetLoggedInUserResponse = zod
   .object({
     id: zod.string().uuid(),
@@ -466,6 +554,14 @@ export const GetLoggedInUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(getLoggedInUserResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(getLoggedInUserResponseOneFollowingCountMin)
+      .optional(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -535,6 +631,8 @@ export const ListUserOrganizationsQueryParams = zod.object({
     .default(listUserOrganizationsQueryIncludeTotalDefault),
 });
 
+export const listUserOrganizationsResponseDataItemFollowerCountMin = 0;
+
 export const ListUserOrganizationsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -545,6 +643,10 @@ export const ListUserOrganizationsResponse = zod.object({
       website: zod.string().url().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
+      followerCount: zod
+        .number()
+        .min(listUserOrganizationsResponseDataItemFollowerCountMin)
+        .optional(),
       role: zod.enum(["owner", "admin", "member"]).nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -604,6 +706,8 @@ export const ListOrganizationsQueryParams = zod.object({
     .default(listOrganizationsQueryIncludeTotalDefault),
 });
 
+export const listOrganizationsResponseDataItemFollowerCountMin = 0;
+
 export const ListOrganizationsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -614,6 +718,10 @@ export const ListOrganizationsResponse = zod.object({
       website: zod.string().url().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
+      followerCount: zod
+        .number()
+        .min(listOrganizationsResponseDataItemFollowerCountMin)
+        .optional(),
       role: zod.enum(["owner", "admin", "member"]).nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -633,6 +741,8 @@ export const GetOrganizationByIdParams = zod.object({
   orgId: zod.coerce.string().uuid(),
 });
 
+export const getOrganizationByIdResponseFollowerCountMin = 0;
+
 export const GetOrganizationByIdResponse = zod.object({
   id: zod.string().uuid(),
   name: zod.string(),
@@ -641,6 +751,10 @@ export const GetOrganizationByIdResponse = zod.object({
   website: zod.string().url().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
+  followerCount: zod
+    .number()
+    .min(getOrganizationByIdResponseFollowerCountMin)
+    .optional(),
   role: zod.enum(["owner", "admin", "member"]).nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -662,6 +776,8 @@ export const UpdateOrganizationBody = zod.object({
   logoUrl: zod.string().nullish(),
 });
 
+export const updateOrganizationResponseFollowerCountMin = 0;
+
 export const UpdateOrganizationResponse = zod.object({
   id: zod.string().uuid(),
   name: zod.string(),
@@ -670,6 +786,10 @@ export const UpdateOrganizationResponse = zod.object({
   website: zod.string().url().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
+  followerCount: zod
+    .number()
+    .min(updateOrganizationResponseFollowerCountMin)
+    .optional(),
   role: zod.enum(["owner", "admin", "member"]).nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -3458,6 +3578,8 @@ export const SetOrgAvatarBody = zod.object({
     .describe("UUID of a confirmed asset owned by the caller."),
 });
 
+export const setOrgAvatarResponseFollowerCountMin = 0;
+
 export const SetOrgAvatarResponse = zod.object({
   id: zod.string().uuid(),
   name: zod.string(),
@@ -3466,6 +3588,10 @@ export const SetOrgAvatarResponse = zod.object({
   website: zod.string().url().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
+  followerCount: zod
+    .number()
+    .min(setOrgAvatarResponseFollowerCountMin)
+    .optional(),
   role: zod.enum(["owner", "admin", "member"]).nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),

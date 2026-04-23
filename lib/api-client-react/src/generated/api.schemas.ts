@@ -44,6 +44,10 @@ export interface PublicUserResponse {
   isOwnProfile: boolean;
   isFollowing?: boolean;
   isConnection?: boolean;
+  /** @minimum 0 */
+  followerCount?: number;
+  /** @minimum 0 */
+  followingCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -352,6 +356,8 @@ export interface OrganizationResponse {
   website?: string | null;
   isMember: boolean;
   isFollowing?: boolean;
+  /** @minimum 0 */
+  followerCount?: number;
   /** @nullable */
   role?: OrganizationResponseRole;
   createdAt: string;

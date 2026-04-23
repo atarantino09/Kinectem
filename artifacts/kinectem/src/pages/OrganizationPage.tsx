@@ -22,6 +22,7 @@ import { PostCard } from "@/components/PostCard";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
+import { FollowListDialog } from "@/components/FollowListDialog";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
@@ -32,6 +33,7 @@ export default function OrganizationPage() {
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [followersOpen, setFollowersOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
@@ -238,8 +240,24 @@ export default function OrganizationPage() {
             >
               {organization.isFollowing ? "Following" : "Follow"}
             </Button>
+            <Button
+              variant="outline"
+              className="font-bold rounded-full"
+              onClick={() => setFollowersOpen(true)}
+              data-testid="btn-view-org-followers"
+            >
+              <Users className="w-4 h-4 mr-1.5" />
+              {(organization as { followerCount?: number }).followerCount ?? 0}{" "}
+              Followers
+            </Button>
           </div>
         </div>
+        <FollowListDialog
+          open={followersOpen}
+          onOpenChange={setFollowersOpen}
+          title={`${organization.name} followers`}
+          variant={{ kind: "org-followers", orgId }}
+        />
         {organization.description && (
           <div className="px-6 pb-6">
             <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">

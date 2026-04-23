@@ -17,6 +17,8 @@ export interface OrganizationResponse {
   website?: string | null;
   isMember: boolean;
   isFollowing?: boolean;
+  /** @minimum 0 */
+  followerCount?: number;
   /** @nullable */
   role?: OrganizationResponseRole;
   createdAt: Date;
