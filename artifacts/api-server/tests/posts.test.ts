@@ -15,10 +15,67 @@ async function getOrgAndTeam(name = "Varsity Football") {
 }
 
 describe("posts", () => {
-  it("returns the published feed", async () => {
+  it("requires authentication for the feed", async () => {
     const res = await request(app).get("/api/v1/feed");
-    expect(res.status).toBe(200);
-    expect(res.body.data.length).toBeGreaterThan(0);
+    expect(res.status).toBe(401);
+  });
+
+  it("filters the feed by what the user follows (and unfollows)", async () => {
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+
+    const post = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Follow filter recap",
+      description: "Used by the follow-filter test",
+      body: "Body",
+    });
+    expect(post.status).toBe(201);
+    const postId: string = post.body.id;
+
+    const email = `feedtester+${Date.now()}@kinectem.test`;
+    const signup = await request(app).post("/api/v1/auth/signup").send({
+      email,
+      password: "test-password-123",
+      firstName: "Feed",
+      lastName: "Tester",
+      role: "coach",
+    });
+    expect(signup.status).toBe(201);
+    const newAgent = request.agent(app);
+    const login = await newAgent
+      .post("/api/v1/auth/login")
+      .send({ email, password: "test-password-123" });
+    expect(login.status).toBe(200);
+
+    const empty = await newAgent.get("/api/v1/feed");
+    expect(empty.status).toBe(200);
+    expect(
+      empty.body.data.find((p: { id: string }) => p.id === postId),
+    ).toBeUndefined();
+
+    const follow = await newAgent.post(
+      `/api/v1/organizations/${org.id}/follow`,
+    );
+    expect([200, 201, 204]).toContain(follow.status);
+
+    const followed = await newAgent.get("/api/v1/feed");
+    expect(followed.status).toBe(200);
+    expect(
+      followed.body.data.find((p: { id: string }) => p.id === postId),
+    ).toBeDefined();
+
+    const unfollow = await newAgent.delete(
+      `/api/v1/organizations/${org.id}/follow`,
+    );
+    expect([200, 204]).toContain(unfollow.status);
+
+    const after = await newAgent.get("/api/v1/feed");
+    expect(after.status).toBe(200);
+    expect(
+      after.body.data.find((p: { id: string }) => p.id === postId),
+    ).toBeUndefined();
   });
 
   it("admin/coach creating a long post publishes immediately", async () => {

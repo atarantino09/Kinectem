@@ -6,7 +6,10 @@ import {
   useListOrgTeams,
   useListOrgPosts,
   useListMembers,
+  useFollowOrg,
+  useUnfollowOrg,
   getGetOrganizationByIdQueryKey,
+  getListFeedQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +37,24 @@ export default function OrganizationPage() {
   const { data: teamsResp } = useListOrgTeams(orgId);
   const { data: postsResp } = useListOrgPosts(orgId);
   const { data: membersResp } = useListMembers(orgId);
+  const followOrg = useFollowOrg();
+  const unfollowOrg = useUnfollowOrg();
+  const onToggleFollow = async () => {
+    if (!organization) return;
+    try {
+      if (organization.isFollowing) {
+        await unfollowOrg.mutateAsync({ orgId });
+      } else {
+        await followOrg.mutateAsync({ orgId });
+      }
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetOrganizationByIdQueryKey(orgId) }),
+        qc.invalidateQueries({ queryKey: getListFeedQueryKey() }),
+      ]);
+    } catch {
+      toast({ title: "Couldn't update follow", variant: "destructive" });
+    }
+  };
 
   if (isLoading || !organization) {
     return (
@@ -209,8 +230,13 @@ export default function OrganizationPage() {
                 <Pencil className="w-4 h-4 mr-1.5" /> Edit
               </Button>
             )}
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6">
-              {organization.isMember ? "Following" : "Follow"}
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6"
+              onClick={onToggleFollow}
+              disabled={followOrg.isPending || unfollowOrg.isPending}
+              data-testid="btn-follow-org"
+            >
+              {organization.isFollowing ? "Following" : "Follow"}
             </Button>
           </div>
         </div>

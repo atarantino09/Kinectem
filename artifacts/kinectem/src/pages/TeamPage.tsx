@@ -10,9 +10,12 @@ import {
   useDeclineTeamInvite,
   useGetOrganizationById,
   useGetLoggedInUser,
+  useFollowTeam,
+  useUnfollowTeam,
   getListTeamMembersQueryKey,
   getListRosterInvitesQueryKey,
   getGetTeamByIdQueryKey,
+  getListFeedQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +64,24 @@ export default function TeamPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: team, isLoading } = useGetTeamById(teamId);
+  const followTeam = useFollowTeam();
+  const unfollowTeam = useUnfollowTeam();
+  const onToggleFollow = async () => {
+    if (!team) return;
+    try {
+      if (team.isFollowing) {
+        await unfollowTeam.mutateAsync({ teamId });
+      } else {
+        await followTeam.mutateAsync({ teamId });
+      }
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) }),
+        qc.invalidateQueries({ queryKey: getListFeedQueryKey() }),
+      ]);
+    } catch {
+      toast({ title: "Couldn't update follow", variant: "destructive" });
+    }
+  };
   const { data: membersResp } = useListTeamMembers(teamId);
   const { data: invitesResp } = useListRosterInvites(teamId);
   const { data: org } = useGetOrganizationById(team?.organization.id ?? "", {
@@ -481,7 +502,12 @@ export default function TeamPage() {
                   Admin Tools
                 </Button>
               )}
-              <Button className="bg-primary text-primary-foreground font-bold rounded-full px-5">
+              <Button
+                className="bg-primary text-primary-foreground font-bold rounded-full px-5"
+                onClick={onToggleFollow}
+                disabled={followTeam.isPending || unfollowTeam.isPending}
+                data-testid="btn-follow-team"
+              >
                 {team.isFollowing ? "Following" : "Follow"} ({team.followerCount})
               </Button>
             </div>

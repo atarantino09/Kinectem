@@ -5,6 +5,8 @@ import {
   organizations,
   organizationAdmins,
   organizationFollowers,
+  userFollowers,
+  teamFollowers,
   teams,
   rosterEntries,
   rosterInvites,
@@ -606,9 +608,23 @@ router.get(
       };
     }
 
+    let isFollowing = false;
+    if (me && !isOwnProfile) {
+      const [f] = await db
+        .select()
+        .from(userFollowers)
+        .where(
+          and(
+            eq(userFollowers.followingUserId, u.id),
+            eq(userFollowers.followerUserId, me.id),
+          ),
+        )
+        .limit(1);
+      isFollowing = !!f;
+    }
     const base = isOwnProfile
       ? toPrivateUser(u)
-      : toPublicUser(u, { isOwnProfile: false, isFollowing: false });
+      : toPublicUser(u, { isOwnProfile: false, isFollowing });
     res.json({ ...base, linkedAccounts });
   }),
 );
@@ -1214,6 +1230,89 @@ router.delete(
     res.status(204).end();
   }),
 );
+
+router.post(
+  "/users/:userId/follow",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (me.id === req.params.userId) {
+      return res.status(400).json({ error: "Cannot follow yourself" });
+    }
+    const [target] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, req.params.userId))
+      .limit(1);
+    if (!target) return notFound(res);
+    await db
+      .insert(userFollowers)
+      .values({ followingUserId: req.params.userId, followerUserId: me.id })
+      .onConflictDoNothing();
+    res.status(201).json({
+      followerId: me.id,
+      followingUserId: req.params.userId,
+      createdAt: new Date().toISOString(),
+    });
+  }),
+);
+
+router.delete(
+  "/users/:userId/follow",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    await db
+      .delete(userFollowers)
+      .where(
+        and(
+          eq(userFollowers.followingUserId, req.params.userId),
+          eq(userFollowers.followerUserId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/teams/:teamId/follow",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [target] = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    if (!target) return notFound(res);
+    await db
+      .insert(teamFollowers)
+      .values({ teamId: req.params.teamId, userId: me.id })
+      .onConflictDoNothing();
+    res.status(201).json({
+      followerId: me.id,
+      teamId: req.params.teamId,
+      createdAt: new Date().toISOString(),
+    });
+  }),
+);
+
+router.delete(
+  "/teams/:teamId/follow",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, req.params.teamId),
+          eq(teamFollowers.userId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
 router.get("/organizations/:orgId/privacy", (_req, res) =>
   res.json({ orgId: _req.params.orgId, settings: {} }),
 );
@@ -1262,7 +1361,23 @@ router.get(
       .select({ count: sql<number>`count(*)::int` })
       .from(rosterEntries)
       .where(eq(rosterEntries.teamId, t.id));
-    res.json(toTeam(t, org, { memberCount: count }));
+    const me = req.sessionUser;
+    const [{ followerCount }] = await db
+      .select({ followerCount: sql<number>`count(*)::int` })
+      .from(teamFollowers)
+      .where(eq(teamFollowers.teamId, t.id));
+    let isFollowing = false;
+    if (me) {
+      const [f] = await db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(eq(teamFollowers.teamId, t.id), eq(teamFollowers.userId, me.id)),
+        )
+        .limit(1);
+      isFollowing = !!f;
+    }
+    res.json(toTeam(t, org, { memberCount: count, followerCount, isFollowing }));
   }),
 );
 
@@ -1760,23 +1875,132 @@ router.get(
   "/feed",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+
+    const [followedOrgRows, followedTeamRows, followedUserRows] = await Promise.all([
+      db
+        .select({ id: organizationFollowers.organizationId })
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, me.id)),
+      db
+        .select({ id: teamFollowers.teamId })
+        .from(teamFollowers)
+        .where(eq(teamFollowers.userId, me.id)),
+      db
+        .select({ id: userFollowers.followingUserId })
+        .from(userFollowers)
+        .where(eq(userFollowers.followerUserId, me.id)),
+    ]);
+    const followedOrgIds = followedOrgRows.map((r) => r.id);
+    const followedTeamIds = followedTeamRows.map((r) => r.id);
+    const followedUserIds = followedUserRows.map((r) => r.id);
+
+    if (
+      followedOrgIds.length === 0 &&
+      followedTeamIds.length === 0 &&
+      followedUserIds.length === 0
+    ) {
+      // User follows nothing: only show their own posts.
+      const ownArts = await db
+        .select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(and(eq(articles.status, "published"), eq(articles.authorId, me.id)))
+        .orderBy(desc(articles.createdAt))
+        .limit(10);
+      const ownHls = await db
+        .select({ h: highlights, team: teams, org: organizations, uploader: users })
+        .from(highlights)
+        .innerJoin(teams, eq(highlights.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(highlights.uploaderId, users.id))
+        .where(eq(highlights.uploaderId, me.id))
+        .orderBy(desc(highlights.createdAt))
+        .limit(10);
+      const stats = await loadPostStats(me.id, [
+        ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+        ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ]);
+      const items = [
+        ...ownArts.map((r) =>
+          articleToPost(r.a, {
+            team: r.team,
+            org: r.org,
+            author: r.author,
+            ...statsFor(stats, "article", r.a.id),
+          }),
+        ),
+        ...ownHls.map((r) =>
+          highlightToPost(r.h, {
+            team: r.team,
+            org: r.org,
+            author: r.uploader,
+            ...statsFor(stats, "highlight", r.h.id),
+          }),
+        ),
+      ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return res.json(paginate(items));
+    }
+
+    // Articles whose tagged users include any followed user.
+    const articleIdsByTaggedUser = followedUserIds.length
+      ? (
+          await db
+            .selectDistinct({ id: articleTags.articleId })
+            .from(articleTags)
+            .where(inArray(articleTags.userId, followedUserIds))
+        ).map((r) => r.id)
+      : [];
+    const highlightIdsByTaggedUser = followedUserIds.length
+      ? (
+          await db
+            .selectDistinct({ id: highlightTags.highlightId })
+            .from(highlightTags)
+            .where(inArray(highlightTags.userId, followedUserIds))
+        ).map((r) => r.id)
+      : [];
+
+    const articleConds = [eq(articles.authorId, me.id)];
+    if (followedTeamIds.length)
+      articleConds.push(inArray(articles.teamId, followedTeamIds));
+    if (followedOrgIds.length)
+      articleConds.push(inArray(teams.organizationId, followedOrgIds));
+    if (followedUserIds.length)
+      articleConds.push(inArray(articles.authorId, followedUserIds));
+    if (articleIdsByTaggedUser.length)
+      articleConds.push(inArray(articles.id, articleIdsByTaggedUser));
+
     const arts = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(eq(articles.status, "published"))
+      .where(and(eq(articles.status, "published"), or(...articleConds)))
       .orderBy(desc(articles.createdAt))
-      .limit(10);
+      .limit(20);
+
+    const highlightConds = [eq(highlights.uploaderId, me.id)];
+    if (followedTeamIds.length)
+      highlightConds.push(inArray(highlights.teamId, followedTeamIds));
+    if (followedOrgIds.length)
+      highlightConds.push(inArray(teams.organizationId, followedOrgIds));
+    if (followedUserIds.length)
+      highlightConds.push(inArray(highlights.uploaderId, followedUserIds));
+    if (highlightIdsByTaggedUser.length)
+      highlightConds.push(inArray(highlights.id, highlightIdsByTaggedUser));
+
     const hls = await db
       .select({ h: highlights, team: teams, org: organizations, uploader: users })
       .from(highlights)
       .innerJoin(teams, eq(highlights.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(or(...highlightConds))
       .orderBy(desc(highlights.createdAt))
-      .limit(10);
+      .limit(20);
     const stats = await loadPostStats(me?.id ?? null, [
       ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),

@@ -1,11 +1,17 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserById,
   useListUserPosts,
   useListUserOrganizations,
   useListUserTeams,
+  useFollowUser,
+  useUnfollowUser,
+  getGetUserByIdQueryKey,
+  getListFeedQueryKey,
 } from "@workspace/api-client-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -31,6 +37,26 @@ export default function UserProfilePage() {
   const { data: orgsResp } = useListUserOrganizations(userId);
   const { data: teamsResp } = useListUserTeams(userId);
   const [teamFilter, setTeamFilter] = useState<string>("all");
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const followUser = useFollowUser();
+  const unfollowUser = useUnfollowUser();
+  const onToggleFollow = async () => {
+    if (!user) return;
+    try {
+      if (user.isFollowing) {
+        await unfollowUser.mutateAsync({ userId });
+      } else {
+        await followUser.mutateAsync({ userId });
+      }
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetUserByIdQueryKey(userId) }),
+        qc.invalidateQueries({ queryKey: getListFeedQueryKey() }),
+      ]);
+    } catch {
+      toast({ title: "Couldn't update follow", variant: "destructive" });
+    }
+  };
 
   const allPosts = postsResp?.data ?? [];
   const posts = useMemo(() => {
@@ -89,7 +115,12 @@ export default function UserProfilePage() {
                 <EditProfileDialog user={user} />
               </div>
             ) : (
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6 mt-14">
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6 mt-14"
+                onClick={onToggleFollow}
+                disabled={followUser.isPending || unfollowUser.isPending}
+                data-testid="btn-follow-user"
+              >
                 {user.isFollowing ? "Following" : "Follow"}
               </Button>
             )}

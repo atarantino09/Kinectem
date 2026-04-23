@@ -351,6 +351,7 @@ export interface OrganizationResponse {
   /** @nullable */
   website?: string | null;
   isMember: boolean;
+  isFollowing?: boolean;
   /** @nullable */
   role?: OrganizationResponseRole;
   createdAt: string;

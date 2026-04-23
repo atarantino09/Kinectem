@@ -77,6 +77,12 @@ export const organizationFollowers = pgTable("organization_followers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
 
+export const userFollowers = pgTable("user_followers", {
+  followingUserId: uuid("following_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  followerUserId: uuid("follower_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.followingUserId, t.followerUserId] }) }));
+
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
@@ -89,6 +95,12 @@ export const teams = pgTable("teams", {
   bannerUrl: text("banner_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const teamFollowers = pgTable("team_followers", {
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.teamId, t.userId] }) }));
 
 export const rosterEntries = pgTable("roster_entries", {
   id: uuid("id").primaryKey().defaultRandom(),

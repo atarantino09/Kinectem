@@ -4040,6 +4040,8 @@ components:
           example: https://westfield-warriors.example.com
         isMember:
           type: boolean
+        isFollowing:
+          type: boolean
         role:
           type: string
           nullable: true

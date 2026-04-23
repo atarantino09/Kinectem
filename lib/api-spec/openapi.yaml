@@ -4146,6 +4146,8 @@ components:
           format: uri
         isMember:
           type: boolean
+        isFollowing:
+          type: boolean
         role:
           type: string
           nullable: true
