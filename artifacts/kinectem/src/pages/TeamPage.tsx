@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -28,6 +28,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper, Users, Pencil } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/format";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
@@ -319,6 +325,12 @@ export default function TeamPage() {
                   </Button>
                 )}
               </div>
+              {team.description && (
+                <TeamDescription
+                  description={team.description}
+                  teamName={team.name}
+                />
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -372,11 +384,6 @@ export default function TeamPage() {
               </Button>
             </div>
           </div>
-          {team.description && (
-            <p className="text-sm text-muted-foreground mt-4 leading-relaxed max-w-3xl">
-              {team.description}
-            </p>
-          )}
         </CardContent>
       </Card>
 
@@ -588,6 +595,68 @@ export default function TeamPage() {
         onOpenChange={setEditOpen}
       />
 
+    </div>
+  );
+}
+
+function TeamDescription({
+  description,
+  teamName,
+}: {
+  description: string;
+  teamName: string;
+}) {
+  const ref = useRef<HTMLParagraphElement | null>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => {
+      setOverflow(el.scrollHeight - 1 > el.clientHeight);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [description]);
+
+  useEffect(() => {
+    setOverflow((prev) => prev);
+  }, []);
+
+  return (
+    <div className="mt-3 max-w-md">
+      <p
+        ref={ref}
+        className="text-sm text-muted-foreground leading-relaxed line-clamp-5 whitespace-pre-wrap"
+        data-testid="text-team-description"
+      >
+        {description}
+      </p>
+      {overflow && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-1 text-xs font-bold text-primary hover:underline"
+          data-testid="btn-team-description-more"
+        >
+          See more
+        </button>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-black tracking-tight">
+              About {teamName}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+            {description}
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
