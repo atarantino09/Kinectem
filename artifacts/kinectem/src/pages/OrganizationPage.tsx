@@ -14,10 +14,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, ChevronRight, Plus } from "lucide-react";
+import { Building2, Users, ChevronRight, Plus, Pencil } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
+import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
@@ -26,6 +27,7 @@ export default function OrganizationPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
@@ -163,9 +165,22 @@ export default function OrganizationPage() {
               </div>
             </div>
           </div>
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6">
-            {organization.isMember ? "Following" : "Follow"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {(organization.role === "admin" ||
+              organization.role === "owner") && (
+              <Button
+                variant="outline"
+                onClick={() => setEditOpen(true)}
+                className="font-bold rounded-full"
+                data-testid="btn-edit-org"
+              >
+                <Pencil className="w-4 h-4 mr-1.5" /> Edit
+              </Button>
+            )}
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6">
+              {organization.isMember ? "Following" : "Follow"}
+            </Button>
+          </div>
         </div>
         {organization.description && (
           <div className="px-6 pb-6">
@@ -187,7 +202,14 @@ export default function OrganizationPage() {
       </div>
 
       {(organization.role === "admin" || organization.role === "owner") && (
-        <OrgAdminPanel orgId={orgId} />
+        <>
+          <EditOrgDialog
+            organization={organization}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+          />
+          <OrgAdminPanel orgId={orgId} />
+        </>
       )}
 
       {/* Teams */}

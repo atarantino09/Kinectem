@@ -373,6 +373,9 @@ export interface UpdateOrganizationRequest {
   name?: string;
   description?: string;
   website?: string;
+  city?: string;
+  state?: string;
+  logoUrl?: string;
 }
 
 export type MemberResponseRole =

@@ -4191,6 +4191,12 @@ components:
         website:
           type: string
           format: uri
+        city:
+          type: string
+        state:
+          type: string
+        logoUrl:
+          type: string
 
     MemberResponse:
       type: object

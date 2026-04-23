@@ -654,6 +654,9 @@ export const UpdateOrganizationBody = zod.object({
   name: zod.string().optional(),
   description: zod.string().optional(),
   website: zod.string().url().optional(),
+  city: zod.string().optional(),
+  state: zod.string().optional(),
+  logoUrl: zod.string().optional(),
 });
 
 export const UpdateOrganizationResponse = zod.object({
