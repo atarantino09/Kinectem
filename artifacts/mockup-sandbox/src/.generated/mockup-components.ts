@@ -5,5 +5,8 @@ export const modules: ModuleMap = {
   "./components/mockups/kinectem/AthleteProfile.tsx": () => import("../components/mockups/kinectem/AthleteProfile.tsx"),
   "./components/mockups/kinectem/GameRecapCreator.tsx": () => import("../components/mockups/kinectem/GameRecapCreator.tsx"),
   "./components/mockups/kinectem/OrganizationPage.tsx": () => import("../components/mockups/kinectem/OrganizationPage.tsx"),
-  "./components/mockups/kinectem/TeamPage.tsx": () => import("../components/mockups/kinectem/TeamPage.tsx")
+  "./components/mockups/kinectem/TeamPage.tsx": () => import("../components/mockups/kinectem/TeamPage.tsx"),
+  "./components/mockups/kinectem-login/Combined.tsx": () => import("../components/mockups/kinectem-login/Combined.tsx"),
+  "./components/mockups/kinectem-login/EmailPassword.tsx": () => import("../components/mockups/kinectem-login/EmailPassword.tsx"),
+  "./components/mockups/kinectem-login/SocialFirst.tsx": () => import("../components/mockups/kinectem-login/SocialFirst.tsx")
 };
