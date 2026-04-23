@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper, Users, Pencil } from "lucide-react";
+import { Shield, Trophy, UserPlus, X, Check, Mail, FileText, Newspaper, Users, Pencil, ChevronDown, ChevronRight } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/format";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
@@ -52,6 +52,9 @@ export default function TeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
   const [expanded, setExpanded] = useState<"posts" | "roster" | "admin">(
     "posts",
   );
@@ -97,7 +100,16 @@ export default function TeamPage() {
     );
   }
 
-  const allMembers = membersResp?.data ?? [];
+  type ParentRef = {
+    id: string;
+    displayName: string;
+    email?: string | null;
+    avatarUrl?: string | null;
+  };
+  const rawMembers = membersResp?.data ?? [];
+  const allMembers = rawMembers as Array<
+    (typeof rawMembers)[number] & { parents?: ParentRef[] }
+  >;
   const players = allMembers.filter((m) => m.position === "player");
   const staff = allMembers.filter((m) => m.position !== "player");
   const invites = (invitesResp?.data ?? []).filter(
@@ -172,11 +184,146 @@ export default function TeamPage() {
     }
   };
 
-  const renderMemberRow = (m: (typeof allMembers)[number]) => {
+  const togglePlayerExpand = (id: string) => {
+    setExpandedPlayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderStatusBadge = (isPending: boolean) =>
+    isPending ? (
+      <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none font-bold uppercase tracking-wider text-[10px]">
+        Pending
+      </Badge>
+    ) : (
+      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-bold uppercase tracking-wider text-[10px]">
+        Active
+      </Badge>
+    );
+
+  const renderActions = (m: (typeof allMembers)[number]) => {
     const isMe = me?.id === m.userId;
     const isPending = m.status === "pending";
     return (
-      <TableRow key={m.id} data-testid={`row-member-${m.id}`}>
+      <div className="flex items-center justify-end gap-2">
+        {isPending && isMe && (
+          <>
+            <Button
+              size="sm"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onAccept(m.id)}
+              data-testid={`btn-accept-${m.id}`}
+            >
+              <Check className="w-3 h-3 mr-1" /> Accept
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onDecline(m.id)}
+              data-testid={`btn-decline-${m.id}`}
+            >
+              Decline
+            </Button>
+          </>
+        )}
+        {isAdmin && !isMe && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            onClick={() => onRemove(m.id, m.displayName)}
+            data-testid={`btn-remove-${m.id}`}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    );
+  };
+
+  const renderPlayerRow = (m: (typeof allMembers)[number]) => {
+    const parents = m.parents ?? [];
+    const isExpanded = expandedPlayers.has(m.id);
+    const hasParents = parents.length > 0;
+    return (
+      <Fragment key={m.id}>
+        <TableRow data-testid={`row-player-${m.id}`}>
+          <TableCell className="w-8 pr-0">
+            {hasParents ? (
+              <button
+                type="button"
+                onClick={() => togglePlayerExpand(m.id)}
+                className="text-muted-foreground hover:text-foreground p-1"
+                data-testid={`btn-expand-${m.id}`}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+            ) : (
+              <span className="inline-block w-4 h-4" />
+            )}
+          </TableCell>
+          <TableCell>
+            <Link href={`/users/${m.userId}`}>
+              <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
+                <div className="w-8 h-8 rounded-full bg-slate-900 text-primary-foreground flex items-center justify-center text-[10px] font-bold">
+                  {getInitials(m.displayName)}
+                </div>
+                <span className="font-semibold">{m.displayName}</span>
+              </div>
+            </Link>
+          </TableCell>
+          <TableCell className="text-xs text-muted-foreground">
+            {hasParents ? `${parents.length} parent${parents.length > 1 ? "s" : ""}` : "—"}
+          </TableCell>
+          <TableCell>{renderStatusBadge(m.status === "pending")}</TableCell>
+          <TableCell className="text-right">{renderActions(m)}</TableCell>
+        </TableRow>
+        {isExpanded && hasParents && (
+          <TableRow
+            key={`${m.id}-parents`}
+            className="bg-muted/30"
+            data-testid={`row-parents-${m.id}`}
+          >
+            <TableCell />
+            <TableCell colSpan={4} className="py-2">
+              <div className="space-y-1.5">
+                {parents.map((p) => (
+                  <Link key={p.id} href={`/users/${p.id}`}>
+                    <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
+                        {getInitials(p.displayName)}
+                      </div>
+                      <span className="font-semibold">{p.displayName}</span>
+                      <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none font-bold uppercase tracking-wider text-[10px]">
+                        Parent
+                      </Badge>
+                      {p.email && (
+                        <span className="text-xs text-muted-foreground">
+                          {p.email}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+      </Fragment>
+    );
+  };
+
+  const renderStaffRow = (m: (typeof allMembers)[number]) => {
+    return (
+      <TableRow key={m.id} data-testid={`row-staff-${m.id}`}>
         <TableCell>
           <Link href={`/users/${m.userId}`}>
             <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
@@ -190,56 +337,11 @@ export default function TeamPage() {
         <TableCell className="text-sm capitalize">
           {m.position?.replace(/_/g, " ") ?? "—"}
         </TableCell>
-        <TableCell>
-          {isPending ? (
-            <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none font-bold uppercase tracking-wider text-[10px]">
-              Pending
-            </Badge>
-          ) : (
-            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-bold uppercase tracking-wider text-[10px]">
-              Active
-            </Badge>
-          )}
-        </TableCell>
+        <TableCell>{renderStatusBadge(m.status === "pending")}</TableCell>
         <TableCell className="text-xs text-muted-foreground">
           {formatDate(m.joinedAt)}
         </TableCell>
-        <TableCell className="text-right">
-          <div className="flex items-center justify-end gap-2">
-            {isPending && isMe && (
-              <>
-                <Button
-                  size="sm"
-                  className="h-7 px-3 font-bold rounded-full"
-                  onClick={() => onAccept(m.id)}
-                  data-testid={`btn-accept-${m.id}`}
-                >
-                  <Check className="w-3 h-3 mr-1" /> Accept
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-3 font-bold rounded-full"
-                  onClick={() => onDecline(m.id)}
-                  data-testid={`btn-decline-${m.id}`}
-                >
-                  Decline
-                </Button>
-              </>
-            )}
-            {isAdmin && !isMe && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={() => onRemove(m.id, m.displayName)}
-                data-testid={`btn-remove-${m.id}`}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </TableCell>
+        <TableCell className="text-right">{renderActions(m)}</TableCell>
       </TableRow>
     );
   };
@@ -470,14 +572,14 @@ export default function TeamPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8" />
                       <TableHead>Player</TableHead>
-                      <TableHead>Position</TableHead>
+                      <TableHead>Parents</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Joined</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>{players.map(renderMemberRow)}</TableBody>
+                  <TableBody>{players.map(renderPlayerRow)}</TableBody>
                 </Table>
               )}
             </CardContent>
@@ -518,7 +620,7 @@ export default function TeamPage() {
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>{staff.map(renderMemberRow)}</TableBody>
+                  <TableBody>{staff.map(renderStaffRow)}</TableBody>
                 </Table>
               )}
             </CardContent>

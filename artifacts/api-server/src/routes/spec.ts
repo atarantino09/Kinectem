@@ -15,12 +15,13 @@ import {
   highlightTags,
   notifications,
 } from "@workspace/db";
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import {
   canCreateRecap,
   canManageOrganization,
+  isTeamMember,
   canManageTeam,
 } from "../lib/permissions";
 import {
@@ -838,7 +839,46 @@ router.get(
       .from(rosterEntries)
       .innerJoin(users, eq(rosterEntries.userId, users.id))
       .where(eq(rosterEntries.teamId, req.params.teamId));
-    const data = rows.map((r) => toTeamMember(r.r, r.u));
+    const parentIds = Array.from(
+      new Set(
+        rows
+          .map((r) => r.u.parentId)
+          .filter((x): x is string => typeof x === "string"),
+      ),
+    );
+    const parentRows = parentIds.length
+      ? await db.select().from(users).where(inArray(users.id, parentIds))
+      : [];
+    const parentMap = new Map(parentRows.map((p) => [p.id, p]));
+    const me = await getOrFallbackUser(req);
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    let canSeeParentEmail = false;
+    if (me && team) {
+      canSeeParentEmail =
+        (await canManageOrganization(me.id, team.organizationId)) ||
+        (await isTeamMember(me.id, team.id));
+    }
+    const data = rows.map((r) => {
+      const base = toTeamMember(r.r, r.u);
+      const parent = r.u.parentId ? parentMap.get(r.u.parentId) : null;
+      return {
+        ...base,
+        parents: parent
+          ? [
+              {
+                id: parent.id,
+                displayName: parent.name || "Parent",
+                email: canSeeParentEmail ? (parent.email ?? null) : null,
+                avatarUrl: parent.avatarUrl ?? null,
+              },
+            ]
+          : [],
+      };
+    });
     res.json(paginate(data));
   }),
 );

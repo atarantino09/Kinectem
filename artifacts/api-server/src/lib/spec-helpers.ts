@@ -190,6 +190,8 @@ export function toTeam(
 const POSITION_MAP: Record<string, string> = {
   player: "player",
   coach: "coach",
+  parent: "parent",
+  athlete: "player",
 };
 function rosterPositionToSpec(role: string, position: string | null): string {
   if (role === "coach") {
@@ -197,6 +199,9 @@ function rosterPositionToSpec(role: string, position: string | null): string {
     if (position?.toLowerCase().includes("manager")) return "manager";
     return "coach";
   }
+  const p = position?.toLowerCase() ?? "";
+  if (p === "author" || role === "parent") return "author";
+  if (p === "manager") return "manager";
   return POSITION_MAP[role] ?? "player";
 }
 

@@ -426,6 +426,7 @@ export const ListUserTeamsResponse = zod.object({
         "assistant_coach",
         "manager",
         "parent",
+        "author",
       ]),
       status: zod.enum(["pending", "active"]),
       seasonId: zod.string().uuid(),
@@ -2448,7 +2449,7 @@ export const listTeamMembersQueryIncludeTotalDefault = false;
 export const ListTeamMembersQueryParams = zod.object({
   seasonId: zod.coerce.string().uuid().optional(),
   position: zod
-    .enum(["player", "coach", "assistant_coach", "manager", "parent"])
+    .enum(["player", "coach", "assistant_coach", "manager", "parent", "author"])
     .optional(),
   status: zod.enum(["pending", "active"]).optional(),
   cursor: zod.coerce.string().max(listTeamMembersQueryCursorMax).optional(),
@@ -2478,6 +2479,7 @@ export const ListTeamMembersResponse = zod.object({
         "assistant_coach",
         "manager",
         "parent",
+        "author",
       ]),
       status: zod.enum(["pending", "active"]),
       joinedAt: zod.coerce.date(),
@@ -2508,6 +2510,7 @@ export const AddTeamMemberBody = zod.object({
     "assistant_coach",
     "manager",
     "parent",
+    "author",
   ]),
   role: zod
     .enum(["owner", "admin", "member"])
@@ -2536,6 +2539,7 @@ export const GetTeamMemberResponse = zod.object({
     "assistant_coach",
     "manager",
     "parent",
+    "author",
   ]),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
@@ -2552,7 +2556,7 @@ export const UpdateTeamMemberParams = zod.object({
 export const UpdateTeamMemberBody = zod.object({
   role: zod.enum(["admin", "member"]).optional(),
   position: zod
-    .enum(["player", "coach", "assistant_coach", "manager", "parent"])
+    .enum(["player", "coach", "assistant_coach", "manager", "parent", "author"])
     .optional(),
 });
 
@@ -2570,6 +2574,7 @@ export const UpdateTeamMemberResponse = zod.object({
     "assistant_coach",
     "manager",
     "parent",
+    "author",
   ]),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
@@ -2605,6 +2610,7 @@ export const AcceptTeamInviteResponse = zod.object({
     "assistant_coach",
     "manager",
     "parent",
+    "author",
   ]),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
@@ -2638,6 +2644,7 @@ export const CreateRosterInviteBody = zod.object({
     "assistant_coach",
     "manager",
     "parent",
+    "author",
   ]),
   role: zod
     .enum(["owner", "admin", "member"])
@@ -2681,7 +2688,14 @@ export const ListRosterInvitesResponse = zod.object({
       id: zod.string().uuid(),
       email: zod.string().email().optional(),
       position: zod
-        .enum(["player", "coach", "assistant_coach", "manager", "parent"])
+        .enum([
+          "player",
+          "coach",
+          "assistant_coach",
+          "manager",
+          "parent",
+          "author",
+        ])
         .nullable(),
       role: zod.enum(["owner", "admin", "member"]),
       status: zod.enum([
@@ -3399,6 +3413,7 @@ export const AcceptTeamJoinLinkResponse = zod.object({
     "assistant_coach",
     "manager",
     "parent",
+    "author",
   ]),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),

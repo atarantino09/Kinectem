@@ -2198,7 +2198,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [player, coach, assistant_coach, manager, parent]
+            enum: [player, coach, assistant_coach, manager, parent, author]
         - name: status
           in: query
           required: false
@@ -3903,7 +3903,7 @@ components:
           enum: [owner, admin, author, member]
         position:
           type: string
-          enum: [player, coach, assistant_coach, manager, parent]
+          enum: [player, coach, assistant_coach, manager, parent, author]
         status:
           type: string
           enum: [pending, active]
@@ -5482,7 +5482,7 @@ components:
           enum: [owner, admin, member]
         position:
           type: string
-          enum: [player, coach, assistant_coach, manager, parent]
+          enum: [player, coach, assistant_coach, manager, parent, author]
         status:
           type: string
           enum: [pending, active]
@@ -5506,7 +5506,7 @@ components:
           format: uuid
         position:
           type: string
-          enum: [player, coach, assistant_coach, manager, parent]
+          enum: [player, coach, assistant_coach, manager, parent, author]
         role:
           type: string
           enum: [owner, admin, member]
@@ -5521,7 +5521,7 @@ components:
           enum: [admin, member]
         position:
           type: string
-          enum: [player, coach, assistant_coach, manager, parent]
+          enum: [player, coach, assistant_coach, manager, parent, author]
 
     PaginatedTeamMembers:
       type: object
@@ -5557,7 +5557,7 @@ components:
           format: uuid
         position:
           type: string
-          enum: [player, coach, assistant_coach, manager, parent]
+          enum: [player, coach, assistant_coach, manager, parent, author]
         role:
           type: string
           enum: [owner, admin, member]
@@ -5583,7 +5583,7 @@ components:
           format: email
         position:
           type: string
-          enum: [player, coach, assistant_coach, manager, parent]
+          enum: [player, coach, assistant_coach, manager, parent, author]
           nullable: true
         role:
           type: string

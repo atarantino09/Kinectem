@@ -126,6 +126,7 @@ export const UserTeamMembershipResponsePosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export type UserTeamMembershipResponseStatus =
@@ -1117,6 +1118,7 @@ export const TeamMemberResponsePosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export type TeamMemberResponseStatus =
@@ -1150,6 +1152,7 @@ export const AddTeamMemberRequestPosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export type AddTeamMemberRequestRole =
@@ -1185,6 +1188,7 @@ export const UpdateTeamMemberRequestPosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export interface UpdateTeamMemberRequest {
@@ -1206,6 +1210,7 @@ export const CreateInviteRequestPosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export type CreateInviteRequestRole =
@@ -1238,6 +1243,7 @@ export const InviteResponsePosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export type InviteResponseRole =
@@ -2155,6 +2161,7 @@ export const ListTeamMembersPosition = {
   assistant_coach: "assistant_coach",
   manager: "manager",
   parent: "parent",
+  author: "author",
 } as const;
 
 export type ListTeamMembersStatus =
