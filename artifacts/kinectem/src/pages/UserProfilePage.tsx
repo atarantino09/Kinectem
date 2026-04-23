@@ -126,7 +126,7 @@ export default function UserProfilePage() {
             )}
           </div>
           <div className="mt-3">
-            <h1 className="text-3xl font-black tracking-tight leading-none">
+            <h1 className="text-4xl font-black tracking-tight leading-[1.05]">
               {displayName}
             </h1>
             {user.nickname && (

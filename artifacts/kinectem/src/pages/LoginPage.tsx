@@ -168,7 +168,9 @@ export default function LoginPage() {
           <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
             <Trophy className="w-5 h-5" />
           </div>
-          <span className="font-black text-2xl tracking-tight">Kinectem</span>
+          <span className="font-black text-2xl tracking-tight">
+            Kinect<span className="bg-gradient-to-r from-amber-200 to-pink-200 bg-clip-text text-transparent">em</span>
+          </span>
         </div>
 
         <div className="relative space-y-6">

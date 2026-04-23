@@ -20,9 +20,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const label = isShort ? "Highlight" : "Game Recap";
-  const badgeClass = isShort
-    ? "bg-slate-900 text-primary-foreground rounded-full"
-    : "bg-violet-100 text-violet-700 rounded-full";
+  const badgeClass = "brand-pill";
 
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
   const allImages = (post.assets ?? []).filter((a) =>

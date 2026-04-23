@@ -432,7 +432,7 @@ export default function TeamPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-3 flex-wrap">
-                <h1 className="text-4xl font-black tracking-tight leading-tight">
+                <h1 className="text-5xl font-black tracking-tight leading-[1.05]">
                   {team.name}
                 </h1>
                 {isAdmin && (

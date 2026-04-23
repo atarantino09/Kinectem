@@ -143,7 +143,7 @@ export default function FeedPage() {
           <Card className="rounded-xl border border-border shadow-sm">
             <CardContent className="p-4">
               <div className="mb-3">
-                <span className="brand-pill">Featured Orgs</span>
+                <span className="brand-pill">Featured Organizations</span>
               </div>
               <div className="space-y-3">
                 {orgs.data.slice(0, 5).map((org) => (
