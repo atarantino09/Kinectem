@@ -1,9 +1,42 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { logger } from "../lib/logger";
+
+const DOCS_TOKEN_HEADER = "x-docs-token";
+const DOCS_TOKEN_QUERY = "docs_token";
+
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function presentedDocsToken(req: Request): string | undefined {
+  const header = req.header(DOCS_TOKEN_HEADER);
+  if (typeof header === "string" && header.length > 0) return header;
+  const query = req.query[DOCS_TOKEN_QUERY];
+  if (typeof query === "string" && query.length > 0) return query;
+  return undefined;
+}
+
+function requireDocsAccess(req: Request, res: Response, next: NextFunction) {
+  if (!isProduction()) {
+    next();
+    return;
+  }
+  if (req.sessionUser) {
+    next();
+    return;
+  }
+  const expected = process.env.DOCS_ACCESS_TOKEN;
+  const presented = presentedDocsToken(req);
+  if (expected && presented && expected === presented) {
+    next();
+    return;
+  }
+  res.status(401).json({ error: "Authentication required" });
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +71,16 @@ function loadSpec(): { yaml: string; json: unknown } | null {
 
 const spec = loadSpec();
 
-const DOCS_HTML = `<!doctype html>
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function renderDocsHtml(specUrl: string): string {
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -52,21 +94,27 @@ const DOCS_HTML = `<!doctype html>
   <body>
     <script
       id="api-reference"
-      data-url="/api/openapi.json"
+      data-url="${escapeHtmlAttr(specUrl)}"
       data-configuration='{"theme":"default","layout":"modern","hideDownloadButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
   </body>
 </html>
 `;
+}
 
 const router: IRouter = Router();
 
-router.get("/docs", (_req, res) => {
-  res.type("html").send(DOCS_HTML);
+router.get("/docs", requireDocsAccess, (req, res) => {
+  const token = presentedDocsToken(req);
+  const specUrl =
+    token && isProduction() && !req.sessionUser
+      ? `/api/openapi.json?${DOCS_TOKEN_QUERY}=${encodeURIComponent(token)}`
+      : "/api/openapi.json";
+  res.type("html").send(renderDocsHtml(specUrl));
 });
 
-router.get("/openapi.yaml", (_req, res) => {
+router.get("/openapi.yaml", requireDocsAccess, (_req, res) => {
   if (!spec) {
     res.status(503).json({ error: "OpenAPI spec not available" });
     return;
@@ -74,7 +122,7 @@ router.get("/openapi.yaml", (_req, res) => {
   res.type("application/yaml").send(spec.yaml);
 });
 
-router.get("/openapi.json", (_req, res) => {
+router.get("/openapi.json", requireDocsAccess, (_req, res) => {
   if (!spec) {
     res.status(503).json({ error: "OpenAPI spec not available" });
     return;
