@@ -63,16 +63,18 @@ export function EditOrgDialog({
     }
     setSaving(true);
     try {
+      const trimmedWebsite = website.trim();
+      const payload: Record<string, string> = {
+        name: name.trim(),
+        description,
+        city,
+        state,
+      };
+      if (trimmedWebsite) payload.website = trimmedWebsite;
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          description,
-          website,
-          city,
-          state,
-        }),
+        body: JSON.stringify(payload),
       });
       await qc.invalidateQueries({
         queryKey: getGetOrganizationByIdQueryKey(organization.id),
