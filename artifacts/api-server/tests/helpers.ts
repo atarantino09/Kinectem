@@ -1,5 +1,6 @@
 import request, { type Agent } from "supertest";
 import app from "../src/app";
+import { DEMO_PASSWORD } from "../src/lib/seed";
 
 export type SeedUser = {
   id: string;
@@ -37,14 +38,17 @@ export async function loginAs(
       ? match
       : (u: SeedUser) => u.email === match || u.id === match;
   const user = await findUser(matcher);
+  if (!user.email) {
+    throw new Error(`Seed user ${user.id} has no email; cannot log in.`);
+  }
   const agent = request.agent(app);
   const res = await agent
     .post("/api/v1/auth/login")
-    .send({ userId: user.id });
+    .send({ email: user.email, password: DEMO_PASSWORD });
   if (res.status !== 200) {
     throw new Error(`Login failed: ${res.status} ${res.text}`);
   }
   return { agent, user };
 }
 
-export { request, app };
+export { request, app, DEMO_PASSWORD };

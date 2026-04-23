@@ -16,6 +16,7 @@ export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "decli
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").unique(),
+  passwordHash: text("password_hash"),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull(),
   sport: text("sport"),
@@ -27,7 +28,19 @@ export const users = pgTable("users", {
   bio: text("bio"),
   dateOfBirth: timestamp("date_of_birth"),
   parentId: uuid("parent_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  guardianEmail: text("guardian_email"),
+  guardianConfirmToken: text("guardian_confirm_token"),
+  guardianConfirmedAt: timestamp("guardian_confirmed_at"),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const passwordResets = pgTable("password_resets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -20,8 +20,10 @@ import {
   conversationParticipants,
   messages,
   organizationJoinRequests,
+  passwordResets,
 } from "@workspace/db";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import {
@@ -261,22 +263,50 @@ router.get("/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 // Auth (custom — not in spec)
 // ---------------------------------------------------------------------------
-const LoginBody = z.object({ userId: z.string().uuid() });
+const LoginBody = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
 const SignupBody = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1).optional().default(""),
   role: z.enum(["athlete", "coach", "admin", "parent"]),
-  email: z.string().email().optional().nullable(),
+  email: z.string().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   dateOfBirth: z.string().optional().nullable(),
+  guardianEmail: z.string().email().optional().nullable(),
+  guardianConsent: z.boolean().optional(),
   parentId: z.string().uuid().optional().nullable(),
 });
+const PasswordResetRequestBody = z.object({ email: z.string().email() });
+const PasswordResetCompleteBody = z.object({
+  token: z.string().min(10),
+  newPassword: z.string().min(8),
+});
+const GuardianConfirmBody = z.object({ token: z.string().min(10) });
 
 router.post(
   "/auth/login",
   asyncHandler(async (req, res) => {
     const body = LoginBody.parse(req.body);
-    const [user] = await db.select().from(users).where(eq(users.id, body.userId)).limit(1);
-    if (!user) return notFound(res);
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, body.email.toLowerCase()))
+      .limit(1);
+    const ok = user ? await verifyPassword(body.password, user.passwordHash) : false;
+    if (!user || !ok) {
+      res.status(401).json({ error: "Incorrect email or password." });
+      return;
+    }
+    if (user.guardianConfirmToken && !user.guardianConfirmedAt) {
+      res.status(403).json({
+        error:
+          "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
+        guardianConfirmUrl: `/guardian-confirm/${user.guardianConfirmToken}`,
+      });
+      return;
+    }
     const sess = await createSession(user.id);
     setSessionCookie(res, sess.id, sess.expiresAt);
     res.json(toPrivateUser(user));
@@ -288,35 +318,135 @@ router.post(
   asyncHandler(async (req, res) => {
     const body = SignupBody.parse(req.body);
     const dob = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
-    if (dob) {
+    let guardianRequired = false;
+    if (body.role === "athlete" && dob) {
       const ageYears = (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000);
-      if (ageYears < 13 && !body.parentId) {
-        res
-          .status(400)
-          .json({ error: "Players under 13 require a parent or guardian account." });
-        return;
-      }
+      guardianRequired = ageYears < 13;
     }
-    if (body.email) {
-      const [exists] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
-      if (exists) {
-        res.status(409).json({ error: "Email already in use" });
-        return;
-      }
+    if (guardianRequired && !body.guardianEmail) {
+      res.status(400).json({
+        error:
+          "Athletes under 13 must provide a parent or guardian email so we can confirm the account.",
+      });
+      return;
     }
+    if (guardianRequired && !body.guardianConsent) {
+      res.status(400).json({
+        error:
+          "Please confirm a parent or guardian has agreed to receive a confirmation email.",
+      });
+      return;
+    }
+
+    const email = body.email.toLowerCase();
+    const [exists] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (exists) {
+      res.status(409).json({ error: "An account with that email already exists." });
+      return;
+    }
+
+    const passwordHash = await hashPassword(body.password);
+    const guardianToken = guardianRequired ? generateToken() : null;
+
     const [created] = await db
       .insert(users)
       .values({
         name: `${body.firstName} ${body.lastName}`.trim(),
         role: body.role,
-        email: body.email ?? undefined,
+        email,
+        passwordHash,
         dateOfBirth: dob ?? undefined,
         parentId: body.parentId ?? undefined,
+        guardianEmail: guardianRequired ? body.guardianEmail!.toLowerCase() : undefined,
+        guardianConfirmToken: guardianToken ?? undefined,
       })
       .returning();
+
+    if (guardianRequired) {
+      // Account is created but cannot sign in until the guardian confirms.
+      // In a production setting we would email this URL to the guardian; in
+      // this environment we return it so the UI can surface it for testing.
+      res.status(201).json({
+        ...toPrivateUser(created),
+        pendingGuardianConfirmation: true,
+        guardianConfirmUrl: `/guardian-confirm/${guardianToken}`,
+      });
+      return;
+    }
+
     const sess = await createSession(created.id);
     setSessionCookie(res, sess.id, sess.expiresAt);
     res.status(201).json(toPrivateUser(created));
+  }),
+);
+
+router.post(
+  "/auth/password-reset/request",
+  asyncHandler(async (req, res) => {
+    const body = PasswordResetRequestBody.parse(req.body);
+    const email = body.email.toLowerCase();
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    // Always respond 200 to avoid leaking which emails exist.
+    if (!user) {
+      res.json({ ok: true, message: "If that email exists, a reset link has been sent." });
+      return;
+    }
+    const token = generateToken();
+    const tokenHash = hashToken(token);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+    await db.insert(passwordResets).values({ userId: user.id, tokenHash, expiresAt });
+    // In production, this URL would be emailed. We return it so the UI can
+    // display it for testing in this environment.
+    res.json({
+      ok: true,
+      message: "If that email exists, a reset link has been sent.",
+      resetUrl: `/reset-password/${token}`,
+    });
+  }),
+);
+
+router.post(
+  "/auth/password-reset/complete",
+  asyncHandler(async (req, res) => {
+    const body = PasswordResetCompleteBody.parse(req.body);
+    const tokenHash = hashToken(body.token);
+    const [reset] = await db
+      .select()
+      .from(passwordResets)
+      .where(eq(passwordResets.tokenHash, tokenHash))
+      .limit(1);
+    if (!reset || reset.usedAt || reset.expiresAt.getTime() < Date.now()) {
+      res.status(400).json({ error: "This reset link is invalid or has expired." });
+      return;
+    }
+    const passwordHash = await hashPassword(body.newPassword);
+    await db.update(users).set({ passwordHash }).where(eq(users.id, reset.userId));
+    await db
+      .update(passwordResets)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResets.id, reset.id));
+    res.json({ ok: true });
+  }),
+);
+
+router.post(
+  "/auth/guardian-confirm",
+  asyncHandler(async (req, res) => {
+    const body = GuardianConfirmBody.parse(req.body);
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.guardianConfirmToken, body.token))
+      .limit(1);
+    if (!user) {
+      res.status(400).json({ error: "This confirmation link is invalid or has already been used." });
+      return;
+    }
+    await db
+      .update(users)
+      .set({ guardianConfirmedAt: new Date(), guardianConfirmToken: null })
+      .where(eq(users.id, user.id));
+    res.json({ ok: true, athleteName: user.name, guardianEmail: user.guardianEmail });
   }),
 );
 

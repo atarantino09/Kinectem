@@ -19,6 +19,8 @@ import MyTagsPage from "@/pages/MyTagsPage";
 import GuardianPage from "@/pages/GuardianPage";
 import InviteAcceptPage from "@/pages/InviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
+import GuardianConfirmPage from "@/pages/GuardianConfirmPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +36,8 @@ function Router() {
     <Switch>
       {/* Fullscreen routes (no layout) */}
       <Route path="/login" component={LoginPage} />
+      <Route path="/reset-password/:token" component={ResetPasswordPage} />
+      <Route path="/guardian-confirm/:token" component={GuardianConfirmPage} />
       <Route path="/invites/:token" component={InviteAcceptPage} />
       <Route path="/posts/new" component={NewPostPage} />
 

@@ -1,52 +1,33 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getInitials } from "@/lib/format";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Trophy,
-  Mail,
-  ArrowRight,
-  User,
-  Users,
-  Pencil,
-  Camera,
-  Loader2,
-} from "lucide-react";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Trophy, Mail, Lock, ArrowRight, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 
-interface DemoUser {
-  id: string;
-  firstName: string;
-  lastName: string;
-  role: string;
-  email: string | null;
-  avatarUrl: string | null;
-  sport: string | null;
-  position: string | null;
-}
-
-type Mode = "signin" | "signup";
-type SignupRole = "athlete" | "parent" | "coach" | "admin";
-
-const ROLE_TILES: Array<{
-  id: SignupRole;
-  label: string;
-  icon: typeof User;
-  hint: string;
-}> = [
-  { id: "athlete", label: "Athlete", icon: User, hint: "I play" },
-  { id: "parent", label: "Parent", icon: Users, hint: "My kid plays" },
-  { id: "coach", label: "Coach", icon: Camera, hint: "I coach" },
-  { id: "admin", label: "Org admin", icon: Pencil, hint: "I run an org" },
-];
+type Mode = "signin" | "signup" | "forgot" | "forgotSent" | "signupPending";
+type Role = "athlete" | "coach" | "admin" | "parent";
 
 function readQueryParam(name: string): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get(name);
+}
+
+function ageInYears(dob: string): number | null {
+  if (!dob) return null;
+  const t = new Date(dob).getTime();
+  if (Number.isNaN(t)) return null;
+  return (Date.now() - t) / (365.25 * 24 * 3600 * 1000);
 }
 
 export default function LoginPage() {
@@ -54,104 +35,124 @@ export default function LoginPage() {
   const qc = useQueryClient();
   const initialSignup = readQueryParam("signup");
   const returnTo = readQueryParam("returnTo");
-
   const [mode, setMode] = useState<Mode>(initialSignup ? "signup" : "signin");
-  const [users, setUsers] = useState<DemoUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Sign-up form
+  // Sign in
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Sign up
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [role, setRole] = useState<SignupRole>(
+  const [role, setRole] = useState<Role>(
     initialSignup === "parent" ? "parent" : "athlete",
   );
-  const [email, setEmail] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
   const [dob, setDob] = useState("");
-  const [parentId, setParentId] = useState<string | null>(null);
-  const [parentQuery, setParentQuery] = useState("");
-  const [parentResults, setParentResults] = useState<DemoUser[]>([]);
+  const [guardianEmail, setGuardianEmail] = useState("");
+  const [guardianConsent, setGuardianConsent] = useState(false);
+  const [pendingGuardianUrl, setPendingGuardianUrl] = useState<string | null>(null);
 
-  const isUnder13 = (() => {
-    if (!dob) return false;
-    const ms = Date.now() - new Date(dob).getTime();
-    return ms / (365.25 * 24 * 3600 * 1000) < 13;
-  })();
+  // Forgot
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotResetUrl, setForgotResetUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isUnder13 || role !== "athlete") return;
-    if (parentQuery.trim().length < 2) {
-      setParentResults([]);
-      return;
-    }
-    const t = setTimeout(async () => {
-      try {
-        const r = await customFetch<{ data: DemoUser[] }>(
-          `/api/v1/users?role=parent&q=${encodeURIComponent(parentQuery.trim())}`,
-        );
-        setParentResults(r.data ?? []);
-      } catch {
-        setParentResults([]);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [parentQuery, isUnder13, role]);
+  const age = ageInYears(dob);
+  const isUnder13 = role === "athlete" && age !== null && age < 13;
 
-  const selectedParent =
-    users.find((u) => u.id === parentId) ??
-    parentResults.find((u) => u.id === parentId) ??
-    null;
+  const switchMode = (next: Mode) => {
+    setError(null);
+    setMode(next);
+  };
 
-  useEffect(() => {
-    customFetch<DemoUser[]>("/api/v1/auth/users")
-      .then((rows) => setUsers(rows))
-      .catch((e) => setError(e?.message ?? "Failed to load demo users"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const signInAs = async (userId: string) => {
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
       await customFetch("/api/v1/auth/login", {
         method: "POST",
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
       await qc.invalidateQueries();
-      setLocation(returnTo || "/");
-    } catch (e) {
-      setError((e as Error)?.message ?? "Login failed");
+      const dest = returnTo || "/";
+      if (typeof window !== "undefined") {
+        window.location.assign(dest);
+      } else {
+        setLocation(dest);
+      }
+    } catch (err) {
+      const e = err as { status?: number; message?: string; body?: { error?: string; guardianConfirmUrl?: string } };
+      const msg = e?.body?.error ?? e?.message ?? "Sign-in failed";
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const signUp = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      if (role === "athlete" && isUnder13 && !parentId) {
+      if (signupPassword.length < 8) {
+        throw new Error("Password must be at least 8 characters.");
+      }
+      if (isUnder13 && (!guardianEmail.trim() || !guardianConsent)) {
         throw new Error(
-          "Athletes under 13 must link a parent or guardian account.",
+          "Athletes under 13 need a guardian email and confirmation before signing up.",
         );
       }
-      await customFetch("/api/v1/auth/signup", {
+      const res = (await customFetch("/api/v1/auth/signup", {
         method: "POST",
         body: JSON.stringify({
-          firstName,
-          lastName,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
           role,
-          email: email || null,
+          email: signupEmail.trim().toLowerCase(),
+          password: signupPassword,
           dateOfBirth: dob || null,
-          parentId: parentId || null,
+          guardianEmail: isUnder13 ? guardianEmail.trim().toLowerCase() : null,
+          guardianConsent: isUnder13 ? guardianConsent : undefined,
         }),
-      });
+      })) as { pendingGuardianConfirmation?: boolean; guardianConfirmUrl?: string };
+      if (res?.pendingGuardianConfirmation) {
+        setPendingGuardianUrl(res.guardianConfirmUrl ?? null);
+        setMode("signupPending");
+        return;
+      }
       await qc.invalidateQueries();
-      setLocation(returnTo || "/");
+      const dest = returnTo || "/";
+      if (typeof window !== "undefined") {
+        window.location.assign(dest);
+      } else {
+        setLocation(dest);
+      }
     } catch (err) {
-      setError((err as Error)?.message ?? "Sign-up failed");
+      const e = err as { message?: string; body?: { error?: string } };
+      setError(e?.body?.error ?? e?.message ?? "Sign-up failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = (await customFetch("/api/v1/auth/password-reset/request", {
+        method: "POST",
+        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
+      })) as { resetUrl?: string };
+      setForgotResetUrl(res?.resetUrl ?? null);
+      setMode("forgotSent");
+    } catch (err) {
+      const e = err as { message?: string; body?: { error?: string } };
+      setError(e?.body?.error ?? e?.message ?? "Could not request password reset");
     } finally {
       setSubmitting(false);
     }
@@ -159,7 +160,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-white text-slate-900">
-      {/* Left hero panel */}
       <aside className="relative hidden md:flex flex-col justify-between p-10 bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 text-white overflow-hidden">
         <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-blue-300/20 blur-3xl" />
@@ -200,221 +200,207 @@ export default function LoginPage() {
         </div>
       </aside>
 
-      {/* Right form panel */}
-      <main className="flex items-center justify-center p-6 md:p-10">
-        <div className="w-full max-w-md space-y-6">
-          {/* Mobile brand mark */}
-          <div className="flex items-center gap-2 md:hidden">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-white flex items-center justify-center">
-              <Trophy className="w-5 h-5" />
-            </div>
-            <span className="font-black text-xl tracking-tight">Kinectem</span>
-          </div>
-
-          {/* Tab switcher */}
-          <div className="grid grid-cols-2 bg-slate-100 p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              data-testid="tab-signin"
-              aria-pressed={mode === "signin"}
-              className={`h-9 rounded-lg text-sm font-bold transition ${
-                mode === "signin"
-                  ? "bg-white text-slate-900 shadow"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              data-testid="tab-signup"
-              aria-pressed={mode === "signup"}
-              className={`h-9 rounded-lg text-sm font-bold transition ${
-                mode === "signup"
-                  ? "bg-white text-slate-900 shadow"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              Create account
-            </button>
-          </div>
-
+      <main className="flex items-center justify-center p-8 md:p-12">
+        <div className="w-full max-w-sm space-y-6">
+          {/* Header */}
           <div className="space-y-2">
-            <h2 className="font-black tracking-tight text-3xl">
-              {mode === "signin" ? "Welcome back" : "Create your account"}
+            <h2 className="font-black tracking-tight text-3xl" data-testid="text-auth-heading">
+              {mode === "signin" && "Welcome back"}
+              {mode === "signup" && "Create your account"}
+              {mode === "forgot" && "Reset your password"}
+              {mode === "forgotSent" && "Check your email"}
+              {mode === "signupPending" && "One more step"}
             </h2>
             <p className="text-sm text-slate-500">
-              {mode === "signin"
-                ? "Pick a demo account to keep exploring."
-                : "Join Kinectem in less than a minute."}
+              {mode === "signin" && "Sign in to keep up with your teams."}
+              {mode === "signup" && "Join Kinectem in less than a minute."}
+              {mode === "forgot" && "We'll send you a link to set a new password."}
+              {mode === "forgotSent" && "If that email exists, a reset link is on its way."}
+              {mode === "signupPending" &&
+                "Your account is ready — once a parent or guardian confirms it."}
             </p>
           </div>
 
           {error && (
             <div
-              className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
-              data-testid="text-error"
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              data-testid="text-auth-error"
             >
               {error}
             </div>
           )}
 
-          {mode === "signin" ? (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                <span className="font-bold">Demo mode.</span> Real
-                email/password sign-in is on the way. For now, pick any
-                seeded account below to continue.
-              </div>
-
-              {loading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading users...
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
-                  {users.map((u) => {
-                    const name = `${u.firstName} ${u.lastName}`.trim();
-                    return (
-                      <button
-                        key={u.id}
-                        disabled={submitting}
-                        onClick={() => signInAs(u.id)}
-                        data-testid={`btn-signin-${u.id}`}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50/40 text-left transition disabled:opacity-50"
-                      >
-                        <Avatar className="w-10 h-10 border border-slate-200 shrink-0">
-                          {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
-                          <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
-                            {getInitials(name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-sm truncate">{name}</p>
-                          <p className="text-xs text-slate-500 truncate capitalize">
-                            {u.role}
-                            {u.position ? ` • ${u.position}` : ""}
-                          </p>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <p className="text-center text-sm text-slate-500">
-                New to Kinectem?{" "}
-                <button
-                  type="button"
-                  onClick={() => setMode("signup")}
-                  className="font-bold text-violet-600 hover:underline"
-                >
-                  Create an account
-                </button>
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={signUp} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="firstName"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-                  >
-                    First name
-                  </Label>
-                  <Input
-                    id="firstName"
-                    required
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Tyler"
-                    className="rounded-xl h-10"
-                    data-testid="input-first-name"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="lastName"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-                  >
-                    Last name
-                  </Label>
-                  <Input
-                    id="lastName"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Chen"
-                    className="rounded-xl h-10"
-                    data-testid="input-last-name"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  I'm signing up as
-                </Label>
-                <div className="grid grid-cols-4 gap-2">
-                  {ROLE_TILES.map((r) => {
-                    const Icon = r.icon;
-                    const active = role === r.id;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setRole(r.id)}
-                        data-testid={`btn-role-${r.id}`}
-                        aria-pressed={active}
-                        className={`rounded-xl border p-2 flex flex-col items-center gap-1 transition ${
-                          active
-                            ? "border-violet-500 bg-violet-50 text-violet-700 shadow-sm"
-                            : "border-slate-200 hover:border-slate-300 text-slate-600"
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span className="text-[11px] font-bold leading-tight text-center">
-                          {r.label}
-                        </span>
-                        <span className="text-[10px] text-slate-400 leading-tight text-center">
-                          {r.hint}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
+          {mode === "signin" && (
+            <form className="space-y-4" onSubmit={handleSignIn}>
               <div className="space-y-1.5">
-                <Label
-                  htmlFor="email"
-                  className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-                >
-                  Email <span className="text-slate-400 normal-case">(optional)</span>
+                <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Email
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     id="email"
                     type="email"
+                    autoComplete="email"
+                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@school.edu"
-                    className="rounded-xl h-10 pl-9"
-                    data-testid="input-email"
+                    className="rounded-xl h-11 pl-9"
+                    data-testid="input-signin-email"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Password
+                  </Label>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-violet-600 hover:underline"
+                    onClick={() => switchMode("forgot")}
+                    data-testid="btn-forgot-password"
+                  >
+                    Forgot?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="rounded-xl h-11 pl-9"
+                    data-testid="input-signin-password"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                data-testid="btn-signin"
+              >
+                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Sign in
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+
+              <p className="text-center text-sm text-slate-500">
+                New to Kinectem?{" "}
+                <button
+                  type="button"
+                  onClick={() => switchMode("signup")}
+                  className="font-bold text-violet-600 hover:underline"
+                  data-testid="btn-switch-signup"
+                >
+                  Create an account
+                </button>
+              </p>
+            </form>
+          )}
+
+          {mode === "signup" && (
+            <form className="space-y-4" onSubmit={handleSignUp}>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="first" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    First name
+                  </Label>
+                  <Input
+                    id="first"
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Tyler"
+                    className="rounded-xl h-11"
+                    data-testid="input-signup-first"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="last" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Last name
+                  </Label>
+                  <Input
+                    id="last"
+                    required
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Chen"
+                    className="rounded-xl h-11"
+                    data-testid="input-signup-last"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="role" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  I am a...
+                </Label>
+                <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                  <SelectTrigger id="role" className="rounded-xl h-11" data-testid="select-signup-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="athlete">Athlete</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                    <SelectItem value="parent">Parent / Guardian</SelectItem>
+                    <SelectItem value="admin">Org admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-email" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Email
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    placeholder="you@school.edu"
+                    className="rounded-xl h-11 pl-9"
+                    data-testid="input-signup-email"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-password" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="rounded-xl h-11 pl-9"
+                    data-testid="input-signup-password"
                   />
                 </div>
               </div>
 
               {role === "athlete" && (
                 <div className="space-y-1.5">
-                  <Label
-                    htmlFor="dob"
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-                  >
+                  <Label htmlFor="dob" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Date of birth
                   </Label>
                   <Input
@@ -422,98 +408,51 @@ export default function LoginPage() {
                     type="date"
                     value={dob}
                     onChange={(e) => setDob(e.target.value)}
-                    className="rounded-xl h-10"
-                    data-testid="input-dob"
+                    className="rounded-xl h-11"
+                    data-testid="input-signup-dob"
                   />
                   <p className="text-xs text-slate-500">
-                    Athletes under 13 will be prompted to link a parent or
-                    guardian account.
+                    Athletes under 13 will need a parent or guardian to confirm.
                   </p>
                 </div>
               )}
 
-              {role === "athlete" && isUnder13 && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              {isUnder13 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3" data-testid="block-guardian">
                   <div className="text-xs font-bold uppercase tracking-wider text-amber-700">
                     Guardian required
                   </div>
                   <p className="text-xs text-amber-900">
-                    Because this athlete is under 13, link a parent or
-                    guardian account before continuing.
+                    We'll send a one-time confirmation link to your parent or
+                    guardian's email so they can approve and link your account.
                   </p>
-                  {selectedParent ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-white p-2">
-                      <Avatar className="w-8 h-8 border border-slate-200">
-                        {selectedParent.avatarUrl && (
-                          <AvatarImage src={selectedParent.avatarUrl} />
-                        )}
-                        <AvatarFallback className="bg-slate-900 text-white font-bold text-[10px]">
-                          {getInitials(
-                            `${selectedParent.firstName} ${selectedParent.lastName}`,
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold truncate">
-                          {selectedParent.firstName} {selectedParent.lastName}
-                        </p>
-                        <p className="text-[11px] text-slate-500 truncate">
-                          {selectedParent.email ?? "Parent / Guardian"}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setParentId(null)}
-                      >
-                        Change
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <Input
-                        value={parentQuery}
-                        onChange={(e) => setParentQuery(e.target.value)}
-                        placeholder="Search for parent's account by name..."
-                        className="rounded-lg h-9 bg-white border-amber-300 text-slate-900 text-xs"
-                        data-testid="input-parent-search"
-                      />
-                      {parentQuery.trim().length >= 2 &&
-                        (parentResults.length === 0 ? (
-                          <p className="text-xs text-amber-900/80">
-                            No parent accounts match. Ask your guardian to
-                            create an account first.
-                          </p>
-                        ) : (
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {parentResults.map((p) => (
-                              <button
-                                type="button"
-                                key={p.id}
-                                onClick={() => setParentId(p.id)}
-                                data-testid={`btn-pick-parent-${p.id}`}
-                                className="w-full flex items-center gap-2 p-2 rounded-lg border border-amber-200 bg-white hover:border-amber-400 text-left"
-                              >
-                                <Avatar className="w-7 h-7 border border-slate-200">
-                                  {p.avatarUrl && (
-                                    <AvatarImage src={p.avatarUrl} />
-                                  )}
-                                  <AvatarFallback className="bg-slate-900 text-white font-bold text-[10px]">
-                                    {getInitials(
-                                      `${p.firstName} ${p.lastName}`,
-                                    )}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-sm font-bold">
-                                  {p.firstName} {p.lastName}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                    </>
-                  )}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="guardian-email" className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+                      Parent or guardian email
+                    </Label>
+                    <Input
+                      id="guardian-email"
+                      type="email"
+                      required
+                      value={guardianEmail}
+                      onChange={(e) => setGuardianEmail(e.target.value)}
+                      placeholder="parent@email.com"
+                      className="rounded-xl h-11 bg-white border-amber-300"
+                      data-testid="input-guardian-email"
+                    />
+                  </div>
+                  <label className="flex items-start gap-2 text-xs text-amber-900 cursor-pointer">
+                    <Checkbox
+                      checked={guardianConsent}
+                      onCheckedChange={(v) => setGuardianConsent(v === true)}
+                      className="mt-0.5"
+                      data-testid="checkbox-guardian-consent"
+                    />
+                    <span>
+                      I confirm my parent or guardian has agreed to receive a
+                      confirmation email and approve my account.
+                    </span>
+                  </label>
                 </div>
               )}
 
@@ -523,20 +462,153 @@ export default function LoginPage() {
                 className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
                 data-testid="btn-create-account"
               >
-                {submitting && (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                )}
+                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Create account
                 <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
 
-              <p className="text-center text-xs text-slate-500">
-                By continuing you agree to our{" "}
-                <span className="font-semibold">Terms</span> and{" "}
-                <span className="font-semibold">Privacy Policy</span>.
+              <p className="text-center text-sm text-slate-500">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => switchMode("signin")}
+                  className="font-bold text-violet-600 hover:underline"
+                  data-testid="btn-switch-signin"
+                >
+                  Sign in
+                </button>
               </p>
             </form>
           )}
+
+          {mode === "forgot" && (
+            <form className="space-y-4" onSubmit={handleForgot}>
+              <button
+                type="button"
+                onClick={() => switchMode("signin")}
+                className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-700"
+                data-testid="btn-forgot-back"
+              >
+                <ArrowLeft className="w-3 h-3" /> Back to sign in
+              </button>
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-email" className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Email
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="you@school.edu"
+                    className="rounded-xl h-11 pl-9"
+                    data-testid="input-forgot-email"
+                  />
+                </div>
+              </div>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                data-testid="btn-send-reset"
+              >
+                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Send reset link
+              </Button>
+            </form>
+          )}
+
+          {mode === "forgotSent" && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900 flex gap-3">
+                <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Reset link sent.</p>
+                  <p className="mt-1">
+                    If an account exists for {forgotEmail}, we sent instructions
+                    to reset the password. The link expires in 1 hour.
+                  </p>
+                </div>
+              </div>
+              {forgotResetUrl && (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-2"
+                  data-testid="block-dev-reset-link"
+                >
+                  <p className="font-bold uppercase tracking-wider text-slate-500">
+                    Demo helper
+                  </p>
+                  <p>
+                    No real email is sent in this environment. Use this link to
+                    set a new password:
+                  </p>
+                  <a
+                    href={forgotResetUrl}
+                    className="block break-all font-mono text-violet-700 hover:underline"
+                    data-testid="link-reset-url"
+                  >
+                    {forgotResetUrl}
+                  </a>
+                </div>
+              )}
+              <Button
+                type="button"
+                onClick={() => switchMode("signin")}
+                variant="outline"
+                className="w-full h-11 rounded-xl font-bold"
+              >
+                Back to sign in
+              </Button>
+            </div>
+          )}
+
+          {mode === "signupPending" && (
+            <div className="space-y-4" data-testid="block-signup-pending">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                <p className="font-bold">Awaiting guardian confirmation.</p>
+                <p className="mt-1">
+                  Your account is created but you can't sign in until your
+                  parent or guardian confirms it. We sent a confirmation link
+                  to {guardianEmail}.
+                </p>
+              </div>
+              {pendingGuardianUrl && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-2">
+                  <p className="font-bold uppercase tracking-wider text-slate-500">
+                    Demo helper
+                  </p>
+                  <p>
+                    No real email is sent in this environment. Share this link
+                    with your guardian:
+                  </p>
+                  <a
+                    href={pendingGuardianUrl}
+                    className="block break-all font-mono text-violet-700 hover:underline"
+                    data-testid="link-guardian-url"
+                  >
+                    {pendingGuardianUrl}
+                  </a>
+                </div>
+              )}
+              <Button
+                type="button"
+                onClick={() => switchMode("signin")}
+                variant="outline"
+                className="w-full h-11 rounded-xl font-bold"
+              >
+                Back to sign in
+              </Button>
+            </div>
+          )}
+
+          <p className="text-center text-xs text-slate-400 pt-2">
+            By continuing you agree to our{" "}
+            <a className="font-semibold underline">Terms</a> and{" "}
+            <a className="font-semibold underline">Privacy Policy</a>.
+          </p>
         </div>
       </main>
     </div>

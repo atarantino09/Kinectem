@@ -31,7 +31,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const status = (currentUserError as { status?: number } | null)?.status;
     if (status === 401 && location !== "/login") {
-      setLocation("/login");
+      if (typeof window !== "undefined") {
+        window.location.assign("/login");
+      } else {
+        setLocation("/login");
+      }
     }
   }, [currentUserError, location, setLocation]);
   const [query, setQuery] = useState("");
@@ -45,7 +49,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       // ignore
     }
     await qc.invalidateQueries();
-    setLocation("/login");
+    if (typeof window !== "undefined") {
+      window.location.assign("/login");
+    } else {
+      setLocation("/login");
+    }
   };
 
   const onSearchSubmit = (e: React.FormEvent) => {

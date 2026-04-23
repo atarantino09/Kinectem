@@ -15,22 +15,41 @@ import {
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { hashPassword } from "./passwords";
+
+export const DEMO_PASSWORD = "demo1234";
 
 export async function seedIfEmpty(): Promise<void> {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(users);
 
+  const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
+
   if (count > 0) {
+    // Backfill: any pre-existing users without a password hash get the demo
+    // password so the seeded accounts remain usable after the auth migration.
+    const updated = await db
+      .update(users)
+      .set({ passwordHash: demoPasswordHash })
+      .where(sql`${users.passwordHash} IS NULL`)
+      .returning({ id: users.id });
+    if (updated.length > 0) {
+      logger.info({ backfilled: updated.length }, "Backfilled demo password on existing users");
+    }
     logger.info({ userCount: count }, "Database already seeded");
     return;
   }
 
   logger.info("Seeding database...");
 
-  const [marcus, jordan, tyler, coachDavis, adminSam, daniela, chris, parentLisa, childSamira] = await db
-    .insert(users)
-    .values([
+
+  const withPw = <T extends Record<string, unknown>>(u: T): T & { passwordHash: string } => ({
+    ...u,
+    passwordHash: demoPasswordHash,
+  });
+
+  const seedUserRows: Array<typeof users.$inferInsert> = [
       {
         name: "Marcus Rivera",
         email: "marcus@kinectem.demo",
@@ -121,7 +140,11 @@ export async function seedIfEmpty(): Promise<void> {
         bio: "Middle school hooper, big dreams.",
         dateOfBirth: new Date("2014-03-12"),
       },
-    ])
+    ];
+
+  const [marcus, jordan, tyler, coachDavis, adminSam, daniela, chris, parentLisa, childSamira] = await db
+    .insert(users)
+    .values(seedUserRows.map(withPw))
     .returning();
 
   // Link parent ↔ child
