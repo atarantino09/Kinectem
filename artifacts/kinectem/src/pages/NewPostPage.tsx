@@ -202,7 +202,10 @@ export default function NewPostPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setLocation("/")}
+            onClick={() => {
+              if (window.history.length > 1) window.history.back();
+              else setLocation("/");
+            }}
             className="font-bold"
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> Cancel
