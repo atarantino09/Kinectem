@@ -285,7 +285,15 @@ const PasswordResetCompleteBody = z.object({
   token: z.string().min(10),
   newPassword: z.string().min(8),
 });
-const GuardianConfirmBody = z.object({ token: z.string().min(10) });
+const GuardianConfirmBody = z.object({
+  token: z.string().min(10),
+  guardianEmail: z.string().email(),
+});
+const GuardianResendBody = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+const GUARDIAN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 router.post(
   "/auth/login",
@@ -301,11 +309,20 @@ router.post(
       res.status(401).json({ error: "Incorrect email or password." });
       return;
     }
-    if (user.guardianConfirmToken && !user.guardianConfirmedAt) {
+    if (user.guardianEmail && !user.guardianConfirmedAt) {
+      const expired =
+        !user.guardianConfirmToken ||
+        !user.guardianConfirmTokenExpiresAt ||
+        user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
       res.status(403).json({
-        error:
-          "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
-        guardianConfirmUrl: `/guardian-confirm/${user.guardianConfirmToken}`,
+        error: expired
+          ? "Your guardian confirmation link has expired. You can send your parent or guardian a new one below."
+          : "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
+        pendingGuardianConfirmation: true,
+        guardianConfirmExpired: expired,
+        guardianConfirmUrl: expired
+          ? null
+          : `/guardian-confirm/${user.guardianConfirmToken}`,
       });
       return;
     }
@@ -329,6 +346,17 @@ router.post(
       res.status(400).json({
         error:
           "Athletes under 13 must provide a parent or guardian email so we can confirm the account.",
+      });
+      return;
+    }
+    if (
+      guardianRequired &&
+      body.guardianEmail &&
+      body.guardianEmail.toLowerCase() === body.email.toLowerCase()
+    ) {
+      res.status(400).json({
+        error:
+          "The guardian email must be different from the athlete's email address.",
       });
       return;
     }
@@ -361,6 +389,9 @@ router.post(
         parentId: body.parentId ?? undefined,
         guardianEmail: guardianRequired ? body.guardianEmail!.toLowerCase() : undefined,
         guardianConfirmToken: guardianToken ?? undefined,
+        guardianConfirmTokenExpiresAt: guardianRequired
+          ? new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS)
+          : undefined,
       })
       .returning();
 
@@ -444,11 +475,80 @@ router.post(
       res.status(400).json({ error: "This confirmation link is invalid or has already been used." });
       return;
     }
+    if (
+      !user.guardianConfirmTokenExpiresAt ||
+      user.guardianConfirmTokenExpiresAt.getTime() < Date.now()
+    ) {
+      res.status(400).json({
+        error:
+          "This confirmation link has expired. Ask the athlete to sign in and request a new link.",
+        expired: true,
+      });
+      return;
+    }
+    const submittedEmail = body.guardianEmail.trim().toLowerCase();
+    if (!user.guardianEmail || submittedEmail !== user.guardianEmail.toLowerCase()) {
+      res.status(403).json({
+        error:
+          "The email you entered doesn't match the guardian email on file for this account.",
+      });
+      return;
+    }
+    // If a real user account exists for the guardian's email, link it via parentId
+    // so we have a record of who confirmed.
+    const [guardianUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, submittedEmail))
+      .limit(1);
     await db
       .update(users)
-      .set({ guardianConfirmedAt: new Date(), guardianConfirmToken: null })
+      .set({
+        guardianConfirmedAt: new Date(),
+        guardianConfirmToken: null,
+        guardianConfirmTokenExpiresAt: null,
+        guardianConfirmedByUserId: guardianUser?.id ?? null,
+        parentId: user.parentId ?? guardianUser?.id ?? null,
+      })
       .where(eq(users.id, user.id));
     res.json({ ok: true, athleteName: user.name, guardianEmail: user.guardianEmail });
+  }),
+);
+
+router.post(
+  "/auth/guardian-resend",
+  asyncHandler(async (req, res) => {
+    const body = GuardianResendBody.parse(req.body);
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, body.email.toLowerCase()))
+      .limit(1);
+    const ok = user ? await verifyPassword(body.password, user.passwordHash) : false;
+    if (!user || !ok) {
+      res.status(401).json({ error: "Incorrect email or password." });
+      return;
+    }
+    if (!user.guardianEmail || user.guardianConfirmedAt) {
+      res.status(400).json({
+        error: "This account does not need a guardian confirmation link.",
+      });
+      return;
+    }
+    const newToken = generateToken();
+    await db
+      .update(users)
+      .set({
+        guardianConfirmToken: newToken,
+        guardianConfirmTokenExpiresAt: new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS),
+      })
+      .where(eq(users.id, user.id));
+    // In production this URL would be emailed to user.guardianEmail.
+    res.json({
+      ok: true,
+      guardianEmail: user.guardianEmail,
+      guardianConfirmUrl: `/guardian-confirm/${newToken}`,
+    });
   }),
 );
 

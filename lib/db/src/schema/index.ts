@@ -30,7 +30,9 @@ export const users = pgTable("users", {
   parentId: uuid("parent_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   guardianEmail: text("guardian_email"),
   guardianConfirmToken: text("guardian_confirm_token"),
+  guardianConfirmTokenExpiresAt: timestamp("guardian_confirm_token_expires_at"),
   guardianConfirmedAt: timestamp("guardian_confirmed_at"),
+  guardianConfirmedByUserId: uuid("guardian_confirmed_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

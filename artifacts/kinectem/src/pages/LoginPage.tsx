@@ -15,7 +15,13 @@ import {
 } from "@/components/ui/select";
 import { Trophy, Mail, Lock, ArrowRight, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 
-type Mode = "signin" | "signup" | "forgot" | "forgotSent" | "signupPending";
+type Mode =
+  | "signin"
+  | "signup"
+  | "forgot"
+  | "forgotSent"
+  | "signupPending"
+  | "guardianPending";
 type Role = "athlete" | "coach" | "admin" | "parent";
 
 function readQueryParam(name: string): string | null {
@@ -56,6 +62,11 @@ export default function LoginPage() {
   const [guardianConsent, setGuardianConsent] = useState(false);
   const [pendingGuardianUrl, setPendingGuardianUrl] = useState<string | null>(null);
 
+  // Guardian pending (after sign-in attempt)
+  const [guardianPendingMessage, setGuardianPendingMessage] = useState<string>("");
+  const [guardianPendingExpired, setGuardianPendingExpired] = useState(false);
+  const [guardianResendUrl, setGuardianResendUrl] = useState<string | null>(null);
+
   // Forgot
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotResetUrl, setForgotResetUrl] = useState<string | null>(null);
@@ -85,9 +96,49 @@ export default function LoginPage() {
         setLocation(dest);
       }
     } catch (err) {
-      const e = err as { status?: number; message?: string; body?: { error?: string; guardianConfirmUrl?: string } };
+      const e = err as {
+        status?: number;
+        message?: string;
+        body?: {
+          error?: string;
+          guardianConfirmUrl?: string;
+          pendingGuardianConfirmation?: boolean;
+          guardianConfirmExpired?: boolean;
+        };
+      };
       const msg = e?.body?.error ?? e?.message ?? "Sign-in failed";
-      setError(msg);
+      if (e?.body?.pendingGuardianConfirmation) {
+        setGuardianPendingMessage(msg);
+        setGuardianPendingExpired(!!e?.body?.guardianConfirmExpired);
+        setGuardianResendUrl(null);
+        setMode("guardianPending");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResendGuardian = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = (await customFetch("/api/v1/auth/guardian-resend", {
+        method: "POST",
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      })) as { guardianConfirmUrl?: string };
+      setGuardianResendUrl(res?.guardianConfirmUrl ?? null);
+      setGuardianPendingExpired(false);
+      setGuardianPendingMessage(
+        "We sent a fresh confirmation link to your parent or guardian. It expires in 7 days.",
+      );
+    } catch (err) {
+      const e = err as { message?: string; body?: { error?: string } };
+      setError(e?.body?.error ?? e?.message ?? "Could not resend confirmation");
     } finally {
       setSubmitting(false);
     }
@@ -212,6 +263,7 @@ export default function LoginPage() {
               {mode === "forgot" && "Reset your password"}
               {mode === "forgotSent" && "Check your email"}
               {mode === "signupPending" && "One more step"}
+              {mode === "guardianPending" && "Guardian confirmation needed"}
             </h2>
             <p className="text-sm text-slate-500">
               {mode === "signin" && "Sign in to keep up with your teams."}
@@ -220,6 +272,8 @@ export default function LoginPage() {
               {mode === "forgotSent" && "If that email exists, a reset link is on its way."}
               {mode === "signupPending" &&
                 "Your account is ready — once a parent or guardian confirms it."}
+              {mode === "guardianPending" &&
+                "Your account can't sign in yet because a parent or guardian still needs to confirm it."}
             </p>
           </div>
 
@@ -553,6 +607,55 @@ export default function LoginPage() {
                     data-testid="link-reset-url"
                   >
                     {forgotResetUrl}
+                  </a>
+                </div>
+              )}
+              <Button
+                type="button"
+                onClick={() => switchMode("signin")}
+                variant="outline"
+                className="w-full h-11 rounded-xl font-bold"
+              >
+                Back to sign in
+              </Button>
+            </div>
+          )}
+
+          {mode === "guardianPending" && (
+            <div className="space-y-4" data-testid="block-guardian-pending">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                <p data-testid="text-guardian-pending-message">{guardianPendingMessage}</p>
+              </div>
+              <Button
+                type="button"
+                onClick={handleResendGuardian}
+                disabled={submitting}
+                className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                data-testid="btn-guardian-resend"
+              >
+                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {guardianPendingExpired
+                  ? "Send a new confirmation link"
+                  : "Resend confirmation link"}
+              </Button>
+              {guardianResendUrl && (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-2"
+                  data-testid="block-dev-guardian-resend-link"
+                >
+                  <p className="font-bold uppercase tracking-wider text-slate-500">
+                    Demo helper
+                  </p>
+                  <p>
+                    No real email is sent in this environment. Share this link
+                    with your guardian:
+                  </p>
+                  <a
+                    href={guardianResendUrl}
+                    className="block break-all font-mono text-violet-700 hover:underline"
+                    data-testid="link-guardian-resend-url"
+                  >
+                    {guardianResendUrl}
                   </a>
                 </div>
               )}

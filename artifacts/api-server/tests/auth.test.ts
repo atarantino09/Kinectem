@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { db, users } from "@workspace/db";
 import { app, listSeedUsers, loginAs, request, DEMO_PASSWORD } from "./helpers";
 
 describe("auth", () => {
@@ -95,15 +97,139 @@ describe("auth", () => {
     expect(blocked.status).toBe(403);
 
     const token = url.split("/").pop()!;
+
+    // Wrong guardian email is rejected so kids can't confirm themselves.
+    const wrongEmail = await request(app)
+      .post("/api/v1/auth/guardian-confirm")
+      .send({ token, guardianEmail: `kid-${Date.now()}@kinectem.test` });
+    expect(wrongEmail.status).toBe(403);
+
+    // Identity check requires the guardian email to match.
     const confirm = await request(app)
       .post("/api/v1/auth/guardian-confirm")
-      .send({ token });
+      .send({ token, guardianEmail });
     expect(confirm.status).toBe(200);
 
     const ok = await request(app)
       .post("/api/v1/auth/login")
       .send({ email, password });
     expect(ok.status).toBe(200);
+  });
+
+  it("lets a pending under-13 athlete request a fresh guardian confirmation link", async () => {
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - 11);
+    const email = `kid-resend-${Date.now()}@kinectem.test`;
+    const guardianEmail = `parent-resend-${Date.now()}@kinectem.test`;
+    const password = "supersecret1";
+
+    const signup = await request(app).post("/api/v1/auth/signup").send({
+      firstName: "Tiny",
+      lastName: "Player",
+      role: "athlete",
+      email,
+      password,
+      dateOfBirth: dob.toISOString(),
+      guardianEmail,
+      guardianConsent: true,
+    });
+    expect(signup.status).toBe(201);
+    const originalUrl: string = signup.body.guardianConfirmUrl;
+    const originalToken = originalUrl.split("/").pop()!;
+
+    // Login surfaces a structured pending-guardian payload.
+    const blocked = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email, password });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.pendingGuardianConfirmation).toBe(true);
+
+    const resend = await request(app)
+      .post("/api/v1/auth/guardian-resend")
+      .send({ email, password });
+    expect(resend.status).toBe(200);
+    const newUrl: string = resend.body.guardianConfirmUrl;
+    expect(newUrl).toMatch(/^\/guardian-confirm\//);
+    const newToken = newUrl.split("/").pop()!;
+    expect(newToken).not.toBe(originalToken);
+
+    // Old link should now be invalid.
+    const oldFails = await request(app)
+      .post("/api/v1/auth/guardian-confirm")
+      .send({ token: originalToken, guardianEmail });
+    expect(oldFails.status).toBe(400);
+
+    // New link works.
+    const ok = await request(app)
+      .post("/api/v1/auth/guardian-confirm")
+      .send({ token: newToken, guardianEmail });
+    expect(ok.status).toBe(200);
+  });
+
+  it("surfaces an expired guardian confirmation link on login and at confirm time", async () => {
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - 9);
+    const email = `kid-expired-${Date.now()}@kinectem.test`;
+    const guardianEmail = `parent-expired-${Date.now()}@kinectem.test`;
+    const password = "supersecret1";
+
+    const signup = await request(app).post("/api/v1/auth/signup").send({
+      firstName: "Tiny",
+      lastName: "Player",
+      role: "athlete",
+      email,
+      password,
+      dateOfBirth: dob.toISOString(),
+      guardianEmail,
+      guardianConsent: true,
+    });
+    expect(signup.status).toBe(201);
+    const url: string = signup.body.guardianConfirmUrl;
+    const token = url.split("/").pop()!;
+
+    // Manually expire the token in the database.
+    await db
+      .update(users)
+      .set({ guardianConfirmTokenExpiresAt: new Date(Date.now() - 1000) })
+      .where(eq(users.email, email));
+
+    const blocked = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email, password });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.pendingGuardianConfirmation).toBe(true);
+    expect(blocked.body.guardianConfirmExpired).toBe(true);
+    expect(blocked.body.guardianConfirmUrl).toBeNull();
+
+    const confirmExpired = await request(app)
+      .post("/api/v1/auth/guardian-confirm")
+      .send({ token, guardianEmail });
+    expect(confirmExpired.status).toBe(400);
+    expect(confirmExpired.body.expired).toBe(true);
+  });
+
+  it("rejects under-13 signup when guardian email matches the athlete email", async () => {
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - 8);
+    const email = `kid-self-${Date.now()}@kinectem.test`;
+    const res = await request(app).post("/api/v1/auth/signup").send({
+      firstName: "Sneaky",
+      lastName: "Kid",
+      role: "athlete",
+      email,
+      password: "supersecret1",
+      dateOfBirth: dob.toISOString(),
+      guardianEmail: email,
+      guardianConsent: true,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects guardian-resend without correct athlete credentials", async () => {
+    const res = await request(app)
+      .post("/api/v1/auth/guardian-resend")
+      .send({ email: "nobody@kinectem.test", password: "wrongpass1" });
+    expect(res.status).toBe(401);
   });
 
   it("rejects duplicate email at signup", async () => {
