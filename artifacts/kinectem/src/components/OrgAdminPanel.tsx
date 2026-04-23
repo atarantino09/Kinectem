@@ -9,6 +9,7 @@ import {
   useDeclineOrgPostApproval,
   getListOrgJoinRequestsQueryKey,
   getListOrgPostApprovalsQueryKey,
+  getListFeedQueryKey,
   type JoinRequestResponse,
   type PostApprovalResponse,
 } from "@workspace/api-client-react";
@@ -28,8 +29,10 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
 
   const invalidateJR = () =>
     qc.invalidateQueries({ queryKey: getListOrgJoinRequestsQueryKey(orgId) });
-  const invalidatePA = () =>
+  const invalidatePA = () => {
     qc.invalidateQueries({ queryKey: getListOrgPostApprovalsQueryKey(orgId) });
+    qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+  };
 
   const approveJR = useApproveOrgJoinRequest({
     mutation: { onSuccess: invalidateJR },

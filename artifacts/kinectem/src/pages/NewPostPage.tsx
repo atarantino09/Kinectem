@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useCreatePost,
   useGetLoggedInUser,
   useListUserOrganizations,
+  getListFeedQueryKey,
   type CreatePostRequest,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,6 +64,9 @@ export default function NewPostPage() {
     query: { enabled: !!me?.id && !initialTeamId } as never,
   });
   const createPost = useCreatePost();
+  const qc = useQueryClient();
+  const invalidateFeed = () =>
+    qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
   const lockedToTeam = !!initialTeamId;
 
   // Load existing draft
@@ -150,10 +155,12 @@ export default function NewPostPage() {
           }),
         });
         await customFetch(`/posts/${draftId}/publish`, { method: "POST" });
+        invalidateFeed();
         toast({ title: "Published!" });
         setLocation(initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`);
       } else {
         const result = await createPost.mutateAsync({ data: buildPayload() });
+        invalidateFeed();
         toast({ title: "Posted!" });
         setLocation(initialTeamId ? `/teams/${initialTeamId}` : `/posts/${result.id}`);
       }
