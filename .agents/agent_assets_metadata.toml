@@ -6,3 +6,15 @@ id = "SgflPTEXPZxrZuE11oC5z"
 uri = "file://artifacts/kinectem/screenshots/roster-filled.jpg"
 type = "image"
 title = "Filled Roster — Players with Parents Expanded"
+
+[[outputs]]
+id = "J699H2iCx2A9FosYzn0x7"
+uri = "file://artifacts/kinectem/screenshots/org-logo-uploaded.jpg"
+type = "image"
+title = "Existing Org — Logo Uploaded"
+
+[[outputs]]
+id = "3gOUP76w0O5o70dYCaiWi"
+uri = "file://artifacts/kinectem/screenshots/org-created-with-logo.jpg"
+type = "image"
+title = "New Org Created with Logo"

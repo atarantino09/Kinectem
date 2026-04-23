@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -47,6 +47,8 @@ export function CreateOrgDialog({
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const createOrg = useCreateOrganization();
   const { data: me } = useGetLoggedInUser();
@@ -59,6 +61,29 @@ export function CreateOrgDialog({
     setCity("");
     setState("");
     setSlugDirty(false);
+    setLogoUrl("");
+  };
+
+  const onPickLogo = () => fileInputRef.current?.click();
+  const onLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please pick an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > 1_500_000) {
+      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
+      return;
+    }
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    setLogoUrl(dataUrl);
   };
 
   const onNameChange = (v: string) => {
@@ -82,6 +107,7 @@ export function CreateOrgDialog({
           website: website.trim() || undefined,
           city: city.trim() || undefined,
           state: state.trim() || undefined,
+          logoUrl: logoUrl || undefined,
         } as never,
       });
       toast({ title: "Organization created!" });
@@ -115,6 +141,53 @@ export function CreateOrgDialog({
           </DialogHeader>
 
           <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="font-bold">Logo</Label>
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-xl border-2 border-dashed border-border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt="Logo preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      Logo
+                    </span>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onLogoChange}
+                  data-testid="input-org-logo"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="font-bold rounded-full"
+                  onClick={onPickLogo}
+                  data-testid="btn-pick-org-logo"
+                >
+                  {logoUrl ? "Change" : "Upload logo"}
+                </Button>
+                {logoUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => setLogoUrl("")}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="org-name" className="font-bold">
                 Name

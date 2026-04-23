@@ -446,6 +446,8 @@ router.post(
         description: req.body?.description ?? undefined,
         city: req.body?.city ?? undefined,
         state: req.body?.state ?? undefined,
+        website: req.body?.website ?? undefined,
+        logoUrl: req.body?.logoUrl ?? undefined,
         createdById: me.id,
       })
       .returning();
@@ -504,6 +506,41 @@ router.get(
       isFollowing = !!follow;
     }
     res.json(toOrganization(org, { isMember, role, isFollowing }));
+  }),
+);
+
+router.patch(
+  "/organizations/:orgId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [existing] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!existing) return notFound(res);
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const body = req.body ?? {};
+    const patch: Record<string, unknown> = {};
+    if (typeof body.name === "string") patch.name = body.name;
+    if (typeof body.description === "string") patch.description = body.description;
+    if (typeof body.website === "string") patch.website = body.website;
+    if (typeof body.city === "string") patch.city = body.city;
+    if (typeof body.state === "string") patch.state = body.state;
+    if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
+    if (Object.keys(patch).length === 0) {
+      return res.json(toOrganization(existing));
+    }
+    const [updated] = await db
+      .update(organizations)
+      .set(patch)
+      .where(eq(organizations.id, req.params.orgId))
+      .returning();
+    if (!updated) return notFound(res);
+    res.json(toOrganization(updated));
   }),
 );
 
