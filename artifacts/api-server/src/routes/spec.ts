@@ -356,17 +356,11 @@ router.get(
 // Current user
 // ---------------------------------------------------------------------------
 
-async function getOrFallbackUser(req: Request) {
-  if (req.sessionUser) return req.sessionUser;
-  const [fallback] = await db.select().from(users).where(eq(users.role, "athlete")).limit(1);
-  return fallback ?? null;
-}
-
 router.get(
   "/users/me",
   asyncHandler(async (req, res) => {
-    const u = await getOrFallbackUser(req);
-    if (!u) return notFound(res);
+    const u = req.sessionUser;
+    if (!u) return res.status(401).json({ error: "Not authenticated" });
     res.json(toPrivateUser(u));
   }),
 );
@@ -428,7 +422,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
     if (!u) return notFound(res);
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     const isOwnProfile = me?.id === u.id;
 
     // Linked accounts (parent ↔ child) are sensitive on a youth-sports
@@ -632,7 +626,7 @@ router.get(
 router.post(
   "/organizations",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const name = String(req.body?.name ?? "").trim();
     if (!name) return res.status(400).json({ error: "name required" });
@@ -671,7 +665,7 @@ router.get(
       .where(eq(organizations.id, req.params.orgId))
       .limit(1);
     if (!org) return notFound(res);
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     let role: "owner" | "admin" | "member" | null = null;
     let isMember = false;
     let isFollowing = false;
@@ -847,7 +841,7 @@ router.get(
 router.get(
   "/organizations/:orgId/join-requests",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const isAdmin = await canManageOrganization(me.id, req.params.orgId);
     if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
@@ -875,7 +869,7 @@ router.get(
 router.post(
   "/organizations/:orgId/join-requests",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [existing] = await db
       .select()
@@ -902,7 +896,7 @@ async function decideJoinRequest(
   res: Response,
   decision: "approved" | "declined",
 ) {
-  const me = await getOrFallbackUser(req);
+  const me = req.sessionUser;
   if (!me) return res.status(401).json({ error: "Not authenticated" });
   const isAdmin = await canManageOrganization(me.id, req.params.orgId);
   if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
@@ -953,7 +947,7 @@ router.post(
 router.delete(
   "/organizations/:orgId/join-requests/:requestId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [r] = await db
       .select()
@@ -977,7 +971,7 @@ router.delete(
 router.get(
   "/organizations/:orgId/post-approvals",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const isAdmin = await canManageOrganization(me.id, req.params.orgId);
     if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
@@ -1025,7 +1019,7 @@ async function transitionApproval(
   res: Response,
   next: "published" | "draft",
 ) {
-  const me = await getOrFallbackUser(req);
+  const me = req.sessionUser;
   if (!me) return res.status(401).json({ error: "Not authenticated" });
   const isAdmin = await canManageOrganization(me.id, req.params.orgId);
   if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
@@ -1061,7 +1055,7 @@ router.post(
 router.post(
   "/organizations/:orgId/follow",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     await db
       .insert(organizationFollowers)
@@ -1077,7 +1071,7 @@ router.post(
 router.delete(
   "/organizations/:orgId/follow",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     await db
       .delete(organizationFollowers)
@@ -1145,7 +1139,7 @@ router.get(
 router.patch(
   "/teams/:teamId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "unauthorized" });
     const [existing] = await db
       .select()
@@ -1214,7 +1208,7 @@ router.get(
       ? await db.select().from(users).where(inArray(users.id, parentIds))
       : [];
     const parentMap = new Map(parentRows.map((p) => [p.id, p]));
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     const [team] = await db
       .select()
       .from(teams)
@@ -1264,7 +1258,7 @@ router.get(
 router.post(
   "/teams/:teamId/members",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const teamId = req.params.teamId;
     const userId = String(req.body?.userId ?? "");
@@ -1324,7 +1318,7 @@ router.delete(
 router.post(
   "/teams/:teamId/members/:memberId/accept",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [entry] = await db
       .select()
@@ -1350,7 +1344,7 @@ router.post(
 router.post(
   "/teams/:teamId/members/:memberId/decline",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [entry] = await db
       .select()
@@ -1373,7 +1367,7 @@ router.post(
 router.post(
   "/teams/:teamId/invites",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const teamId = req.params.teamId;
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -1425,7 +1419,7 @@ router.get(
 router.post(
   "/invites/:token/accept",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [invite] = await db
       .select()
@@ -1479,7 +1473,7 @@ router.post(
 router.post(
   "/invites/:token/children",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [invite] = await db
       .select()
@@ -1550,7 +1544,7 @@ router.get(
 router.post(
   "/teams/:teamId/join-link",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const teamId = req.params.teamId;
     // Only org admins of the owning organization can mint join links.
@@ -1635,7 +1629,7 @@ router.get(
 router.get(
   "/feed",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     const arts = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
@@ -1682,7 +1676,7 @@ router.get(
 router.get(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     if (parsed.kind === "article") {
@@ -1760,7 +1754,7 @@ router.get(
 router.post(
   "/posts/:postId/comments",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
@@ -1782,7 +1776,7 @@ router.post(
 router.delete(
   "/posts/:postId/comments/:commentId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [c] = await db
       .select()
@@ -1803,7 +1797,7 @@ router.delete(
 router.post(
   "/posts/:postId/reactions",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
@@ -1823,7 +1817,7 @@ router.post(
 router.delete(
   "/posts/:postId/reactions",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
@@ -1892,7 +1886,7 @@ router.get(
 router.post(
   "/posts",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const body = req.body ?? {};
     // Spec uses organizationId; we pick first team in that org as a default context.
@@ -1979,7 +1973,7 @@ router.post(
 router.get(
   "/drafts",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json(paginate([]));
     const owned = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
@@ -2013,7 +2007,7 @@ router.get(
 router.patch(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
@@ -2074,7 +2068,7 @@ router.patch(
 router.post(
   "/posts/:postId/publish",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
@@ -2143,7 +2137,7 @@ router.get(
 router.post(
   "/posts/:postId/co-authors",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
@@ -2174,7 +2168,7 @@ router.post(
 router.delete(
   "/posts/:postId/co-authors/:userId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
@@ -2205,7 +2199,7 @@ router.delete(
 router.get(
   "/notifications",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json(paginate([]));
     const rows = await db
       .select()
@@ -2220,7 +2214,7 @@ router.get(
 router.get(
   "/notifications/unread-count",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json({ unreadCount: 0 });
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -2244,7 +2238,7 @@ router.post(
 router.post(
   "/notifications/read-all",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json({ markedCount: 0 });
     const result = await db
       .update(notifications)
@@ -2354,7 +2348,7 @@ async function loadConversationView(conv: { id: string; type: string; createdAt:
 router.get(
   "/conversations",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json(paginate([]));
     const myParts = await db
       .select({ conv: conversations })
@@ -2378,7 +2372,7 @@ router.get(
 router.get(
   "/conversations/unread-count",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json({ unreadCount: 0 });
     const myParts = await db
       .select()
@@ -2412,7 +2406,7 @@ router.get(
 router.post(
   "/conversations",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const recipientId: string | undefined = req.body?.recipientId;
     const recipientType: "user" | "organization" =
@@ -2469,7 +2463,7 @@ router.post(
 router.get(
   "/conversations/:id",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [conv] = await db
       .select()
@@ -2498,7 +2492,7 @@ router.get(
 router.delete(
   "/conversations/:id",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     await db
       .update(conversationParticipants)
@@ -2517,7 +2511,7 @@ router.delete(
 router.get(
   "/conversations/:id/messages",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [iAmIn] = await db
       .select()
@@ -2559,7 +2553,7 @@ router.get(
 router.post(
   "/conversations/:id/messages",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [iAmIn] = await db
       .select()
@@ -2600,7 +2594,7 @@ router.post(
 router.post(
   "/conversations/:id/read",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     await db
       .update(conversationParticipants)
@@ -2623,7 +2617,7 @@ router.post(
 router.get(
   "/tags/pending",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json(paginate([]));
     const aRows = await db
       .select()
@@ -2670,7 +2664,7 @@ async function decidePendingTag(
   res: Response,
   decision: "approved" | "declined",
 ) {
-  const me = await getOrFallbackUser(req);
+  const me = req.sessionUser;
   if (!me) return res.status(401).json({ error: "Not authenticated" });
   const tagId = req.params.tagId;
   const [a] = await db.select().from(articleTags).where(eq(articleTags.id, tagId)).limit(1);
@@ -2734,7 +2728,7 @@ router.post(
 router.get(
   "/users/me/tags",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.json({ data: [] });
     const aRows = await db
       .select({
@@ -2789,7 +2783,7 @@ router.get(
 router.delete(
   "/article-tags/:tagId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [t] = await db
       .select()
@@ -2807,7 +2801,7 @@ router.delete(
 router.delete(
   "/highlight-tags/:tagId",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [t] = await db
       .select()
@@ -2827,7 +2821,7 @@ router.delete("/tags/:tagId", (_req, res) => res.status(204).end());
 router.patch(
   "/users/me/tag-consent",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const requireTagConsent = !!req.body?.requireTagConsent;
     const [updated] = await db
@@ -2846,7 +2840,7 @@ router.patch(
 router.get(
   "/users/me/children",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const rows = await db
       .select()
@@ -2872,7 +2866,7 @@ router.get(
 router.post(
   "/users/me/children",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     if (me.role !== "parent") {
       return res
@@ -2913,7 +2907,7 @@ router.post(
 router.patch(
   "/users/me/children/:childId/visibility",
   asyncHandler(async (req, res) => {
-    const me = await getOrFallbackUser(req);
+    const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
     const [child] = await db
       .select()

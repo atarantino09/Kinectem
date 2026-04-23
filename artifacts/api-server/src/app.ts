@@ -8,6 +8,7 @@ import { logger } from "./lib/logger";
 import { loadSession } from "./lib/auth";
 
 const app: Express = express();
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({

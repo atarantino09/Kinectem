@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import {
@@ -22,9 +22,18 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { data: currentUser } = useGetLoggedInUser();
+  const { data: currentUser, error: currentUserError } = useGetLoggedInUser({
+    query: { retry: false },
+  });
   const { data: unreadMsgs } = useGetUnreadMessageCount();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    const status = (currentUserError as { status?: number } | null)?.status;
+    if (status === 401 && location !== "/login") {
+      setLocation("/login");
+    }
+  }, [currentUserError, location, setLocation]);
   const [query, setQuery] = useState("");
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const qc = useQueryClient();

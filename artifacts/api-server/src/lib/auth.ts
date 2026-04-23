@@ -43,17 +43,38 @@ export async function destroySession(token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.id, token));
 }
 
+function isSecureRequest(res: Response): boolean {
+  const req = res.req as Request | undefined;
+  if (!req) return false;
+  if (req.secure) return true;
+  const xfProto = req.headers["x-forwarded-proto"];
+  const proto = Array.isArray(xfProto) ? xfProto[0] : xfProto;
+  if (typeof proto === "string" && proto.split(",")[0].trim() === "https") return true;
+  return false;
+}
+
 export function setSessionCookie(res: Response, sessionId: string, expiresAt: Date) {
+  const secure = isSecureRequest(res);
   res.cookie(SESSION_COOKIE, sessionId, {
     httpOnly: true,
-    sameSite: "lax",
+    // When the request is HTTPS (e.g. running behind the Replit proxy),
+    // use SameSite=None + Secure so the cookie is sent from the workspace
+    // canvas iframe (which is a third-party context). On plain HTTP dev,
+    // fall back to Lax (browsers reject SameSite=None without Secure).
+    sameSite: secure ? "none" : "lax",
+    secure,
     expires: expiresAt,
     path: "/",
   });
 }
 
 export function clearSessionCookie(res: Response) {
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  const secure = isSecureRequest(res);
+  res.clearCookie(SESSION_COOKIE, {
+    path: "/",
+    sameSite: secure ? "none" : "lax",
+    secure,
+  });
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
