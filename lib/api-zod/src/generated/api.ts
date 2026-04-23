@@ -2990,6 +2990,95 @@ export const ListFeedResponse = zod.object({
 });
 
 /**
+ * Returns a small set of organizations, teams, and users the authenticated viewer could follow. Excludes anything the viewer already follows, owns, is an admin of, or is a member of. Intended to power the empty-feed "who to follow" experience.
+
+ * @summary Suggested organizations, teams, and athletes to follow
+ */
+export const listFollowSuggestionsResponseTeamsItemFollowerCountMin = 0;
+
+export const listFollowSuggestionsResponseUsersItemNicknameMax = 100;
+
+export const listFollowSuggestionsResponseUsersItemBioMax = 1000;
+
+export const ListFollowSuggestionsResponse = zod.object({
+  organizations: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      slug: zod.string(),
+      description: zod.string().nullish(),
+      website: zod.string().url().nullish(),
+      isMember: zod.boolean(),
+      isFollowing: zod.boolean().optional(),
+      role: zod.enum(["owner", "admin", "member"]).nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  teams: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      organization: zod.object({
+        id: zod.string().uuid(),
+        name: zod.string(),
+        slug: zod.string(),
+      }),
+      name: zod.string(),
+      slug: zod.string(),
+      description: zod.string().nullish(),
+      sport: zod.string().nullish(),
+      level: zod.string().nullish(),
+      avatarUrl: zod.string().url().nullish(),
+      currentSeason: zod
+        .object({
+          id: zod.string().uuid().optional(),
+          name: zod.string().optional(),
+          startDate: zod.coerce.date().nullish(),
+          endDate: zod.coerce.date().nullish(),
+          status: zod.enum(["active", "completed"]).optional(),
+          createdAt: zod.coerce.date().optional(),
+        })
+        .nullish()
+        .describe("The team's current active season, or null if none."),
+      followerCount: zod
+        .number()
+        .min(listFollowSuggestionsResponseTeamsItemFollowerCountMin),
+      isFollowing: zod.boolean(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  users: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      nickname: zod
+        .string()
+        .max(listFollowSuggestionsResponseUsersItemNicknameMax)
+        .nullish(),
+      bio: zod
+        .string()
+        .max(listFollowSuggestionsResponseUsersItemBioMax)
+        .nullish(),
+      avatarUrl: zod.string().url().nullish(),
+      coverPhotoUrl: zod
+        .string()
+        .url()
+        .nullish()
+        .describe(
+          "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+        ),
+      isOwnProfile: zod.boolean(),
+      isFollowing: zod.boolean().optional(),
+      isConnection: zod.boolean().optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
  * Idempotent. Calling twice with the same user is a no-op. Requires adult or consented-minor user.
  * @summary Add or upsert a reaction on a post
  */

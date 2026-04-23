@@ -2428,6 +2428,132 @@ router.get(
 );
 
 router.get(
+  "/follow-suggestions",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+
+    const SUGGESTION_LIMIT = 5;
+
+    const [
+      followedOrgRows,
+      adminOrgRows,
+      followedTeamRows,
+      memberTeamRows,
+      followedUserRows,
+    ] = await Promise.all([
+      db
+        .select({ id: organizationFollowers.organizationId })
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, me.id)),
+      db
+        .select({ id: organizationAdmins.organizationId })
+        .from(organizationAdmins)
+        .where(eq(organizationAdmins.userId, me.id)),
+      db
+        .select({ id: teamFollowers.teamId })
+        .from(teamFollowers)
+        .where(eq(teamFollowers.userId, me.id)),
+      db
+        .select({ id: rosterEntries.teamId })
+        .from(rosterEntries)
+        .where(eq(rosterEntries.userId, me.id)),
+      db
+        .select({ id: userFollowers.followingUserId })
+        .from(userFollowers)
+        .where(eq(userFollowers.followerUserId, me.id)),
+    ]);
+
+    const excludedOrgIds = new Set<string>([
+      ...followedOrgRows.map((r) => r.id),
+      ...adminOrgRows.map((r) => r.id),
+    ]);
+    const excludedTeamIds = new Set<string>([
+      ...followedTeamRows.map((r) => r.id),
+      ...memberTeamRows.map((r) => r.id),
+    ]);
+    const excludedUserIds = new Set<string>([
+      ...followedUserRows.map((r) => r.id),
+      me.id,
+    ]);
+
+    const orgRows = await db
+      .select({
+        org: organizations,
+        followerCount: sql<number>`count(${organizationFollowers.userId})::int`,
+      })
+      .from(organizations)
+      .leftJoin(
+        organizationFollowers,
+        eq(organizationFollowers.organizationId, organizations.id),
+      )
+      .groupBy(organizations.id)
+      .orderBy(
+        desc(sql<number>`count(${organizationFollowers.userId})`),
+        desc(organizations.createdAt),
+      )
+      .limit(SUGGESTION_LIMIT + excludedOrgIds.size);
+    const orgSuggestions = orgRows
+      .filter((r) => !excludedOrgIds.has(r.org.id))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((r) => toOrganization(r.org, { isMember: false, isFollowing: false }));
+
+    const teamRows = await db
+      .select({
+        team: teams,
+        org: organizations,
+        followerCount: sql<number>`count(${teamFollowers.userId})::int`,
+      })
+      .from(teams)
+      .innerJoin(organizations, eq(organizations.id, teams.organizationId))
+      .leftJoin(teamFollowers, eq(teamFollowers.teamId, teams.id))
+      .groupBy(teams.id, organizations.id)
+      .orderBy(
+        desc(sql<number>`count(${teamFollowers.userId})`),
+        desc(teams.createdAt),
+      )
+      .limit(SUGGESTION_LIMIT + excludedTeamIds.size);
+    const teamSuggestions = teamRows
+      .filter((r) => !excludedTeamIds.has(r.team.id))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((r) =>
+        toTeam(r.team, r.org, {
+          followerCount: r.followerCount,
+          isFollowing: false,
+        }),
+      );
+
+    const userRows = await db
+      .select({
+        user: users,
+        followerCount: sql<number>`count(${userFollowers.followerUserId})::int`,
+      })
+      .from(users)
+      .leftJoin(
+        userFollowers,
+        eq(userFollowers.followingUserId, users.id),
+      )
+      .where(ne(users.id, me.id))
+      .groupBy(users.id)
+      .orderBy(
+        desc(sql<number>`count(${userFollowers.followerUserId})`),
+        desc(users.createdAt),
+      )
+      .limit(SUGGESTION_LIMIT + excludedUserIds.size);
+    const userSuggestions = userRows
+      .filter((r) => !excludedUserIds.has(r.user.id))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((r) => toPublicUser(r.user, { isOwnProfile: false, isFollowing: false }));
+
+    res.json({
+      organizations: orgSuggestions,
+      teams: teamSuggestions,
+      users: userSuggestions,
+    });
+  }),
+);
+
+router.get(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;

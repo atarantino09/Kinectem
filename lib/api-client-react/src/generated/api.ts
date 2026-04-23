@@ -50,6 +50,7 @@ import type {
   ErrorResponse,
   FeedResponse,
   FollowOrgResponse,
+  FollowSuggestionsResponse,
   FollowUserResponse,
   ForbiddenResponse,
   GuardianLinkResponse,
@@ -10236,6 +10237,83 @@ export function useListFeed<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListFeedQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns a small set of organizations, teams, and users the authenticated viewer could follow. Excludes anything the viewer already follows, owns, is an admin of, or is a member of. Intended to power the empty-feed "who to follow" experience.
+
+ * @summary Suggested organizations, teams, and athletes to follow
+ */
+export const getListFollowSuggestionsUrl = () => {
+  return `/api/v1/follow-suggestions`;
+};
+
+export const listFollowSuggestions = async (
+  options?: RequestInit,
+): Promise<FollowSuggestionsResponse> => {
+  return customFetch<FollowSuggestionsResponse>(getListFollowSuggestionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFollowSuggestionsQueryKey = () => {
+  return [`/api/v1/follow-suggestions`] as const;
+};
+
+export const getListFollowSuggestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFollowSuggestions>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFollowSuggestions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFollowSuggestionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFollowSuggestions>>
+  > = ({ signal }) => listFollowSuggestions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFollowSuggestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFollowSuggestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFollowSuggestions>>
+>;
+export type ListFollowSuggestionsQueryError = ErrorType<UnauthorizedResponse>;
+
+/**
+ * @summary Suggested organizations, teams, and athletes to follow
+ */
+
+export function useListFollowSuggestions<
+  TData = Awaited<ReturnType<typeof listFollowSuggestions>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFollowSuggestions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFollowSuggestionsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

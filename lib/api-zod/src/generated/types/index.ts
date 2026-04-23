@@ -76,6 +76,7 @@ export * from "./followingListItem";
 export * from "./followingListItemEntityType";
 export * from "./followLimitParameter";
 export * from "./followOrgResponse";
+export * from "./followSuggestionsResponse";
 export * from "./followUserResponse";
 export * from "./forbiddenResponse";
 export * from "./guardianLinkResponse";

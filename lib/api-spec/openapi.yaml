@@ -2567,6 +2567,27 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /follow-suggestions:
+    get:
+      operationId: listFollowSuggestions
+      summary: Suggested organizations, teams, and athletes to follow
+      description: >
+        Returns a small set of organizations, teams, and users the authenticated
+        viewer could follow. Excludes anything the viewer already follows, owns,
+        is an admin of, or is a member of. Intended to power the empty-feed
+        "who to follow" experience.
+      tags:
+        - Feed
+      responses:
+        '200':
+          description: Suggested entities to follow
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowSuggestionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /posts/{postId}/reactions:
     put:
       operationId: addPostReaction
@@ -5935,6 +5956,23 @@ components:
             $ref: '#/components/schemas/FeedPost'
         pagination:
           $ref: '#/components/schemas/PaginationMeta'
+
+    FollowSuggestionsResponse:
+      type: object
+      required: [organizations, teams, users]
+      properties:
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationResponse'
+        teams:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamResponse'
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicUserResponse'
 
     # ------------------------------------------------------------------
     # Reactions & Comments

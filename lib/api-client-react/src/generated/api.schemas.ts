@@ -1495,6 +1495,12 @@ export interface FeedResponse {
   pagination: PaginationMeta;
 }
 
+export interface FollowSuggestionsResponse {
+  organizations: OrganizationResponse[];
+  teams: TeamResponse[];
+  users: PublicUserResponse[];
+}
+
 export type AddReactionRequestReactionType =
   (typeof AddReactionRequestReactionType)[keyof typeof AddReactionRequestReactionType];
 
