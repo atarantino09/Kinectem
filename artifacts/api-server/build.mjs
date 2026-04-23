@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, mkdir, copyFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -118,6 +118,23 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // Copy the Scalar API reference standalone bundle into dist so /api/docs
+  // works offline without depending on a public CDN.
+  // Resolve via the main entry, then walk up to the package root, since
+  // @scalar/api-reference doesn't expose ./package.json or the standalone
+  // bundle through the "exports" field.
+  const scalarMain = createRequire(import.meta.url).resolve(
+    "@scalar/api-reference",
+  );
+  const scalarPkgRoot = scalarMain.replace(/\/dist\/.*$/, "");
+  const scalarSrc = path.resolve(
+    scalarPkgRoot,
+    "dist/browser/standalone.js",
+  );
+  const scalarOutDir = path.resolve(distDir, "public/scalar");
+  await mkdir(scalarOutDir, { recursive: true });
+  await copyFile(scalarSrc, path.resolve(scalarOutDir, "standalone.js"));
 }
 
 buildAll().catch((err) => {

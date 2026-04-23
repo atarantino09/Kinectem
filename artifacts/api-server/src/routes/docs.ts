@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +48,51 @@ const candidatePaths = [
   path.resolve(process.cwd(), "artifacts/api-server/.openapi-prefixed.yaml"),
   path.resolve(process.cwd(), ".openapi-prefixed.yaml"),
 ];
+
+const scalarCandidatePaths = [
+  // Production: copied next to the built bundle by build.mjs
+  path.resolve(here, "./public/scalar/standalone.js"),
+  path.resolve(here, "../public/scalar/standalone.js"),
+  // Development: load directly from node_modules
+  path.resolve(
+    here,
+    "../node_modules/@scalar/api-reference/dist/browser/standalone.js",
+  ),
+  path.resolve(
+    here,
+    "../../node_modules/@scalar/api-reference/dist/browser/standalone.js",
+  ),
+  path.resolve(
+    process.cwd(),
+    "artifacts/api-server/node_modules/@scalar/api-reference/dist/browser/standalone.js",
+  ),
+  path.resolve(
+    process.cwd(),
+    "node_modules/@scalar/api-reference/dist/browser/standalone.js",
+  ),
+];
+
+function loadScalarBundle(): Buffer | null {
+  for (const p of scalarCandidatePaths) {
+    if (existsSync(p)) {
+      logger.info({ path: p }, "Loaded Scalar standalone bundle for docs");
+      return readFileSync(p);
+    }
+  }
+  logger.warn(
+    { tried: scalarCandidatePaths },
+    "Could not find @scalar/api-reference standalone bundle — /api/docs will be unavailable.",
+  );
+  return null;
+}
+
+const scalarBundle = loadScalarBundle();
+const scalarBundleHash = scalarBundle
+  ? createHash("sha256").update(scalarBundle).digest("hex").slice(0, 16)
+  : "";
+const scalarBundleUrl = scalarBundle
+  ? `/api/docs/scalar.${scalarBundleHash}.js`
+  : "/api/docs/scalar.js";
 
 function loadSpec(): { yaml: string; json: unknown } | null {
   for (const p of candidatePaths) {
@@ -97,7 +143,7 @@ function renderDocsHtml(specUrl: string): string {
       data-url="${escapeHtmlAttr(specUrl)}"
       data-configuration='{"theme":"default","layout":"modern","hideDownloadButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'
     ></script>
-    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <script src="${scalarBundleUrl}"></script>
   </body>
 </html>
 `;
@@ -112,6 +158,23 @@ router.get("/docs", requireDocsAccess, (req, res) => {
       ? `/api/openapi.json?${DOCS_TOKEN_QUERY}=${encodeURIComponent(token)}`
       : "/api/openapi.json";
   res.type("html").send(renderDocsHtml(specUrl));
+});
+
+// Match both the unhashed fallback path and the content-hashed path
+// (e.g. /docs/scalar.<hash>.js). Only the hashed path uses an immutable
+// cache header so an upgrade naturally invalidates client caches.
+router.get(/^\/docs\/scalar(?:\.[a-f0-9]+)?\.js$/, requireDocsAccess, (req, res) => {
+  if (!scalarBundle) {
+    res.status(503).type("text/plain").send("Scalar bundle not available");
+    return;
+  }
+  res.type("application/javascript");
+  if (req.path === scalarBundleUrl.replace(/^\/api/, "")) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    res.setHeader("Cache-Control", "public, max-age=300");
+  }
+  res.send(scalarBundle);
 });
 
 router.get("/openapi.yaml", requireDocsAccess, (_req, res) => {
