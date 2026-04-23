@@ -169,7 +169,7 @@ export default function LoginPage() {
             <Trophy className="w-5 h-5" />
           </div>
           <span className="font-black text-2xl tracking-tight">
-            Kinect<span className="bg-gradient-to-r from-amber-200 to-pink-200 bg-clip-text text-transparent">em</span>
+            Kinect<span className="brand-gradient-text">em</span>
           </span>
         </div>
 
