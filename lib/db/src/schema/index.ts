@@ -65,6 +65,7 @@ export const teams = pgTable("teams", {
   season: text("season"),
   sport: text("sport"),
   level: text("level"),
+  description: text("description"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
