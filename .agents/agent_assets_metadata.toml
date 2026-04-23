@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "SgflPTEXPZxrZuE11oC5z"
+uri = "file://artifacts/kinectem/screenshots/roster-filled.jpg"
+type = "image"
+title = "Filled Roster — Players with Parents Expanded"
