@@ -196,7 +196,7 @@ export default function NewPostPage() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Button
