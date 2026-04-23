@@ -55,31 +55,49 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
       <CardContent className="p-0">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
-          <Link
-            href={
-              post.context.type === "team"
-                ? `/teams/${post.context.id}`
-                : `/organizations/${post.context.id}`
-            }
-            className="flex items-center gap-3 min-w-0"
-          >
-            <Avatar className="w-10 h-10 rounded-lg">
-              {post.context.avatarUrl && (
-                <AvatarImage src={post.context.avatarUrl} />
-              )}
-              <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-black rounded-lg">
-                {getInitials(post.context.name ?? post.context.type)}
-              </AvatarFallback>
-            </Avatar>
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href={
+                post.context.type === "team"
+                  ? `/teams/${post.context.id}`
+                  : `/organizations/${post.context.id}`
+              }
+              className="shrink-0"
+            >
+              <Avatar className="w-10 h-10 rounded-lg">
+                {post.context.avatarUrl && (
+                  <AvatarImage src={post.context.avatarUrl} />
+                )}
+                <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-black rounded-lg">
+                  {getInitials(post.context.name ?? post.context.type)}
+                </AvatarFallback>
+              </Avatar>
+            </Link>
             <div className="min-w-0">
-              <p className="font-bold text-sm truncate">
-                {post.context.name ?? post.context.type}
-              </p>
+              <Link
+                href={
+                  post.context.type === "team"
+                    ? `/teams/${post.context.id}`
+                    : `/organizations/${post.context.id}`
+                }
+              >
+                <p className="font-bold text-sm truncate hover:underline">
+                  {post.context.name ?? post.context.type}
+                </p>
+              </Link>
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5 truncate">
-                {post.author.displayName} • {timeAgo(post.createdAt)}
+                <Link
+                  href={`/users/${post.author.id}`}
+                  className="hover:underline hover:text-primary"
+                  data-testid={`link-post-author-${post.id}`}
+                >
+                  {post.author.displayName}
+                </Link>
+                {" • "}
+                {timeAgo(post.createdAt)}
               </p>
             </div>
-          </Link>
+          </div>
           <Badge
             className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest shrink-0`}
           >
