@@ -4098,6 +4098,7 @@ components:
           example: NY
         logoUrl:
           type: string
+          nullable: true
     MemberResponse:
       type: object
       required:
