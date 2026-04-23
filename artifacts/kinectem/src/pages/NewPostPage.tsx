@@ -203,13 +203,7 @@ export default function NewPostPage() {
             variant="ghost"
             size="sm"
             onClick={() => {
-              if (initialTeamId) {
-                setLocation(`/teams/${initialTeamId}`);
-              } else if (window.history.length > 1) {
-                window.history.back();
-              } else {
-                setLocation("/");
-              }
+              setLocation(initialTeamId ? `/teams/${initialTeamId}` : "/");
             }}
             className="font-bold"
           >
