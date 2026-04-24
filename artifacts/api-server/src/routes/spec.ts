@@ -3397,7 +3397,12 @@ router.get(
         avatarUrl: users.avatarUrl,
       })
       .from(users)
-      .where(and(ilike(users.name, `%${q}%`), ne(users.id, me.id)))
+      .where(
+        and(
+          or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
+          ne(users.id, me.id),
+        ),
+      )
       .orderBy(asc(users.name))
       .limit(limit);
     res.json({
@@ -3896,7 +3901,11 @@ router.get(
       });
     }
     const [userRows, orgRows, teamRows] = await Promise.all([
-      db.select().from(users).where(ilike(users.name, `%${q}%`)).limit(10),
+      db
+        .select()
+        .from(users)
+        .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
+        .limit(10),
       db.select().from(organizations).where(ilike(organizations.name, `%${q}%`)).limit(10),
       db.select().from(teams).where(ilike(teams.name, `%${q}%`)).limit(10),
     ]);

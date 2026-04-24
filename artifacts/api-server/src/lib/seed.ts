@@ -13,11 +13,47 @@ import {
   highlightTags,
   notifications,
 } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { hashPassword } from "./passwords";
 
 export const DEMO_PASSWORD = "demo1234";
+
+// Demo users that must always exist so common test queries (e.g. searching
+// for "morgan") succeed regardless of whether the DB was seeded before this
+// user was added to the seed list.
+const REQUIRED_DEMO_USERS: Array<typeof users.$inferInsert> = [
+  {
+    name: "Morgan Lee",
+    email: "morgan@kinectem.demo",
+    role: "athlete",
+    sport: "Soccer",
+    position: "Midfielder",
+    jerseyNumber: 10,
+    grade: "Class of 2026",
+    location: "Westfield, NJ",
+    bio: "Two-footed midfielder. Captain of the school squad.",
+  },
+];
+
+async function ensureRequiredDemoUsers(passwordHash: string): Promise<void> {
+  for (const u of REQUIRED_DEMO_USERS) {
+    const email = u.email;
+    if (typeof email !== "string") continue;
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (existing) continue;
+    const row: typeof users.$inferInsert & { passwordHash: string } = {
+      ...u,
+      passwordHash,
+    };
+    await db.insert(users).values(row);
+    logger.info({ email }, "Inserted required demo user");
+  }
+}
 
 export async function seedIfEmpty(): Promise<void> {
   const [{ count }] = await db
@@ -37,6 +73,9 @@ export async function seedIfEmpty(): Promise<void> {
     if (updated.length > 0) {
       logger.info({ backfilled: updated.length }, "Backfilled demo password on existing users");
     }
+    // Ensure newly-required demo users (added after the initial seed) are
+    // present even when the DB already has data.
+    await ensureRequiredDemoUsers(demoPasswordHash);
     logger.info({ userCount: count }, "Database already seeded");
     return;
   }
@@ -140,6 +179,7 @@ export async function seedIfEmpty(): Promise<void> {
         bio: "Middle school hooper, big dreams.",
         dateOfBirth: new Date("2014-03-12"),
       },
+      ...REQUIRED_DEMO_USERS,
     ];
 
   const [marcus, jordan, tyler, coachDavis, adminSam, daniela, chris, parentLisa, childSamira] = await db
