@@ -3323,6 +3323,8 @@ router.post(
           eq(conversationParticipants.participantId, me.id),
         ),
       );
+    let conv: typeof conversations.$inferSelect | undefined;
+    let isNew = false;
     if (meParts.length > 0) {
       const existing = await db
         .select({ conv: conversations, part: conversationParticipants })
@@ -3339,22 +3341,72 @@ router.post(
           ),
         )
         .limit(1);
-      if (existing.length > 0) {
-        const view = await loadConversationView(existing[0].conv, me.id);
-        if (view) return res.json(view);
-      }
+      if (existing.length > 0) conv = existing[0].conv;
     }
 
-    const convType: "direct" | "user_to_org" | "org_to_org" =
-      recipientType === "organization" ? "user_to_org" : "direct";
-    const [conv] = await db.insert(conversations).values({ type: convType }).returning();
-    await db.insert(conversationParticipants).values([
-      { conversationId: conv.id, participantType: "user", participantId: me.id },
-      { conversationId: conv.id, participantType: recipientType, participantId: recipientId },
-    ]);
+    if (!conv) {
+      const convType: "direct" | "user_to_org" | "org_to_org" =
+        recipientType === "organization" ? "user_to_org" : "direct";
+      const [created] = await db.insert(conversations).values({ type: convType }).returning();
+      conv = created;
+      isNew = true;
+      await db.insert(conversationParticipants).values([
+        { conversationId: conv.id, participantType: "user", participantId: me.id },
+        { conversationId: conv.id, participantType: recipientType, participantId: recipientId },
+      ]);
+    }
+
+    const firstBody = String(req.body?.message?.body ?? "").trim();
+    if (firstBody) {
+      await db.insert(messages).values({
+        conversationId: conv.id,
+        senderUserId: me.id,
+        body: firstBody,
+      });
+      conv = (
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date() })
+          .where(eq(conversations.id, conv.id))
+          .returning()
+      )[0];
+    }
+
     const view = await loadConversationView(conv, me.id);
     if (!view) return res.status(500).json({ error: "Failed to load conversation" });
-    res.status(201).json(view);
+    res.status(isNew ? 201 : 200).json(view);
+  }),
+);
+
+router.get(
+  "/conversations/search/contacts",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const q = String(req.query.q ?? "").trim();
+    if (q.length < 1) {
+      return res.status(400).json({ error: "q is required" });
+    }
+    const limitRaw = Number(req.query.limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(50, Math.floor(limitRaw)) : 20;
+    const rows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(and(ilike(users.name, `%${q}%`), ne(users.id, me.id)))
+      .orderBy(asc(users.name))
+      .limit(limit);
+    res.json({
+      data: rows.map((u) => ({
+        id: u.id,
+        displayName: u.name,
+        avatarUrl: u.avatarUrl ?? null,
+      })),
+    });
   }),
 );
 

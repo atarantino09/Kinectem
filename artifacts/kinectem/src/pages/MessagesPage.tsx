@@ -1,25 +1,36 @@
-import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { useState, useEffect } from "react";
+import { Link, useParams, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListConversations,
   useListMessages,
   useSendMessage,
   useMarkConversationRead,
+  useCreateConversation,
+  useSearchConversationContacts,
   getListMessagesQueryKey,
   getListConversationsQueryKey,
   getGetUnreadMessageCountQueryKey,
   type ConversationListItem,
+  type ConversationContactResult,
   type MessageResponse,
   type DeletedMessageStub,
 } from "@workspace/api-client-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Send } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { MessageSquare, Send, Plus, Search, ArrowLeft } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 
 function isDeleted(
@@ -31,6 +42,7 @@ function isDeleted(
 export default function MessagesPage() {
   const params = useParams<{ conversationId?: string }>();
   const activeId = params.conversationId;
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const { data: convs, isLoading } = useListConversations();
   const items = convs?.data ?? [];
@@ -38,13 +50,34 @@ export default function MessagesPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 -mt-2">
       <aside className="space-y-1">
-        <h2 className="text-xl font-black tracking-tight px-2 mb-2">Messages</h2>
+        <div className="flex items-center justify-between px-2 mb-2">
+          <h2 className="text-xl font-black tracking-tight">Messages</h2>
+          <Button
+            size="sm"
+            className="font-bold rounded-full gap-1.5 brand-gradient text-primary-foreground hover:opacity-95"
+            onClick={() => setComposeOpen(true)}
+            data-testid="button-new-message"
+          >
+            <Plus className="w-4 h-4" />
+            New
+          </Button>
+        </div>
         {isLoading ? (
           <Skeleton className="h-32 rounded-xl" />
         ) : items.length === 0 ? (
           <Card className="rounded-xl border border-border">
-            <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              No conversations yet.
+            <CardContent className="p-6 text-center text-sm text-muted-foreground space-y-3">
+              <p>No conversations yet.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold rounded-full"
+                onClick={() => setComposeOpen(true)}
+                data-testid="button-new-message-empty"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Start a conversation
+              </Button>
             </CardContent>
           </Card>
         ) : (
@@ -99,6 +132,8 @@ export default function MessagesPage() {
           </Card>
         )}
       </section>
+
+      <NewMessageDialog open={composeOpen} onOpenChange={setComposeOpen} />
     </div>
   );
 }
@@ -221,5 +256,212 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function NewMessageDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [recipient, setRecipient] = useState<ConversationContactResult | null>(
+    null,
+  );
+  const [body, setBody] = useState("");
+
+  // Reset whenever the dialog opens or closes.
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setDebounced("");
+      setRecipient(null);
+      setBody("");
+    }
+  }, [open]);
+
+  // Debounce search input by ~250ms.
+  useEffect(() => {
+    const h = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(h);
+  }, [query]);
+
+  const enableSearch = !recipient && debounced.length >= 1;
+  const { data: searchResp, isFetching: isSearching } =
+    useSearchConversationContacts(
+      { q: debounced, limit: 8 },
+      { query: { enabled: enableSearch } },
+    );
+  const results = searchResp?.data ?? [];
+
+  const create = useCreateConversation({
+    mutation: {
+      onSuccess: (conv) => {
+        qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetUnreadMessageCountQueryKey() });
+        onOpenChange(false);
+        setLocation(`/messages/${conv.id}`);
+      },
+      onError: () => {
+        toast({
+          title: "Couldn't send message",
+          description: "Please try again in a moment.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recipient) return;
+    const trimmed = body.trim();
+    if (!trimmed) return;
+    create.mutate({
+      data: {
+        recipientType: "user",
+        recipientId: recipient.id,
+        message: { body: trimmed },
+      },
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-md sm:rounded-xl"
+        data-testid="dialog-new-message"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-black tracking-tight text-xl">
+            New message
+          </DialogTitle>
+        </DialogHeader>
+
+        {!recipient ? (
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name…"
+                className="pl-9"
+                data-testid="input-contact-search"
+              />
+            </div>
+
+            {!enableSearch ? (
+              <p className="text-xs text-muted-foreground px-1 py-6 text-center">
+                Type a name to find someone.
+              </p>
+            ) : isSearching ? (
+              <Skeleton className="h-24 rounded-lg" />
+            ) : results.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-1 py-6 text-center">
+                No matches for &ldquo;{debounced}&rdquo;.
+              </p>
+            ) : (
+              <ul className="max-h-72 overflow-y-auto -mx-2">
+                {results.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => setRecipient(c)}
+                      className="w-full text-left p-2 rounded-lg flex items-center gap-3 hover:bg-muted"
+                      data-testid={`contact-result-${c.id}`}
+                    >
+                      <Avatar className="w-9 h-9 shrink-0">
+                        {c.avatarUrl && <AvatarImage src={c.avatarUrl} />}
+                        <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
+                          {getInitials(c.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm truncate">
+                          {c.displayName}
+                        </p>
+                        {c.relationship && (
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {c.relationship}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-3">
+            <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/60">
+              <Avatar className="w-9 h-9 shrink-0">
+                {recipient.avatarUrl && (
+                  <AvatarImage src={recipient.avatarUrl} />
+                )}
+                <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
+                  {getInitials(recipient.displayName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
+                  To
+                </p>
+                <p className="font-bold text-sm truncate">
+                  {recipient.displayName}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs font-bold gap-1"
+                onClick={() => setRecipient(null)}
+                data-testid="button-change-recipient"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Change
+              </Button>
+            </div>
+            <Textarea
+              autoFocus
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Type a message…"
+              rows={4}
+              className="resize-none"
+              data-testid="input-new-message-body"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="font-bold"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!body.trim() || create.isPending}
+                className="font-bold gap-2 brand-gradient text-primary-foreground hover:opacity-95"
+                data-testid="button-send-new-message"
+              >
+                <Send className="w-4 h-4" />
+                Send
+              </Button>
+            </div>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

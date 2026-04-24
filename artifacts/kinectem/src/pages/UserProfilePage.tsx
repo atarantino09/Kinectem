@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserById,
@@ -8,8 +8,11 @@ import {
   useListUserTeams,
   useFollowUser,
   useUnfollowUser,
+  useCreateConversation,
   getGetUserByIdQueryKey,
   getListFeedQueryKey,
+  getListConversationsQueryKey,
+  getGetUnreadMessageCountQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -24,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Building2, Tag, Users } from "lucide-react";
+import { Building2, MessageSquare, Tag, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
@@ -41,9 +44,11 @@ export default function UserProfilePage() {
   const { data: teamsResp } = useListUserTeams(userId);
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const followUser = useFollowUser();
   const unfollowUser = useUnfollowUser();
+  const startConversation = useCreateConversation();
   const onToggleFollow = async () => {
     if (!user) return;
     try {
@@ -58,6 +63,22 @@ export default function UserProfilePage() {
       ]);
     } catch {
       toast({ title: "Couldn't update follow", variant: "destructive" });
+    }
+  };
+  const onMessage = async () => {
+    try {
+      const conv = await startConversation.mutateAsync({
+        data: { recipientType: "user", recipientId: userId },
+      });
+      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetUnreadMessageCountQueryKey() });
+      setLocation(`/messages/${conv.id}`);
+    } catch {
+      toast({
+        title: "Couldn't open conversation",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -118,14 +139,26 @@ export default function UserProfilePage() {
                 <EditProfileDialog user={user} />
               </div>
             ) : (
-              <Button
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6 mt-14"
-                onClick={onToggleFollow}
-                disabled={followUser.isPending || unfollowUser.isPending}
-                data-testid="btn-follow-user"
-              >
-                {user.isFollowing ? "Following" : "Follow"}
-              </Button>
+              <div className="mt-14 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="font-bold rounded-full"
+                  onClick={onMessage}
+                  disabled={startConversation.isPending}
+                  data-testid="btn-message-user"
+                >
+                  <MessageSquare className="w-4 h-4 mr-1.5" />
+                  Message
+                </Button>
+                <Button
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6"
+                  onClick={onToggleFollow}
+                  disabled={followUser.isPending || unfollowUser.isPending}
+                  data-testid="btn-follow-user"
+                >
+                  {user.isFollowing ? "Following" : "Follow"}
+                </Button>
+              </div>
             )}
           </div>
           <div className="mt-3">
