@@ -20,6 +20,8 @@ const ALL_TABLES = [
   "organization_admins",
   "teams",
   "organizations",
+  "message_assets",
+  "assets",
   "sessions",
   "users",
 ];

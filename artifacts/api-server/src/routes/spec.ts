@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import express, { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
   users,
@@ -21,6 +21,8 @@ import {
   conversations,
   conversationParticipants,
   messages,
+  messageAssets,
+  assets,
   organizationJoinRequests,
   passwordResets,
 } from "@workspace/db";
@@ -69,6 +71,7 @@ import {
   toComment,
   toConversation,
   toMessage,
+  toAssetResponse,
   toJoinRequest,
 } from "../lib/spec-helpers";
 
@@ -3192,6 +3195,25 @@ async function getOtherParticipant(conversationId: string, meId: string) {
   };
 }
 
+async function loadAssetsForMessages(
+  messageIds: string[],
+): Promise<Map<string, (typeof assets.$inferSelect)[]>> {
+  const map = new Map<string, (typeof assets.$inferSelect)[]>();
+  if (messageIds.length === 0) return map;
+  const rows = await db
+    .select({ ma: messageAssets, a: assets })
+    .from(messageAssets)
+    .innerJoin(assets, eq(messageAssets.assetId, assets.id))
+    .where(inArray(messageAssets.messageId, messageIds))
+    .orderBy(asc(messageAssets.displayOrder));
+  for (const r of rows) {
+    const list = map.get(r.ma.messageId) ?? [];
+    list.push(r.a);
+    map.set(r.ma.messageId, list);
+  }
+  return map;
+}
+
 async function loadConversationView(conv: { id: string; type: string; createdAt: Date; updatedAt: Date }, meId: string) {
   const participant = await getOtherParticipant(conv.id, meId);
   if (!participant) return null;
@@ -3205,6 +3227,14 @@ async function loadConversationView(conv: { id: string; type: string; createdAt:
   if (last?.senderUserId) {
     const [u] = await db.select().from(users).where(eq(users.id, last.senderUserId)).limit(1);
     lastSenderName = u ? displayName(u) : null;
+  }
+  let lastHasAttachments = false;
+  if (last) {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messageAssets)
+      .where(eq(messageAssets.messageId, last.id));
+    lastHasAttachments = Number(count) > 0;
   }
   const [myPart] = await db
     .select()
@@ -3240,6 +3270,7 @@ async function loadConversationView(conv: { id: string; type: string; createdAt:
     last ?? null,
     lastSenderName,
     unread,
+    lastHasAttachments,
   );
 }
 
@@ -3357,12 +3388,58 @@ router.post(
     }
 
     const firstBody = String(req.body?.message?.body ?? "").trim();
-    if (firstBody) {
-      await db.insert(messages).values({
-        conversationId: conv.id,
-        senderUserId: me.id,
-        body: firstBody,
-      });
+    const rawAssetIds = Array.isArray(req.body?.message?.assetIds)
+      ? (req.body.message.assetIds as unknown[])
+      : [];
+    if (rawAssetIds.length > 10) {
+      return res
+        .status(400)
+        .json({ error: "A message can attach at most 10 assets" });
+    }
+    const assetIds: string[] = [];
+    for (const v of rawAssetIds) {
+      if (typeof v === "string" && v.length > 0 && !assetIds.includes(v)) {
+        assetIds.push(v);
+      }
+    }
+    let validAssets: (typeof assets.$inferSelect)[] = [];
+    if (assetIds.length > 0) {
+      validAssets = await db
+        .select()
+        .from(assets)
+        .where(and(inArray(assets.id, assetIds), eq(assets.ownerId, me.id)));
+      if (validAssets.length !== assetIds.length) {
+        return res
+          .status(400)
+          .json({ error: "One or more assetIds are invalid or not owned by you" });
+      }
+      const unconfirmed = validAssets.find((a) => a.status !== "confirmed");
+      if (unconfirmed) {
+        return res
+          .status(400)
+          .json({ error: "All assets must be confirmed before attaching" });
+      }
+    }
+
+    if (firstBody || validAssets.length > 0) {
+      const [created] = await db
+        .insert(messages)
+        .values({
+          conversationId: conv.id,
+          senderUserId: me.id,
+          body: firstBody || null,
+        })
+        .returning();
+      if (validAssets.length > 0) {
+        const orderById = new Map(assetIds.map((id, i) => [id, i] as const));
+        await db.insert(messageAssets).values(
+          validAssets.map((a) => ({
+            messageId: created.id,
+            assetId: a.id,
+            displayOrder: orderById.get(a.id) ?? 0,
+          })),
+        );
+      }
       conv = (
         await db
           .update(conversations)
@@ -3486,6 +3563,7 @@ router.get(
       .leftJoin(users, eq(messages.senderUserId, users.id))
       .where(eq(messages.conversationId, req.params.id))
       .orderBy(asc(messages.createdAt));
+    const assetsByMessage = await loadAssetsForMessages(rows.map((r) => r.m.id));
     res.json(
       paginate(
         rows.map((r) =>
@@ -3498,6 +3576,7 @@ router.get(
                   avatarUrl: r.sender.avatarUrl ?? null,
                 }
               : null,
+            assetsByMessage.get(r.m.id) ?? [],
           ),
         ),
       ),
@@ -3523,25 +3602,73 @@ router.post(
       .limit(1);
     if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
     const body = String(req.body?.body ?? "").trim();
-    if (!body) return res.status(400).json({ error: "Message body is required" });
+    const rawAssetIds = Array.isArray(req.body?.assetIds)
+      ? (req.body.assetIds as unknown[])
+      : [];
+    if (rawAssetIds.length > 10) {
+      return res
+        .status(400)
+        .json({ error: "A message can attach at most 10 assets" });
+    }
+    const assetIds: string[] = [];
+    for (const v of rawAssetIds) {
+      if (typeof v === "string" && v.length > 0 && !assetIds.includes(v)) {
+        assetIds.push(v);
+      }
+    }
+    if (!body && assetIds.length === 0) {
+      return res.status(400).json({ error: "Message body or assetIds required" });
+    }
+    let validAssets: (typeof assets.$inferSelect)[] = [];
+    if (assetIds.length > 0) {
+      validAssets = await db
+        .select()
+        .from(assets)
+        .where(and(inArray(assets.id, assetIds), eq(assets.ownerId, me.id)));
+      if (validAssets.length !== assetIds.length) {
+        return res
+          .status(400)
+          .json({ error: "One or more assetIds are invalid or not owned by you" });
+      }
+      const unconfirmed = validAssets.find((a) => a.status !== "confirmed");
+      if (unconfirmed) {
+        return res
+          .status(400)
+          .json({ error: "All assets must be confirmed before attaching" });
+      }
+    }
     const [m] = await db
       .insert(messages)
       .values({
         conversationId: req.params.id,
         senderUserId: me.id,
-        body,
+        body: body || null,
       })
       .returning();
+    if (validAssets.length > 0) {
+      const orderById = new Map(assetIds.map((id, i) => [id, i] as const));
+      await db.insert(messageAssets).values(
+        validAssets.map((a) => ({
+          messageId: m.id,
+          assetId: a.id,
+          displayOrder: orderById.get(a.id) ?? 0,
+        })),
+      );
+    }
     await db
       .update(conversations)
       .set({ updatedAt: new Date() })
       .where(eq(conversations.id, req.params.id));
     res.status(201).json(
-      toMessage(m, {
-        id: me.id,
-        displayName: displayName(me),
-        avatarUrl: me.avatarUrl ?? null,
-      }),
+      toMessage(
+        m,
+        {
+          id: me.id,
+          displayName: displayName(me),
+          avatarUrl: me.avatarUrl ?? null,
+        },
+        validAssets,
+      ),
     );
   }),
 );
@@ -3561,6 +3688,154 @@ router.post(
           eq(conversationParticipants.participantId, me.id),
         ),
       );
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Assets (3-step upload: requestUpload → PUT data → confirmUpload)
+// ---------------------------------------------------------------------------
+
+const ASSET_UPLOAD_TTL_SECONDS = 3600;
+const ASSET_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+
+function publicBaseUrl(req: Request): string {
+  const proto = req.protocol;
+  const host = req.get("host");
+  return `${proto}://${host}`;
+}
+
+router.post(
+  "/assets/upload",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const fileName = String(req.body?.fileName ?? "").trim();
+    const fileType = String(req.body?.fileType ?? "").trim();
+    const fileSize = Number(req.body?.fileSize);
+    if (!fileName || fileName.length > 255) {
+      return res.status(400).json({ error: "fileName is required (max 255)" });
+    }
+    if (!fileType) {
+      return res.status(400).json({ error: "fileType is required" });
+    }
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return res.status(400).json({ error: "fileSize must be a positive integer" });
+    }
+    if (fileSize > ASSET_MAX_BYTES) {
+      return res.status(400).json({ error: "fileSize exceeds the 10 MB limit" });
+    }
+    const [created] = await db
+      .insert(assets)
+      .values({
+        ownerId: me.id,
+        fileName,
+        fileType,
+        fileSize,
+        status: "pending",
+      })
+      .returning();
+    const uploadUrl = `${publicBaseUrl(req)}/api/v1/assets/${created.id}/data`;
+    res.status(201).json({
+      assetId: created.id,
+      uploadUrl,
+      uploadHeaders: { "Content-Type": fileType },
+      expiresIn: ASSET_UPLOAD_TTL_SECONDS,
+    });
+  }),
+);
+
+// Internal route used as the `uploadUrl` returned by /assets/upload. Accepts
+// the raw binary body and stores it as a data URL on the asset row. This is
+// not part of the public OpenAPI surface — clients only ever PUT to the URL
+// they received from the upload-request response.
+router.put(
+  "/assets/:assetId/data",
+  express.raw({ type: () => true, limit: `${ASSET_MAX_BYTES}b` }),
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [a] = await db
+      .select()
+      .from(assets)
+      .where(eq(assets.id, req.params.assetId))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.ownerId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    const buf = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!buf || buf.length === 0) {
+      return res.status(400).json({ error: "Request body is empty" });
+    }
+    if (buf.length > ASSET_MAX_BYTES) {
+      return res.status(413).json({ error: "Upload exceeds 10 MB" });
+    }
+    const mime = a.fileType || "application/octet-stream";
+    const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+    await db
+      .update(assets)
+      .set({ url: dataUrl, fileSize: buf.length })
+      .where(eq(assets.id, a.id));
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/assets/:assetId/confirm",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [a] = await db
+      .select()
+      .from(assets)
+      .where(eq(assets.id, req.params.assetId))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.ownerId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    if (!a.url) {
+      return res
+        .status(422)
+        .json({ error: "Upload has not been received yet" });
+    }
+    const [updated] =
+      a.status === "confirmed"
+        ? [a]
+        : await db
+            .update(assets)
+            .set({ status: "confirmed" })
+            .where(eq(assets.id, a.id))
+            .returning();
+    res.status(200).json(toAssetResponse(updated));
+  }),
+);
+
+router.get(
+  "/assets/:assetId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [a] = await db
+      .select()
+      .from(assets)
+      .where(eq(assets.id, req.params.assetId))
+      .limit(1);
+    if (!a) return notFound(res);
+    res.json(toAssetResponse(a));
+  }),
+);
+
+router.delete(
+  "/assets/:assetId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [a] = await db
+      .select()
+      .from(assets)
+      .where(eq(assets.id, req.params.assetId))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.ownerId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    await db.delete(assets).where(eq(assets.id, a.id));
     res.status(204).end();
   }),
 );

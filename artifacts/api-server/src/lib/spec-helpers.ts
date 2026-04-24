@@ -11,6 +11,7 @@ import type {
   messages,
   postComments,
   organizationJoinRequests,
+  assets,
 } from "@workspace/db";
 
 type UserRow = typeof users.$inferSelect;
@@ -419,6 +420,7 @@ export function toConversation(
   lastMessage: MessageRow | null,
   lastMessageSenderName: string | null,
   unreadCount: number,
+  lastMessageHasAttachments = false,
 ) {
   return {
     id: c.id,
@@ -436,7 +438,7 @@ export function toConversation(
           bodyPreview: lastMessage.deletedAt
             ? null
             : (lastMessage.body ?? "").slice(0, 200),
-          hasAttachments: false,
+          hasAttachments: lastMessageHasAttachments,
           createdAt: lastMessage.createdAt.toISOString(),
         }
       : undefined,
@@ -446,9 +448,22 @@ export function toConversation(
   };
 }
 
+type AssetRow = typeof assets.$inferSelect;
+
+export function toMessageAsset(a: AssetRow) {
+  return {
+    id: a.id,
+    fileName: a.fileName ?? "",
+    mimeType: a.fileType,
+    size: a.fileSize ?? 0,
+    url: a.url ?? null,
+  };
+}
+
 export function toMessage(
   m: MessageRow,
   sender: { id: string; displayName: string; avatarUrl: string | null } | null,
+  assetRows: AssetRow[] = [],
 ) {
   if (m.deletedAt) {
     return {
@@ -463,8 +478,22 @@ export function toMessage(
     senderDisplayName: sender?.displayName ?? "Unknown",
     senderAvatarUrl: sender?.avatarUrl ?? null,
     body: m.body ?? "",
-    assets: [],
+    assets: assetRows.map(toMessageAsset),
     createdAt: m.createdAt.toISOString(),
+  };
+}
+
+export function toAssetResponse(a: AssetRow) {
+  return {
+    id: a.id,
+    createdBy: a.ownerId ?? "00000000-0000-0000-0000-000000000000",
+    fileType: a.fileType,
+    fileSize: a.fileSize,
+    originalFilename: a.fileName,
+    status: a.status,
+    url: a.url ?? null,
+    urlExpiresAt: null as string | null,
+    createdAt: a.createdAt.toISOString(),
   };
 }
 

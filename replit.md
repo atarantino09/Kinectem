@@ -51,6 +51,14 @@ header injected by the React fetch mutator.
   `useListPostComments`, `useCreatePostComment`, `useDeletePostComment`. Invalidate
   with `getGetPostQueryKey(postId)` and `getListPostCommentsQueryKey(postId)` after
   mutations.
+- **Asset uploads** use a 3-step flow: `requestUpload({fileName, fileType, fileSize})`
+  → `PUT uploadUrl` (raw bytes, `Content-Type` matching `fileType`,
+  `credentials: include`) → `confirmUpload(assetId)`. Confirmed asset ids can be
+  attached to a new conversation via `createConversation({ message: { assetIds } })`
+  or to a follow-up message via `sendMessage({ data: { assetIds } })`. Max 10
+  attachments per message; uploads cap at 10 MB. The dev server stores the binary
+  as a base64 `data:` URL on the asset row, so `MessageAsset.url` is consumable
+  directly by an `<img src>` in the UI.
 
 ## Design system
 

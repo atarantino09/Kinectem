@@ -12,6 +12,7 @@ export const conversationTypeEnum = pgEnum("conversation_type", ["direct", "user
 export const participantTypeEnum = pgEnum("participant_type", ["user", "organization"]);
 export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "approved", "declined", "withdrawn"]);
 export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "declined", "removed"]);
+export const assetStatusEnum = pgEnum("asset_status", ["pending", "confirmed"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -232,6 +233,23 @@ export const messages = pgTable("messages", {
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const assets = pgTable("assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+  fileName: text("file_name"),
+  fileType: text("file_type").notNull(),
+  fileSize: integer("file_size"),
+  url: text("url"),
+  status: assetStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const messageAssets = pgTable("message_assets", {
+  messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }).notNull(),
+  assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }).notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
+}, (t) => ({ pk: primaryKey({ columns: [t.messageId, t.assetId] }) }));
 
 export const organizationJoinRequests = pgTable("organization_join_requests", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,6 +9,8 @@ import {
   useCreateConversation,
   useSearchConversationContacts,
   useGetLoggedInUser,
+  requestUpload,
+  confirmUpload,
   getListMessagesQueryKey,
   getListConversationsQueryKey,
   getGetUnreadMessageCountQueryKey,
@@ -16,6 +18,7 @@ import {
   type ConversationContactResult,
   type MessageResponse,
   type DeletedMessageStub,
+  type MessageAsset,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -31,13 +34,82 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Send, Plus, Search, ArrowLeft } from "lucide-react";
+import {
+  MessageSquare,
+  Send,
+  Plus,
+  Search,
+  ArrowLeft,
+  ImagePlus,
+  X,
+} from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 
 function isDeleted(
   m: MessageResponse | DeletedMessageStub,
 ): m is DeletedMessageStub {
   return (m as DeletedMessageStub).deleted === true;
+}
+
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const ATTACHMENT_MAX_COUNT = 10;
+
+type AttachmentDraft = {
+  localId: string;
+  file: File;
+  previewUrl: string;
+};
+
+function MessageAttachments({
+  assets,
+  testIdPrefix,
+}: {
+  assets: MessageAsset[];
+  testIdPrefix: string;
+}) {
+  const images = assets.filter(
+    (a) => a.url && a.mimeType.startsWith("image/"),
+  );
+  if (images.length === 0) return null;
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-1.5 max-w-md">
+      {images.map((a) => (
+        <a
+          key={a.id}
+          href={a.url ?? "#"}
+          target="_blank"
+          rel="noreferrer"
+          className="block rounded-lg overflow-hidden border border-border bg-muted aspect-square"
+          data-testid={`${testIdPrefix}-attachment-${a.id}`}
+        >
+          <img
+            src={a.url ?? ""}
+            alt={a.fileName}
+            className="w-full h-full object-cover"
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+async function uploadAttachment(file: File): Promise<string> {
+  const upload = await requestUpload({
+    fileName: file.name,
+    fileType: file.type || "application/octet-stream",
+    fileSize: file.size,
+  });
+  const putResp = await fetch(upload.uploadUrl, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!putResp.ok) {
+    throw new Error(`Upload failed (${putResp.status})`);
+  }
+  await confirmUpload(upload.assetId);
+  return upload.assetId;
 }
 
 export default function MessagesPage() {
@@ -273,6 +345,12 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         {timeAgo(m.createdAt)}
                       </p>
                     )}
+                    {m.assets && m.assets.length > 0 && (
+                      <MessageAttachments
+                        assets={m.assets}
+                        testIdPrefix={`message-${m.id}`}
+                      />
+                    )}
                   </div>
                 </div>
               );
@@ -320,16 +398,74 @@ function NewMessageDialog({
     null,
   );
   const [body, setBody] = useState("");
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset whenever the dialog opens or closes.
+  // Reset whenever the dialog opens or closes. Revoke any blob preview URLs
+  // so we don't leak object URLs across compose sessions.
   useEffect(() => {
     if (!open) {
       setQuery("");
       setDebounced("");
       setRecipient(null);
       setBody("");
+      setAttachments((prev) => {
+        prev.forEach((a) => URL.revokeObjectURL(a.previewUrl));
+        return [];
+      });
+      setIsUploading(false);
     }
   }, [open]);
+
+  const onPickFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const room = ATTACHMENT_MAX_COUNT - attachments.length;
+    if (room <= 0) {
+      toast({
+        title: "Attachment limit reached",
+        description: `You can attach up to ${ATTACHMENT_MAX_COUNT} images.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const incoming = Array.from(files).slice(0, room);
+    const accepted: AttachmentDraft[] = [];
+    for (const file of incoming) {
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Only images are supported",
+          description: `${file.name} was skipped.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      if (file.size > ATTACHMENT_MAX_BYTES) {
+        toast({
+          title: "Image too large",
+          description: `${file.name} exceeds the 10 MB limit.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      accepted.push({
+        localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+    if (accepted.length > 0) {
+      setAttachments((prev) => [...prev, ...accepted]);
+    }
+  };
+
+  const removeAttachment = (localId: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.localId === localId);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.localId !== localId);
+    });
+  };
 
   // Debounce search input by ~250ms.
   useEffect(() => {
@@ -363,16 +499,37 @@ function NewMessageDialog({
     },
   });
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recipient) return;
     const trimmed = body.trim();
-    if (!trimmed) return;
+    if (!trimmed && attachments.length === 0) return;
+    let assetIds: string[] = [];
+    if (attachments.length > 0) {
+      setIsUploading(true);
+      try {
+        assetIds = await Promise.all(
+          attachments.map((a) => uploadAttachment(a.file)),
+        );
+      } catch {
+        setIsUploading(false);
+        toast({
+          title: "Couldn't upload attachments",
+          description: "Please try again in a moment.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setIsUploading(false);
+    }
     create.mutate({
       data: {
         recipientType: "user",
         recipientId: recipient.id,
-        message: { body: trimmed },
+        message: {
+          ...(trimmed ? { body: trimmed } : {}),
+          ...(assetIds.length > 0 ? { assetIds } : {}),
+        },
       },
     });
   };
@@ -485,24 +642,83 @@ function NewMessageDialog({
               className="resize-none"
               data-testid="input-new-message-body"
             />
-            <div className="flex justify-end gap-2">
+            {attachments.length > 0 && (
+              <div
+                className="grid grid-cols-3 gap-2"
+                data-testid="new-message-attachments"
+              >
+                {attachments.map((a) => (
+                  <div
+                    key={a.localId}
+                    className="relative rounded-lg overflow-hidden border border-border aspect-square bg-muted"
+                    data-testid={`new-message-attachment-${a.localId}`}
+                  >
+                    <img
+                      src={a.previewUrl}
+                      alt={a.file.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.localId)}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-1"
+                      aria-label="Remove attachment"
+                      data-testid={`button-remove-attachment-${a.localId}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              data-testid="input-attachment-file"
+              onChange={(e) => {
+                onPickFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <div className="flex items-center justify-between gap-2">
               <Button
                 type="button"
-                variant="ghost"
-                className="font-bold"
-                onClick={() => onOpenChange(false)}
+                variant="outline"
+                size="sm"
+                className="font-bold rounded-full gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={attachments.length >= ATTACHMENT_MAX_COUNT}
+                data-testid="button-attach-image"
               >
-                Cancel
+                <ImagePlus className="w-3.5 h-3.5" />
+                Attach image
               </Button>
-              <Button
-                type="submit"
-                disabled={!body.trim() || create.isPending}
-                className="font-bold gap-2 brand-gradient text-primary-foreground hover:opacity-95"
-                data-testid="button-send-new-message"
-              >
-                <Send className="w-4 h-4" />
-                Send
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="font-bold"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    (!body.trim() && attachments.length === 0) ||
+                    create.isPending ||
+                    isUploading
+                  }
+                  className="font-bold gap-2 brand-gradient text-primary-foreground hover:opacity-95"
+                  data-testid="button-send-new-message"
+                >
+                  <Send className="w-4 h-4" />
+                  {isUploading ? "Uploading…" : "Send"}
+                </Button>
+              </div>
             </div>
           </form>
         )}
