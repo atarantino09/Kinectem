@@ -3804,6 +3804,20 @@ router.get(
     res.json({
       data: rows.map((u) => {
         const [first, ...rest] = u.name.split(" ");
+        let confirmationStatus: "none" | "confirmed" | "pending" | "expired" =
+          "none";
+        if (u.guardianEmail) {
+          if (u.guardianConfirmedAt) {
+            confirmationStatus = "confirmed";
+          } else if (
+            !u.guardianConfirmTokenExpiresAt ||
+            u.guardianConfirmTokenExpiresAt.getTime() < Date.now()
+          ) {
+            confirmationStatus = "expired";
+          } else {
+            confirmationStatus = "pending";
+          }
+        }
         return {
           id: u.id,
           firstName: first ?? u.name,
@@ -3812,6 +3826,13 @@ router.get(
           email: u.email ?? null,
           avatarUrl: u.avatarUrl ?? null,
           requireTagConsent: u.requireTagConsent,
+          guardianEmail: u.guardianEmail ?? null,
+          guardianConfirmedAt: u.guardianConfirmedAt
+            ? u.guardianConfirmedAt.toISOString()
+            : null,
+          confirmationStatus,
+          confirmedByMe:
+            !!u.guardianConfirmedAt && u.guardianConfirmedByUserId === me.id,
         };
       }),
     });
@@ -3855,6 +3876,48 @@ router.post(
       email: updated.email ?? null,
       avatarUrl: updated.avatarUrl ?? null,
       requireTagConsent: updated.requireTagConsent,
+    });
+  }),
+);
+
+router.post(
+  "/users/me/children/:childId/resend-guardian-confirm",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const [child] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, req.params.childId))
+      .limit(1);
+    if (!child || child.parentId !== me.id) {
+      return res.status(404).json({ error: "Child not found" });
+    }
+    if (!child.guardianEmail) {
+      return res.status(400).json({
+        error: "This account does not require guardian confirmation.",
+      });
+    }
+    if (child.guardianConfirmedAt) {
+      return res.status(400).json({
+        error: "This account has already been confirmed.",
+      });
+    }
+    const newToken = generateToken();
+    await db
+      .update(users)
+      .set({
+        guardianConfirmToken: newToken,
+        guardianConfirmTokenExpiresAt: new Date(
+          Date.now() + GUARDIAN_TOKEN_TTL_MS,
+        ),
+      })
+      .where(eq(users.id, child.id));
+    // In production this URL would be emailed to child.guardianEmail.
+    res.json({
+      ok: true,
+      guardianEmail: child.guardianEmail,
+      guardianConfirmUrl: `/guardian-confirm/${newToken}`,
     });
   }),
 );

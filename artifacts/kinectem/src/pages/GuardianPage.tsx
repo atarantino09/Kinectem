@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Shield, UserPlus, Search, Users } from "lucide-react";
+import { Shield, UserPlus, Search, Users, CheckCircle2, Clock, AlertTriangle, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
 
@@ -20,6 +20,10 @@ interface Child {
   email: string | null;
   avatarUrl: string | null;
   requireTagConsent: boolean;
+  guardianEmail: string | null;
+  guardianConfirmedAt: string | null;
+  confirmationStatus: "none" | "confirmed" | "pending" | "expired";
+  confirmedByMe: boolean;
 }
 
 interface SearchUser {
@@ -40,6 +44,7 @@ export default function GuardianPage() {
   const [results, setResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -97,6 +102,34 @@ export default function GuardianPage() {
       toast({ title: msg, variant: "destructive" });
     } finally {
       setLinking(null);
+    }
+  };
+
+  const resendConfirmation = async (child: Child) => {
+    setResending(child.id);
+    try {
+      const r = await customFetch<{
+        ok: boolean;
+        guardianEmail: string;
+        guardianConfirmUrl: string;
+      }>(
+        `/api/v1/users/me/children/${child.id}/resend-guardian-confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      toast({
+        title: `New confirmation link sent to ${r.guardianEmail}`,
+        description: r.guardianConfirmUrl,
+      });
+      await refresh();
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Failed to resend link";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setResending(null);
     }
   };
 
@@ -172,40 +205,100 @@ export default function GuardianPage() {
               {children.map((c) => (
                 <div
                   key={c.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-border"
+                  className="flex flex-col gap-3 p-3 rounded-lg border border-border"
                   data-testid={`row-child-${c.id}`}
                 >
-                  <Avatar className="w-10 h-10 border border-border shrink-0">
-                    {c.avatarUrl && <AvatarImage src={c.avatarUrl} />}
-                    <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
-                      {getInitials(`${c.firstName} ${c.lastName}`)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <Link href={`/users/${c.id}`}>
-                      <p className="font-bold text-sm cursor-pointer hover:text-primary truncate">
-                        {c.firstName} {c.lastName}
-                      </p>
-                    </Link>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {c.email ?? "No email on file"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right text-xs">
-                      <p className="font-bold">Require tag consent</p>
-                      <p className="text-muted-foreground">
-                        {c.requireTagConsent
-                          ? "Coaches must ask first"
-                          : "Anyone may tag"}
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-10 h-10 border border-border shrink-0">
+                      {c.avatarUrl && <AvatarImage src={c.avatarUrl} />}
+                      <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
+                        {getInitials(`${c.firstName} ${c.lastName}`)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <Link href={`/users/${c.id}`}>
+                        <p className="font-bold text-sm cursor-pointer hover:text-primary truncate">
+                          {c.firstName} {c.lastName}
+                        </p>
+                      </Link>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {c.email ?? "No email on file"}
                       </p>
                     </div>
-                    <Switch
-                      checked={c.requireTagConsent}
-                      onCheckedChange={(v) => toggleConsent(c, v)}
-                      data-testid={`switch-consent-${c.id}`}
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right text-xs">
+                        <p className="font-bold">Require tag consent</p>
+                        <p className="text-muted-foreground">
+                          {c.requireTagConsent
+                            ? "Coaches must ask first"
+                            : "Anyone may tag"}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={c.requireTagConsent}
+                        onCheckedChange={(v) => toggleConsent(c, v)}
+                        data-testid={`switch-consent-${c.id}`}
+                      />
+                    </div>
                   </div>
+
+                  {c.confirmationStatus !== "none" && (
+                    <div
+                      className="flex flex-wrap items-center gap-2 pt-2 border-t border-border"
+                      data-testid={`status-confirmation-${c.id}`}
+                    >
+                      {c.confirmationStatus === "confirmed" && (
+                        <Badge
+                          variant="outline"
+                          className="font-bold gap-1 border-green-600 text-green-700 dark:text-green-400"
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          {c.confirmedByMe
+                            ? "Confirmed by you"
+                            : "Confirmed"}
+                        </Badge>
+                      )}
+                      {c.confirmationStatus === "pending" && (
+                        <Badge
+                          variant="outline"
+                          className="font-bold gap-1 border-amber-500 text-amber-700 dark:text-amber-400"
+                        >
+                          <Clock className="w-3 h-3" />
+                          Pending guardian confirmation
+                        </Badge>
+                      )}
+                      {c.confirmationStatus === "expired" && (
+                        <Badge
+                          variant="outline"
+                          className="font-bold gap-1 border-red-500 text-red-700 dark:text-red-400"
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          Confirmation link expired
+                        </Badge>
+                      )}
+                      {c.guardianEmail && (
+                        <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          {c.guardianEmail}
+                        </span>
+                      )}
+                      {(c.confirmationStatus === "pending" ||
+                        c.confirmationStatus === "expired") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="ml-auto font-bold rounded-full"
+                          disabled={resending === c.id}
+                          onClick={() => resendConfirmation(c)}
+                          data-testid={`btn-resend-${c.id}`}
+                        >
+                          {resending === c.id
+                            ? "Sending..."
+                            : "Resend confirmation link"}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
