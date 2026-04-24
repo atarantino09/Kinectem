@@ -301,7 +301,7 @@ export function EditOrgDialog({
             </Button>
             <Button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploading}
               className="font-bold"
               data-testid="btn-save-edit-org"
             >
