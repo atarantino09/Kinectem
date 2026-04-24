@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,7 +10,6 @@ import {
   useUnfollowOrg,
   getGetOrganizationByIdQueryKey,
   getListFeedQueryKey,
-  customFetch,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,9 +31,7 @@ export default function OrganizationPage() {
   const { toast } = useToast();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
   const { data: postsResp } = useListOrgPosts(orgId);
@@ -67,61 +64,6 @@ export default function OrganizationPage() {
     );
   }
 
-  const onPickPhoto = () => fileInputRef.current?.click();
-  const onRemovePhoto = async () => {
-    setUploading(true);
-    try {
-      await customFetch(`/api/v1/organizations/${orgId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logoUrl: null }),
-      });
-      await qc.invalidateQueries({
-        queryKey: getGetOrganizationByIdQueryKey(orgId),
-      });
-      toast({ title: "Logo removed" });
-    } catch {
-      toast({ title: "Failed to remove logo", variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please pick an image file", variant: "destructive" });
-      return;
-    }
-    if (file.size > 1_500_000) {
-      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
-      return;
-    }
-    setUploading(true);
-    try {
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      await customFetch(`/api/v1/organizations/${orgId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logoUrl: dataUrl }),
-      });
-      await qc.invalidateQueries({
-        queryKey: getGetOrganizationByIdQueryKey(orgId),
-      });
-      toast({ title: "Logo updated" });
-    } catch {
-      toast({ title: "Failed to upload logo", variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const teams = teamsResp?.data ?? [];
   const posts = postsResp?.data ?? [];
   const members = membersResp?.data ?? [];
@@ -133,7 +75,7 @@ export default function OrganizationPage() {
         <div className="h-32 brand-gradient relative" />
         <div className="px-6 pb-6 -mt-10 flex items-end justify-between gap-4 flex-wrap relative z-10">
           <div className="flex items-end gap-4">
-            <div className="relative shrink-0">
+            <div className="shrink-0">
               <div className="w-20 h-20 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
                 {organization.avatarUrl ? (
                   <img
@@ -147,47 +89,6 @@ export default function OrganizationPage() {
                   </div>
                 )}
               </div>
-              {(organization.role === "admin" ||
-                organization.role === "owner") && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={onPhotoChange}
-                    data-testid="input-org-logo"
-                  />
-                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
-                      onClick={onPickPhoto}
-                      disabled={uploading}
-                      data-testid="btn-upload-org-logo"
-                    >
-                      {uploading
-                        ? "Working..."
-                        : organization.avatarUrl
-                          ? "Change"
-                          : "Upload"}
-                    </Button>
-                    {organization.avatarUrl && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-[10px] font-bold rounded-full whitespace-nowrap"
-                        onClick={onRemovePhoto}
-                        disabled={uploading}
-                        data-testid="btn-remove-org-logo"
-                      >
-                        Remove logo
-                      </Button>
-                    )}
-                  </div>
-                </>
-              )}
             </div>
             <div className="pb-2">
               <h1 className="text-4xl font-black tracking-tight leading-none">
