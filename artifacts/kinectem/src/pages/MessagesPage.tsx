@@ -8,6 +8,7 @@ import {
   useMarkConversationRead,
   useCreateConversation,
   useSearchConversationContacts,
+  useGetLoggedInUser,
   getListMessagesQueryKey,
   getListConversationsQueryKey,
   getGetUnreadMessageCountQueryKey,
@@ -144,6 +145,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
   const { data: msgsResp, isLoading } = useListMessages(conversationId);
   const messages = msgsResp?.data ?? [];
+  const { data: currentUser } = useGetLoggedInUser();
+  const myId = currentUser?.id ?? null;
 
   const invalidate = () => {
     qc.invalidateQueries({
@@ -188,7 +191,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        <div className="flex-1 overflow-y-auto pr-1">
           {isLoading ? (
             <Skeleton className="h-24 rounded-lg" />
           ) : messages.length === 0 ? (
@@ -196,42 +199,79 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               Start the conversation.
             </p>
           ) : (
-            messages.map((m) =>
-              isDeleted(m) ? (
+            messages.map((m, i) => {
+              if (isDeleted(m)) {
+                return (
+                  <div
+                    key={m.id}
+                    className="text-xs text-muted-foreground italic py-2 text-center"
+                  >
+                    message deleted • {timeAgo(m.createdAt)}
+                  </div>
+                );
+              }
+              const prev = i > 0 ? messages[i - 1] : null;
+              const prevSenderId =
+                prev && !isDeleted(prev) ? prev.senderId : null;
+              const groupedWithPrev = prevSenderId === m.senderId;
+              const isMine = myId !== null && m.senderId === myId;
+              return (
                 <div
                   key={m.id}
-                  className="text-xs text-muted-foreground italic py-2"
+                  data-testid={`message-${m.id}`}
+                  className={`flex w-full ${groupedWithPrev ? "mt-0.5" : "mt-3"} ${
+                    isMine ? "justify-end" : "justify-start"
+                  }`}
                 >
-                  message deleted • {timeAgo(m.createdAt)}
-                </div>
-              ) : (
-                <div key={m.id} className="flex gap-2 py-1">
-                  <Avatar className="w-7 h-7 mt-0.5">
-                    {m.senderAvatarUrl && (
-                      <AvatarImage src={m.senderAvatarUrl} />
-                    )}
-                    <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                      {getInitials(m.senderDisplayName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <p className="font-bold text-xs">
-                        {m.senderDisplayName}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {timeAgo(m.createdAt)}
-                      </p>
+                  {!isMine && (
+                    <div className="w-7 mr-2 shrink-0">
+                      {!groupedWithPrev && (
+                        <Avatar className="w-7 h-7">
+                          {m.senderAvatarUrl && (
+                            <AvatarImage src={m.senderAvatarUrl} />
+                          )}
+                          <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
+                            {getInitials(m.senderDisplayName)}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
                     </div>
+                  )}
+                  <div
+                    className={`flex flex-col max-w-[75%] ${
+                      isMine ? "items-end" : "items-start"
+                    }`}
+                  >
+                    {!isMine && !groupedWithPrev && (
+                      <div className="flex items-baseline gap-2 mb-1 px-1">
+                        <p className="font-bold text-xs">
+                          {m.senderDisplayName}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {timeAgo(m.createdAt)}
+                        </p>
+                      </div>
+                    )}
                     {m.body && (
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                      <div
+                        className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                          isMine
+                            ? "brand-gradient text-primary-foreground"
+                            : "bg-slate-100 text-foreground"
+                        }`}
+                      >
                         {m.body}
+                      </div>
+                    )}
+                    {isMine && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 px-1">
+                        {timeAgo(m.createdAt)}
                       </p>
                     )}
                   </div>
                 </div>
-              ),
-            )
+              );
+            })
           )}
         </div>
 
