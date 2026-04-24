@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
+import { rateLimitMessage } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +35,7 @@ export default function ResetPasswordPage() {
       setDone(true);
     } catch (err) {
       const e = err as { message?: string; body?: { error?: string } };
-      setError(e?.body?.error ?? e?.message ?? "Could not reset password");
+      setError(rateLimitMessage(err) ?? e?.body?.error ?? e?.message ?? "Could not reset password");
     } finally {
       setSubmitting(false);
     }

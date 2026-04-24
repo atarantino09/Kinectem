@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { rateLimitMessage } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,8 +105,9 @@ export default function LoginPage() {
           guardianConfirmExpired?: boolean;
         };
       };
-      const msg = e?.body?.error ?? e?.message ?? "Sign-in failed";
-      if (e?.body?.pendingGuardianConfirmation) {
+      const rateMsg = rateLimitMessage(err);
+      const msg = rateMsg ?? e?.body?.error ?? e?.message ?? "Sign-in failed";
+      if (!rateMsg && e?.body?.pendingGuardianConfirmation) {
         setGuardianPendingMessage(msg);
         setGuardianPendingExpired(!!e?.body?.guardianConfirmExpired);
         setGuardianResendUrl(null);
@@ -136,7 +138,7 @@ export default function LoginPage() {
       );
     } catch (err) {
       const e = err as { message?: string; body?: { error?: string } };
-      setError(e?.body?.error ?? e?.message ?? "Could not resend confirmation");
+      setError(rateLimitMessage(err) ?? e?.body?.error ?? e?.message ?? "Could not resend confirmation");
     } finally {
       setSubmitting(false);
     }
@@ -181,7 +183,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       const e = err as { message?: string; body?: { error?: string } };
-      setError(e?.body?.error ?? e?.message ?? "Sign-up failed");
+      setError(rateLimitMessage(err) ?? e?.body?.error ?? e?.message ?? "Sign-up failed");
     } finally {
       setSubmitting(false);
     }
@@ -199,7 +201,7 @@ export default function LoginPage() {
       setMode("forgotSent");
     } catch (err) {
       const e = err as { message?: string; body?: { error?: string } };
-      setError(e?.body?.error ?? e?.message ?? "Could not request password reset");
+      setError(rateLimitMessage(err) ?? e?.body?.error ?? e?.message ?? "Could not request password reset");
     } finally {
       setSubmitting(false);
     }
