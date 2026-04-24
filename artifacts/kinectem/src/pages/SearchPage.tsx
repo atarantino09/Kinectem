@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Trophy, User as UserIcon } from "lucide-react";
+import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { getInitials } from "@/lib/format";
 
 export default function SearchPage() {
@@ -20,11 +21,18 @@ export default function SearchPage() {
 
   if (!enabled) {
     return (
-      <div className="max-w-3xl mx-auto py-8">
-        <h1 className="text-2xl font-black tracking-tight mb-2">Search</h1>
-        <p className="text-sm text-muted-foreground">
-          Type at least 3 characters to search athletes, teams, and organizations.
-        </p>
+      <div className="max-w-3xl mx-auto py-8 space-y-6">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight mb-2">Search</h1>
+          <p className="text-sm text-muted-foreground">
+            Type at least 3 characters to search athletes, teams, and organizations.
+          </p>
+        </div>
+        <SuggestionsPanel
+          heading="Suggested for you"
+          subheading="Discover organizations, teams, and athletes to follow."
+          hideWhenEmpty
+        />
       </div>
     );
   }
@@ -123,6 +131,12 @@ export default function SearchPage() {
               </Link>
             ))}
           </Section>
+
+          <SuggestionsPanel
+            heading="Suggested for you"
+            subheading="Other organizations, teams, and athletes to follow."
+            hideWhenEmpty
+          />
         </>
       )}
     </div>

@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetLoggedInUser,
   useListOrganizations,
@@ -8,21 +7,15 @@ import {
   useListUserOrganizations,
   useListUserTeams,
   useListOrgTeams,
-  useListFollowSuggestions,
-  useFollowOrg,
-  useFollowTeam,
-  useFollowUser,
-  getListFollowSuggestionsQueryKey,
-  getListFeedQueryKey,
 } from "@workspace/api-client-react";
-import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Building2, ChevronRight, Users, UserCheck } from "lucide-react";
+import { Building2, ChevronRight, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
+import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { getInitials } from "@/lib/format";
 
 export default function FeedPage() {
@@ -141,8 +134,14 @@ export default function FeedPage() {
         )}
       </div>
 
-      {/* Right sidebar: orgs */}
+      {/* Right sidebar: suggestions + orgs */}
       <aside className="hidden lg:block space-y-4">
+        <SuggestionsPanel
+          variant="compact"
+          heading="People to follow"
+          perSectionLimit={3}
+          hideWhenEmpty
+        />
         {orgs && (
           <Card className="rounded-xl border border-border shadow-sm">
             <CardContent className="p-4">
@@ -264,234 +263,3 @@ function OrgRow({
   );
 }
 
-function SuggestionsPanel() {
-  const { data, isLoading } = useListFollowSuggestions();
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const followOrg = useFollowOrg();
-  const followTeam = useFollowTeam();
-  const followUser = useFollowUser();
-
-  const refresh = async () => {
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: getListFollowSuggestionsQueryKey() }),
-      qc.invalidateQueries({ queryKey: getListFeedQueryKey() }),
-    ]);
-  };
-
-  const handleFollowOrg = async (orgId: string) => {
-    try {
-      await followOrg.mutateAsync({ orgId });
-      await refresh();
-    } catch {
-      toast({ title: "Couldn't follow", variant: "destructive" });
-    }
-  };
-  const handleFollowTeam = async (teamId: string) => {
-    try {
-      await followTeam.mutateAsync({ teamId });
-      await refresh();
-    } catch {
-      toast({ title: "Couldn't follow", variant: "destructive" });
-    }
-  };
-  const handleFollowUser = async (userId: string) => {
-    try {
-      await followUser.mutateAsync({ userId });
-      await refresh();
-    } catch {
-      toast({ title: "Couldn't follow", variant: "destructive" });
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <Card className="rounded-xl border border-border">
-        <CardContent className="p-8 space-y-3">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-12 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const orgs = data?.organizations ?? [];
-  const teams = data?.teams ?? [];
-  const users = data?.users ?? [];
-  const empty = orgs.length === 0 && teams.length === 0 && users.length === 0;
-
-  if (empty) {
-    return (
-      <Card className="rounded-xl border border-border">
-        <CardContent className="p-8 text-center text-sm text-muted-foreground">
-          Your feed is quiet. Follow organizations or athletes to see updates here.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="rounded-xl border border-border">
-      <CardContent className="p-6 space-y-6">
-        <div>
-          <h3 className="font-black text-base tracking-tight">
-            Your feed is quiet
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Follow a few organizations, teams, or athletes to start seeing
-            updates here.
-          </p>
-        </div>
-
-        {orgs.length > 0 && (
-          <SuggestionSection
-            title="Organizations"
-            icon={<Building2 className="w-4 h-4" />}
-          >
-            {orgs.map((org) => (
-              <SuggestionRow
-                key={org.id}
-                href={`/organizations/${org.id}`}
-                avatar={
-                  <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-                    {getInitials(org.name)}
-                  </div>
-                }
-                title={org.name}
-                subtitle={org.description ?? undefined}
-                onFollow={() => handleFollowOrg(org.id)}
-                disabled={followOrg.isPending}
-                testId={`button-follow-suggested-org-${org.id}`}
-              />
-            ))}
-          </SuggestionSection>
-        )}
-
-        {teams.length > 0 && (
-          <SuggestionSection
-            title="Teams"
-            icon={<Users className="w-4 h-4" />}
-          >
-            {teams.map((team) => (
-              <SuggestionRow
-                key={team.id}
-                href={`/teams/${team.id}`}
-                avatar={
-                  <Avatar className="w-10 h-10">
-                    {team.avatarUrl && <AvatarImage src={team.avatarUrl} />}
-                    <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-xs">
-                      {getInitials(team.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                }
-                title={team.name}
-                subtitle={team.organization.name}
-                onFollow={() => handleFollowTeam(team.id)}
-                disabled={followTeam.isPending}
-                testId={`button-follow-suggested-team-${team.id}`}
-              />
-            ))}
-          </SuggestionSection>
-        )}
-
-        {users.length > 0 && (
-          <SuggestionSection
-            title="Athletes & Coaches"
-            icon={<UserCheck className="w-4 h-4" />}
-          >
-            {users.map((u) => {
-              const name = `${u.firstName} ${u.lastName}`.trim();
-              return (
-                <SuggestionRow
-                  key={u.id}
-                  href={`/users/${u.id}`}
-                  avatar={
-                    <Avatar className="w-10 h-10">
-                      {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
-                      <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-xs">
-                        {getInitials(name)}
-                      </AvatarFallback>
-                    </Avatar>
-                  }
-                  title={name}
-                  subtitle={u.bio ?? undefined}
-                  onFollow={() => handleFollowUser(u.id)}
-                  disabled={followUser.isPending}
-                  testId={`button-follow-suggested-user-${u.id}`}
-                />
-              );
-            })}
-          </SuggestionSection>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SuggestionSection({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-        {icon}
-        {title}
-      </h4>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
-
-function SuggestionRow({
-  href,
-  avatar,
-  title,
-  subtitle,
-  onFollow,
-  disabled,
-  testId,
-}: {
-  href: string;
-  avatar: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  onFollow: () => void;
-  disabled: boolean;
-  testId: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 py-1.5">
-      <Link href={href} className="shrink-0">
-        {avatar}
-      </Link>
-      <div className="flex-1 min-w-0">
-        <Link href={href}>
-          <p className="font-bold text-sm leading-tight truncate hover:text-primary cursor-pointer">
-            {title}
-          </p>
-        </Link>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-            {subtitle}
-          </p>
-        )}
-      </div>
-      <Button
-        size="sm"
-        className="font-bold shrink-0"
-        onClick={onFollow}
-        disabled={disabled}
-        data-testid={testId}
-      >
-        Follow
-      </Button>
-    </div>
-  );
-}
