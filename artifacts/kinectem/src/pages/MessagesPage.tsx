@@ -59,7 +59,7 @@ export default function MessagesPage() {
             data-testid="button-new-message"
           >
             <Plus className="w-4 h-4" />
-            New
+            New message
           </Button>
         </div>
         {isLoading ? (
