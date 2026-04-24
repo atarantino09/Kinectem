@@ -210,9 +210,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   </div>
                 );
               }
-              const prev = i > 0 ? messages[i - 1] : null;
-              const prevSenderId =
-                prev && !isDeleted(prev) ? prev.senderId : null;
+              let prevSenderId: string | null = null;
+              for (let j = i - 1; j >= 0; j--) {
+                const candidate = messages[j];
+                if (!isDeleted(candidate)) {
+                  prevSenderId = candidate.senderId;
+                  break;
+                }
+              }
               const groupedWithPrev = prevSenderId === m.senderId;
               const isMine = myId !== null && m.senderId === myId;
               return (
