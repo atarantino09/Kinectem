@@ -27,6 +27,7 @@ import {
   assets,
   organizationJoinRequests,
   passwordResets,
+  contentReports,
 } from "@workspace/db";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -464,6 +465,10 @@ router.post(
       res.status(401).json({ error: "Incorrect email or password." });
       return;
     }
+    if (user.deletedAt) {
+      res.status(403).json({ error: "This account has been deactivated." });
+      return;
+    }
     if (user.guardianEmail && !user.guardianConfirmedAt) {
       const expired =
         !user.guardianConfirmToken ||
@@ -474,11 +479,13 @@ router.post(
           "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
         pendingGuardianConfirmation: true,
         guardianConfirmExpired: expired,
+        ...(expired ? { guardianConfirmUrl: null } : {}),
       });
       return;
     }
     const sess = await createSession(user.id);
     setSessionCookie(res, sess.id, sess.expiresAt);
+    await db.update(users).set({ lastSignInAt: new Date() }).where(eq(users.id, user.id));
     res.json(toPrivateUser(user));
   }),
 );
@@ -736,7 +743,12 @@ router.post(
 router.get(
   "/auth/users",
   asyncHandler(async (_req, res) => {
-    const rows = await db.select().from(users).orderBy(users.role, users.name).limit(100);
+    const rows = await db
+      .select()
+      .from(users)
+      .where(isNull(users.deletedAt))
+      .orderBy(users.role, users.name)
+      .limit(100);
     res.json(
       rows.map((u) => {
         const { firstName, lastName } = splitName(u.name);
@@ -806,9 +818,14 @@ router.get(
       ? await db
           .select()
           .from(users)
-          .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
+          .where(
+            and(
+              isNull(users.deletedAt),
+              or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
+            ),
+          )
           .limit(40)
-      : await db.select().from(users).limit(40);
+      : await db.select().from(users).where(isNull(users.deletedAt)).limit(40);
     if (roleFilter) rows = rows.filter((u) => u.role === roleFilter);
     res.json({
       data: rows.slice(0, 20).map((u) => {
@@ -835,6 +852,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
     if (!u) return notFound(res);
+    if (u.deletedAt && req.realUser?.role !== "admin") return notFound(res);
     const me = req.sessionUser;
     const isOwnProfile = me?.id === u.id;
 
@@ -953,6 +971,12 @@ router.get(
     const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
     if (!u) return notFound(res);
 
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const userPostsConds = [
+      eq(articles.authorId, u.id),
+      eq(articles.status, "published"),
+    ];
+    if (!isAdmin) userPostsConds.push(isNull(articles.hiddenAt));
     const arts = await db
       .select({
         a: articles,
@@ -964,7 +988,7 @@ router.get(
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.authorId, u.id), eq(articles.status, "published")))
+      .where(and(...userPostsConds))
       .orderBy(desc(articles.createdAt))
       .limit(20);
 
@@ -2529,7 +2553,13 @@ router.get(
         .innerJoin(teams, eq(articles.teamId, teams.id))
         .innerJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(and(eq(articles.status, "published"), eq(articles.authorId, me.id)))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            eq(articles.authorId, me.id),
+            isNull(articles.hiddenAt),
+          ),
+        )
         .orderBy(desc(articles.createdAt))
         .limit(10);
       const ownHls = await db
@@ -2538,7 +2568,7 @@ router.get(
         .innerJoin(teams, eq(highlights.teamId, teams.id))
         .innerJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(highlights.uploaderId, users.id))
-        .where(eq(highlights.uploaderId, me.id))
+        .where(and(eq(highlights.uploaderId, me.id), isNull(highlights.hiddenAt)))
         .orderBy(desc(highlights.createdAt))
         .limit(10);
       const stats = await loadPostStats(me.id, [
@@ -2600,7 +2630,13 @@ router.get(
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.status, "published"), or(...articleConds)))
+      .where(
+        and(
+          eq(articles.status, "published"),
+          isNull(articles.hiddenAt),
+          or(...articleConds),
+        ),
+      )
       .orderBy(desc(articles.createdAt))
       .limit(20);
 
@@ -2620,7 +2656,7 @@ router.get(
       .innerJoin(teams, eq(highlights.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
-      .where(or(...highlightConds))
+      .where(and(isNull(highlights.hiddenAt), or(...highlightConds)))
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
@@ -2634,6 +2670,7 @@ router.get(
           .where(
             and(
               eq(orgPosts.status, "published"),
+              isNull(orgPosts.hiddenAt),
               inArray(orgPosts.organizationId, followedOrgIds),
             ),
           )
@@ -2805,6 +2842,7 @@ router.get(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     if (parsed.kind === "article") {
@@ -2817,6 +2855,7 @@ router.get(
         .where(eq(articles.id, parsed.id))
         .limit(1);
       if (!row) return notFound(res);
+      if (row.a.hiddenAt && !isAdmin) return notFound(res);
       if (row.a.status !== "published") {
         const isAuthor = !!me && row.a.authorId === me.id;
         const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
@@ -2844,6 +2883,7 @@ router.get(
         .where(eq(orgPosts.id, parsed.id))
         .limit(1);
       if (!row) return notFound(res);
+      if (row.p.hiddenAt && !isAdmin) return notFound(res);
       if (row.p.status !== "published") {
         const isAuthor = !!me && row.p.authorId === me.id;
         const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
@@ -2870,6 +2910,7 @@ router.get(
       .where(eq(highlights.id, parsed.id))
       .limit(1);
     if (!row) return notFound(res);
+    if (row.h.hiddenAt && !isAdmin) return notFound(res);
     const stats = await loadPostStats(me?.id ?? null, [
       { kind: "highlight", refId: row.h.id },
     ]);
@@ -2889,17 +2930,18 @@ router.get(
   asyncHandler(async (req, res) => {
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const conds = [
+      eq(postComments.postKind, parsed.kind),
+      eq(postComments.postRefId, parsed.id),
+      isNull(postComments.deletedAt),
+    ];
+    if (!isAdmin) conds.push(isNull(postComments.hiddenAt));
     const rows = await db
       .select({ c: postComments, author: users })
       .from(postComments)
       .leftJoin(users, eq(postComments.authorId, users.id))
-      .where(
-        and(
-          eq(postComments.postKind, parsed.kind),
-          eq(postComments.postRefId, parsed.id),
-          isNull(postComments.deletedAt),
-        ),
-      )
+      .where(and(...conds))
       .orderBy(asc(postComments.createdAt));
     res.json(paginate(rows.map((r) => toComment(r.c, r.author))));
   }),
@@ -4602,6 +4644,168 @@ router.get(
         ),
         pagination: emptyPagination(),
       },
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// User-facing reports
+// ---------------------------------------------------------------------------
+
+const ReportBody = z.object({
+  contentType: z.enum(["article", "highlight", "org_post", "comment"]),
+  contentId: z.string().uuid(),
+  reason: z.string().min(1).max(120),
+  note: z.string().max(2000).optional(),
+});
+
+router.post(
+  "/reports",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const body = ReportBody.parse(req.body);
+
+    // Verify the content exists.
+    let exists = false;
+    if (body.contentType === "article") {
+      const [r] = await db.select({ id: articles.id }).from(articles).where(eq(articles.id, body.contentId)).limit(1);
+      exists = !!r;
+    } else if (body.contentType === "highlight") {
+      const [r] = await db.select({ id: highlights.id }).from(highlights).where(eq(highlights.id, body.contentId)).limit(1);
+      exists = !!r;
+    } else if (body.contentType === "org_post") {
+      const [r] = await db.select({ id: orgPosts.id }).from(orgPosts).where(eq(orgPosts.id, body.contentId)).limit(1);
+      exists = !!r;
+    } else {
+      const [r] = await db.select({ id: postComments.id }).from(postComments).where(eq(postComments.id, body.contentId)).limit(1);
+      exists = !!r;
+    }
+    if (!exists) return notFound(res);
+
+    // Dedupe: do not create another open report from the same reporter on the
+    // same content.
+    const [dupe] = await db
+      .select()
+      .from(contentReports)
+      .where(
+        and(
+          eq(contentReports.reporterUserId, me.id),
+          eq(contentReports.contentType, body.contentType),
+          eq(contentReports.contentId, body.contentId),
+          eq(contentReports.status, "open"),
+        ),
+      )
+      .limit(1);
+    if (dupe) {
+      res.status(200).json({
+        id: dupe.id,
+        status: dupe.status,
+        alreadyReported: true,
+      });
+      return;
+    }
+
+    const [created] = await db
+      .insert(contentReports)
+      .values({
+        reporterUserId: me.id,
+        contentType: body.contentType,
+        contentId: body.contentId,
+        reason: body.reason,
+        note: body.note ?? null,
+      })
+      .returning();
+    res.status(201).json({ id: created.id, status: created.status, alreadyReported: false });
+  }),
+);
+
+// Returns whether the current viewer already has an open report against the
+// given content. Used by the report dialog to disable submission when the
+// user has already reported the item.
+router.get(
+  "/reports/mine",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const contentType = String(req.query["contentType"] ?? "");
+    const contentId = String(req.query["contentId"] ?? "");
+    if (!["article", "highlight", "org_post", "comment"].includes(contentType)) {
+      res.status(400).json({ error: "Invalid contentType" });
+      return;
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(contentId)) {
+      res.status(400).json({ error: "Invalid contentId" });
+      return;
+    }
+    const [row] = await db
+      .select({
+        id: contentReports.id,
+        reason: contentReports.reason,
+        note: contentReports.note,
+        status: contentReports.status,
+        createdAt: contentReports.createdAt,
+      })
+      .from(contentReports)
+      .where(
+        and(
+          eq(contentReports.reporterUserId, me.id),
+          eq(
+            contentReports.contentType,
+            contentType as "article" | "highlight" | "org_post" | "comment",
+          ),
+          eq(contentReports.contentId, contentId),
+          eq(contentReports.status, "open"),
+        ),
+      )
+      .limit(1);
+    res.json({
+      alreadyReported: !!row,
+      report: row
+        ? {
+            id: row.id,
+            reason: row.reason,
+            note: row.note ?? null,
+            status: row.status,
+            createdAt: row.createdAt.toISOString(),
+          }
+        : null,
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Masquerade visibility for the current viewer (web client uses this to
+// render the masquerade banner).
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/auth/whoami",
+  asyncHandler((req, res) => {
+    const session = req.sessionUser;
+    const real = req.realUser;
+    if (!real) {
+      res.json({ authenticated: false });
+      return;
+    }
+    res.json({
+      authenticated: true,
+      isMasquerading: !!req.isMasquerading,
+      realUser: {
+        id: real.id,
+        name: real.name,
+        email: real.email,
+        role: real.role,
+      },
+      viewingAs:
+        req.isMasquerading && session
+          ? {
+              id: session.id,
+              name: session.name,
+              email: session.email,
+              role: session.role,
+            }
+          : null,
     });
   }),
 );

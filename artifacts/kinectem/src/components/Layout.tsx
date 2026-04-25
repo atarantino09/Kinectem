@@ -6,7 +6,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users } from "lucide-react";
+import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -20,12 +20,16 @@ import {
 import { getInitials } from "@/lib/format";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
+import { MasqueradeBanner } from "@/components/MasqueradeBanner";
+import { useWhoami } from "@/hooks/useWhoami";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser, error: currentUserError } = useGetLoggedInUser({
     query: { retry: false },
   });
   const { data: unreadMsgs } = useGetUnreadMessageCount();
+  const { data: whoami } = useWhoami();
+  const isAdmin = whoami?.realUser?.role === "admin";
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
@@ -67,6 +71,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <MasqueradeBanner />
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 shrink-0">
@@ -194,6 +199,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem onSelect={() => setLocation(`/users/${currentUser.id}`)}>
                   <UserCircle className="w-4 h-4 mr-2" /> View profile
                 </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem
+                    onSelect={() => setLocation("/admin")}
+                    data-testid="menu-admin"
+                  >
+                    <Shield className="w-4 h-4 mr-2" /> Admin
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onSelect={() => setLocation("/login")}>
                   <Repeat className="w-4 h-4 mr-2" /> Switch user
                 </DropdownMenuItem>

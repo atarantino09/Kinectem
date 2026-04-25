@@ -16,8 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Heart, MessageSquare, Trash2 } from "lucide-react";
+import { Heart, MessageSquare, Trash2, Flag } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
+import { ReportDialog } from "@/components/ReportDialog";
 
 export function PostInteractions({ post }: { post: PostResponse }) {
   const qc = useQueryClient();
@@ -172,6 +173,7 @@ function CommentRow({
   canDelete: boolean;
   onDelete: () => void;
 }) {
+  const [reportOpen, setReportOpen] = useState(false);
   return (
     <Card className="rounded-xl border border-border">
       <CardContent className="p-3">
@@ -195,7 +197,7 @@ function CommentRow({
               {comment.body}
             </p>
           </div>
-          {canDelete && (
+          {canDelete ? (
             <Button
               variant="ghost"
               size="icon"
@@ -205,8 +207,25 @@ function CommentRow({
             >
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setReportOpen(true)}
+              className="w-7 h-7 text-muted-foreground hover:text-destructive"
+              data-testid={`button-report-comment-${comment.id}`}
+              aria-label="Report comment"
+            >
+              <Flag className="w-3.5 h-3.5" />
+            </Button>
           )}
         </div>
+        <ReportDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          contentType="comment"
+          contentId={comment.id}
+        />
       </CardContent>
     </Card>
   );

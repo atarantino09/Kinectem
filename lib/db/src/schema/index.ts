@@ -14,6 +14,30 @@ export const participantTypeEnum = pgEnum("participant_type", ["user", "organiza
 export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "approved", "declined", "withdrawn"]);
 export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "declined", "removed"]);
 export const assetStatusEnum = pgEnum("asset_status", ["pending", "confirmed"]);
+export const reportContentTypeEnum = pgEnum("report_content_type", ["article", "highlight", "org_post", "comment"]);
+export const reportStatusEnum = pgEnum("report_status", ["open", "resolved", "dismissed"]);
+export const adminActionTypeEnum = pgEnum("admin_action_type", [
+  "hide_content",
+  "unhide_content",
+  "delete_content",
+  "resolve_report",
+  "dismiss_report",
+  "create_user",
+  "update_user",
+  "soft_delete_user",
+  "restore_user",
+  "reset_password",
+  "masquerade_start",
+  "masquerade_stop",
+]);
+export const adminTargetTypeEnum = pgEnum("admin_target_type", [
+  "user",
+  "article",
+  "highlight",
+  "org_post",
+  "comment",
+  "report",
+]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -36,6 +60,8 @@ export const users = pgTable("users", {
   guardianConfirmedAt: timestamp("guardian_confirmed_at"),
   guardianConfirmedByUserId: uuid("guardian_confirmed_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
+  lastSignInAt: timestamp("last_sign_in_at"),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -51,6 +77,7 @@ export const passwordResets = pgTable("password_resets", {
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  masqueradingAsUserId: uuid("masquerading_as_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -157,6 +184,8 @@ export const articles = pgTable("articles", {
   gameDate: timestamp("game_date"),
   status: articleStatusEnum("status").notNull().default("published"),
   publishedAt: timestamp("published_at"),
+  hiddenAt: timestamp("hidden_at"),
+  hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -177,6 +206,8 @@ export const highlights = pgTable("highlights", {
   videoUrl: text("video_url").notNull().default(""),
   thumbnailUrl: text("thumbnail_url"),
   durationSeconds: integer("duration_seconds"),
+  hiddenAt: timestamp("hidden_at"),
+  hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -191,6 +222,8 @@ export const orgPosts = pgTable("org_posts", {
   photoUrls: text("photo_urls").array(),
   status: orgPostStatusEnum("status").notNull().default("published"),
   publishedAt: timestamp("published_at"),
+  hiddenAt: timestamp("hidden_at"),
+  hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -230,6 +263,32 @@ export const postComments = pgTable("post_comments", {
   authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
   body: text("body").notNull(),
   deletedAt: timestamp("deleted_at"),
+  hiddenAt: timestamp("hidden_at"),
+  hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const contentReports = pgTable("content_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reporterUserId: uuid("reporter_user_id").references(() => users.id, { onDelete: "set null" }),
+  contentType: reportContentTypeEnum("content_type").notNull(),
+  contentId: uuid("content_id").notNull(),
+  reason: text("reason").notNull(),
+  note: text("note"),
+  status: reportStatusEnum("status").notNull().default("open"),
+  resolution: text("resolution"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByUserId: uuid("resolved_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const adminActivityLog = pgTable("admin_activity_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminUserId: uuid("admin_user_id").references(() => users.id, { onDelete: "set null" }),
+  actionType: adminActionTypeEnum("action_type").notNull(),
+  targetType: adminTargetTypeEnum("target_type"),
+  targetId: uuid("target_id"),
+  metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

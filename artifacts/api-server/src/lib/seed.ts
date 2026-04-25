@@ -34,6 +34,13 @@ const REQUIRED_DEMO_USERS: Array<typeof users.$inferInsert> = [
     location: "Westfield, NJ",
     bio: "Two-footed midfielder. Captain of the school squad.",
   },
+  {
+    name: "Andrew Tarantino",
+    email: "andrew@kinectem.com",
+    role: "admin",
+    location: "Westfield, NJ",
+    bio: "Kinectem global admin.",
+  },
 ];
 
 async function ensureRequiredDemoUsers(passwordHash: string): Promise<void> {

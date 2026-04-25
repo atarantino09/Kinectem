@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, Video } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag } from "lucide-react";
 import {
   useAddPostReaction,
   useRemovePostReaction,
@@ -14,12 +14,41 @@ import {
   type FeedPost,
 } from "@workspace/api-client-react";
 import { timeAgo, getInitials } from "@/lib/format";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
+
+function parseSyntheticPostId(
+  id: string,
+): { contentType: ReportContentType; contentId: string } {
+  if (id.startsWith("article-")) {
+    return { contentType: "article", contentId: id.slice("article-".length) };
+  }
+  if (id.startsWith("highlight-")) {
+    return { contentType: "highlight", contentId: id.slice("highlight-".length) };
+  }
+  if (id.startsWith("orgpost-")) {
+    return { contentType: "org_post", contentId: id.slice("orgpost-".length) };
+  }
+  return { contentType: "article", contentId: id };
+}
 
 export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const qc = useQueryClient();
+  const [reportOpen, setReportOpen] = useState(false);
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
-  const label = isShort ? "Highlight" : "Game Recap";
+  const reportTarget = parseSyntheticPostId(post.id);
+  const label =
+    reportTarget.contentType === "highlight"
+      ? "Highlight"
+      : reportTarget.contentType === "org_post"
+        ? "Update"
+        : "Game Recap";
   const badgeClass = "brand-pill";
 
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
@@ -96,13 +125,42 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               </p>
             </div>
           </div>
-          <Badge
-            className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest shrink-0`}
-          >
-            <Icon className="w-3 h-3 mr-1 inline" />
-            {label}
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <Badge
+              className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest`}
+            >
+              <Icon className="w-3 h-3 mr-1 inline" />
+              {label}
+            </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  data-testid={`btn-post-menu-${post.id}`}
+                  aria-label="Post actions"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => setReportOpen(true)}
+                  data-testid={`menuitem-report-${post.id}`}
+                >
+                  <Flag className="w-4 h-4 mr-2" /> Report post
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+        <ReportDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          contentType={reportTarget.contentType}
+          contentId={reportTarget.contentId}
+        />
 
         <div>
           {isShort && firstImage?.url && (

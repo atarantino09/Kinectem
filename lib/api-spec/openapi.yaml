@@ -3765,6 +3765,666 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /auth/whoami:
+    get:
+      operationId: getWhoami
+      summary: Get the currently authenticated session including masquerade state
+      tags: [Auth]
+      responses:
+        '200':
+          description: Session details. When `authenticated` is false the other fields are omitted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated]
+                properties:
+                  authenticated:
+                    type: boolean
+                  isMasquerading:
+                    type: boolean
+                  realUser:
+                    $ref: '#/components/schemas/AdminWhoamiUser'
+                  viewingAs:
+                    nullable: true
+                    allOf:
+                      - $ref: '#/components/schemas/AdminWhoamiUser'
+                additionalProperties: true
+
+  /reports:
+    post:
+      operationId: createContentReport
+      summary: User-facing — report a piece of content for moderator review (deduped per user/content)
+      tags: [Reports]
+      security:
+        - clerkSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+      responses:
+        '201':
+          description: Report created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateReportResponse'
+        '200':
+          description: Already reported by this user (dedupe — returns the existing open report)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reports/mine:
+    get:
+      operationId: getMyReportForContent
+      summary: Check whether the current user has already reported a specific piece of content
+      tags: [Reports]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: contentType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [article, highlight, org_post, comment]
+        - name: contentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Existing open report (if any) for this user/content pair
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alreadyReported, report]
+                properties:
+                  alreadyReported:
+                    type: boolean
+                  report:
+                    nullable: true
+                    type: object
+                    required: [id, reason, note, status, createdAt]
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      reason:
+                        type: string
+                      note:
+                        type: string
+                        nullable: true
+                      status:
+                        type: string
+                        enum: [open, resolved, dismissed]
+                      createdAt:
+                        type: string
+                        format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/analytics:
+    get:
+      operationId: getAdminAnalytics
+      summary: Admin dashboard analytics (totals, time series, top lists)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Aggregate analytics for the admin dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      summary: List users (admin) with optional search, role filter, soft-deleted inclusion, and pagination
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [athlete, parent, coach, admin]
+        - name: includeDeleted
+          in: query
+          required: false
+          description: Pass "1" or "true" to include soft-deleted users in the result.
+          schema:
+            type: string
+            enum: ["0", "1", "true", "false"]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Page of admin user records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUser'
+                  pagination:
+                    $ref: '#/components/schemas/AdminPagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: createAdminUser
+      summary: Create a user account (admin)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      operationId: updateAdminUser
+      summary: Update a user's profile / role / guardian fields (admin)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUserRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: softDeleteAdminUser
+      summary: Soft-delete (deactivate) a user account
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users/{userId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      operationId: restoreAdminUser
+      summary: Restore a soft-deleted user
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Restored user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users/{userId}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      operationId: resetAdminUserPassword
+      summary: Force-reset a user's password and revoke their existing sessions
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: New temporary password
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tempPassword]
+                properties:
+                  tempPassword:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/content/{contentType}:
+    parameters:
+      - $ref: '#/components/parameters/AdminContentType'
+    get:
+      operationId: listAdminContent
+      summary: List moderatable content of a specific type (capped at 200)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: hidden
+          in: query
+          required: false
+          description: Pass "1" or "true" to only return hidden items.
+          schema:
+            type: string
+            enum: ["0", "1", "true", "false"]
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        '200':
+          description: Paged content listing for moderation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminContentItem'
+                  pagination:
+                    $ref: '#/components/schemas/AdminPagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/content/{contentType}/{contentId}/hide:
+    parameters:
+      - $ref: '#/components/parameters/AdminContentType'
+      - $ref: '#/components/parameters/AdminContentId'
+    post:
+      operationId: hideAdminContent
+      summary: Hide a piece of content from non-admin viewers
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Content hidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/content/{contentType}/{contentId}/unhide:
+    parameters:
+      - $ref: '#/components/parameters/AdminContentType'
+      - $ref: '#/components/parameters/AdminContentId'
+    post:
+      operationId: unhideAdminContent
+      summary: Un-hide a piece of content
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Content un-hidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/content/{contentType}/{contentId}:
+    parameters:
+      - $ref: '#/components/parameters/AdminContentType'
+      - $ref: '#/components/parameters/AdminContentId'
+    delete:
+      operationId: deleteAdminContent
+      summary: Permanently delete a piece of content (admin)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/reports:
+    get:
+      operationId: listAdminReports
+      summary: List content reports (admin moderation queue, capped at 200)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: When omitted, all statuses are returned.
+          schema:
+            type: string
+            enum: [open, resolved, dismissed]
+      responses:
+        '200':
+          description: Paged report queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReport'
+                  pagination:
+                    $ref: '#/components/schemas/AdminPagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/reports/{reportId}/resolve:
+    parameters:
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: resolveAdminReport
+      summary: Resolve, dismiss, or take moderation action on a report
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [dismiss, hide_content, delete_content, mark_resolved]
+                note:
+                  type: string
+                  maxLength: 2000
+              additionalProperties: false
+      responses:
+        '200':
+          description: Action recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, status]
+                properties:
+                  ok:
+                    type: boolean
+                  status:
+                    type: string
+                    enum: [resolved, dismissed]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/activity:
+    get:
+      operationId: listAdminActivity
+      summary: Admin audit log with optional admin user / action type filters
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      parameters:
+        - name: adminUserId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: actionType
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Paged audit log entries (newest first)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminActivityItem'
+                  pagination:
+                    $ref: '#/components/schemas/AdminPagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/activity/admins:
+    get:
+      operationId: listAdminActivityAdmins
+      summary: Distinct admins who have entries in the activity log (for filter dropdowns)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Distinct admins
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminWhoamiUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/masquerade/{userId}/start:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      operationId: startAdminMasquerade
+      summary: Begin masquerading as another user (admin)
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Masquerade started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  viewingAs:
+                    $ref: '#/components/schemas/AdminWhoamiUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/masquerade/stop:
+    post:
+      operationId: stopAdminMasquerade
+      summary: Stop the current masquerade and return to the real admin session
+      tags: [Admin]
+      security:
+        - clerkSession: []
+      responses:
+        '200':
+          description: Masquerade stopped
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   schemas:
     UserSearchResult:
@@ -6569,6 +7229,494 @@ components:
           type: string
           description: Optional hint about why this contact is eligible (e.g., teammate, follower).
 
+    AdminPagination:
+      type: object
+      required: [hasMore, totalCount]
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+        hasMore:
+          type: boolean
+        totalCount:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+
+    AdminWhoamiUser:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [athlete, parent, coach, admin]
+      additionalProperties: true
+
+    AdminUser:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+        - displayName
+        - email
+        - role
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [athlete, parent, coach, admin]
+        createdAt:
+          type: string
+          format: date-time
+        lastSignInAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        sport:
+          type: string
+          nullable: true
+        position:
+          type: string
+          nullable: true
+        jerseyNumber:
+          type: integer
+          nullable: true
+        grade:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        guardianEmail:
+          type: string
+          nullable: true
+        guardianConfirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+        requireTagConsent:
+          type: boolean
+
+    AdminCreateUserRequest:
+      type: object
+      required: [firstName, lastName, email, password, role]
+      additionalProperties: false
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        role:
+          type: string
+          enum: [athlete, parent, coach, admin]
+
+    AdminUpdateUserRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [athlete, parent, coach, admin]
+        sport:
+          type: string
+          nullable: true
+        position:
+          type: string
+          nullable: true
+        jerseyNumber:
+          type: integer
+          nullable: true
+        grade:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          maxLength: 5000
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        dateOfBirth:
+          type: string
+          nullable: true
+          description: ISO-8601 datetime; date-only forms are also accepted.
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        guardianEmail:
+          type: string
+          format: email
+          nullable: true
+        requireTagConsent:
+          type: boolean
+        clearGuardianConfirmation:
+          type: boolean
+
+    AdminContentItem:
+      type: object
+      required: [id, type, title, body, authorId, authorName, createdAt, hiddenAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [article, highlight, org_post, comment]
+        title:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+        authorId:
+          type: string
+          format: uuid
+          nullable: true
+        authorName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        hiddenAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateReportRequest:
+      type: object
+      required: [contentType, contentId, reason]
+      additionalProperties: false
+      properties:
+        contentType:
+          type: string
+          enum: [article, highlight, org_post, comment]
+        contentId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 120
+        note:
+          type: string
+          maxLength: 2000
+
+    CreateReportResponse:
+      type: object
+      required: [id, status, alreadyReported]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [open, resolved, dismissed]
+        alreadyReported:
+          type: boolean
+
+    AdminOkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    AdminReportContentSnippet:
+      type: object
+      required: [title, body, hiddenAt, deleted]
+      properties:
+        title:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+        hiddenAt:
+          type: string
+          format: date-time
+          nullable: true
+        deleted:
+          type: boolean
+
+    AdminReport:
+      type: object
+      required:
+        - id
+        - contentType
+        - contentId
+        - reason
+        - note
+        - status
+        - resolution
+        - createdAt
+        - resolvedAt
+        - reporter
+        - content
+      properties:
+        id:
+          type: string
+          format: uuid
+        contentType:
+          type: string
+          enum: [article, highlight, org_post, comment]
+        contentId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        note:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [open, resolved, dismissed]
+        resolution:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reporter:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AdminWhoamiUser'
+        content:
+          $ref: '#/components/schemas/AdminReportContentSnippet'
+
+    AdminActivityItem:
+      type: object
+      required: [id, actionType, createdAt, admin]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actionType:
+          type: string
+        targetType:
+          type: string
+          nullable: true
+        targetId:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        admin:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AdminWhoamiUser'
+
+    AdminAnalyticsResponse:
+      type: object
+      required: [totals, series, top]
+      properties:
+        totals:
+          type: object
+          additionalProperties: true
+          properties:
+            users:
+              type: integer
+            athletes:
+              type: integer
+            parents:
+              type: integer
+            coaches:
+              type: integer
+            admins:
+              type: integer
+            deletedUsers:
+              type: integer
+            organizations:
+              type: integer
+            teams:
+              type: integer
+            articles:
+              type: integer
+            hiddenArticles:
+              type: integer
+            highlights:
+              type: integer
+            hiddenHighlights:
+              type: integer
+            orgPosts:
+              type: integer
+            comments:
+              type: integer
+            messages:
+              type: integer
+            follows:
+              type: integer
+            userFollows:
+              type: integer
+            orgFollows:
+              type: integer
+            teamFollows:
+              type: integer
+            openReports:
+              type: integer
+            activeUsersLast30d:
+              type: integer
+        series:
+          type: object
+          required: [newUsersByDay, newPostsByDay, commentsByDay, activeSessionsByDay]
+          properties:
+            newUsersByDay:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminDayCount'
+            newPostsByDay:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminDayCount'
+            commentsByDay:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminDayCount'
+            activeSessionsByDay:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminDayCount'
+        top:
+          type: object
+          required: [followedOrganizations, followedUsers, postersThisWeek]
+          properties:
+            followedOrganizations:
+              type: array
+              items:
+                type: object
+                required: [orgId, name, count]
+                properties:
+                  orgId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                    nullable: true
+                  count:
+                    type: integer
+            followedUsers:
+              type: array
+              items:
+                type: object
+                required: [userId, name, count]
+                properties:
+                  userId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                    nullable: true
+                  email:
+                    type: string
+                    nullable: true
+                  count:
+                    type: integer
+            postersThisWeek:
+              type: array
+              items:
+                type: object
+                required: [userId, name, count]
+                properties:
+                  userId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                    nullable: true
+                  email:
+                    type: string
+                    nullable: true
+                  count:
+                    type: integer
+
+    AdminDayCount:
+      type: object
+      required: [day, count]
+      properties:
+        day:
+          type: string
+        count:
+          type: integer
+          minimum: 0
+
   responses:
     BadRequest:
       description: Validation error — malformed body, invalid params, or constraint violation
@@ -6799,6 +7947,20 @@ components:
         format: uuid
     LinkId:
       name: linkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdminContentType:
+      name: contentType
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [article, highlight, org_post, comment]
+    AdminContentId:
+      name: contentId
       in: path
       required: true
       schema:

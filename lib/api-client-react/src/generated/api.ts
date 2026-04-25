@@ -22,6 +22,10 @@ import type {
   AddTeamMemberRequest,
   AddressListResponse,
   AddressResponse,
+  AdminAnalyticsResponse,
+  AdminCreateUserRequest,
+  AdminOkResponse,
+  AdminUpdateUserRequest,
   ApproveJoinRequestBody,
   AssetResponse,
   AssetUploadRequest,
@@ -42,6 +46,8 @@ import type {
   CreatePhoneRequest,
   CreatePostRequest,
   CreatePostTags201,
+  CreateReportRequest,
+  CreateReportResponse,
   CreateTagsRequest,
   CreateTeamRequest,
   CreateTeamSeasonRequest,
@@ -54,6 +60,9 @@ import type {
   FollowSuggestionsResponse,
   FollowUserResponse,
   ForbiddenResponse,
+  GetMyReportForContent200,
+  GetMyReportForContentParams,
+  GetWhoami200,
   GuardianLinkResponse,
   InternalServerErrorResponse,
   InviteCreatePendingResponse,
@@ -65,6 +74,15 @@ import type {
   JoinLinkPreviewResponse,
   JoinLinkResponse,
   JoinRequestResponse,
+  ListAdminActivity200,
+  ListAdminActivityAdmins200,
+  ListAdminActivityParams,
+  ListAdminContent200,
+  ListAdminContentParams,
+  ListAdminReports200,
+  ListAdminReportsParams,
+  ListAdminUsers200,
+  ListAdminUsersParams,
   ListCommentReactorsParams,
   ListConversationsParams,
   ListFeedParams,
@@ -127,12 +145,17 @@ import type {
   PostRevisionResponse,
   PrivateUserResponse,
   PublicUserResponse,
+  ResetAdminUserPassword200,
+  ResolveAdminReport200,
+  ResolveAdminReportBody,
   SearchConversationContacts200,
   SearchConversationContactsParams,
   SearchUsers200,
   SearchUsersParams,
   SendMessageRequest,
   SetAssetIdRequest,
+  StartAdminMasquerade200,
+  StopAdminMasquerade200,
   TagResponse,
   TeamFollowResponse,
   TeamMemberResponse,
@@ -14767,3 +14790,1954 @@ export function useCrossEntitySearch<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get the currently authenticated session including masquerade state
+ */
+export const getGetWhoamiUrl = () => {
+  return `/api/v1/auth/whoami`;
+};
+
+export const getWhoami = async (
+  options?: RequestInit,
+): Promise<GetWhoami200> => {
+  return customFetch<GetWhoami200>(getGetWhoamiUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWhoamiQueryKey = () => {
+  return [`/api/v1/auth/whoami`] as const;
+};
+
+export const getGetWhoamiQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWhoami>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getWhoami>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWhoamiQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getWhoami>>> = ({
+    signal,
+  }) => getWhoami({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWhoami>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWhoamiQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWhoami>>
+>;
+export type GetWhoamiQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the currently authenticated session including masquerade state
+ */
+
+export function useGetWhoami<
+  TData = Awaited<ReturnType<typeof getWhoami>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getWhoami>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWhoamiQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary User-facing — report a piece of content for moderator review (deduped per user/content)
+ */
+export const getCreateContentReportUrl = () => {
+  return `/api/v1/reports`;
+};
+
+export const createContentReport = async (
+  createReportRequest: CreateReportRequest,
+  options?: RequestInit,
+): Promise<CreateReportResponse> => {
+  return customFetch<CreateReportResponse>(getCreateContentReportUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createReportRequest),
+  });
+};
+
+export const getCreateContentReportMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContentReport>>,
+    TError,
+    { data: BodyType<CreateReportRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createContentReport>>,
+  TError,
+  { data: BodyType<CreateReportRequest> },
+  TContext
+> => {
+  const mutationKey = ["createContentReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createContentReport>>,
+    { data: BodyType<CreateReportRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createContentReport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateContentReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createContentReport>>
+>;
+export type CreateContentReportMutationBody = BodyType<CreateReportRequest>;
+export type CreateContentReportMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+>;
+
+/**
+ * @summary User-facing — report a piece of content for moderator review (deduped per user/content)
+ */
+export const useCreateContentReport = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContentReport>>,
+    TError,
+    { data: BodyType<CreateReportRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createContentReport>>,
+  TError,
+  { data: BodyType<CreateReportRequest> },
+  TContext
+> => {
+  return useMutation(getCreateContentReportMutationOptions(options));
+};
+
+/**
+ * @summary Check whether the current user has already reported a specific piece of content
+ */
+export const getGetMyReportForContentUrl = (
+  params: GetMyReportForContentParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/reports/mine?${stringifiedParams}`
+    : `/api/v1/reports/mine`;
+};
+
+export const getMyReportForContent = async (
+  params: GetMyReportForContentParams,
+  options?: RequestInit,
+): Promise<GetMyReportForContent200> => {
+  return customFetch<GetMyReportForContent200>(
+    getGetMyReportForContentUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetMyReportForContentQueryKey = (
+  params?: GetMyReportForContentParams,
+) => {
+  return [`/api/v1/reports/mine`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMyReportForContentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyReportForContent>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetMyReportForContentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMyReportForContent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMyReportForContentQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMyReportForContent>>
+  > = ({ signal }) =>
+    getMyReportForContent(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyReportForContent>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyReportForContentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyReportForContent>>
+>;
+export type GetMyReportForContentQueryError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse
+>;
+
+/**
+ * @summary Check whether the current user has already reported a specific piece of content
+ */
+
+export function useGetMyReportForContent<
+  TData = Awaited<ReturnType<typeof getMyReportForContent>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetMyReportForContentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMyReportForContent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyReportForContentQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Admin dashboard analytics (totals, time series, top lists)
+ */
+export const getGetAdminAnalyticsUrl = () => {
+  return `/api/v1/admin/analytics`;
+};
+
+export const getAdminAnalytics = async (
+  options?: RequestInit,
+): Promise<AdminAnalyticsResponse> => {
+  return customFetch<AdminAnalyticsResponse>(getGetAdminAnalyticsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminAnalyticsQueryKey = () => {
+  return [`/api/v1/admin/analytics`] as const;
+};
+
+export const getGetAdminAnalyticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminAnalytics>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminAnalytics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminAnalyticsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminAnalytics>>
+  > = ({ signal }) => getAdminAnalytics({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminAnalytics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminAnalyticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminAnalytics>>
+>;
+export type GetAdminAnalyticsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary Admin dashboard analytics (totals, time series, top lists)
+ */
+
+export function useGetAdminAnalytics<
+  TData = Awaited<ReturnType<typeof getAdminAnalytics>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminAnalytics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminAnalyticsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List users (admin) with optional search, role filter, soft-deleted inclusion, and pagination
+ */
+export const getListAdminUsersUrl = (params?: ListAdminUsersParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/users?${stringifiedParams}`
+    : `/api/v1/admin/users`;
+};
+
+export const listAdminUsers = async (
+  params?: ListAdminUsersParams,
+  options?: RequestInit,
+): Promise<ListAdminUsers200> => {
+  return customFetch<ListAdminUsers200>(getListAdminUsersUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminUsersQueryKey = (params?: ListAdminUsersParams) => {
+  return [`/api/v1/admin/users`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminUsersQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsers>>> = ({
+    signal,
+  }) => listAdminUsers(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminUsers>>
+>;
+export type ListAdminUsersQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary List users (admin) with optional search, role filter, soft-deleted inclusion, and pagination
+ */
+
+export function useListAdminUsers<
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminUsersQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a user account (admin)
+ */
+export const getCreateAdminUserUrl = () => {
+  return `/api/v1/admin/users`;
+};
+
+export const createAdminUser = async (
+  adminCreateUserRequest: AdminCreateUserRequest,
+  options?: RequestInit,
+): Promise<PrivateUserResponse> => {
+  return customFetch<PrivateUserResponse>(getCreateAdminUserUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminCreateUserRequest),
+  });
+};
+
+export const getCreateAdminUserMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | ConflictResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAdminUser>>,
+    TError,
+    { data: BodyType<AdminCreateUserRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAdminUser>>,
+  TError,
+  { data: BodyType<AdminCreateUserRequest> },
+  TContext
+> => {
+  const mutationKey = ["createAdminUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAdminUser>>,
+    { data: BodyType<AdminCreateUserRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createAdminUser(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAdminUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAdminUser>>
+>;
+export type CreateAdminUserMutationBody = BodyType<AdminCreateUserRequest>;
+export type CreateAdminUserMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | ConflictResponse
+>;
+
+/**
+ * @summary Create a user account (admin)
+ */
+export const useCreateAdminUser = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | ConflictResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAdminUser>>,
+    TError,
+    { data: BodyType<AdminCreateUserRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAdminUser>>,
+  TError,
+  { data: BodyType<AdminCreateUserRequest> },
+  TContext
+> => {
+  return useMutation(getCreateAdminUserMutationOptions(options));
+};
+
+/**
+ * @summary Update a user's profile / role / guardian fields (admin)
+ */
+export const getUpdateAdminUserUrl = (userId: string) => {
+  return `/api/v1/admin/users/${userId}`;
+};
+
+export const updateAdminUser = async (
+  userId: string,
+  adminUpdateUserRequest: AdminUpdateUserRequest,
+  options?: RequestInit,
+): Promise<PrivateUserResponse> => {
+  return customFetch<PrivateUserResponse>(getUpdateAdminUserUrl(userId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminUpdateUserRequest),
+  });
+};
+
+export const getUpdateAdminUserMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminUser>>,
+    TError,
+    { userId: string; data: BodyType<AdminUpdateUserRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminUser>>,
+  TError,
+  { userId: string; data: BodyType<AdminUpdateUserRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminUser>>,
+    { userId: string; data: BodyType<AdminUpdateUserRequest> }
+  > = (props) => {
+    const { userId, data } = props ?? {};
+
+    return updateAdminUser(userId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminUser>>
+>;
+export type UpdateAdminUserMutationBody = BodyType<AdminUpdateUserRequest>;
+export type UpdateAdminUserMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Update a user's profile / role / guardian fields (admin)
+ */
+export const useUpdateAdminUser = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminUser>>,
+    TError,
+    { userId: string; data: BodyType<AdminUpdateUserRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminUser>>,
+  TError,
+  { userId: string; data: BodyType<AdminUpdateUserRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminUserMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete (deactivate) a user account
+ */
+export const getSoftDeleteAdminUserUrl = (userId: string) => {
+  return `/api/v1/admin/users/${userId}`;
+};
+
+export const softDeleteAdminUser = async (
+  userId: string,
+  options?: RequestInit,
+): Promise<PrivateUserResponse> => {
+  return customFetch<PrivateUserResponse>(getSoftDeleteAdminUserUrl(userId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getSoftDeleteAdminUserMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof softDeleteAdminUser>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof softDeleteAdminUser>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  const mutationKey = ["softDeleteAdminUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof softDeleteAdminUser>>,
+    { userId: string }
+  > = (props) => {
+    const { userId } = props ?? {};
+
+    return softDeleteAdminUser(userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SoftDeleteAdminUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof softDeleteAdminUser>>
+>;
+
+export type SoftDeleteAdminUserMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Soft-delete (deactivate) a user account
+ */
+export const useSoftDeleteAdminUser = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof softDeleteAdminUser>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof softDeleteAdminUser>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  return useMutation(getSoftDeleteAdminUserMutationOptions(options));
+};
+
+/**
+ * @summary Restore a soft-deleted user
+ */
+export const getRestoreAdminUserUrl = (userId: string) => {
+  return `/api/v1/admin/users/${userId}/restore`;
+};
+
+export const restoreAdminUser = async (
+  userId: string,
+  options?: RequestInit,
+): Promise<PrivateUserResponse> => {
+  return customFetch<PrivateUserResponse>(getRestoreAdminUserUrl(userId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRestoreAdminUserMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreAdminUser>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restoreAdminUser>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  const mutationKey = ["restoreAdminUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restoreAdminUser>>,
+    { userId: string }
+  > = (props) => {
+    const { userId } = props ?? {};
+
+    return restoreAdminUser(userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RestoreAdminUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof restoreAdminUser>>
+>;
+
+export type RestoreAdminUserMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Restore a soft-deleted user
+ */
+export const useRestoreAdminUser = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreAdminUser>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof restoreAdminUser>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  return useMutation(getRestoreAdminUserMutationOptions(options));
+};
+
+/**
+ * @summary Force-reset a user's password and revoke their existing sessions
+ */
+export const getResetAdminUserPasswordUrl = (userId: string) => {
+  return `/api/v1/admin/users/${userId}/reset-password`;
+};
+
+export const resetAdminUserPassword = async (
+  userId: string,
+  options?: RequestInit,
+): Promise<ResetAdminUserPassword200> => {
+  return customFetch<ResetAdminUserPassword200>(
+    getResetAdminUserPasswordUrl(userId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getResetAdminUserPasswordMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetAdminUserPassword>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetAdminUserPassword>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  const mutationKey = ["resetAdminUserPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetAdminUserPassword>>,
+    { userId: string }
+  > = (props) => {
+    const { userId } = props ?? {};
+
+    return resetAdminUserPassword(userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetAdminUserPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetAdminUserPassword>>
+>;
+
+export type ResetAdminUserPasswordMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Force-reset a user's password and revoke their existing sessions
+ */
+export const useResetAdminUserPassword = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetAdminUserPassword>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetAdminUserPassword>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  return useMutation(getResetAdminUserPasswordMutationOptions(options));
+};
+
+/**
+ * @summary List moderatable content of a specific type (capped at 200)
+ */
+export const getListAdminContentUrl = (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  params?: ListAdminContentParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/content/${contentType}?${stringifiedParams}`
+    : `/api/v1/admin/content/${contentType}`;
+};
+
+export const listAdminContent = async (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  params?: ListAdminContentParams,
+  options?: RequestInit,
+): Promise<ListAdminContent200> => {
+  return customFetch<ListAdminContent200>(
+    getListAdminContentUrl(contentType, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAdminContentQueryKey = (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  params?: ListAdminContentParams,
+) => {
+  return [
+    `/api/v1/admin/content/${contentType}`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListAdminContentQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminContent>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  params?: ListAdminContentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminContent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminContentQueryKey(contentType, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminContent>>
+  > = ({ signal }) =>
+    listAdminContent(contentType, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!contentType,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminContent>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminContentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminContent>>
+>;
+export type ListAdminContentQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary List moderatable content of a specific type (capped at 200)
+ */
+
+export function useListAdminContent<
+  TData = Awaited<ReturnType<typeof listAdminContent>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  params?: ListAdminContentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminContent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminContentQueryOptions(
+    contentType,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Hide a piece of content from non-admin viewers
+ */
+export const getHideAdminContentUrl = (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  contentId: string,
+) => {
+  return `/api/v1/admin/content/${contentType}/${contentId}/hide`;
+};
+
+export const hideAdminContent = async (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  contentId: string,
+  options?: RequestInit,
+): Promise<AdminOkResponse> => {
+  return customFetch<AdminOkResponse>(
+    getHideAdminContentUrl(contentType, contentId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getHideAdminContentMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof hideAdminContent>>,
+    TError,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof hideAdminContent>>,
+  TError,
+  {
+    contentType: "article" | "highlight" | "org_post" | "comment";
+    contentId: string;
+  },
+  TContext
+> => {
+  const mutationKey = ["hideAdminContent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof hideAdminContent>>,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    }
+  > = (props) => {
+    const { contentType, contentId } = props ?? {};
+
+    return hideAdminContent(contentType, contentId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type HideAdminContentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof hideAdminContent>>
+>;
+
+export type HideAdminContentMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Hide a piece of content from non-admin viewers
+ */
+export const useHideAdminContent = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof hideAdminContent>>,
+    TError,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof hideAdminContent>>,
+  TError,
+  {
+    contentType: "article" | "highlight" | "org_post" | "comment";
+    contentId: string;
+  },
+  TContext
+> => {
+  return useMutation(getHideAdminContentMutationOptions(options));
+};
+
+/**
+ * @summary Un-hide a piece of content
+ */
+export const getUnhideAdminContentUrl = (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  contentId: string,
+) => {
+  return `/api/v1/admin/content/${contentType}/${contentId}/unhide`;
+};
+
+export const unhideAdminContent = async (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  contentId: string,
+  options?: RequestInit,
+): Promise<AdminOkResponse> => {
+  return customFetch<AdminOkResponse>(
+    getUnhideAdminContentUrl(contentType, contentId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getUnhideAdminContentMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unhideAdminContent>>,
+    TError,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unhideAdminContent>>,
+  TError,
+  {
+    contentType: "article" | "highlight" | "org_post" | "comment";
+    contentId: string;
+  },
+  TContext
+> => {
+  const mutationKey = ["unhideAdminContent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unhideAdminContent>>,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    }
+  > = (props) => {
+    const { contentType, contentId } = props ?? {};
+
+    return unhideAdminContent(contentType, contentId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnhideAdminContentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unhideAdminContent>>
+>;
+
+export type UnhideAdminContentMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Un-hide a piece of content
+ */
+export const useUnhideAdminContent = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unhideAdminContent>>,
+    TError,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unhideAdminContent>>,
+  TError,
+  {
+    contentType: "article" | "highlight" | "org_post" | "comment";
+    contentId: string;
+  },
+  TContext
+> => {
+  return useMutation(getUnhideAdminContentMutationOptions(options));
+};
+
+/**
+ * @summary Permanently delete a piece of content (admin)
+ */
+export const getDeleteAdminContentUrl = (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  contentId: string,
+) => {
+  return `/api/v1/admin/content/${contentType}/${contentId}`;
+};
+
+export const deleteAdminContent = async (
+  contentType: "article" | "highlight" | "org_post" | "comment",
+  contentId: string,
+  options?: RequestInit,
+): Promise<AdminOkResponse> => {
+  return customFetch<AdminOkResponse>(
+    getDeleteAdminContentUrl(contentType, contentId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteAdminContentMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAdminContent>>,
+    TError,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAdminContent>>,
+  TError,
+  {
+    contentType: "article" | "highlight" | "org_post" | "comment";
+    contentId: string;
+  },
+  TContext
+> => {
+  const mutationKey = ["deleteAdminContent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAdminContent>>,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    }
+  > = (props) => {
+    const { contentType, contentId } = props ?? {};
+
+    return deleteAdminContent(contentType, contentId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAdminContentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAdminContent>>
+>;
+
+export type DeleteAdminContentMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Permanently delete a piece of content (admin)
+ */
+export const useDeleteAdminContent = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAdminContent>>,
+    TError,
+    {
+      contentType: "article" | "highlight" | "org_post" | "comment";
+      contentId: string;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAdminContent>>,
+  TError,
+  {
+    contentType: "article" | "highlight" | "org_post" | "comment";
+    contentId: string;
+  },
+  TContext
+> => {
+  return useMutation(getDeleteAdminContentMutationOptions(options));
+};
+
+/**
+ * @summary List content reports (admin moderation queue, capped at 200)
+ */
+export const getListAdminReportsUrl = (params?: ListAdminReportsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/reports?${stringifiedParams}`
+    : `/api/v1/admin/reports`;
+};
+
+export const listAdminReports = async (
+  params?: ListAdminReportsParams,
+  options?: RequestInit,
+): Promise<ListAdminReports200> => {
+  return customFetch<ListAdminReports200>(getListAdminReportsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminReportsQueryKey = (
+  params?: ListAdminReportsParams,
+) => {
+  return [`/api/v1/admin/reports`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminReportsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminReports>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(
+  params?: ListAdminReportsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminReports>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminReportsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminReports>>
+  > = ({ signal }) => listAdminReports(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminReports>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminReportsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminReports>>
+>;
+export type ListAdminReportsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary List content reports (admin moderation queue, capped at 200)
+ */
+
+export function useListAdminReports<
+  TData = Awaited<ReturnType<typeof listAdminReports>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(
+  params?: ListAdminReportsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminReports>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminReportsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Resolve, dismiss, or take moderation action on a report
+ */
+export const getResolveAdminReportUrl = (reportId: string) => {
+  return `/api/v1/admin/reports/${reportId}/resolve`;
+};
+
+export const resolveAdminReport = async (
+  reportId: string,
+  resolveAdminReportBody: ResolveAdminReportBody,
+  options?: RequestInit,
+): Promise<ResolveAdminReport200> => {
+  return customFetch<ResolveAdminReport200>(
+    getResolveAdminReportUrl(reportId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(resolveAdminReportBody),
+    },
+  );
+};
+
+export const getResolveAdminReportMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveAdminReport>>,
+    TError,
+    { reportId: string; data: BodyType<ResolveAdminReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resolveAdminReport>>,
+  TError,
+  { reportId: string; data: BodyType<ResolveAdminReportBody> },
+  TContext
+> => {
+  const mutationKey = ["resolveAdminReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resolveAdminReport>>,
+    { reportId: string; data: BodyType<ResolveAdminReportBody> }
+  > = (props) => {
+    const { reportId, data } = props ?? {};
+
+    return resolveAdminReport(reportId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResolveAdminReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resolveAdminReport>>
+>;
+export type ResolveAdminReportMutationBody = BodyType<ResolveAdminReportBody>;
+export type ResolveAdminReportMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Resolve, dismiss, or take moderation action on a report
+ */
+export const useResolveAdminReport = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveAdminReport>>,
+    TError,
+    { reportId: string; data: BodyType<ResolveAdminReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resolveAdminReport>>,
+  TError,
+  { reportId: string; data: BodyType<ResolveAdminReportBody> },
+  TContext
+> => {
+  return useMutation(getResolveAdminReportMutationOptions(options));
+};
+
+/**
+ * @summary Admin audit log with optional admin user / action type filters
+ */
+export const getListAdminActivityUrl = (params?: ListAdminActivityParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/activity?${stringifiedParams}`
+    : `/api/v1/admin/activity`;
+};
+
+export const listAdminActivity = async (
+  params?: ListAdminActivityParams,
+  options?: RequestInit,
+): Promise<ListAdminActivity200> => {
+  return customFetch<ListAdminActivity200>(getListAdminActivityUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminActivityQueryKey = (
+  params?: ListAdminActivityParams,
+) => {
+  return [`/api/v1/admin/activity`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminActivityQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminActivity>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(
+  params?: ListAdminActivityParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminActivity>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminActivityQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminActivity>>
+  > = ({ signal }) => listAdminActivity(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminActivity>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminActivityQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminActivity>>
+>;
+export type ListAdminActivityQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary Admin audit log with optional admin user / action type filters
+ */
+
+export function useListAdminActivity<
+  TData = Awaited<ReturnType<typeof listAdminActivity>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(
+  params?: ListAdminActivityParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminActivity>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminActivityQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Distinct admins who have entries in the activity log (for filter dropdowns)
+ */
+export const getListAdminActivityAdminsUrl = () => {
+  return `/api/v1/admin/activity/admins`;
+};
+
+export const listAdminActivityAdmins = async (
+  options?: RequestInit,
+): Promise<ListAdminActivityAdmins200> => {
+  return customFetch<ListAdminActivityAdmins200>(
+    getListAdminActivityAdminsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAdminActivityAdminsQueryKey = () => {
+  return [`/api/v1/admin/activity/admins`] as const;
+};
+
+export const getListAdminActivityAdminsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminActivityAdmins>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminActivityAdmins>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminActivityAdminsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminActivityAdmins>>
+  > = ({ signal }) => listAdminActivityAdmins({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminActivityAdmins>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminActivityAdminsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminActivityAdmins>>
+>;
+export type ListAdminActivityAdminsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary Distinct admins who have entries in the activity log (for filter dropdowns)
+ */
+
+export function useListAdminActivityAdmins<
+  TData = Awaited<ReturnType<typeof listAdminActivityAdmins>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminActivityAdmins>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminActivityAdminsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Begin masquerading as another user (admin)
+ */
+export const getStartAdminMasqueradeUrl = (userId: string) => {
+  return `/api/v1/admin/masquerade/${userId}/start`;
+};
+
+export const startAdminMasquerade = async (
+  userId: string,
+  options?: RequestInit,
+): Promise<StartAdminMasquerade200> => {
+  return customFetch<StartAdminMasquerade200>(
+    getStartAdminMasqueradeUrl(userId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getStartAdminMasqueradeMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startAdminMasquerade>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startAdminMasquerade>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  const mutationKey = ["startAdminMasquerade"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startAdminMasquerade>>,
+    { userId: string }
+  > = (props) => {
+    const { userId } = props ?? {};
+
+    return startAdminMasquerade(userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartAdminMasqueradeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startAdminMasquerade>>
+>;
+
+export type StartAdminMasqueradeMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Begin masquerading as another user (admin)
+ */
+export const useStartAdminMasquerade = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startAdminMasquerade>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof startAdminMasquerade>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  return useMutation(getStartAdminMasqueradeMutationOptions(options));
+};
+
+/**
+ * @summary Stop the current masquerade and return to the real admin session
+ */
+export const getStopAdminMasqueradeUrl = () => {
+  return `/api/v1/admin/masquerade/stop`;
+};
+
+export const stopAdminMasquerade = async (
+  options?: RequestInit,
+): Promise<StopAdminMasquerade200> => {
+  return customFetch<StopAdminMasquerade200>(getStopAdminMasqueradeUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getStopAdminMasqueradeMutationOptions = <
+  TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof stopAdminMasquerade>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof stopAdminMasquerade>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["stopAdminMasquerade"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof stopAdminMasquerade>>,
+    void
+  > = () => {
+    return stopAdminMasquerade(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StopAdminMasqueradeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof stopAdminMasquerade>>
+>;
+
+export type StopAdminMasqueradeMutationError = ErrorType<UnauthorizedResponse>;
+
+/**
+ * @summary Stop the current masquerade and return to the real admin session
+ */
+export const useStopAdminMasquerade = <
+  TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof stopAdminMasquerade>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof stopAdminMasquerade>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getStopAdminMasqueradeMutationOptions(options));
+};

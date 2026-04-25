@@ -21,6 +21,10 @@ import InviteAcceptPage from "@/pages/InviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import GuardianConfirmPage from "@/pages/GuardianConfirmPage";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminUsers from "@/pages/admin/AdminUsers";
+import AdminModeration from "@/pages/admin/AdminModeration";
+import AdminActivity from "@/pages/admin/AdminActivity";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +63,10 @@ function Router() {
             <Route path="/teams/:teamId" component={TeamPage} />
             <Route path="/users/:userId" component={UserProfilePage} />
             <Route path="/posts/:postId" component={PostPage} />
+            <Route path="/admin" component={AdminDashboard} />
+            <Route path="/admin/users" component={AdminUsers} />
+            <Route path="/admin/moderation" component={AdminModeration} />
+            <Route path="/admin/activity" component={AdminActivity} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

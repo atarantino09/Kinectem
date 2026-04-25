@@ -1892,6 +1892,370 @@ export interface ConversationContactResult {
   relationship?: string;
 }
 
+export interface AdminPagination {
+  /** @nullable */
+  nextCursor?: string | null;
+  hasMore: boolean;
+  /** @minimum 0 */
+  totalCount: number;
+  /** @minimum 1 */
+  limit?: number;
+  /** @minimum 0 */
+  offset?: number;
+}
+
+export type AdminWhoamiUserRole =
+  (typeof AdminWhoamiUserRole)[keyof typeof AdminWhoamiUserRole];
+
+export const AdminWhoamiUserRole = {
+  athlete: "athlete",
+  parent: "parent",
+  coach: "coach",
+  admin: "admin",
+} as const;
+
+export interface AdminWhoamiUser {
+  id: string;
+  name: string;
+  /** @nullable */
+  email: string | null;
+  role?: AdminWhoamiUserRole;
+  [key: string]: unknown;
+}
+
+export type AdminUserRole = (typeof AdminUserRole)[keyof typeof AdminUserRole];
+
+export const AdminUserRole = {
+  athlete: "athlete",
+  parent: "parent",
+  coach: "coach",
+  admin: "admin",
+} as const;
+
+export interface AdminUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  /** @nullable */
+  email: string | null;
+  role: AdminUserRole;
+  createdAt: string;
+  /** @nullable */
+  lastSignInAt?: string | null;
+  /** @nullable */
+  deletedAt?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** @nullable */
+  sport?: string | null;
+  /** @nullable */
+  position?: string | null;
+  /** @nullable */
+  jerseyNumber?: number | null;
+  /** @nullable */
+  grade?: string | null;
+  /** @nullable */
+  location?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  dateOfBirth?: string | null;
+  /** @nullable */
+  parentId?: string | null;
+  /** @nullable */
+  guardianEmail?: string | null;
+  /** @nullable */
+  guardianConfirmedAt?: string | null;
+  requireTagConsent?: boolean;
+}
+
+export type AdminCreateUserRequestRole =
+  (typeof AdminCreateUserRequestRole)[keyof typeof AdminCreateUserRequestRole];
+
+export const AdminCreateUserRequestRole = {
+  athlete: "athlete",
+  parent: "parent",
+  coach: "coach",
+  admin: "admin",
+} as const;
+
+export interface AdminCreateUserRequest {
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  firstName: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  lastName: string;
+  email: string;
+  /** @minLength 8 */
+  password: string;
+  role: AdminCreateUserRequestRole;
+}
+
+export type AdminUpdateUserRequestRole =
+  (typeof AdminUpdateUserRequestRole)[keyof typeof AdminUpdateUserRequestRole];
+
+export const AdminUpdateUserRequestRole = {
+  athlete: "athlete",
+  parent: "parent",
+  coach: "coach",
+  admin: "admin",
+} as const;
+
+export interface AdminUpdateUserRequest {
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  firstName?: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  lastName?: string;
+  email?: string;
+  role?: AdminUpdateUserRequestRole;
+  /** @nullable */
+  sport?: string | null;
+  /** @nullable */
+  position?: string | null;
+  /** @nullable */
+  jerseyNumber?: number | null;
+  /** @nullable */
+  grade?: string | null;
+  /** @nullable */
+  location?: string | null;
+  /**
+   * @maxLength 5000
+   * @nullable
+   */
+  bio?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /**
+   * ISO-8601 datetime; date-only forms are also accepted.
+   * @nullable
+   */
+  dateOfBirth?: string | null;
+  /** @nullable */
+  parentId?: string | null;
+  /** @nullable */
+  guardianEmail?: string | null;
+  requireTagConsent?: boolean;
+  clearGuardianConfirmation?: boolean;
+}
+
+export type AdminContentItemType =
+  (typeof AdminContentItemType)[keyof typeof AdminContentItemType];
+
+export const AdminContentItemType = {
+  article: "article",
+  highlight: "highlight",
+  org_post: "org_post",
+  comment: "comment",
+} as const;
+
+export interface AdminContentItem {
+  id: string;
+  type: AdminContentItemType;
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  body: string | null;
+  /** @nullable */
+  authorId: string | null;
+  /** @nullable */
+  authorName: string | null;
+  createdAt: string;
+  /** @nullable */
+  hiddenAt: string | null;
+}
+
+export type CreateReportRequestContentType =
+  (typeof CreateReportRequestContentType)[keyof typeof CreateReportRequestContentType];
+
+export const CreateReportRequestContentType = {
+  article: "article",
+  highlight: "highlight",
+  org_post: "org_post",
+  comment: "comment",
+} as const;
+
+export interface CreateReportRequest {
+  contentType: CreateReportRequestContentType;
+  contentId: string;
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  reason: string;
+  /** @maxLength 2000 */
+  note?: string;
+}
+
+export type CreateReportResponseStatus =
+  (typeof CreateReportResponseStatus)[keyof typeof CreateReportResponseStatus];
+
+export const CreateReportResponseStatus = {
+  open: "open",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export interface CreateReportResponse {
+  id: string;
+  status: CreateReportResponseStatus;
+  alreadyReported: boolean;
+}
+
+export interface AdminOkResponse {
+  ok: boolean;
+}
+
+export interface AdminReportContentSnippet {
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  body: string | null;
+  /** @nullable */
+  hiddenAt: string | null;
+  deleted: boolean;
+}
+
+export type AdminReportContentType =
+  (typeof AdminReportContentType)[keyof typeof AdminReportContentType];
+
+export const AdminReportContentType = {
+  article: "article",
+  highlight: "highlight",
+  org_post: "org_post",
+  comment: "comment",
+} as const;
+
+export type AdminReportStatus =
+  (typeof AdminReportStatus)[keyof typeof AdminReportStatus];
+
+export const AdminReportStatus = {
+  open: "open",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export interface AdminReport {
+  id: string;
+  contentType: AdminReportContentType;
+  contentId: string;
+  reason: string;
+  /** @nullable */
+  note: string | null;
+  status: AdminReportStatus;
+  /** @nullable */
+  resolution: string | null;
+  createdAt: string;
+  /** @nullable */
+  resolvedAt: string | null;
+  reporter: AdminWhoamiUser | null;
+  content: AdminReportContentSnippet;
+}
+
+/**
+ * @nullable
+ */
+export type AdminActivityItemMetadata = { [key: string]: unknown } | null;
+
+export interface AdminActivityItem {
+  id: string;
+  actionType: string;
+  /** @nullable */
+  targetType?: string | null;
+  /** @nullable */
+  targetId?: string | null;
+  /** @nullable */
+  metadata?: AdminActivityItemMetadata;
+  createdAt: string;
+  admin: AdminWhoamiUser | null;
+}
+
+export type AdminAnalyticsResponseTotals = {
+  users?: number;
+  athletes?: number;
+  parents?: number;
+  coaches?: number;
+  admins?: number;
+  deletedUsers?: number;
+  organizations?: number;
+  teams?: number;
+  articles?: number;
+  hiddenArticles?: number;
+  highlights?: number;
+  hiddenHighlights?: number;
+  orgPosts?: number;
+  comments?: number;
+  messages?: number;
+  follows?: number;
+  userFollows?: number;
+  orgFollows?: number;
+  teamFollows?: number;
+  openReports?: number;
+  activeUsersLast30d?: number;
+  [key: string]: unknown;
+};
+
+export interface AdminDayCount {
+  day: string;
+  /** @minimum 0 */
+  count: number;
+}
+
+export type AdminAnalyticsResponseSeries = {
+  newUsersByDay: AdminDayCount[];
+  newPostsByDay: AdminDayCount[];
+  commentsByDay: AdminDayCount[];
+  activeSessionsByDay: AdminDayCount[];
+};
+
+export type AdminAnalyticsResponseTopFollowedOrganizationsItem = {
+  orgId: string;
+  /** @nullable */
+  name: string | null;
+  count: number;
+};
+
+export type AdminAnalyticsResponseTopFollowedUsersItem = {
+  userId: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email?: string | null;
+  count: number;
+};
+
+export type AdminAnalyticsResponseTopPostersThisWeekItem = {
+  userId: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email?: string | null;
+  count: number;
+};
+
+export type AdminAnalyticsResponseTop = {
+  followedOrganizations: AdminAnalyticsResponseTopFollowedOrganizationsItem[];
+  followedUsers: AdminAnalyticsResponseTopFollowedUsersItem[];
+  postersThisWeek: AdminAnalyticsResponseTopPostersThisWeekItem[];
+};
+
+export interface AdminAnalyticsResponse {
+  totals: AdminAnalyticsResponseTotals;
+  series: AdminAnalyticsResponseSeries;
+  top: AdminAnalyticsResponseTop;
+}
+
 /**
  * Validation error — malformed body, invalid params, or constraint violation
  */
@@ -2407,4 +2771,206 @@ export type CrossEntitySearch200 = {
   users?: UserSearchSection;
   organizations?: OrgSearchSection;
   teams?: TeamSearchSection;
+};
+
+export type GetWhoami200 = {
+  authenticated: boolean;
+  isMasquerading?: boolean;
+  realUser?: AdminWhoamiUser;
+  viewingAs?: AdminWhoamiUser | null;
+  [key: string]: unknown;
+};
+
+export type GetMyReportForContentParams = {
+  contentType: GetMyReportForContentContentType;
+  contentId: string;
+};
+
+export type GetMyReportForContentContentType =
+  (typeof GetMyReportForContentContentType)[keyof typeof GetMyReportForContentContentType];
+
+export const GetMyReportForContentContentType = {
+  article: "article",
+  highlight: "highlight",
+  org_post: "org_post",
+  comment: "comment",
+} as const;
+
+/**
+ * @nullable
+ */
+export type GetMyReportForContent200Report = {
+  id: string;
+  reason: string;
+  /** @nullable */
+  note: string | null;
+  status: "open" | "resolved" | "dismissed";
+  createdAt: string;
+} | null;
+
+export type GetMyReportForContent200 = {
+  alreadyReported: boolean;
+  /** @nullable */
+  report: GetMyReportForContent200Report;
+};
+
+export type ListAdminUsersParams = {
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+  role?: ListAdminUsersRole;
+  /**
+   * Pass "1" or "true" to include soft-deleted users in the result.
+   */
+  includeDeleted?: ListAdminUsersIncludeDeleted;
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+};
+
+export type ListAdminUsersRole =
+  (typeof ListAdminUsersRole)[keyof typeof ListAdminUsersRole];
+
+export const ListAdminUsersRole = {
+  athlete: "athlete",
+  parent: "parent",
+  coach: "coach",
+  admin: "admin",
+} as const;
+
+export type ListAdminUsersIncludeDeleted =
+  (typeof ListAdminUsersIncludeDeleted)[keyof typeof ListAdminUsersIncludeDeleted];
+
+export const ListAdminUsersIncludeDeleted = {
+  NUMBER_0: "0",
+  NUMBER_1: "1",
+  true: "true",
+  false: "false",
+} as const;
+
+export type ListAdminUsers200 = {
+  data: AdminUser[];
+  pagination: AdminPagination;
+};
+
+export type ResetAdminUserPassword200 = {
+  tempPassword: string;
+};
+
+export type ListAdminContentParams = {
+  /**
+   * Pass "1" or "true" to only return hidden items.
+   */
+  hidden?: ListAdminContentHidden;
+  /**
+   * @maxLength 200
+   */
+  q?: string;
+};
+
+export type ListAdminContentHidden =
+  (typeof ListAdminContentHidden)[keyof typeof ListAdminContentHidden];
+
+export const ListAdminContentHidden = {
+  NUMBER_0: "0",
+  NUMBER_1: "1",
+  true: "true",
+  false: "false",
+} as const;
+
+export type ListAdminContent200 = {
+  data: AdminContentItem[];
+  pagination: AdminPagination;
+};
+
+export type ListAdminReportsParams = {
+  /**
+   * When omitted, all statuses are returned.
+   */
+  status?: ListAdminReportsStatus;
+};
+
+export type ListAdminReportsStatus =
+  (typeof ListAdminReportsStatus)[keyof typeof ListAdminReportsStatus];
+
+export const ListAdminReportsStatus = {
+  open: "open",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export type ListAdminReports200 = {
+  data: AdminReport[];
+  pagination: AdminPagination;
+};
+
+export type ResolveAdminReportBodyAction =
+  (typeof ResolveAdminReportBodyAction)[keyof typeof ResolveAdminReportBodyAction];
+
+export const ResolveAdminReportBodyAction = {
+  dismiss: "dismiss",
+  hide_content: "hide_content",
+  delete_content: "delete_content",
+  mark_resolved: "mark_resolved",
+} as const;
+
+export type ResolveAdminReportBody = {
+  action: ResolveAdminReportBodyAction;
+  /** @maxLength 2000 */
+  note?: string;
+};
+
+export type ResolveAdminReport200Status =
+  (typeof ResolveAdminReport200Status)[keyof typeof ResolveAdminReport200Status];
+
+export const ResolveAdminReport200Status = {
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export type ResolveAdminReport200 = {
+  ok: boolean;
+  status: ResolveAdminReport200Status;
+};
+
+export type ListAdminActivityParams = {
+  adminUserId?: string;
+  /**
+   * @maxLength 100
+   */
+  actionType?: string;
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+};
+
+export type ListAdminActivity200 = {
+  data: AdminActivityItem[];
+  pagination: AdminPagination;
+};
+
+export type ListAdminActivityAdmins200 = {
+  data: AdminWhoamiUser[];
+};
+
+export type StartAdminMasquerade200 = {
+  ok: boolean;
+  viewingAs?: AdminWhoamiUser;
+};
+
+export type StopAdminMasquerade200 = {
+  ok: boolean;
 };

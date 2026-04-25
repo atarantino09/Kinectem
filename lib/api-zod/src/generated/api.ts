@@ -4509,3 +4509,725 @@ export const CrossEntitySearchResponse = zod.object({
     })
     .optional(),
 });
+
+/**
+ * @summary Get the currently authenticated session including masquerade state
+ */
+export const GetWhoamiResponse = zod.object({
+  authenticated: zod.boolean(),
+  isMasquerading: zod.boolean().optional(),
+  realUser: zod
+    .object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      email: zod.string().nullable(),
+      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+    })
+    .optional(),
+  viewingAs: zod
+    .object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      email: zod.string().nullable(),
+      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+    })
+    .nullish(),
+});
+
+/**
+ * @summary User-facing — report a piece of content for moderator review (deduped per user/content)
+ */
+export const createContentReportBodyReasonMax = 120;
+
+export const createContentReportBodyNoteMax = 2000;
+
+export const CreateContentReportBody = zod.object({
+  contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+  contentId: zod.string().uuid(),
+  reason: zod.string().min(1).max(createContentReportBodyReasonMax),
+  note: zod.string().max(createContentReportBodyNoteMax).optional(),
+});
+
+export const CreateContentReportResponse = zod.object({
+  id: zod.string().uuid(),
+  status: zod.enum(["open", "resolved", "dismissed"]),
+  alreadyReported: zod.boolean(),
+});
+
+/**
+ * @summary Check whether the current user has already reported a specific piece of content
+ */
+export const GetMyReportForContentQueryParams = zod.object({
+  contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+  contentId: zod.coerce.string().uuid(),
+});
+
+export const GetMyReportForContentResponse = zod.object({
+  alreadyReported: zod.boolean(),
+  report: zod
+    .object({
+      id: zod.string().uuid(),
+      reason: zod.string(),
+      note: zod.string().nullable(),
+      status: zod.enum(["open", "resolved", "dismissed"]),
+      createdAt: zod.coerce.date(),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Admin dashboard analytics (totals, time series, top lists)
+ */
+export const getAdminAnalyticsResponseSeriesNewUsersByDayItemCountMin = 0;
+
+export const getAdminAnalyticsResponseSeriesNewPostsByDayItemCountMin = 0;
+
+export const getAdminAnalyticsResponseSeriesCommentsByDayItemCountMin = 0;
+
+export const getAdminAnalyticsResponseSeriesActiveSessionsByDayItemCountMin = 0;
+
+export const GetAdminAnalyticsResponse = zod.object({
+  totals: zod.object({
+    users: zod.number().optional(),
+    athletes: zod.number().optional(),
+    parents: zod.number().optional(),
+    coaches: zod.number().optional(),
+    admins: zod.number().optional(),
+    deletedUsers: zod.number().optional(),
+    organizations: zod.number().optional(),
+    teams: zod.number().optional(),
+    articles: zod.number().optional(),
+    hiddenArticles: zod.number().optional(),
+    highlights: zod.number().optional(),
+    hiddenHighlights: zod.number().optional(),
+    orgPosts: zod.number().optional(),
+    comments: zod.number().optional(),
+    messages: zod.number().optional(),
+    follows: zod.number().optional(),
+    userFollows: zod.number().optional(),
+    orgFollows: zod.number().optional(),
+    teamFollows: zod.number().optional(),
+    openReports: zod.number().optional(),
+    activeUsersLast30d: zod.number().optional(),
+  }),
+  series: zod.object({
+    newUsersByDay: zod.array(
+      zod.object({
+        day: zod.string(),
+        count: zod
+          .number()
+          .min(getAdminAnalyticsResponseSeriesNewUsersByDayItemCountMin),
+      }),
+    ),
+    newPostsByDay: zod.array(
+      zod.object({
+        day: zod.string(),
+        count: zod
+          .number()
+          .min(getAdminAnalyticsResponseSeriesNewPostsByDayItemCountMin),
+      }),
+    ),
+    commentsByDay: zod.array(
+      zod.object({
+        day: zod.string(),
+        count: zod
+          .number()
+          .min(getAdminAnalyticsResponseSeriesCommentsByDayItemCountMin),
+      }),
+    ),
+    activeSessionsByDay: zod.array(
+      zod.object({
+        day: zod.string(),
+        count: zod
+          .number()
+          .min(getAdminAnalyticsResponseSeriesActiveSessionsByDayItemCountMin),
+      }),
+    ),
+  }),
+  top: zod.object({
+    followedOrganizations: zod.array(
+      zod.object({
+        orgId: zod.string().uuid(),
+        name: zod.string().nullable(),
+        count: zod.number(),
+      }),
+    ),
+    followedUsers: zod.array(
+      zod.object({
+        userId: zod.string().uuid(),
+        name: zod.string().nullable(),
+        email: zod.string().nullish(),
+        count: zod.number(),
+      }),
+    ),
+    postersThisWeek: zod.array(
+      zod.object({
+        userId: zod.string().uuid(),
+        name: zod.string().nullable(),
+        email: zod.string().nullish(),
+        count: zod.number(),
+      }),
+    ),
+  }),
+});
+
+/**
+ * @summary List users (admin) with optional search, role filter, soft-deleted inclusion, and pagination
+ */
+export const listAdminUsersQueryQMax = 200;
+
+export const listAdminUsersQueryLimitDefault = 50;
+export const listAdminUsersQueryLimitMax = 200;
+
+export const listAdminUsersQueryOffsetDefault = 0;
+export const listAdminUsersQueryOffsetMin = 0;
+
+export const ListAdminUsersQueryParams = zod.object({
+  q: zod.coerce.string().max(listAdminUsersQueryQMax).optional(),
+  role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+  includeDeleted: zod
+    .enum(["0", "1", "true", "false"])
+    .optional()
+    .describe(
+      'Pass \"1\" or \"true\" to include soft-deleted users in the result.',
+    ),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listAdminUsersQueryLimitMax)
+    .default(listAdminUsersQueryLimitDefault),
+  offset: zod.coerce
+    .number()
+    .min(listAdminUsersQueryOffsetMin)
+    .default(listAdminUsersQueryOffsetDefault),
+});
+
+export const listAdminUsersResponsePaginationTotalCountMin = 0;
+
+export const listAdminUsersResponsePaginationOffsetMin = 0;
+
+export const ListAdminUsersResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      displayName: zod.string(),
+      email: zod.string().nullable(),
+      role: zod.enum(["athlete", "parent", "coach", "admin"]),
+      createdAt: zod.coerce.date(),
+      lastSignInAt: zod.coerce.date().nullish(),
+      deletedAt: zod.coerce.date().nullish(),
+      avatarUrl: zod.string().nullish(),
+      sport: zod.string().nullish(),
+      position: zod.string().nullish(),
+      jerseyNumber: zod.number().nullish(),
+      grade: zod.string().nullish(),
+      location: zod.string().nullish(),
+      bio: zod.string().nullish(),
+      dateOfBirth: zod.coerce.date().nullish(),
+      parentId: zod.string().uuid().nullish(),
+      guardianEmail: zod.string().nullish(),
+      guardianConfirmedAt: zod.coerce.date().nullish(),
+      requireTagConsent: zod.boolean().optional(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().min(listAdminUsersResponsePaginationTotalCountMin),
+    limit: zod.number().min(1).optional(),
+    offset: zod
+      .number()
+      .min(listAdminUsersResponsePaginationOffsetMin)
+      .optional(),
+  }),
+});
+
+/**
+ * @summary Create a user account (admin)
+ */
+export const createAdminUserBodyFirstNameMax = 100;
+
+export const createAdminUserBodyLastNameMax = 100;
+
+export const createAdminUserBodyPasswordMin = 8;
+
+export const CreateAdminUserBody = zod.object({
+  firstName: zod.string().min(1).max(createAdminUserBodyFirstNameMax),
+  lastName: zod.string().min(1).max(createAdminUserBodyLastNameMax),
+  email: zod.string().email(),
+  password: zod.string().min(createAdminUserBodyPasswordMin),
+  role: zod.enum(["athlete", "parent", "coach", "admin"]),
+});
+
+/**
+ * @summary Update a user's profile / role / guardian fields (admin)
+ */
+export const UpdateAdminUserParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const updateAdminUserBodyFirstNameMax = 100;
+
+export const updateAdminUserBodyLastNameMax = 100;
+
+export const updateAdminUserBodyBioMax = 5000;
+
+export const UpdateAdminUserBody = zod.object({
+  firstName: zod
+    .string()
+    .min(1)
+    .max(updateAdminUserBodyFirstNameMax)
+    .optional(),
+  lastName: zod.string().min(1).max(updateAdminUserBodyLastNameMax).optional(),
+  email: zod.string().email().optional(),
+  role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+  sport: zod.string().nullish(),
+  position: zod.string().nullish(),
+  jerseyNumber: zod.number().nullish(),
+  grade: zod.string().nullish(),
+  location: zod.string().nullish(),
+  bio: zod.string().max(updateAdminUserBodyBioMax).nullish(),
+  avatarUrl: zod.string().nullish(),
+  dateOfBirth: zod
+    .string()
+    .nullish()
+    .describe("ISO-8601 datetime; date-only forms are also accepted."),
+  parentId: zod.string().uuid().nullish(),
+  guardianEmail: zod.string().email().nullish(),
+  requireTagConsent: zod.boolean().optional(),
+  clearGuardianConfirmation: zod.boolean().optional(),
+});
+
+export const updateAdminUserResponseOneNicknameMax = 100;
+
+export const updateAdminUserResponseOneBioMax = 1000;
+
+export const updateAdminUserResponseOneFollowerCountMin = 0;
+
+export const updateAdminUserResponseOneFollowingCountMin = 0;
+
+export const UpdateAdminUserResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    nickname: zod.string().max(updateAdminUserResponseOneNicknameMax).nullish(),
+    bio: zod.string().max(updateAdminUserResponseOneBioMax).nullish(),
+    avatarUrl: zod.string().url().nullish(),
+    coverPhotoUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+      ),
+    isOwnProfile: zod.boolean(),
+    isFollowing: zod.boolean().optional(),
+    isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(updateAdminUserResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(updateAdminUserResponseOneFollowingCountMin)
+      .optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      email: zod.string().email(),
+      dateOfBirth: zod.coerce.date().nullish(),
+    }),
+  );
+
+/**
+ * @summary Soft-delete (deactivate) a user account
+ */
+export const SoftDeleteAdminUserParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const softDeleteAdminUserResponseOneNicknameMax = 100;
+
+export const softDeleteAdminUserResponseOneBioMax = 1000;
+
+export const softDeleteAdminUserResponseOneFollowerCountMin = 0;
+
+export const softDeleteAdminUserResponseOneFollowingCountMin = 0;
+
+export const SoftDeleteAdminUserResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    nickname: zod
+      .string()
+      .max(softDeleteAdminUserResponseOneNicknameMax)
+      .nullish(),
+    bio: zod.string().max(softDeleteAdminUserResponseOneBioMax).nullish(),
+    avatarUrl: zod.string().url().nullish(),
+    coverPhotoUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+      ),
+    isOwnProfile: zod.boolean(),
+    isFollowing: zod.boolean().optional(),
+    isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(softDeleteAdminUserResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(softDeleteAdminUserResponseOneFollowingCountMin)
+      .optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      email: zod.string().email(),
+      dateOfBirth: zod.coerce.date().nullish(),
+    }),
+  );
+
+/**
+ * @summary Restore a soft-deleted user
+ */
+export const RestoreAdminUserParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const restoreAdminUserResponseOneNicknameMax = 100;
+
+export const restoreAdminUserResponseOneBioMax = 1000;
+
+export const restoreAdminUserResponseOneFollowerCountMin = 0;
+
+export const restoreAdminUserResponseOneFollowingCountMin = 0;
+
+export const RestoreAdminUserResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    firstName: zod.string(),
+    lastName: zod.string(),
+    nickname: zod
+      .string()
+      .max(restoreAdminUserResponseOneNicknameMax)
+      .nullish(),
+    bio: zod.string().max(restoreAdminUserResponseOneBioMax).nullish(),
+    avatarUrl: zod.string().url().nullish(),
+    coverPhotoUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+      ),
+    isOwnProfile: zod.boolean(),
+    isFollowing: zod.boolean().optional(),
+    isConnection: zod.boolean().optional(),
+    followerCount: zod
+      .number()
+      .min(restoreAdminUserResponseOneFollowerCountMin)
+      .optional(),
+    followingCount: zod
+      .number()
+      .min(restoreAdminUserResponseOneFollowingCountMin)
+      .optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      email: zod.string().email(),
+      dateOfBirth: zod.coerce.date().nullish(),
+    }),
+  );
+
+/**
+ * @summary Force-reset a user's password and revoke their existing sessions
+ */
+export const ResetAdminUserPasswordParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const ResetAdminUserPasswordResponse = zod.object({
+  tempPassword: zod.string(),
+});
+
+/**
+ * @summary List moderatable content of a specific type (capped at 200)
+ */
+export const ListAdminContentParams = zod.object({
+  contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+});
+
+export const listAdminContentQueryQMax = 200;
+
+export const ListAdminContentQueryParams = zod.object({
+  hidden: zod
+    .enum(["0", "1", "true", "false"])
+    .optional()
+    .describe('Pass \"1\" or \"true\" to only return hidden items.'),
+  q: zod.coerce.string().max(listAdminContentQueryQMax).optional(),
+});
+
+export const listAdminContentResponsePaginationTotalCountMin = 0;
+
+export const listAdminContentResponsePaginationOffsetMin = 0;
+
+export const ListAdminContentResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      type: zod.enum(["article", "highlight", "org_post", "comment"]),
+      title: zod.string().nullable(),
+      body: zod.string().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      authorName: zod.string().nullable(),
+      createdAt: zod.coerce.date(),
+      hiddenAt: zod.coerce.date().nullable(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod
+      .number()
+      .min(listAdminContentResponsePaginationTotalCountMin),
+    limit: zod.number().min(1).optional(),
+    offset: zod
+      .number()
+      .min(listAdminContentResponsePaginationOffsetMin)
+      .optional(),
+  }),
+});
+
+/**
+ * @summary Hide a piece of content from non-admin viewers
+ */
+export const HideAdminContentParams = zod.object({
+  contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+  contentId: zod.coerce.string().uuid(),
+});
+
+export const HideAdminContentResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Un-hide a piece of content
+ */
+export const UnhideAdminContentParams = zod.object({
+  contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+  contentId: zod.coerce.string().uuid(),
+});
+
+export const UnhideAdminContentResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Permanently delete a piece of content (admin)
+ */
+export const DeleteAdminContentParams = zod.object({
+  contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+  contentId: zod.coerce.string().uuid(),
+});
+
+export const DeleteAdminContentResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary List content reports (admin moderation queue, capped at 200)
+ */
+export const ListAdminReportsQueryParams = zod.object({
+  status: zod
+    .enum(["open", "resolved", "dismissed"])
+    .optional()
+    .describe("When omitted, all statuses are returned."),
+});
+
+export const listAdminReportsResponsePaginationTotalCountMin = 0;
+
+export const listAdminReportsResponsePaginationOffsetMin = 0;
+
+export const ListAdminReportsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      contentType: zod.enum(["article", "highlight", "org_post", "comment"]),
+      contentId: zod.string().uuid(),
+      reason: zod.string(),
+      note: zod.string().nullable(),
+      status: zod.enum(["open", "resolved", "dismissed"]),
+      resolution: zod.string().nullable(),
+      createdAt: zod.coerce.date(),
+      resolvedAt: zod.coerce.date().nullable(),
+      reporter: zod
+        .object({
+          id: zod.string().uuid(),
+          name: zod.string(),
+          email: zod.string().nullable(),
+          role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+        })
+        .nullable(),
+      content: zod.object({
+        title: zod.string().nullable(),
+        body: zod.string().nullable(),
+        hiddenAt: zod.coerce.date().nullable(),
+        deleted: zod.boolean(),
+      }),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod
+      .number()
+      .min(listAdminReportsResponsePaginationTotalCountMin),
+    limit: zod.number().min(1).optional(),
+    offset: zod
+      .number()
+      .min(listAdminReportsResponsePaginationOffsetMin)
+      .optional(),
+  }),
+});
+
+/**
+ * @summary Resolve, dismiss, or take moderation action on a report
+ */
+export const ResolveAdminReportParams = zod.object({
+  reportId: zod.coerce.string().uuid(),
+});
+
+export const resolveAdminReportBodyNoteMax = 2000;
+
+export const ResolveAdminReportBody = zod.object({
+  action: zod.enum([
+    "dismiss",
+    "hide_content",
+    "delete_content",
+    "mark_resolved",
+  ]),
+  note: zod.string().max(resolveAdminReportBodyNoteMax).optional(),
+});
+
+export const ResolveAdminReportResponse = zod.object({
+  ok: zod.boolean(),
+  status: zod.enum(["resolved", "dismissed"]),
+});
+
+/**
+ * @summary Admin audit log with optional admin user / action type filters
+ */
+export const listAdminActivityQueryActionTypeMax = 100;
+
+export const listAdminActivityQueryLimitDefault = 100;
+export const listAdminActivityQueryLimitMax = 200;
+
+export const listAdminActivityQueryOffsetDefault = 0;
+export const listAdminActivityQueryOffsetMin = 0;
+
+export const ListAdminActivityQueryParams = zod.object({
+  adminUserId: zod.coerce.string().uuid().optional(),
+  actionType: zod.coerce
+    .string()
+    .max(listAdminActivityQueryActionTypeMax)
+    .optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listAdminActivityQueryLimitMax)
+    .default(listAdminActivityQueryLimitDefault),
+  offset: zod.coerce
+    .number()
+    .min(listAdminActivityQueryOffsetMin)
+    .default(listAdminActivityQueryOffsetDefault),
+});
+
+export const listAdminActivityResponsePaginationTotalCountMin = 0;
+
+export const listAdminActivityResponsePaginationOffsetMin = 0;
+
+export const ListAdminActivityResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      actionType: zod.string(),
+      targetType: zod.string().nullish(),
+      targetId: zod.string().nullish(),
+      metadata: zod.record(zod.string(), zod.unknown()).nullish(),
+      createdAt: zod.coerce.date(),
+      admin: zod
+        .object({
+          id: zod.string().uuid(),
+          name: zod.string(),
+          email: zod.string().nullable(),
+          role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+        })
+        .nullable(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod
+      .number()
+      .min(listAdminActivityResponsePaginationTotalCountMin),
+    limit: zod.number().min(1).optional(),
+    offset: zod
+      .number()
+      .min(listAdminActivityResponsePaginationOffsetMin)
+      .optional(),
+  }),
+});
+
+/**
+ * @summary Distinct admins who have entries in the activity log (for filter dropdowns)
+ */
+export const ListAdminActivityAdminsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      email: zod.string().nullable(),
+      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Begin masquerading as another user (admin)
+ */
+export const StartAdminMasqueradeParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const StartAdminMasqueradeResponse = zod.object({
+  ok: zod.boolean(),
+  viewingAs: zod
+    .object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      email: zod.string().nullable(),
+      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Stop the current masquerade and return to the real admin session
+ */
+export const StopAdminMasqueradeResponse = zod.object({
+  ok: zod.boolean(),
+});
