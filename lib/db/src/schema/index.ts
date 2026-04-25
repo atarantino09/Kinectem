@@ -155,6 +155,7 @@ export const rosterEntries = pgTable("roster_entries", {
   status: rosterStatusEnum("status").notNull().default("accepted"),
   position: text("position"),
   jerseyNumber: integer("jersey_number"),
+  invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

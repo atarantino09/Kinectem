@@ -2486,6 +2486,7 @@ router.post(
           role: dbRole,
           status: "pending",
           position: positionRaw === "coach" ? null : positionRaw,
+          invitedById: me.id,
         })
         .returning();
       await ensureOrgFollowedForTeam(userId, teamId);
@@ -2670,6 +2671,7 @@ router.post(
             role: dbRole,
             status: "pending",
             position: positionRaw === "coach" ? null : positionRaw,
+            invitedById: me.id,
           })
           .returning();
         await ensureOrgFollowedForTeam(existingUser.id, teamId);
@@ -2738,37 +2740,13 @@ router.get(
       )
       .orderBy(desc(rosterEntries.createdAt));
 
-    // Best-effort lookup of "who invited" via the related rosterInvites row
-    // (the email-invite path stores `invitedById`). Direct-add roster rows
-    // have no such link, so the inviter falls back to null.
-    const teamIds = rows.map((r) => r.team.id);
-    const inviteByTeam = new Map<string, string | null>();
-    if (child.email && teamIds.length > 0) {
-      const invs = await db
-        .select({
-          teamId: rosterInvites.teamId,
-          invitedById: rosterInvites.invitedById,
-          createdAt: rosterInvites.createdAt,
-        })
-        .from(rosterInvites)
-        .where(
-          and(
-            eq(rosterInvites.invitedEmail, child.email),
-            inArray(rosterInvites.teamId, teamIds),
-          ),
-        )
-        .orderBy(desc(rosterInvites.createdAt));
-      for (const i of invs) {
-        if (!inviteByTeam.has(i.teamId)) {
-          inviteByTeam.set(i.teamId, i.invitedById);
-        }
-      }
-    }
+    // Resolve "who invited" directly from `rosterEntries.invitedById`,
+    // which both the direct-add and email-invite paths populate.
     const inviterIds = Array.from(
       new Set(
-        Array.from(inviteByTeam.values()).filter(
-          (id): id is string => !!id,
-        ),
+        rows
+          .map((r) => r.entry.invitedById)
+          .filter((id): id is string => !!id),
       ),
     );
     const inviterMap = new Map<string, typeof users.$inferSelect>();
@@ -2781,8 +2759,9 @@ router.get(
     }
 
     const data = rows.map((r) => {
-      const inviterId = inviteByTeam.get(r.team.id) ?? null;
-      const inviter = inviterId ? inviterMap.get(inviterId) ?? null : null;
+      const inviter = r.entry.invitedById
+        ? inviterMap.get(r.entry.invitedById) ?? null
+        : null;
       return {
         entryId: r.entry.id,
         teamId: r.team.id,
@@ -2869,6 +2848,7 @@ router.post(
         role: invite.role,
         status: "accepted",
         position: invite.position,
+        invitedById: invite.invitedById,
       })
       .returning();
     await ensureOrgFollowedForTeam(me.id, invite.teamId);
