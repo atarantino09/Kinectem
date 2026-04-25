@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -45,6 +46,16 @@ type DraftPayload = {
   gameDate?: string | null;
 };
 
+// Today's local calendar date in YYYY-MM-DD form, the shape an
+// <input type="date"> control accepts.
+function todayLocalIso(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function NewPostPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
@@ -60,10 +71,15 @@ export default function NewPostPage() {
   const [orgId, setOrgId] = useState<string>("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
-  // ISO date (YYYY-MM-DD) — empty string means "not a recap, just a
-  // long-form post." Setting it is what triggers the auto-tag fan-out
-  // on the backend (rostered players are tagged at publish time).
-  const [gameDate, setGameDate] = useState<string>("");
+  // YYYY-MM-DD value bound to the date input. Pre-filled with today
+  // so coaches who don't touch the picker still publish a recap
+  // dated today (the backend uses this date to drive the auto-tag
+  // fan-out, gated by the `tagRoster` checkbox below).
+  const [gameDate, setGameDate] = useState<string>(todayLocalIso());
+  // Defaults to true so a recap published without touching the form
+  // still tags every rostered player. Unchecking sends `gameDate:
+  // null` and skips the fan-out.
+  const [tagRoster, setTagRoster] = useState<boolean>(true);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
@@ -89,13 +105,13 @@ export default function NewPostPage() {
         setBody(d.body ?? "");
         setVideoUrl(d.videoUrl ?? "");
         setPhotos(Array.isArray(d.photoUrls) ? d.photoUrls : []);
-        // Trim ISO datetime down to the YYYY-MM-DD shape the
-        // <input type="date"> control accepts.
-        setGameDate(
-          typeof d.gameDate === "string" && d.gameDate.length >= 10
-            ? d.gameDate.slice(0, 10)
-            : "",
-        );
+        // Pre-fill the date input. Trim ISO datetime down to
+        // YYYY-MM-DD; if the draft has no gameDate, fall back to
+        // today so the next publish still tags the roster (the box
+        // below defaults to checked for date-less drafts too).
+        const hasDate =
+          typeof d.gameDate === "string" && d.gameDate.length >= 10;
+        setGameDate(hasDate ? d.gameDate!.slice(0, 10) : todayLocalIso());
         setPostType("long");
       })
       .catch(() => {
@@ -103,13 +119,13 @@ export default function NewPostPage() {
       });
   }, [initialDraftId, toast]);
 
-  // Convert the YYYY-MM-DD value from the date picker into the
-  // ISO datetime the API expects, or null when the field is empty.
-  // We use noon UTC so the resulting calendar date matches the
-  // user's intent regardless of their timezone.
+  // Build the ISO datetime sent to the API. Noon UTC keeps the
+  // calendar date stable across timezones. Returning null when the
+  // tag-roster checkbox is off skips the auto-tag fan-out.
   const gameDateForApi = (): string | null => {
-    if (!gameDate) return null;
-    const iso = `${gameDate}T12:00:00.000Z`;
+    if (!tagRoster) return null;
+    const value = gameDate || todayLocalIso();
+    const iso = `${value}T12:00:00.000Z`;
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   };
@@ -144,7 +160,7 @@ export default function NewPostPage() {
       if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, body, videoUrl, photos, gameDate, draftId]);
+  }, [title, body, videoUrl, photos, gameDate, tagRoster, draftId]);
 
   const isShort = postType === "short";
   const heading = isShort ? "New Highlight" : "New Game Recap";
@@ -372,9 +388,8 @@ export default function NewPostPage() {
                     id="game-date-help"
                     className="mt-1.5 text-[11px] text-muted-foreground font-semibold"
                   >
-                    Setting a date marks this as a game recap and tags every
-                    rostered player on the team. Leave blank for a regular
-                    long-form post.
+                    Defaults to today. Change it if the game was on a
+                    different day.
                   </p>
                 </div>
               )}
@@ -422,6 +437,33 @@ export default function NewPostPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {!isShort && (
+                <div className="pt-4 border-t border-border">
+                  <label
+                    htmlFor="tag-roster"
+                    className="flex items-start gap-3 cursor-pointer"
+                  >
+                    <Checkbox
+                      id="tag-roster"
+                      checked={tagRoster}
+                      onCheckedChange={(v) => setTagRoster(v === true)}
+                      className="mt-0.5"
+                      data-testid="checkbox-tag-roster"
+                    />
+                    <span className="text-sm">
+                      <span className="font-bold">
+                        Tag every rostered player on this team
+                      </span>
+                      <span className="block mt-1 text-[12px] text-muted-foreground font-semibold">
+                        The recap will appear on each rostered player's
+                        profile. Uncheck to publish as a regular long-form
+                        post with no player tags.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               )}
 
