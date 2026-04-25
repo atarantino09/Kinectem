@@ -5,9 +5,12 @@ import {
   ShieldAlert,
   History,
   ArrowLeft,
+  Lock,
 } from "lucide-react";
 import { useWhoami } from "@/hooks/useWhoami";
 import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
@@ -22,17 +25,48 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
-    const role = who?.realUser?.role;
     if (!who?.authenticated) {
       setLocation("/login");
-    } else if (role !== "admin") {
-      setLocation("/");
     }
   }, [who, isLoading, setLocation]);
 
-  if (isLoading || who?.realUser?.role !== "admin") {
+  if (isLoading || !who) {
     return (
-      <div className="p-8 text-muted-foreground">Loading admin console…</div>
+      <div className="p-8 text-muted-foreground" data-testid="admin-loading">
+        Loading admin console…
+      </div>
+    );
+  }
+
+  if (!who.authenticated) {
+    return (
+      <div className="p-8 text-muted-foreground" data-testid="admin-loading">
+        Redirecting to sign in…
+      </div>
+    );
+  }
+
+  if (who.realUser?.role !== "admin") {
+    return (
+      <div className="max-w-lg mx-auto py-12" data-testid="admin-forbidden">
+        <Card>
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <Lock className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight">
+              Admin access required
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              This area is only available to platform administrators. If you
+              think you should have access, contact your Kinectem admin.
+            </p>
+            <Link href="/">
+              <Button data-testid="btn-admin-back-feed">Back to feed</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

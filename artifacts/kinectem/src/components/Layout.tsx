@@ -124,6 +124,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 )}
               </Button>
             </Link>
+            {isAdmin && (
+              <Link href="/admin">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-semibold"
+                  data-testid="link-admin"
+                >
+                  <Shield className="w-4 h-4 mr-2" /> Admin
+                </Button>
+              </Link>
+            )}
           </nav>
 
           <DropdownMenu>
