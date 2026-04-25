@@ -28,7 +28,7 @@ import {
   organizationJoinRequests,
   passwordResets,
 } from "@workspace/db";
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { z } from "zod";
@@ -764,6 +764,16 @@ router.get(
   asyncHandler(async (req, res) => {
     const u = req.sessionUser;
     if (!u) return res.status(401).json({ error: "Not authenticated" });
+    if (u.role === "parent") {
+      try {
+        await notifyExpiredGuardianConfirmations(u.id);
+      } catch (err) {
+        logger.error(
+          { err },
+          "Failed to create guardian-expired notifications",
+        );
+      }
+    }
     res.json(toPrivateUser(u));
   }),
 );
@@ -4310,11 +4320,71 @@ router.patch(
 // Parent / Guardian — children management
 // ---------------------------------------------------------------------------
 
+// Creates a notification on the parent's account for each linked child whose
+// guardian-confirmation token has expired without being confirmed. Existing
+// notifications for the same child are not duplicated.
+async function notifyExpiredGuardianConfirmations(
+  parentUserId: string,
+): Promise<void> {
+  const expiredChildren = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(
+      and(
+        eq(users.parentId, parentUserId),
+        isNull(users.guardianConfirmedAt),
+        sql`${users.guardianEmail} IS NOT NULL`,
+        sql`${users.guardianConfirmTokenExpiresAt} IS NOT NULL`,
+        lt(users.guardianConfirmTokenExpiresAt, new Date()),
+      ),
+    );
+  if (expiredChildren.length === 0) return;
+
+  const links = expiredChildren.map((c) => `/guardian?childId=${c.id}`);
+  const existing = await db
+    .select({ link: notifications.link })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, parentUserId),
+        eq(notifications.kind, "guardian_expired"),
+        inArray(notifications.link, links),
+      ),
+    );
+  const alreadyNotified = new Set(
+    existing.map((n) => n.link).filter((l): l is string => !!l),
+  );
+
+  const toInsert = expiredChildren
+    .filter((c) => !alreadyNotified.has(`/guardian?childId=${c.id}`))
+    .map((c) => {
+      const [first] = c.name.split(" ");
+      return {
+        userId: parentUserId,
+        kind: "guardian_expired",
+        message: `${first ?? c.name}'s guardian confirmation link has expired. Send a new one so they don't lose access.`,
+        link: `/guardian?childId=${c.id}`,
+      };
+    });
+  if (toInsert.length === 0) return;
+  await db.insert(notifications).values(toInsert);
+}
+
 router.get(
   "/users/me/children",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (me.role === "parent") {
+      try {
+        await notifyExpiredGuardianConfirmations(me.id);
+      } catch (err) {
+        logger.error(
+          { err },
+          "Failed to create guardian-expired notifications",
+        );
+      }
+    }
     const rows = await db
       .select()
       .from(users)

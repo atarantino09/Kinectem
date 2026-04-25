@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { db, users } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
 describe("notifications", () => {
@@ -52,5 +54,101 @@ describe("notifications", () => {
     // Without a session, there is no targeted user, so the route returns
     // an empty page (per the route implementation).
     expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  describe("guardian confirmation expired notifications", () => {
+    async function setupExpiredChild() {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const childRes = await agent.get("/api/v1/users/me/children");
+      const child = childRes.body.data[0];
+      await db
+        .update(users)
+        .set({
+          guardianEmail: "lisa@kinectem.demo",
+          guardianConfirmedAt: null,
+          guardianConfirmedByUserId: null,
+          guardianConfirmToken: "expired-token-test",
+          guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
+        })
+        .where(eq(users.id, child.id));
+      return { agent, childId: child.id as string };
+    }
+
+    it("creates a notification for the parent when a child's confirmation link has expired", async () => {
+      const { agent, childId } = await setupExpiredChild();
+      const me = await agent.get("/api/v1/users/me");
+      expect(me.status).toBe(200);
+      const list = await agent.get("/api/v1/notifications");
+      const expired = list.body.data.find(
+        (n: { type: string; data: { link: string } | null }) =>
+          n.type === "guardian_expired" &&
+          n.data?.link === `/guardian?childId=${childId}`,
+      );
+      expect(expired).toBeDefined();
+      expect(expired.title).toMatch(/expired/i);
+    });
+
+    it("does not create a duplicate notification on subsequent requests", async () => {
+      const { agent, childId } = await setupExpiredChild();
+      await agent.get("/api/v1/users/me");
+      await agent.get("/api/v1/users/me/children");
+      await agent.get("/api/v1/users/me");
+      const list = await agent.get("/api/v1/notifications");
+      const matches = list.body.data.filter(
+        (n: { type: string; data: { link: string } | null }) =>
+          n.type === "guardian_expired" &&
+          n.data?.link === `/guardian?childId=${childId}`,
+      );
+      expect(matches).toHaveLength(1);
+    });
+
+    it("does not create a notification when the child's confirmation is still pending (not expired)", async () => {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const childRes = await agent.get("/api/v1/users/me/children");
+      const child = childRes.body.data[0];
+      await db
+        .update(users)
+        .set({
+          guardianEmail: "lisa@kinectem.demo",
+          guardianConfirmedAt: null,
+          guardianConfirmedByUserId: null,
+          guardianConfirmToken: "valid-token-test",
+          guardianConfirmTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
+        })
+        .where(eq(users.id, child.id));
+      await agent.get("/api/v1/users/me");
+      const list = await agent.get("/api/v1/notifications");
+      const expired = list.body.data.filter(
+        (n: { type: string }) => n.type === "guardian_expired",
+      );
+      expect(expired).toHaveLength(0);
+    });
+
+    it("does not create a notification for confirmed children", async () => {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const childRes = await agent.get("/api/v1/users/me/children");
+      const child = childRes.body.data[0];
+      await db
+        .update(users)
+        .set({
+          guardianEmail: "lisa@kinectem.demo",
+          guardianConfirmedAt: new Date(),
+          guardianConfirmToken: null,
+          guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
+        })
+        .where(eq(users.id, child.id));
+      await agent.get("/api/v1/users/me");
+      const list = await agent.get("/api/v1/notifications");
+      const expired = list.body.data.filter(
+        (n: { type: string }) => n.type === "guardian_expired",
+      );
+      expect(expired).toHaveLength(0);
+    });
   });
 });

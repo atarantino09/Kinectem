@@ -53,6 +53,7 @@ function Router() {
             <Route path="/drafts" component={DraftsPage} />
             <Route path="/me/tags" component={MyTagsPage} />
             <Route path="/family" component={GuardianPage} />
+            <Route path="/guardian" component={GuardianPage} />
             <Route path="/organizations" component={OrganizationsListPage} />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
             <Route path="/teams/:teamId" component={TeamPage} />
