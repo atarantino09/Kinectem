@@ -42,6 +42,7 @@ type DraftPayload = {
   title?: string | null;
   description?: string | null;
   body?: string | null;
+  gameDate?: string | null;
 };
 
 export default function NewPostPage() {
@@ -59,6 +60,10 @@ export default function NewPostPage() {
   const [orgId, setOrgId] = useState<string>("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
+  // ISO date (YYYY-MM-DD) — empty string means "not a recap, just a
+  // long-form post." Setting it is what triggers the auto-tag fan-out
+  // on the backend (rostered players are tagged at publish time).
+  const [gameDate, setGameDate] = useState<string>("");
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
@@ -84,12 +89,30 @@ export default function NewPostPage() {
         setBody(d.body ?? "");
         setVideoUrl(d.videoUrl ?? "");
         setPhotos(Array.isArray(d.photoUrls) ? d.photoUrls : []);
+        // Trim ISO datetime down to the YYYY-MM-DD shape the
+        // <input type="date"> control accepts.
+        setGameDate(
+          typeof d.gameDate === "string" && d.gameDate.length >= 10
+            ? d.gameDate.slice(0, 10)
+            : "",
+        );
         setPostType("long");
       })
       .catch(() => {
         toast({ title: "Couldn't load draft", variant: "destructive" });
       });
   }, [initialDraftId, toast]);
+
+  // Convert the YYYY-MM-DD value from the date picker into the
+  // ISO datetime the API expects, or null when the field is empty.
+  // We use noon UTC so the resulting calendar date matches the
+  // user's intent regardless of their timezone.
+  const gameDateForApi = (): string | null => {
+    if (!gameDate) return null;
+    const iso = `${gameDate}T12:00:00.000Z`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
 
   // Auto-save (debounced) when we already have a draft id
   const debouncedRef = useRef<number | null>(null);
@@ -107,6 +130,7 @@ export default function NewPostPage() {
             body,
             videoUrl: videoUrl || null,
             photoUrls: photos,
+            gameDate: gameDateForApi(),
           }),
         });
         setSavedAt(new Date());
@@ -119,26 +143,31 @@ export default function NewPostPage() {
     return () => {
       if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     };
-  }, [title, body, videoUrl, photos, draftId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, body, videoUrl, photos, gameDate, draftId]);
 
   const isShort = postType === "short";
   const heading = isShort ? "New Highlight" : "New Game Recap";
   const Icon = isShort ? Play : FileText;
 
-  const buildPayload = (status?: "draft"): CreatePostRequest => ({
-    postType,
-    title: title.trim() || undefined,
-    body: !isShort && body.trim() ? body.trim() : undefined,
-    organizationId: orgId || undefined,
-    ...(initialTeamId
-      ? ({ context: { type: "team", id: initialTeamId } } as object)
-      : {}),
-    ...(photos.length > 0
-      ? ({ photoUrls: photos, coverImageUrl: photos[0] } as object)
-      : {}),
-    ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
-    ...(status ? ({ status } as object) : {}),
-  });
+  const buildPayload = (status?: "draft"): CreatePostRequest => {
+    const recapDate = !isShort ? gameDateForApi() : null;
+    return {
+      postType,
+      title: title.trim() || undefined,
+      body: !isShort && body.trim() ? body.trim() : undefined,
+      organizationId: orgId || undefined,
+      ...(initialTeamId
+        ? ({ context: { type: "team", id: initialTeamId } } as object)
+        : {}),
+      ...(photos.length > 0
+        ? ({ photoUrls: photos, coverImageUrl: photos[0] } as object)
+        : {}),
+      ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
+      ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
+      ...(status ? ({ status } as object) : {}),
+    };
+  };
 
   const onPublish = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +185,7 @@ export default function NewPostPage() {
             body,
             videoUrl: videoUrl || null,
             photoUrls: photos,
+            gameDate: gameDateForApi(),
           }),
         });
         await customFetch(`/posts/${draftId}/publish`, { method: "POST" });
@@ -189,6 +219,7 @@ export default function NewPostPage() {
             body,
             videoUrl: videoUrl || null,
             photoUrls: photos,
+            gameDate: gameDateForApi(),
           }),
         });
       } else {
@@ -319,6 +350,34 @@ export default function NewPostPage() {
                   data-testid="input-title"
                 />
               </div>
+
+              {!isShort && (
+                <div>
+                  <Label
+                    htmlFor="game-date"
+                    className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+                  >
+                    Game Date
+                  </Label>
+                  <Input
+                    id="game-date"
+                    type="date"
+                    value={gameDate}
+                    onChange={(e) => setGameDate(e.target.value)}
+                    className="mt-2 font-bold"
+                    data-testid="input-game-date"
+                    aria-describedby="game-date-help"
+                  />
+                  <p
+                    id="game-date-help"
+                    className="mt-1.5 text-[11px] text-muted-foreground font-semibold"
+                  >
+                    Setting a date marks this as a game recap and tags every
+                    rostered player on the team. Leave blank for a regular
+                    long-form post.
+                  </p>
+                </div>
+              )}
 
               {!isShort && (
                 <div>

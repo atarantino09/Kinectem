@@ -95,6 +95,16 @@ export interface PostResponse {
    */
   recentReactorName?: string | null;
   /**
+   * For long-form posts only. ISO datetime when the recap's
+game was played, or `null` for a regular long-form post.
+Clients use this both as the "is this a recap?" signal
+and to pre-fill the Game Date input when reopening a
+saved draft.
+
+   * @nullable
+   */
+  gameDate?: Date | null;
+  /**
    * Only set on `listUserPosts` results, and only when the
 article was surfaced via the user's own `article_tags` row
 and the tag is still `pending`. Clients should render a

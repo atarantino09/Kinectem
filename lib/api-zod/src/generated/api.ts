@@ -1288,6 +1288,12 @@ export const GetPostResponse = zod.object({
     .describe(
       'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
     ),
+  gameDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+    ),
   tagStatus: zod
     .enum(["approved", "pending"])
     .nullish()
@@ -1321,6 +1327,12 @@ export const UpdatePostBody = zod.object({
     .array(zod.string().uuid())
     .max(updatePostBodyAssetIdsMax)
     .optional(),
+  gameDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "For long-form posts. Pass an ISO datetime to mark the\narticle as a game recap (or update the recap's date);\npass `null` to clear it. When the article is later\npublished with `gameDate` set, every accepted player on\nthe team's roster is auto-tagged (idempotent — re-runs\nnever create duplicate tags).\n",
+    ),
 });
 
 export const updatePostResponseReactionCountMin = 0;
@@ -1373,6 +1385,12 @@ export const UpdatePostResponse = zod.object({
     .nullish()
     .describe(
       'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
+  gameDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
     ),
   tagStatus: zod
     .enum(["approved", "pending"])
@@ -1497,6 +1515,12 @@ export const ListOrgPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -1831,6 +1855,12 @@ export const ListUserPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -3895,6 +3925,12 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
         ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+        ),
       tagStatus: zod
         .enum(["approved", "pending"])
         .nullish()
@@ -4314,6 +4350,12 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
               ),
+            gameDate: zod.coerce
+              .date()
+              .nullish()
+              .describe(
+                'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+              ),
             tagStatus: zod
               .enum(["approved", "pending"])
               .nullish()
@@ -4414,6 +4456,12 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
         ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+        ),
       tagStatus: zod
         .enum(["approved", "pending"])
         .nullish()
@@ -4503,6 +4551,12 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
         ),
       tagStatus: zod
         .enum(["approved", "pending"])

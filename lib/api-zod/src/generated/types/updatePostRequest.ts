@@ -84,4 +84,15 @@ export interface UpdatePostRequest {
   body?: string | null;
   /** @maxItems 10 */
   assetIds?: string[];
+  /**
+   * For long-form posts. Pass an ISO datetime to mark the
+article as a game recap (or update the recap's date);
+pass `null` to clear it. When the article is later
+published with `gameDate` set, every accepted player on
+the team's roster is auto-tagged (idempotent — re-runs
+never create duplicate tags).
+
+   * @nullable
+   */
+  gameDate?: Date | null;
 }

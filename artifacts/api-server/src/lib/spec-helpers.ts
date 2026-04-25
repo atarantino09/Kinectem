@@ -409,6 +409,7 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     isEdited: a.updatedAt.getTime() > a.createdAt.getTime() + 1000,
     createdAt: (a.publishedAt ?? a.createdAt).toISOString(),
     updatedAt: a.updatedAt.toISOString(),
+    gameDate: a.gameDate ? a.gameDate.toISOString() : null,
     extras,
   });
 }
@@ -490,6 +491,10 @@ function basePost(p: {
   isEdited: boolean;
   createdAt: string;
   updatedAt: string;
+  // Only article-backed long-form posts ever carry this. Short-form
+  // (highlight) and org posts pass undefined and the response just
+  // omits the field downstream consumers expect to see as null.
+  gameDate?: string | null;
   extras: PostExtras;
 }) {
   const author = p.extras.author
@@ -523,6 +528,7 @@ function basePost(p: {
     isEdited: p.isEdited,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    gameDate: p.gameDate ?? null,
     author,
     context,
     assets: p.assets,

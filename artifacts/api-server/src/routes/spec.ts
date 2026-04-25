@@ -338,6 +338,94 @@ function statsFor(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Article auto-tag fan-out (game recaps)
+// ---------------------------------------------------------------------------
+// When an article has `gameDate` set, every accepted player on the
+// team's roster is auto-tagged. Called from POST /posts (initial
+// create) and POST /posts/:postId/publish (draft → publish path) so
+// drafts that get a game date added later still tag everyone at
+// publish time. ON CONFLICT DO NOTHING keeps re-runs idempotent.
+async function applyArticleTagFanout(args: {
+  articleId: string;
+  teamId: string;
+  taggerUserId: string;
+  explicitUserIds: string[];
+  gameDate: Date | null;
+}): Promise<void> {
+  const tagMap = new Map<string, "approved" | "pending">();
+  // Explicit tags from the request always start as approved; pending
+  // wins below if the same user is also consent-required.
+  for (const uid of args.explicitUserIds) {
+    tagMap.set(uid, "approved");
+  }
+  if (args.gameDate) {
+    const players = await db
+      .select({
+        userId: rosterEntries.userId,
+        requireTagConsent: users.requireTagConsent,
+        parentId: users.parentId,
+      })
+      .from(rosterEntries)
+      .innerJoin(users, eq(rosterEntries.userId, users.id))
+      .where(
+        and(
+          eq(rosterEntries.teamId, args.teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    // Bulk-look-up parent consent flags so we don't N+1.
+    const parentIds = Array.from(
+      new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
+    );
+    const parentConsent = new Map<string, boolean>();
+    if (parentIds.length > 0) {
+      const parents = await db
+        .select({ id: users.id, flag: users.requireTagConsent })
+        .from(users)
+        .where(inArray(users.id, parentIds));
+      for (const p of parents) parentConsent.set(p.id, !!p.flag);
+    }
+    for (const p of players) {
+      const parentRequires = p.parentId
+        ? !!parentConsent.get(p.parentId)
+        : false;
+      const requires = !!p.requireTagConsent || parentRequires;
+      const status: "approved" | "pending" = requires ? "pending" : "approved";
+      // Pending wins over approved (safer for consent-required users)
+      if (tagMap.get(p.userId) === "pending" || status === "pending") {
+        tagMap.set(p.userId, "pending");
+      } else if (!tagMap.has(p.userId)) {
+        tagMap.set(p.userId, "approved");
+      }
+    }
+  }
+  if (tagMap.size === 0) return;
+  // Per-user dedupe: article_tags has no unique index on
+  // (article_id, user_id) so onConflictDoNothing alone wouldn't
+  // prevent duplicates. Drop any user that already has a tag row
+  // — preserving whatever status (approved/pending/declined) they
+  // already have, which is critical for consent decisions.
+  const existing = await db
+    .select({ userId: articleTags.userId })
+    .from(articleTags)
+    .where(eq(articleTags.articleId, args.articleId));
+  for (const row of existing) tagMap.delete(row.userId);
+  if (tagMap.size === 0) return;
+  await db
+    .insert(articleTags)
+    .values(
+      Array.from(tagMap.entries()).map(([userId, tagStatus]) => ({
+        articleId: args.articleId,
+        userId,
+        taggerUserId: args.taggerUserId,
+        status: tagStatus,
+      })),
+    )
+    .onConflictDoNothing();
+}
+
 const router: IRouter = Router();
 
 // ---------------------------------------------------------------------------
@@ -3424,75 +3512,15 @@ router.post(
         })
         .returning();
 
-      // Build the auto-tag set:
-      //   - explicit body.taggedUserIds (always)
-      //   - if gameDate is set: every accepted player on the team's
-      //     roster, marked pending if that user OR their parent has
-      //     requireTagConsent = true, else approved.
-      //   - merged + deduped on userId; pending wins over approved when
-      //     both sources disagree (safer for the under-13 case).
-      const explicitIds: string[] = Array.isArray(body.taggedUserIds)
-        ? body.taggedUserIds.filter((u: unknown): u is string => typeof u === "string")
-        : [];
-      const tagMap = new Map<string, "approved" | "pending">();
-      for (const uid of explicitIds) {
-        tagMap.set(uid, "approved");
-      }
-      if (gameDate) {
-        const players = await db
-          .select({
-            userId: rosterEntries.userId,
-            requireTagConsent: users.requireTagConsent,
-            parentId: users.parentId,
-          })
-          .from(rosterEntries)
-          .innerJoin(users, eq(rosterEntries.userId, users.id))
-          .where(
-            and(
-              eq(rosterEntries.teamId, teamId),
-              eq(rosterEntries.role, "player"),
-              eq(rosterEntries.status, "accepted"),
-            ),
-          );
-        // Bulk-look-up parent consent flags so we don't N+1.
-        const parentIds = Array.from(
-          new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
-        );
-        const parentConsent = new Map<string, boolean>();
-        if (parentIds.length > 0) {
-          const parents = await db
-            .select({ id: users.id, flag: users.requireTagConsent })
-            .from(users)
-            .where(inArray(users.id, parentIds));
-          for (const p of parents) parentConsent.set(p.id, !!p.flag);
-        }
-        for (const p of players) {
-          const parentRequires = p.parentId
-            ? !!parentConsent.get(p.parentId)
-            : false;
-          const requires = !!p.requireTagConsent || parentRequires;
-          const status: "approved" | "pending" = requires ? "pending" : "approved";
-          // Pending wins over approved (safer for consent-required users)
-          if (tagMap.get(p.userId) === "pending" || status === "pending") {
-            tagMap.set(p.userId, "pending");
-          } else if (!tagMap.has(p.userId)) {
-            tagMap.set(p.userId, "approved");
-          }
-        }
-      }
-      if (tagMap.size > 0) {
-        await db
-          .insert(articleTags)
-          .values(
-            Array.from(tagMap.entries()).map(([userId, tagStatus]) => ({
-              articleId: a.id,
-              userId,
-              taggerUserId: me.id,
-              status: tagStatus,
-            })),
-          )
-          .onConflictDoNothing();
-      }
+      await applyArticleTagFanout({
+        articleId: a.id,
+        teamId,
+        taggerUserId: me.id,
+        explicitUserIds: Array.isArray(body.taggedUserIds)
+          ? body.taggedUserIds.filter((u: unknown): u is string => typeof u === "string")
+          : [],
+        gameDate,
+      });
 
       res.status(201).json({
         ...articleToPost(a, { team, org, author: me }),
@@ -3600,6 +3628,16 @@ router.patch(
       updates["photoUrls"] = arr.length > 0 ? arr : null;
       if (!("coverImageUrl" in updates)) updates["coverImageUrl"] = arr[0] ?? null;
     }
+    // gameDate: presence (or absence) marks the article as a recap. We
+    // don't run the auto-tag fan-out here — it fires at publish time.
+    if ("gameDate" in body) {
+      if (body.gameDate === null || body.gameDate === "") {
+        updates["gameDate"] = null;
+      } else if (typeof body.gameDate === "string") {
+        const parsed = new Date(body.gameDate);
+        if (!Number.isNaN(parsed.getTime())) updates["gameDate"] = parsed;
+      }
+    }
     if (Object.keys(updates).length === 0)
       return apiError(res, 400, "no changes");
     const [updated] = await db
@@ -3658,6 +3696,21 @@ router.post(
       })
       .where(eq(articles.id, a.id))
       .returning();
+    // Re-run the auto-tag fan-out at publish time so drafts that
+    // had a game date added later (via PATCH) still tag the roster.
+    // The helper itself does per-user dedupe, so this is safe to call
+    // even if some players are already tagged — only missing roster
+    // members get inserted, and existing tag statuses (approved /
+    // pending / declined) are preserved untouched.
+    if (updated.gameDate) {
+      await applyArticleTagFanout({
+        articleId: updated.id,
+        teamId: updated.teamId,
+        taggerUserId: updated.authorId ?? me.id,
+        explicitUserIds: [],
+        gameDate: updated.gameDate,
+      });
+    }
     const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
     const [org] = team
       ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)

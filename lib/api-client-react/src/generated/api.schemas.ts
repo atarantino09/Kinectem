@@ -652,6 +652,16 @@ export interface PostResponse {
    */
   recentReactorName?: string | null;
   /**
+   * For long-form posts only. ISO datetime when the recap's
+game was played, or `null` for a regular long-form post.
+Clients use this both as the "is this a recap?" signal
+and to pre-fill the Game Date input when reopening a
+saved draft.
+
+   * @nullable
+   */
+  gameDate?: string | null;
+  /**
    * Only set on `listUserPosts` results, and only when the
 article was surfaced via the user's own `article_tags` row
 and the tag is still `pending`. Clients should render a
@@ -953,6 +963,17 @@ export interface UpdatePostRequest {
   body?: string | null;
   /** @maxItems 10 */
   assetIds?: string[];
+  /**
+   * For long-form posts. Pass an ISO datetime to mark the
+article as a game recap (or update the recap's date);
+pass `null` to clear it. When the article is later
+published with `gameDate` set, every accepted player on
+the team's roster is auto-tagged (idempotent — re-runs
+never create duplicate tags).
+
+   * @nullable
+   */
+  gameDate?: string | null;
 }
 
 export interface PostRevisionEditor {

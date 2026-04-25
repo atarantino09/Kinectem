@@ -6417,6 +6417,17 @@ components:
             type: string
             format: uuid
           maxItems: 10
+        gameDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            For long-form posts. Pass an ISO datetime to mark the
+            article as a game recap (or update the recap's date);
+            pass `null` to clear it. When the article is later
+            published with `gameDate` set, every accepted player on
+            the team's roster is auto-tagged (idempotent — re-runs
+            never create duplicate tags).
 
     PostAuthor:
       type: object
@@ -6539,6 +6550,16 @@ components:
           type: string
           nullable: true
           description: Display name of the most recent reactor (if any), for "X and N others reacted" UI hints.
+        gameDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            For long-form posts only. ISO datetime when the recap's
+            game was played, or `null` for a regular long-form post.
+            Clients use this both as the "is this a recap?" signal
+            and to pre-fill the Game Date input when reopening a
+            saved draft.
         tagStatus:
           type: string
           enum:

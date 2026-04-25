@@ -256,6 +256,233 @@ describe("auto-tag rostered players on game-recap articles", () => {
       .where(eq(articleTags.articleId, articleId));
     expect(tagRows).toHaveLength(0);
   });
+
+  it("fires the fan-out at publish when gameDate is added to a draft", async () => {
+    // The most common path the user actually hits: coach saves a
+    // draft from the form (no game date yet, so no tags), edits the
+    // draft to add the game date, then publishes. The fan-out must
+    // fire at publish time — Task #94's create-time hook alone misses
+    // this path entirely.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // 1) Create as draft, no game date.
+    const draft = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Draft recap",
+      body: "Wrote this in the locker room.",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    const draftPostId = draft.body.id;
+    const articleId = draftPostId.replace(/^article-/, "");
+
+    // No tags yet — exactly the bug #108 was filed for.
+    let tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows).toHaveLength(0);
+
+    // 2) PATCH the draft to add the game date.
+    const patched = await coach.patch(`/api/v1/posts/${draftPostId}`).send({
+      gameDate: new Date("2025-09-12T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    // PATCH alone does NOT run the fan-out — that fires at publish.
+    tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows).toHaveLength(0);
+
+    // 3) Publish — this is when the roster is fanned out.
+    const published = await coach
+      .post(`/api/v1/posts/${draftPostId}/publish`)
+      .send();
+    expect(published.status).toBe(200);
+
+    tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const taggedIds = new Set(tagRows.map((t) => t.userId));
+    const accepted = await db
+      .select({ userId: rosterEntries.userId, role: rosterEntries.role })
+      .from(rosterEntries)
+      .where(
+        and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.status, "accepted")),
+      );
+    const expectedPlayers = accepted
+      .filter((r) => r.role === "player")
+      .map((r) => r.userId);
+    expect(expectedPlayers.length).toBeGreaterThan(0);
+    for (const uid of expectedPlayers) {
+      expect(taggedIds.has(uid)).toBe(true);
+    }
+  });
+
+  it("clears gameDate when PATCH passes null and stops marking the article as a recap", async () => {
+    const { orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // Save as draft with a date, then clear it via PATCH null. The
+    // article should no longer carry a gameDate (and the publish
+    // path will skip the fan-out as a result).
+    const draft = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Wrong date",
+      body: "Oops, wrong week.",
+      status: "draft",
+      gameDate: new Date("2025-09-12T19:00:00Z").toISOString(),
+    });
+    expect(draft.status).toBe(201);
+    const articleId = draft.body.id.replace(/^article-/, "");
+
+    const cleared = await coach.patch(`/api/v1/posts/${draft.body.id}`).send({
+      gameDate: null,
+    });
+    expect(cleared.status).toBe(200);
+
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    expect(a.gameDate).toBeNull();
+  });
+
+  it("never inserts duplicate tags when fan-out runs more than once", async () => {
+    // Idempotency guard. The create handler runs the fan-out, and
+    // the publish handler runs it again whenever it gets a draft
+    // with gameDate. For an article that's published immediately
+    // (status != draft) and then later re-published, the second
+    // pass must not produce duplicate article_tags rows.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Westfield 49, Madison 0",
+      body: "Total domination.",
+      gameDate: new Date("2025-11-14T19:00:00Z").toISOString(),
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    const before = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(before.length).toBeGreaterThan(0);
+
+    // Re-trigger publish on an already-published article. The
+    // helper does per-user dedupe, so the second call must be a
+    // no-op for already-tagged users.
+    const republished = await coach
+      .post(`/api/v1/posts/${postId}/publish`)
+      .send();
+    expect(republished.status).toBe(200);
+
+    const after = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(after).toHaveLength(before.length);
+
+    // Sanity-check: same set of users, same statuses — nothing
+    // re-flipped (e.g., a player who declined isn't re-approved).
+    const beforeKey = before.map((t) => `${t.userId}:${t.status}`).sort();
+    const afterKey = after.map((t) => `${t.userId}:${t.status}`).sort();
+    expect(afterKey).toEqual(beforeKey);
+    expect(teamId).toBeTruthy();
+  });
+
+  it("fills in missing roster tags at publish without disturbing pre-existing ones", async () => {
+    // Regression test for the partial-tag case the architect flagged:
+    // if an article already has SOME tags (e.g., manual tags from
+    // another path, or a previous fan-out that didn't cover everyone),
+    // publishing must still tag the rest of the roster — and must
+    // leave existing tag statuses (approved/pending/declined) alone.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // Create a draft (no fan-out yet — no gameDate).
+    const draft = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Partial-tag regression",
+      body: "Some players manually tagged before publish.",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    const postId = draft.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    // Hand-insert one tag for one rostered player with a non-default
+    // status. This simulates a tag created by some other path.
+    const accepted = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(accepted.length).toBeGreaterThan(1);
+    const seedUserId = accepted[0].userId;
+    await db.insert(articleTags).values({
+      articleId,
+      userId: seedUserId,
+      taggerUserId: null,
+      status: "declined",
+    });
+
+    // Add the game date and publish.
+    await coach
+      .patch(`/api/v1/posts/${postId}`)
+      .send({ gameDate: new Date("2025-12-05T19:00:00Z").toISOString() });
+    const published = await coach.post(`/api/v1/posts/${postId}/publish`).send();
+    expect(published.status).toBe(200);
+
+    // The seed tag must be untouched (still "declined", not flipped
+    // to "approved" by the fan-out).
+    const seedRows = await db
+      .select()
+      .from(articleTags)
+      .where(
+        and(eq(articleTags.articleId, articleId), eq(articleTags.userId, seedUserId)),
+      );
+    expect(seedRows).toHaveLength(1);
+    expect(seedRows[0].status).toBe("declined");
+
+    // Every other accepted player on the roster must have been
+    // tagged exactly once.
+    const allTags = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const taggedSet = new Set(allTags.map((t) => t.userId));
+    for (const r of accepted) {
+      expect(taggedSet.has(r.userId)).toBe(true);
+    }
+    // No duplicates: tag count == distinct user count.
+    expect(allTags.length).toBe(taggedSet.size);
+  });
 });
 
 describe("GET /users/:userId/posts merges authored + tagged", () => {
