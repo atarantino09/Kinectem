@@ -304,14 +304,21 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   {!isMine && (
                     <div className="w-7 mr-2 shrink-0">
                       {!groupedWithPrev && (
-                        <Avatar className="w-7 h-7">
-                          {m.senderAvatarUrl && (
-                            <AvatarImage src={m.senderAvatarUrl} />
-                          )}
-                          <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                            {getInitials(m.senderDisplayName)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <Link
+                          href={`/users/${m.senderId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`View ${m.senderDisplayName}'s profile`}
+                          data-testid={`link-message-avatar-${m.id}`}
+                        >
+                          <Avatar className="w-7 h-7 cursor-pointer hover:opacity-80">
+                            {m.senderAvatarUrl && (
+                              <AvatarImage src={m.senderAvatarUrl} />
+                            )}
+                            <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
+                              {getInitials(m.senderDisplayName)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </Link>
                       )}
                     </div>
                   )}
@@ -322,9 +329,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   >
                     {!isMine && !groupedWithPrev && (
                       <div className="flex items-baseline gap-2 mb-1 px-1">
-                        <p className="font-bold text-xs">
-                          {m.senderDisplayName}
-                        </p>
+                        <Link
+                          href={`/users/${m.senderId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          data-testid={`link-message-sender-${m.id}`}
+                        >
+                          <p className="font-bold text-xs cursor-pointer hover:underline">
+                            {m.senderDisplayName}
+                          </p>
+                        </Link>
                         <p className="text-[10px] text-muted-foreground">
                           {timeAgo(m.createdAt)}
                         </p>
@@ -607,21 +620,35 @@ function NewMessageDialog({
         ) : (
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/60">
-              <Avatar className="w-9 h-9 shrink-0">
-                {recipient.avatarUrl && (
-                  <AvatarImage src={recipient.avatarUrl} />
-                )}
-                <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
-                  {getInitials(recipient.displayName)}
-                </AvatarFallback>
-              </Avatar>
+              <Link
+                href={`/users/${recipient.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0"
+                aria-label={`View ${recipient.displayName}'s profile`}
+                data-testid="link-recipient-avatar"
+              >
+                <Avatar className="w-9 h-9 shrink-0 cursor-pointer hover:opacity-80">
+                  {recipient.avatarUrl && (
+                    <AvatarImage src={recipient.avatarUrl} />
+                  )}
+                  <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
+                    {getInitials(recipient.displayName)}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
                   To
                 </p>
-                <p className="font-bold text-sm truncate">
-                  {recipient.displayName}
-                </p>
+                <Link
+                  href={`/users/${recipient.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid="link-recipient-name"
+                >
+                  <p className="font-bold text-sm truncate cursor-pointer hover:underline">
+                    {recipient.displayName}
+                  </p>
+                </Link>
               </div>
               <Button
                 type="button"

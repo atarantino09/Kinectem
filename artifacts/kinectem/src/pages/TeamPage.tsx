@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -258,9 +259,12 @@ export default function TeamPage() {
           <TableCell>
             <Link href={`/users/${m.userId}`}>
               <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-primary-foreground flex items-center justify-center text-[10px] font-bold">
-                  {getInitials(m.displayName)}
-                </div>
+                <Avatar className="w-8 h-8">
+                  {m.avatarUrl && <AvatarImage src={m.avatarUrl} />}
+                  <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
+                    {getInitials(m.displayName)}
+                  </AvatarFallback>
+                </Avatar>
                 <span className="font-semibold">{m.displayName}</span>
               </div>
             </Link>
@@ -312,9 +316,12 @@ export default function TeamPage() {
         <TableCell>
           <Link href={`/users/${m.userId}`}>
             <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
-              <div className="w-8 h-8 rounded-full bg-slate-900 text-primary-foreground flex items-center justify-center text-[10px] font-bold">
-                {getInitials(m.displayName)}
-              </div>
+              <Avatar className="w-8 h-8">
+                {m.avatarUrl && <AvatarImage src={m.avatarUrl} />}
+                <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
+                  {getInitials(m.displayName)}
+                </AvatarFallback>
+              </Avatar>
               <span className="font-semibold">{m.displayName}</span>
             </div>
           </Link>

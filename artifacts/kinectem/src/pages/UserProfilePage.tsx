@@ -29,6 +29,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Building2, MessageSquare, Tag, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
@@ -128,12 +134,46 @@ export default function UserProfilePage() {
         </div>
         <div className="px-6 pb-6 -mt-12">
           <div className="flex items-start justify-between gap-4 flex-wrap">
-            <Avatar className="w-24 h-24 border-4 border-card shadow-lg">
-              {user.avatarUrl && <AvatarImage src={user.avatarUrl} />}
-              <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-2xl">
-                {getInitials(displayName)}
-              </AvatarFallback>
-            </Avatar>
+            {user.avatarUrl ? (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    aria-label={`View ${displayName}'s profile photo`}
+                    data-testid="btn-open-avatar-lightbox"
+                  >
+                    <Avatar className="w-24 h-24 border-4 border-card shadow-lg cursor-pointer">
+                      <AvatarImage src={user.avatarUrl} />
+                      <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-2xl">
+                        {getInitials(displayName)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DialogTrigger>
+                <DialogContent
+                  className="max-w-2xl p-0 bg-transparent border-none shadow-none"
+                  data-testid="dialog-avatar-lightbox"
+                  aria-describedby={undefined}
+                >
+                  <DialogTitle className="sr-only">
+                    {displayName}'s profile photo
+                  </DialogTitle>
+                  <img
+                    src={user.avatarUrl}
+                    alt={`${displayName}'s profile photo`}
+                    className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+                    data-testid="img-avatar-lightbox"
+                  />
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <Avatar className="w-24 h-24 border-4 border-card shadow-lg">
+                <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-2xl">
+                  {getInitials(displayName)}
+                </AvatarFallback>
+              </Avatar>
+            )}
             {user.isOwnProfile && "email" in user ? (
               <div className="mt-14 flex items-center gap-2">
                 <Link href="/me/tags">
