@@ -88,4 +88,10 @@ export interface UpdateUserRequest {
    * @nullable
    */
   level?: string | null;
+  /**
+   * URL of the user's profile picture. Use the asset upload flow to obtain a confirmed URL, or pass null to remove the current avatar.
+   * @maxLength 4096
+   * @nullable
+   */
+  avatarUrl?: string | null;
 }

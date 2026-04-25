@@ -206,6 +206,8 @@ export const updateUserBodyNicknameMax = 100;
 
 export const updateUserBodyLevelMax = 50;
 
+export const updateUserBodyAvatarUrlMax = 4096;
+
 export const UpdateUserBody = zod.object({
   firstName: zod.string().max(updateUserBodyFirstNameMax).optional(),
   lastName: zod.string().max(updateUserBodyLastNameMax).optional(),
@@ -216,6 +218,13 @@ export const UpdateUserBody = zod.object({
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
   nickname: zod.string().max(updateUserBodyNicknameMax).nullish(),
   level: zod.string().max(updateUserBodyLevelMax).nullish(),
+  avatarUrl: zod
+    .string()
+    .max(updateUserBodyAvatarUrlMax)
+    .nullish()
+    .describe(
+      "URL of the user's profile picture. Use the asset upload flow to obtain a confirmed URL, or pass null to remove the current avatar.",
+    ),
 });
 
 export const updateUserResponseOneNicknameMax = 100;

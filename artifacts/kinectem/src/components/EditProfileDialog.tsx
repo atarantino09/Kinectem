@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useUpdateUser,
   getGetUserByIdQueryKey,
   getGetLoggedInUserQueryKey,
+  requestUpload,
+  confirmUpload,
   type PrivateUserResponse,
 } from "@workspace/api-client-react";
 import {
@@ -14,12 +16,39 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil } from "lucide-react";
+import { Camera, Loader2, Pencil, X } from "lucide-react";
+import { getInitials } from "@/lib/format";
+
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+async function uploadAvatarFile(file: File): Promise<string> {
+  const upload = await requestUpload({
+    fileName: file.name,
+    fileType: file.type || "application/octet-stream",
+    fileSize: file.size,
+  });
+  const putResp = await fetch(upload.uploadUrl, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!putResp.ok) {
+    throw new Error(`Upload failed (${putResp.status})`);
+  }
+  const confirmed = await confirmUpload(upload.assetId);
+  if (!confirmed?.url) {
+    throw new Error("Upload could not be confirmed");
+  }
+  return confirmed.url;
+}
 
 export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
   const qc = useQueryClient();
@@ -29,6 +58,11 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
   const [lastName, setLastName] = useState(user.lastName);
   const [nickname, setNickname] = useState(user.nickname ?? "");
   const [bio, setBio] = useState(user.bio ?? "");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadGenRef = useRef(0);
 
   const update = useUpdateUser({
     mutation: {
@@ -47,6 +81,58 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
     },
   });
 
+  const onPickFile = () => fileInputRef.current?.click();
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = "";
+    if (!file) return;
+    setAvatarError(null);
+    if (!AVATAR_ACCEPTED_TYPES.includes(file.type)) {
+      setAvatarError("Use a JPG, PNG, WebP, or GIF image.");
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      setAvatarError("Image must be under 5 MB.");
+      return;
+    }
+    const myGen = ++uploadGenRef.current;
+    setAvatarUploading(true);
+    try {
+      const url = await uploadAvatarFile(file);
+      if (uploadGenRef.current !== myGen) return;
+      setAvatarUrl(url);
+    } catch (err) {
+      if (uploadGenRef.current !== myGen) return;
+      setAvatarError(
+        err instanceof Error ? err.message : "Upload failed. Try again.",
+      );
+    } finally {
+      if (uploadGenRef.current === myGen) setAvatarUploading(false);
+    }
+  };
+
+  const onRemoveAvatar = () => {
+    uploadGenRef.current += 1;
+    setAvatarError(null);
+    setAvatarUploading(false);
+    setAvatarUrl(null);
+  };
+
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      uploadGenRef.current += 1;
+      setAvatarUploading(false);
+      setFirstName(user.firstName);
+      setLastName(user.lastName);
+      setNickname(user.nickname ?? "");
+      setBio(user.bio ?? "");
+      setAvatarUrl(user.avatarUrl ?? null);
+      setAvatarError(null);
+    }
+  };
+
   const onSave = () => {
     update.mutate({
       userId: user.id,
@@ -55,12 +141,15 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
         lastName,
         nickname: nickname.trim() ? nickname : null,
         bio: bio.trim() ? bio : null,
+        avatarUrl,
       },
     });
   };
 
+  const initials = getInitials(`${firstName} ${lastName}`.trim() || user.firstName);
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -78,6 +167,71 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Avatar
+                className="w-20 h-20 border-2 border-border"
+                data-testid="avatar-edit-preview"
+              >
+                {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+                <AvatarFallback className="text-lg font-bold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              {avatarUploading && (
+                <div
+                  className="absolute inset-0 rounded-full bg-background/70 flex items-center justify-center"
+                  data-testid="avatar-uploading"
+                >
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={AVATAR_ACCEPTED_TYPES.join(",")}
+                className="hidden"
+                onChange={onFileChange}
+                data-testid="input-avatar-file"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onPickFile}
+                disabled={avatarUploading}
+                className="font-bold rounded-full gap-2"
+                data-testid="button-change-avatar"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                {avatarUrl ? "Change photo" : "Upload photo"}
+              </Button>
+              {avatarUrl && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRemoveAvatar}
+                  disabled={avatarUploading}
+                  className="font-bold rounded-full gap-2 text-muted-foreground"
+                  data-testid="button-remove-avatar"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Remove photo
+                </Button>
+              )}
+            </div>
+          </div>
+          {avatarError && (
+            <p
+              className="text-xs text-destructive font-medium"
+              data-testid="text-avatar-error"
+            >
+              {avatarError}
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="firstName" className="text-xs font-bold">
@@ -132,14 +286,16 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => setOpen(false)}
+            onClick={() => onOpenChange(false)}
             className="font-bold"
           >
             Cancel
           </Button>
           <Button
             onClick={onSave}
-            disabled={update.isPending || !firstName || !lastName}
+            disabled={
+              update.isPending || avatarUploading || !firstName || !lastName
+            }
             className="font-bold"
             data-testid="button-save-profile"
           >

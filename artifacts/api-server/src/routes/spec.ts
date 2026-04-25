@@ -933,12 +933,18 @@ router.get(
 router.patch(
   "/users/:userId",
   asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [existing] = await db
       .select()
       .from(users)
       .where(eq(users.id, req.params.userId))
       .limit(1);
     if (!existing) return notFound(res);
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    if (existing.id !== me.id && !isAdmin) {
+      return apiError(res, 403, "Forbidden");
+    }
     const body = req.body ?? {};
     const updates: Partial<typeof users.$inferInsert> = {};
     if (body.firstName || body.lastName) {
@@ -946,6 +952,39 @@ router.patch(
       updates.name = `${body.firstName ?? cur.firstName} ${body.lastName ?? cur.lastName}`.trim();
     }
     if (body.bio !== undefined) updates.bio = body.bio;
+    if (body.avatarUrl !== undefined) {
+      if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {
+        return apiError(res, 400, "avatarUrl must be a string or null");
+      }
+      if (typeof body.avatarUrl === "string" && body.avatarUrl.length > 4096) {
+        return apiError(res, 400, "avatarUrl is too long");
+      }
+      if (typeof body.avatarUrl === "string") {
+        // Avatar URLs must come from a confirmed asset that the caller (not
+        // the target user, since admins may edit anyone) owns. This prevents
+        // direct API callers from pointing at arbitrary external URLs that
+        // bypass the upload + confirm flow.
+        const [ownedAsset] = await db
+          .select()
+          .from(assets)
+          .where(
+            and(
+              eq(assets.url, body.avatarUrl),
+              eq(assets.ownerId, me.id),
+              eq(assets.status, "confirmed"),
+            ),
+          )
+          .limit(1);
+        if (!ownedAsset) {
+          return apiError(
+            res,
+            400,
+            "avatarUrl must reference a confirmed asset you uploaded",
+          );
+        }
+      }
+      updates.avatarUrl = body.avatarUrl;
+    }
     const [updated] = Object.keys(updates).length
       ? await db.update(users).set(updates).where(eq(users.id, existing.id)).returning()
       : [existing];

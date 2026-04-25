@@ -5422,6 +5422,11 @@ components:
           type: string
           nullable: true
           maxLength: 50
+        avatarUrl:
+          type: string
+          nullable: true
+          maxLength: 4096
+          description: URL of the user's profile picture. Use the asset upload flow to obtain a confirmed URL, or pass null to remove the current avatar.
 
     SetAssetIdRequest:
       type: object
