@@ -102,6 +102,7 @@ export default function FeedPage() {
                       key={org.id}
                       orgId={org.id}
                       orgName={org.name}
+                      orgLogoUrl={org.avatarUrl ?? null}
                       isOpen={openOrgId === org.id}
                       onClick={() => handleOrgClick(org.id)}
                       isOrgAdmin={isOrgAdmin}
@@ -188,6 +189,7 @@ export default function FeedPage() {
 function OrgRow({
   orgId,
   orgName,
+  orgLogoUrl,
   isOpen,
   onClick,
   isOrgAdmin,
@@ -195,6 +197,7 @@ function OrgRow({
 }: {
   orgId: string;
   orgName: string;
+  orgLogoUrl: string | null;
   isOpen: boolean;
   onClick: () => void;
   isOrgAdmin: boolean;
@@ -225,7 +228,17 @@ function OrgRow({
             isOpen ? "rotate-90" : ""
           }`}
         />
-        <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        {orgLogoUrl ? (
+          <img
+            src={orgLogoUrl}
+            alt=""
+            className="w-5 h-5 rounded-md object-cover bg-muted shrink-0"
+          />
+        ) : (
+          <div className="w-5 h-5 rounded-md bg-muted flex items-center justify-center shrink-0">
+            <Building2 className="w-3 h-3 text-muted-foreground" />
+          </div>
+        )}
         <span className="truncate flex-1">{orgName}</span>
         {isOpen && teams.length > 0 && (
           <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
