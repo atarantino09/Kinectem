@@ -5116,6 +5116,115 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /users/me/children/{childId}/notifications:
+    get:
+      operationId: listChildNotifications
+      summary: List the unified notification stream for a guardian-managed child
+      description: >
+        Aggregates events addressed to the child — direct notifications,
+        tags in posts, comments on posts the child is involved with,
+        messages in conversations the child participates in, and roster
+        events — into a single stream for the parent. The parent's
+        per-item read state is tracked separately from the child's, so
+        marking items here does not change what the child sees.
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Aggregated notification stream for the child.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  unreadCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/me/children/{childId}/notifications/read:
+    post:
+      operationId: markChildNotificationRead
+      summary: Mark a single child-stream item as read for the parent
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemKey]
+              properties:
+                itemKey:
+                  type: string
+                  description: >
+                    The aggregated item's key in the form `<kind>:<id>`,
+                    e.g. `tag:abc-123` or `comment:def-456`.
+      responses:
+        '204':
+          description: Item marked as read.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/me/children/{childId}/notifications/read-all:
+    post:
+      operationId: markAllChildNotificationsRead
+      summary: Mark every currently visible child-stream item as read
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Count of newly-marked items.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [markedCount]
+                properties:
+                  markedCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /users/me/children/{childId}/resend-guardian-confirm:
     post:
       operationId: resendChildGuardianConfirm

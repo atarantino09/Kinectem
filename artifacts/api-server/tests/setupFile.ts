@@ -5,6 +5,7 @@ import { seedIfEmpty } from "../src/lib/seed";
 import { resetAllRateLimits } from "../src/middlewares/rate-limit";
 
 const ALL_TABLES = [
+  "parent_child_notification_reads",
   "article_tags",
   "highlight_tags",
   "article_authors",

@@ -28,6 +28,7 @@ import {
   organizationJoinRequests,
   passwordResets,
   contentReports,
+  parentChildNotificationReads,
 } from "@workspace/db";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -2782,6 +2783,421 @@ router.get(
     });
 
     res.json({ data });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Parent inbox: unified per-child notification stream
+// ---------------------------------------------------------------------------
+// Roster invites are not the only thing parents need to see. Coaches tag
+// children in game recaps, comment on those recaps, and DM the child
+// directly. Today the only of those that fans out to the parent is the
+// roster invite. This endpoint aggregates every recent event addressed to
+// the child so the parent can supervise without logging in as the child.
+//
+// The stream is computed on the fly from:
+//   - `notifications` rows addressed to the child (mention, roster_invite,
+//     ...) — these are the events the child themselves sees
+//   - `articleTags` for the child (tags in posts / recaps)
+//   - `postComments` on articles authored by the child OR articles the
+//     child is tagged in, excluding the child's own comments
+//   - `messages` in conversations the child participates in, sent by
+//     someone other than the child
+//   - `rosterEntries` for the child (roster events: invites + status)
+//
+// Each item is keyed `kind:underlyingId`. Per-parent read state is stored
+// in `parent_child_notification_reads`, keyed by (parentId, childId,
+// itemKey), so marking-as-seen by the parent does NOT touch the child's
+// own read flags. Auth shape mirrors the pending-team-invites endpoint:
+// real (non-masquerading) parent or real admin.
+
+type ChildItemKind = "notification" | "tag" | "comment" | "message" | "roster";
+
+interface ChildItem {
+  itemKey: string;
+  kind: ChildItemKind;
+  title: string;
+  body: string | null;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+  actor: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+  } | null;
+}
+
+const CHILD_ITEM_LOOKBACK_DAYS = 90;
+const CHILD_ITEM_PER_SOURCE_LIMIT = 50;
+const CHILD_ITEM_TOTAL_LIMIT = 50;
+
+async function loadChildNotificationItems(
+  child: typeof users.$inferSelect,
+): Promise<ChildItem[]> {
+  const childId = child.id;
+  const since = new Date(
+    Date.now() - CHILD_ITEM_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const items: ChildItem[] = [];
+
+  // 1. Notifications addressed to the child
+  const childNotifs = await db
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, childId),
+        gt(notifications.createdAt, since),
+      ),
+    )
+    .orderBy(desc(notifications.createdAt))
+    .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  for (const n of childNotifs) {
+    items.push({
+      itemKey: `notification:${n.id}`,
+      kind: "notification",
+      title: n.message,
+      body: null,
+      link: n.link ?? null,
+      isRead: false, // overlaid below from parent's read table
+      createdAt: n.createdAt.toISOString(),
+      actor: null,
+    });
+  }
+
+  // 2. Tags for the child (only approved/pending — declined tags should
+  //    never resurface).
+  const tagRows = await db
+    .select({
+      t: articleTags,
+      a: articles,
+      tagger: users,
+    })
+    .from(articleTags)
+    .innerJoin(articles, eq(articleTags.articleId, articles.id))
+    .leftJoin(users, eq(articleTags.taggerUserId, users.id))
+    .where(
+      and(
+        eq(articleTags.userId, childId),
+        inArray(articleTags.status, ["approved", "pending"] as const),
+        gt(articleTags.createdAt, since),
+      ),
+    )
+    .orderBy(desc(articleTags.createdAt))
+    .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  const childFirst = (child.name?.trim().split(/\s+/)[0] ?? "").length > 0
+    ? child.name!.trim().split(/\s+/)[0]
+    : "your child";
+  for (const r of tagRows) {
+    const taggerName = r.tagger ? displayName(r.tagger) : "Someone";
+    const articleTitle = r.a.title ?? "Untitled";
+    items.push({
+      itemKey: `tag:${r.t.id}`,
+      kind: "tag",
+      title: `${taggerName} tagged ${childFirst} in "${articleTitle}"`,
+      body:
+        r.t.status === "pending"
+          ? "Pending consent — review the tag for your child."
+          : null,
+      link: `/posts/${articlePostId(r.a.id)}`,
+      isRead: false,
+      createdAt: r.t.createdAt.toISOString(),
+      actor: r.tagger
+        ? {
+            id: r.tagger.id,
+            displayName: displayName(r.tagger),
+            avatarUrl: r.tagger.avatarUrl ?? null,
+          }
+        : null,
+    });
+  }
+
+  // 3. Comments on articles where the child is the author OR is tagged
+  //    (status approved/pending — declined tag means the child isn't
+  //    publicly associated with the article and shouldn't see comments).
+  //    Exclude comments authored by the child themselves.
+  const taggedArticleRows = await db
+    .select({ id: articleTags.articleId })
+    .from(articleTags)
+    .where(
+      and(
+        eq(articleTags.userId, childId),
+        inArray(articleTags.status, ["approved", "pending"] as const),
+      ),
+    );
+  const authoredArticleRows = await db
+    .select({ id: articles.id })
+    .from(articles)
+    .where(eq(articles.authorId, childId));
+  const involvedArticleIds = Array.from(
+    new Set<string>([
+      ...taggedArticleRows.map((r) => r.id),
+      ...authoredArticleRows.map((r) => r.id),
+    ]),
+  );
+  if (involvedArticleIds.length > 0) {
+    const commentRows = await db
+      .select({ c: postComments, a: articles, author: users })
+      .from(postComments)
+      .innerJoin(
+        articles,
+        and(
+          eq(articles.id, postComments.postRefId),
+          eq(postComments.postKind, "article"),
+        ),
+      )
+      .leftJoin(users, eq(postComments.authorId, users.id))
+      .where(
+        and(
+          inArray(postComments.postRefId, involvedArticleIds),
+          eq(postComments.postKind, "article"),
+          isNull(postComments.deletedAt),
+          isNull(postComments.hiddenAt),
+          gt(postComments.createdAt, since),
+          ne(postComments.authorId, childId),
+        ),
+      )
+      .orderBy(desc(postComments.createdAt))
+      .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+    for (const r of commentRows) {
+      const authorName = r.author ? displayName(r.author) : "Someone";
+      const articleTitle = r.a.title ?? "Untitled";
+      items.push({
+        itemKey: `comment:${r.c.id}`,
+        kind: "comment",
+        title: `${authorName} commented on "${articleTitle}"`,
+        body:
+          r.c.body.length > 140
+            ? `${r.c.body.slice(0, 140)}…`
+            : r.c.body,
+        link: `/posts/${articlePostId(r.a.id)}`,
+        isRead: false,
+        createdAt: r.c.createdAt.toISOString(),
+        actor: r.author
+          ? {
+              id: r.author.id,
+              displayName: displayName(r.author),
+              avatarUrl: r.author.avatarUrl ?? null,
+            }
+          : null,
+      });
+    }
+  }
+
+  // 4. Messages in conversations the child participates in, sent by
+  //    other users (not the child themselves).
+  const childConvRows = await db
+    .select({ conversationId: conversationParticipants.conversationId })
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.participantType, "user"),
+        eq(conversationParticipants.participantId, childId),
+        isNull(conversationParticipants.leftAt),
+      ),
+    );
+  const childConvIds = childConvRows.map((r) => r.conversationId);
+  if (childConvIds.length > 0) {
+    const msgRows = await db
+      .select({ m: messages, sender: users })
+      .from(messages)
+      .leftJoin(users, eq(messages.senderUserId, users.id))
+      .where(
+        and(
+          inArray(messages.conversationId, childConvIds),
+          ne(messages.senderUserId, childId),
+          isNull(messages.deletedAt),
+          gt(messages.createdAt, since),
+        ),
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+    for (const r of msgRows) {
+      const senderName = r.sender ? displayName(r.sender) : "Someone";
+      const preview = r.m.body
+        ? r.m.body.length > 140
+          ? `${r.m.body.slice(0, 140)}…`
+          : r.m.body
+        : "Sent an attachment";
+      items.push({
+        itemKey: `message:${r.m.id}`,
+        kind: "message",
+        title: `${senderName} messaged ${childFirst}`,
+        body: preview,
+        link: `/messages`,
+        isRead: false,
+        createdAt: r.m.createdAt.toISOString(),
+        actor: r.sender
+          ? {
+              id: r.sender.id,
+              displayName: displayName(r.sender),
+              avatarUrl: r.sender.avatarUrl ?? null,
+            }
+          : null,
+      });
+    }
+  }
+
+  // 5. Roster events for the child (recent invites + accepted/declined).
+  //    These are higher-level than the per-team `roster_invite_for_child`
+  //    notification because they cover acceptance/denial too.
+  const rosterRows = await db
+    .select({ entry: rosterEntries, team: teams })
+    .from(rosterEntries)
+    .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+    .where(
+      and(
+        eq(rosterEntries.userId, childId),
+        gt(rosterEntries.createdAt, since),
+      ),
+    )
+    .orderBy(desc(rosterEntries.createdAt))
+    .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  for (const r of rosterRows) {
+    const verb =
+      r.entry.status === "accepted"
+        ? `joined ${r.team.name}`
+        : r.entry.status === "pending"
+          ? `was invited to ${r.team.name}`
+          : `${r.entry.status} ${r.team.name}`;
+    items.push({
+      itemKey: `roster:${r.entry.id}`,
+      kind: "roster",
+      title: `${childFirst} ${verb}`,
+      body: r.entry.position ?? null,
+      link: `/family?childId=${childId}&entryId=${r.entry.id}&teamId=${r.team.id}`,
+      isRead: false,
+      createdAt: r.entry.createdAt.toISOString(),
+      actor: null,
+    });
+  }
+
+  // Sort and trim to total cap
+  items.sort((a, b) =>
+    a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+  );
+  return items.slice(0, CHILD_ITEM_TOTAL_LIMIT);
+}
+
+async function applyParentReadOverlay(
+  parentId: string,
+  childId: string,
+  items: ChildItem[],
+): Promise<ChildItem[]> {
+  if (items.length === 0) return items;
+  const keys = items.map((i) => i.itemKey);
+  const reads = await db
+    .select({ itemKey: parentChildNotificationReads.itemKey })
+    .from(parentChildNotificationReads)
+    .where(
+      and(
+        eq(parentChildNotificationReads.parentId, parentId),
+        eq(parentChildNotificationReads.childId, childId),
+        inArray(parentChildNotificationReads.itemKey, keys),
+      ),
+    );
+  const readSet = new Set(reads.map((r) => r.itemKey));
+  return items.map((i) =>
+    readSet.has(i.itemKey) ? { ...i, isRead: true } : i,
+  );
+}
+
+async function authorizeChildAccess(
+  req: Request,
+  res: Response,
+): Promise<typeof users.$inferSelect | null> {
+  const me = req.sessionUser;
+  if (!me) {
+    apiError(res, 401, "Not authenticated");
+    return null;
+  }
+  const childId = req.params.childId;
+  const [child] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, childId))
+    .limit(1);
+  if (!child) {
+    notFound(res);
+    return null;
+  }
+  const isRealAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+  const isGuardian = child.parentId === me.id && !req.isMasquerading;
+  if (!isGuardian && !isRealAdmin) {
+    apiError(res, 403, "Forbidden");
+    return null;
+  }
+  return child;
+}
+
+router.get(
+  "/users/me/children/:childId/notifications",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const me = req.sessionUser!;
+    const raw = await loadChildNotificationItems(child);
+    const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
+    res.json({
+      data: overlaid,
+      unreadCount: overlaid.filter((i) => !i.isRead).length,
+    });
+  }),
+);
+
+router.post(
+  "/users/me/children/:childId/notifications/read",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const me = req.sessionUser!;
+    const itemKey = String(req.body?.itemKey ?? "").trim();
+    if (!itemKey) return apiError(res, 400, "itemKey is required");
+    if (itemKey.length > 200)
+      return apiError(res, 400, "itemKey too long");
+    // Sanity-check the shape so callers can't poison the table with
+    // arbitrary strings — we only accept known kinds.
+    const [kind] = itemKey.split(":");
+    const allowed: ChildItemKind[] = [
+      "notification",
+      "tag",
+      "comment",
+      "message",
+      "roster",
+    ];
+    if (!allowed.includes(kind as ChildItemKind)) {
+      return apiError(res, 400, "unknown item kind");
+    }
+    await db
+      .insert(parentChildNotificationReads)
+      .values({ parentId: me.id, childId: child.id, itemKey })
+      .onConflictDoNothing();
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/users/me/children/:childId/notifications/read-all",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const me = req.sessionUser!;
+    const raw = await loadChildNotificationItems(child);
+    const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
+    const toMark = overlaid.filter((i) => !i.isRead);
+    if (toMark.length === 0) return res.json({ markedCount: 0 });
+    await db
+      .insert(parentChildNotificationReads)
+      .values(
+        toMark.map((i) => ({
+          parentId: me.id,
+          childId: child.id,
+          itemKey: i.itemKey,
+        })),
+      )
+      .onConflictDoNothing();
+    res.json({ markedCount: toMark.length });
   }),
 );
 

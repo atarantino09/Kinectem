@@ -162,6 +162,7 @@ import type {
   ListAdminReportsParams,
   ListAdminUsers200,
   ListAdminUsersParams,
+  ListChildNotifications200,
   ListChildPendingTeamInvites200,
   ListCommentReactorsParams,
   ListConversationsParams,
@@ -199,7 +200,9 @@ import type {
   ListUserOrganizationsParams,
   ListUserPostsParams,
   ListUserTeamsParams,
+  MarkAllChildNotificationsRead200,
   MarkAllReadResponse,
+  MarkChildNotificationReadBody,
   MemberResponse,
   MessageResponse,
   NotFoundResponse,
@@ -18444,6 +18447,302 @@ export function useListChildPendingTeamInvites<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Aggregates events addressed to the child — direct notifications, tags in posts, comments on posts the child is involved with, messages in conversations the child participates in, and roster events — into a single stream for the parent. The parent's per-item read state is tracked separately from the child's, so marking items here does not change what the child sees.
+
+ * @summary List the unified notification stream for a guardian-managed child
+ */
+export const getListChildNotificationsUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/notifications`;
+};
+
+export const listChildNotifications = async (
+  childId: string,
+  options?: RequestInit,
+): Promise<ListChildNotifications200> => {
+  return customFetch<ListChildNotifications200>(
+    getListChildNotificationsUrl(childId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListChildNotificationsQueryKey = (childId: string) => {
+  return [`/api/v1/users/me/children/${childId}/notifications`] as const;
+};
+
+export const getListChildNotificationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listChildNotifications>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChildNotifications>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListChildNotificationsQueryKey(childId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listChildNotifications>>
+  > = ({ signal }) =>
+    listChildNotifications(childId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!childId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listChildNotifications>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListChildNotificationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listChildNotifications>>
+>;
+export type ListChildNotificationsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary List the unified notification stream for a guardian-managed child
+ */
+
+export function useListChildNotifications<
+  TData = Awaited<ReturnType<typeof listChildNotifications>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChildNotifications>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListChildNotificationsQueryOptions(childId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark a single child-stream item as read for the parent
+ */
+export const getMarkChildNotificationReadUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/notifications/read`;
+};
+
+export const markChildNotificationRead = async (
+  childId: string,
+  markChildNotificationReadBody: MarkChildNotificationReadBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getMarkChildNotificationReadUrl(childId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(markChildNotificationReadBody),
+  });
+};
+
+export const getMarkChildNotificationReadMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markChildNotificationRead>>,
+    TError,
+    { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markChildNotificationRead>>,
+  TError,
+  { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+  TContext
+> => {
+  const mutationKey = ["markChildNotificationRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markChildNotificationRead>>,
+    { childId: string; data: BodyType<MarkChildNotificationReadBody> }
+  > = (props) => {
+    const { childId, data } = props ?? {};
+
+    return markChildNotificationRead(childId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkChildNotificationReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markChildNotificationRead>>
+>;
+export type MarkChildNotificationReadMutationBody =
+  BodyType<MarkChildNotificationReadBody>;
+export type MarkChildNotificationReadMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Mark a single child-stream item as read for the parent
+ */
+export const useMarkChildNotificationRead = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markChildNotificationRead>>,
+    TError,
+    { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markChildNotificationRead>>,
+  TError,
+  { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+  TContext
+> => {
+  return useMutation(getMarkChildNotificationReadMutationOptions(options));
+};
+
+/**
+ * @summary Mark every currently visible child-stream item as read
+ */
+export const getMarkAllChildNotificationsReadUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/notifications/read-all`;
+};
+
+export const markAllChildNotificationsRead = async (
+  childId: string,
+  options?: RequestInit,
+): Promise<MarkAllChildNotificationsRead200> => {
+  return customFetch<MarkAllChildNotificationsRead200>(
+    getMarkAllChildNotificationsReadUrl(childId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getMarkAllChildNotificationsReadMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAllChildNotificationsRead>>,
+    TError,
+    { childId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markAllChildNotificationsRead>>,
+  TError,
+  { childId: string },
+  TContext
+> => {
+  const mutationKey = ["markAllChildNotificationsRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markAllChildNotificationsRead>>,
+    { childId: string }
+  > = (props) => {
+    const { childId } = props ?? {};
+
+    return markAllChildNotificationsRead(childId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkAllChildNotificationsReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markAllChildNotificationsRead>>
+>;
+
+export type MarkAllChildNotificationsReadMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Mark every currently visible child-stream item as read
+ */
+export const useMarkAllChildNotificationsRead = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markAllChildNotificationsRead>>,
+    TError,
+    { childId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markAllChildNotificationsRead>>,
+  TError,
+  { childId: string },
+  TContext
+> => {
+  return useMutation(getMarkAllChildNotificationsReadMutationOptions(options));
+};
 
 /**
  * @summary Resend the guardian-confirmation email for a child account

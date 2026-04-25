@@ -3309,6 +3309,23 @@ export type ListChildPendingTeamInvites200 = {
   data: ListChildPendingTeamInvites200DataItem[];
 };
 
+export type ListChildNotifications200DataItem = { [key: string]: unknown };
+
+export type ListChildNotifications200 = {
+  data: ListChildNotifications200DataItem[];
+  unreadCount?: number;
+};
+
+export type MarkChildNotificationReadBody = {
+  /** The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
+   */
+  itemKey: string;
+};
+
+export type MarkAllChildNotificationsRead200 = {
+  markedCount: number;
+};
+
 export type ResendChildGuardianConfirm200 = {
   ok?: boolean;
 };

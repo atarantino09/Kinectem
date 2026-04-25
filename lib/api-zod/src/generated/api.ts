@@ -5906,6 +5906,46 @@ export const ListChildPendingTeamInvitesResponse = zod.object({
 });
 
 /**
+ * Aggregates events addressed to the child — direct notifications, tags in posts, comments on posts the child is involved with, messages in conversations the child participates in, and roster events — into a single stream for the parent. The parent's per-item read state is tracked separately from the child's, so marking items here does not change what the child sees.
+
+ * @summary List the unified notification stream for a guardian-managed child
+ */
+export const ListChildNotificationsParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const ListChildNotificationsResponse = zod.object({
+  data: zod.array(zod.record(zod.string(), zod.unknown())),
+  unreadCount: zod.number().optional(),
+});
+
+/**
+ * @summary Mark a single child-stream item as read for the parent
+ */
+export const MarkChildNotificationReadParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const MarkChildNotificationReadBody = zod.object({
+  itemKey: zod
+    .string()
+    .describe(
+      "The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.\n",
+    ),
+});
+
+/**
+ * @summary Mark every currently visible child-stream item as read
+ */
+export const MarkAllChildNotificationsReadParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const MarkAllChildNotificationsReadResponse = zod.object({
+  markedCount: zod.number(),
+});
+
+/**
  * @summary Resend the guardian-confirmation email for a child account
  */
 export const ResendChildGuardianConfirmParams = zod.object({

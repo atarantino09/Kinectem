@@ -25,6 +25,11 @@ import {
   BellOff,
   Pencil,
   Inbox,
+  Bell,
+  MessageSquare,
+  Tag as TagIcon,
+  MessageCircle,
+  ClipboardList,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, getInitials, timeAgo } from "@/lib/format";
@@ -52,6 +57,27 @@ interface SearchUser {
   role: string;
   email: string | null;
   avatarUrl: string | null;
+}
+
+interface ChildNotificationItem {
+  itemKey: string;
+  kind: "notification" | "tag" | "comment" | "message" | "roster";
+  title: string;
+  body: string | null;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+  actor: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+  } | null;
+}
+
+interface ChildNotificationsState {
+  loading: boolean;
+  items: ChildNotificationItem[];
+  unreadCount: number;
 }
 
 interface PendingTeamInvite {
@@ -92,6 +118,13 @@ export default function GuardianPage() {
     Record<string, PendingTeamInvite[]>
   >({});
   const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
+  const [notifsByChild, setNotifsByChild] = useState<
+    Record<string, ChildNotificationsState>
+  >({});
+  const [markingItemKey, setMarkingItemKey] = useState<string | null>(null);
+  const [markingAllForChild, setMarkingAllForChild] = useState<string | null>(
+    null,
+  );
   const childRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const deepLink = useMemo(() => {
@@ -132,6 +165,124 @@ export default function GuardianPage() {
     }
   };
 
+  const fetchNotificationsForChild = async (childId: string) => {
+    setNotifsByChild((prev) => ({
+      ...prev,
+      [childId]: {
+        loading: true,
+        items: prev[childId]?.items ?? [],
+        unreadCount: prev[childId]?.unreadCount ?? 0,
+      },
+    }));
+    try {
+      const r = await customFetch<{
+        data: ChildNotificationItem[];
+        unreadCount?: number;
+      }>(`/api/v1/users/me/children/${childId}/notifications`);
+      const items = r.data ?? [];
+      setNotifsByChild((prev) => ({
+        ...prev,
+        [childId]: {
+          loading: false,
+          items,
+          unreadCount:
+            typeof r.unreadCount === "number"
+              ? r.unreadCount
+              : items.filter((i) => !i.isRead).length,
+        },
+      }));
+    } catch {
+      setNotifsByChild((prev) => ({
+        ...prev,
+        [childId]: { loading: false, items: [], unreadCount: 0 },
+      }));
+    }
+  };
+
+  const markChildItemRead = async (
+    childId: string,
+    item: ChildNotificationItem,
+  ) => {
+    if (item.isRead) return;
+    setMarkingItemKey(item.itemKey);
+    // Optimistically flip the flag so the UI feels instant.
+    setNotifsByChild((prev) => {
+      const cur = prev[childId];
+      if (!cur) return prev;
+      const items = cur.items.map((i) =>
+        i.itemKey === item.itemKey ? { ...i, isRead: true } : i,
+      );
+      return {
+        ...prev,
+        [childId]: {
+          ...cur,
+          items,
+          unreadCount: Math.max(0, cur.unreadCount - 1),
+        },
+      };
+    });
+    try {
+      await customFetch(
+        `/api/v1/users/me/children/${childId}/notifications/read`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemKey: item.itemKey }),
+        },
+      );
+    } catch {
+      // Roll back on failure so the user can try again.
+      setNotifsByChild((prev) => {
+        const cur = prev[childId];
+        if (!cur) return prev;
+        const items = cur.items.map((i) =>
+          i.itemKey === item.itemKey ? { ...i, isRead: false } : i,
+        );
+        return {
+          ...prev,
+          [childId]: { ...cur, items, unreadCount: cur.unreadCount + 1 },
+        };
+      });
+      toast({
+        title: "Couldn't mark as seen",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setMarkingItemKey(null);
+    }
+  };
+
+  const markAllChildItemsRead = async (childId: string) => {
+    setMarkingAllForChild(childId);
+    try {
+      await customFetch(
+        `/api/v1/users/me/children/${childId}/notifications/read-all`,
+        { method: "POST" },
+      );
+      setNotifsByChild((prev) => {
+        const cur = prev[childId];
+        if (!cur) return prev;
+        return {
+          ...prev,
+          [childId]: {
+            ...cur,
+            items: cur.items.map((i) => ({ ...i, isRead: true })),
+            unreadCount: 0,
+          },
+        };
+      });
+    } catch {
+      toast({
+        title: "Couldn't mark all as seen",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setMarkingAllForChild(null);
+    }
+  };
+
   const refresh = async () => {
     setLoading(true);
     try {
@@ -139,11 +290,14 @@ export default function GuardianPage() {
         "/api/v1/users/me/children",
       );
       setChildren(r.data);
-      // Fan out the pending-invite lookups so each card has its data ready
-      // by the time the user looks at it. Failures are swallowed per-child
-      // so one slow child can't hide the rest.
+      // Fan out the pending-invite and notification lookups so each card
+      // has its data ready by the time the user looks at it. Failures are
+      // swallowed per-child so one slow child can't hide the rest.
       await Promise.all(
-        (r.data ?? []).map((c) => fetchPendingForChild(c.id)),
+        (r.data ?? []).flatMap((c) => [
+          fetchPendingForChild(c.id),
+          fetchNotificationsForChild(c.id),
+        ]),
       );
     } catch {
       // ignore
@@ -609,6 +763,135 @@ export default function GuardianPage() {
                       )}
                     </div>
                   )}
+
+                  {(() => {
+                    const notifState = notifsByChild[c.id];
+                    const items = notifState?.items ?? [];
+                    if (notifState?.loading && items.length === 0) {
+                      return (
+                        <div
+                          className="pt-2 border-t border-border space-y-2"
+                          data-testid={`section-child-notifs-${c.id}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Bell className="w-3.5 h-3.5 text-primary" />
+                            <p className="text-xs font-black uppercase tracking-wider text-primary">
+                              {c.firstName}'s notifications
+                            </p>
+                          </div>
+                          <Skeleton className="h-12 rounded-lg" />
+                        </div>
+                      );
+                    }
+                    if (items.length === 0) return null;
+                    const unread = notifState?.unreadCount ?? 0;
+                    return (
+                      <div
+                        className="pt-2 border-t border-border space-y-2"
+                        data-testid={`section-child-notifs-${c.id}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Bell className="w-3.5 h-3.5 text-primary" />
+                          <p className="text-xs font-black uppercase tracking-wider text-primary">
+                            {c.firstName}'s notifications
+                          </p>
+                          {unread > 0 && (
+                            <Badge
+                              variant="outline"
+                              className="font-bold text-[10px] h-5 px-1.5 border-primary text-primary"
+                              data-testid={`badge-child-notif-unread-${c.id}`}
+                            >
+                              {unread} new
+                            </Badge>
+                          )}
+                          {unread > 0 && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="ml-auto h-6 px-2 text-xs font-bold"
+                              disabled={markingAllForChild === c.id}
+                              onClick={() => void markAllChildItemsRead(c.id)}
+                              data-testid={`btn-mark-all-read-${c.id}`}
+                            >
+                              {markingAllForChild === c.id
+                                ? "Marking…"
+                                : "Mark all seen"}
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          {items.slice(0, 8).map((item) => {
+                            const Icon =
+                              item.kind === "tag"
+                                ? TagIcon
+                                : item.kind === "comment"
+                                  ? MessageCircle
+                                  : item.kind === "message"
+                                    ? MessageSquare
+                                    : item.kind === "roster"
+                                      ? ClipboardList
+                                      : Bell;
+                            const isMarking = markingItemKey === item.itemKey;
+                            return (
+                              <div
+                                key={item.itemKey}
+                                data-testid={`row-child-notif-${item.itemKey}`}
+                                data-read={item.isRead ? "true" : "false"}
+                                className={`flex items-start gap-2 p-2 rounded-md border ${
+                                  item.isRead
+                                    ? "border-border bg-background"
+                                    : "border-primary/30 bg-primary/5"
+                                }`}
+                              >
+                                <Icon className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  {item.link ? (
+                                    <Link href={item.link}>
+                                      <p
+                                        className="text-xs font-bold leading-tight cursor-pointer hover:text-primary truncate"
+                                        data-testid={`text-child-notif-title-${item.itemKey}`}
+                                      >
+                                        {item.title}
+                                      </p>
+                                    </Link>
+                                  ) : (
+                                    <p
+                                      className="text-xs font-bold leading-tight truncate"
+                                      data-testid={`text-child-notif-title-${item.itemKey}`}
+                                    >
+                                      {item.title}
+                                    </p>
+                                  )}
+                                  {item.body && (
+                                    <p className="text-[11px] text-muted-foreground line-clamp-2">
+                                      {item.body}
+                                    </p>
+                                  )}
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                                    {timeAgo(item.createdAt)}
+                                  </p>
+                                </div>
+                                {!item.isRead && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-2 text-[11px] font-bold shrink-0"
+                                    disabled={isMarking}
+                                    onClick={() =>
+                                      void markChildItemRead(c.id, item)
+                                    }
+                                    data-testid={`btn-mark-read-${item.itemKey}`}
+                                  >
+                                    {isMarking ? "…" : "Mark seen"}
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {(pendingByChild[c.id] ?? []).length > 0 && (
                     <div

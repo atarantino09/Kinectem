@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, uuid, pgEnum, boolean, primaryKey, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, uuid, pgEnum, boolean, primaryKey, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent"]);
@@ -361,6 +361,34 @@ export const notifications = pgTable("notifications", {
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Per-parent read state for the unified "child notifications" stream on
+// /family. Items in that stream are aggregated on the fly from many tables
+// (notifications, article_tags, post_comments, messages, roster_entries),
+// so they share no single primary key. The parent's seen-state is keyed by
+// a composite (parentId, childId, itemKey) where itemKey is "<kind>:<id>"
+// (e.g. "tag:<articleTagId>"). The child's own read flags are unaffected.
+export const parentChildNotificationReads = pgTable(
+  "parent_child_notification_reads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parentId: uuid("parent_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    childId: uuid("child_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    itemKey: text("item_key").notNull(),
+    readAt: timestamp("read_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("pc_notif_reads_parent_child_key_unique").on(
+      t.parentId,
+      t.childId,
+      t.itemKey,
+    ),
+  }),
+);
 
 export const usersRelations = relations(users, ({ many, one }) => ({
   rosterEntries: many(rosterEntries),
