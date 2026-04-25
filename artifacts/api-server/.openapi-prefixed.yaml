@@ -5811,6 +5811,10 @@ components:
           nullable: true
           format: uri
           example: https://kinectem.demo
+        logoUrl:
+          type: string
+          nullable: true
+          format: uri
         isMember:
           type: boolean
         isFollowing:
