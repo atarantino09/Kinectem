@@ -170,7 +170,7 @@ export function toPublicUser(
     id: u.id,
     firstName,
     lastName,
-    nickname: null as string | null,
+    nickname: u.nickname ?? null,
     bio: u.bio ?? null,
     avatarUrl: u.avatarUrl ?? null,
     coverPhotoUrl: null as string | null,

@@ -32,6 +32,7 @@ interface Child {
   id: string;
   firstName: string;
   lastName: string;
+  nickname: string | null;
   role: string;
   email: string | null;
   avatarUrl: string | null;
@@ -351,6 +352,14 @@ export default function GuardianPage() {
                           {c.firstName} {c.lastName}
                         </p>
                       </Link>
+                      {c.nickname && (
+                        <p
+                          className="text-xs font-bold text-primary uppercase tracking-wider truncate"
+                          data-testid={`text-child-nickname-${c.id}`}
+                        >
+                          @{c.nickname}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground truncate">
                         {c.email ?? "No email on file"}
                       </p>
