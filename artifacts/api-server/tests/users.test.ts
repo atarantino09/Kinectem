@@ -218,6 +218,87 @@ describe("users routes — parent ↔ child permissions", () => {
     });
   });
 
+  describe("GET /users/:userId/teams — feed sidebar contract", () => {
+    // The feed page's left sidebar groups the signed-in user's team
+    // memberships under each org by `organization.id`. Plain team members
+    // (no org admin/owner role) rely entirely on this endpoint, so the
+    // grouping key it returns must match the org IDs returned by
+    // /users/:userId/organizations. Regression coverage for Task #113.
+    it("returns the user's rostered teams with org IDs that match /users/:userId/organizations", async () => {
+      const { agent: tyler, user } = await loginAs(
+        (u) => u.email === "tyler@kinectem.demo",
+      );
+      const orgsRes = await tyler.get(
+        `/api/v1/users/${user.id}/organizations`,
+      );
+      expect(orgsRes.status).toBe(200);
+      const orgIds = new Set<string>(
+        (orgsRes.body.data as Array<{ id: string }>).map((o) => o.id),
+      );
+
+      const teamsRes = await tyler.get(`/api/v1/users/${user.id}/teams`);
+      expect(teamsRes.status).toBe(200);
+      const memberships = teamsRes.body.data as Array<{
+        teamId: string;
+        teamName: string;
+        organization: { id: string };
+        status: string;
+      }>;
+
+      // Tyler is rostered on teams in Westfield Athletic Club.
+      expect(memberships.length).toBeGreaterThan(0);
+
+      // Every org.id returned for a roster row must be one of the orgs
+      // the sidebar lists, otherwise the grouping in FeedPage.tsx
+      // silently drops the team and the user sees "No teams yet".
+      for (const m of memberships) {
+        expect(orgIds.has(m.organization.id)).toBe(true);
+      }
+
+      // And specifically: at least one org row in the sidebar must have
+      // a matching membership (i.e. the per-org bucket is non-empty
+      // for someone who is on a team).
+      const groupedOrgIds = new Set(
+        memberships.map((m) => m.organization.id),
+      );
+      const overlap = [...groupedOrgIds].filter((id) => orgIds.has(id));
+      expect(overlap.length).toBeGreaterThan(0);
+    });
+
+    it("includes the requester's own pending memberships so the sidebar can surface them", async () => {
+      const { agent: samira, user } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const teamsRes = await samira.get(`/api/v1/users/${user.id}/teams`);
+      expect(teamsRes.status).toBe(200);
+      const memberships = teamsRes.body.data as Array<{
+        organization: { id: string };
+        status: string;
+      }>;
+
+      // Samira has a pending roster entry on a Westfield team (per seed).
+      // The endpoint must return it when she asks for her own teams,
+      // otherwise the feed sidebar will incorrectly show "No teams yet"
+      // under the org.
+      expect(memberships.length).toBeGreaterThan(0);
+      const hasPending = memberships.some((m) => m.status === "pending");
+      expect(hasPending).toBe(true);
+
+      // And the org.id on each row must match an org returned by
+      // /users/:userId/organizations so the FeedPage grouping works.
+      const orgsRes = await samira.get(
+        `/api/v1/users/${user.id}/organizations`,
+      );
+      expect(orgsRes.status).toBe(200);
+      const orgIds = new Set<string>(
+        (orgsRes.body.data as Array<{ id: string }>).map((o) => o.id),
+      );
+      for (const m of memberships) {
+        expect(orgIds.has(m.organization.id)).toBe(true);
+      }
+    });
+  });
+
   describe("avatarUrl asset-ownership check", () => {
     it("lets the parent set an avatar URL backed by an asset they own", async () => {
       const { agent: parent } = await loginAs((u) => u.email === PARENT_EMAIL);

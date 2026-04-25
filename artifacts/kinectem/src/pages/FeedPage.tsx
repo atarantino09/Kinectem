@@ -246,7 +246,10 @@ function OrgRow({
         )}
         <span className="truncate flex-1">{orgName}</span>
         {isOpen && teams.length > 0 && (
-          <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+          <span
+            data-testid={`badge-org-${orgId}-team-count`}
+            className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full"
+          >
             {teams.length}
           </span>
         )}
