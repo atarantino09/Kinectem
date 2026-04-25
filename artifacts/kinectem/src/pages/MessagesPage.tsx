@@ -320,13 +320,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   {!isMine && (
                     <div className="w-7 mr-2 shrink-0">
                       {!groupedWithPrev && (
-                        <Link
-                          href={`/users/${m.senderId}`}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`View ${m.senderDisplayName}'s profile`}
-                          data-testid={`link-message-avatar-${m.id}`}
+                        <AvatarLightbox
+                          avatarUrl={m.senderAvatarUrl}
+                          displayName={m.senderDisplayName}
+                          triggerClassName="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          triggerTestId={`btn-open-message-avatar-lightbox-${m.id}`}
+                          dialogTestId={`dialog-message-avatar-lightbox-${m.id}`}
+                          imageTestId={`img-message-avatar-lightbox-${m.id}`}
                         >
-                          <Avatar className="w-7 h-7 cursor-pointer hover:opacity-80">
+                          <Avatar
+                            className={`w-7 h-7 ${m.senderAvatarUrl ? "cursor-pointer hover:opacity-80" : ""}`}
+                          >
                             {m.senderAvatarUrl && (
                               <AvatarImage src={m.senderAvatarUrl} />
                             )}
@@ -334,7 +338,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                               {getInitials(m.senderDisplayName)}
                             </AvatarFallback>
                           </Avatar>
-                        </Link>
+                        </AvatarLightbox>
                       )}
                     </div>
                   )}
