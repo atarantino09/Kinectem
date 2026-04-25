@@ -48,6 +48,7 @@ export * from "./createInviteRequest";
 export * from "./createInviteRequestPosition";
 export * from "./createInviteRequestRole";
 export * from "./createOrganizationRequest";
+export * from "./createOrgPostRequest";
 export * from "./createPhoneRequest";
 export * from "./createPhoneRequestType";
 export * from "./createPostRequest";

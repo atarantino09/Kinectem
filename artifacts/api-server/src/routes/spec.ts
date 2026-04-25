@@ -15,6 +15,7 @@ import {
   articleTags,
   highlights,
   highlightTags,
+  orgPosts,
   notifications,
   postReactions,
   postComments,
@@ -62,6 +63,7 @@ import {
   toNotification,
   articleToPost,
   highlightToPost,
+  orgPostToPost,
   paginate,
   emptyPagination,
   splitName,
@@ -86,13 +88,15 @@ interface PostStats {
   recentReactorName: string | null;
 }
 
-function statsKey(kind: "article" | "highlight", refId: string): string {
+type StatsKind = "article" | "highlight" | "org_post";
+
+function statsKey(kind: StatsKind, refId: string): string {
   return `${kind}:${refId}`;
 }
 
 async function loadPostStats(
   meId: string | null,
-  items: Array<{ kind: "article" | "highlight"; refId: string }>,
+  items: Array<{ kind: StatsKind; refId: string }>,
 ): Promise<Map<string, PostStats>> {
   const map = new Map<string, PostStats>();
   if (items.length === 0) return map;
@@ -106,6 +110,7 @@ async function loadPostStats(
   }
   const articleIds = items.filter((i) => i.kind === "article").map((i) => i.refId);
   const highlightIds = items.filter((i) => i.kind === "highlight").map((i) => i.refId);
+  const orgPostIds = items.filter((i) => i.kind === "org_post").map((i) => i.refId);
 
   const tasks: Promise<unknown>[] = [];
 
@@ -243,13 +248,79 @@ async function loadPostStats(
       })(),
     );
   }
+  if (orgPostIds.length > 0) {
+    tasks.push(
+      (async () => {
+        const rows = await db
+          .select({
+            postRefId: postReactions.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postReactions)
+          .where(and(eq(postReactions.postKind, "org_post"), inArray(postReactions.postRefId, orgPostIds)))
+          .groupBy(postReactions.postRefId);
+        for (const r of rows) {
+          const s = map.get(statsKey("org_post", r.postRefId));
+          if (s) s.reactionCount = Number(r.count);
+        }
+        if (meId) {
+          const my = await db
+            .select({ postRefId: postReactions.postRefId })
+            .from(postReactions)
+            .where(
+              and(
+                eq(postReactions.postKind, "org_post"),
+                eq(postReactions.userId, meId),
+                inArray(postReactions.postRefId, orgPostIds),
+              ),
+            );
+          for (const r of my) {
+            const s = map.get(statsKey("org_post", r.postRefId));
+            if (s) s.hasReacted = true;
+          }
+        }
+        const recent = await db
+          .select({
+            postRefId: postReactions.postRefId,
+            createdAt: postReactions.createdAt,
+            name: users.name,
+          })
+          .from(postReactions)
+          .innerJoin(users, eq(postReactions.userId, users.id))
+          .where(and(eq(postReactions.postKind, "org_post"), inArray(postReactions.postRefId, orgPostIds)))
+          .orderBy(desc(postReactions.createdAt));
+        for (const r of recent) {
+          const s = map.get(statsKey("org_post", r.postRefId));
+          if (s && !s.recentReactorName) s.recentReactorName = r.name;
+        }
+        const cmts = await db
+          .select({
+            postRefId: postComments.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postComments)
+          .where(
+            and(
+              eq(postComments.postKind, "org_post"),
+              isNull(postComments.deletedAt),
+              inArray(postComments.postRefId, orgPostIds),
+            ),
+          )
+          .groupBy(postComments.postRefId);
+        for (const c of cmts) {
+          const s = map.get(statsKey("org_post", c.postRefId));
+          if (s) s.commentCount = Number(c.count);
+        }
+      })(),
+    );
+  }
   await Promise.all(tasks);
   return map;
 }
 
 function statsFor(
   map: Map<string, PostStats>,
-  kind: "article" | "highlight",
+  kind: StatsKind,
   refId: string,
 ): PostStats {
   return (
@@ -270,6 +341,25 @@ const router: IRouter = Router();
 router.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+// Auto-follow the parent organization when a user joins one of its team
+// rosters. Tolerant of failures (e.g. unique constraint races).
+async function ensureOrgFollowedForTeam(userId: string, teamId: string): Promise<void> {
+  try {
+    const [team] = await db
+      .select({ orgId: teams.organizationId })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return;
+    await db
+      .insert(organizationFollowers)
+      .values({ organizationId: team.orgId, userId })
+      .onConflictDoNothing();
+  } catch (err) {
+    logger.warn({ err, userId, teamId }, "ensureOrgFollowedForTeam failed");
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Auth (custom — not in spec)
@@ -1147,23 +1237,90 @@ router.get(
 router.get(
   "/organizations/:orgId/posts",
   asyncHandler(async (req, res) => {
-    const teamIds = (
-      await db.select({ id: teams.id }).from(teams).where(eq(teams.organizationId, req.params.orgId))
-    ).map((t) => t.id);
-    if (teamIds.length === 0) return res.json(paginate([]));
-    const rows = await db
-      .select({ a: articles, team: teams, org: organizations, author: users })
-      .from(articles)
-      .innerJoin(teams, eq(articles.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.status, "published"), eq(organizations.id, req.params.orgId)))
-      .orderBy(desc(articles.createdAt))
-      .limit(20);
-    const data = rows.map((r) =>
-      articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
-    );
+    const me = req.sessionUser;
+    const orgId = req.params.orgId;
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) return notFound(res);
+
+    const [articleRows, orgPostRows] = await Promise.all([
+      db
+        .select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(and(eq(articles.status, "published"), eq(organizations.id, orgId)))
+        .orderBy(desc(articles.createdAt))
+        .limit(20),
+      db
+        .select({ p: orgPosts, author: users })
+        .from(orgPosts)
+        .leftJoin(users, eq(orgPosts.authorId, users.id))
+        .where(and(eq(orgPosts.organizationId, orgId), eq(orgPosts.status, "published")))
+        .orderBy(desc(orgPosts.createdAt))
+        .limit(20),
+    ]);
+
+    const stats = await loadPostStats(me?.id ?? null, [
+      ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+    ]);
+
+    const data = [
+      ...articleRows.map((r) =>
+        articleToPost(r.a, {
+          team: r.team,
+          org: r.org,
+          author: r.author,
+          ...statsFor(stats, "article", r.a.id),
+        }),
+      ),
+      ...orgPostRows.map((r) =>
+        orgPostToPost(r.p, {
+          org,
+          author: r.author,
+          ...statsFor(stats, "org_post", r.p.id),
+        }),
+      ),
+    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     res.json(paginate(data));
+  }),
+);
+
+router.post(
+  "/organizations/:orgId/posts",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    const orgId = req.params.orgId;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return res.status(403).json({ error: "Org admins only" });
+    }
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) return notFound(res);
+    const body = req.body ?? {};
+    const title = String(body.title ?? "").trim();
+    if (!title) return res.status(400).json({ error: "title required" });
+    const photoUrls: string[] = Array.isArray(body.photoUrls)
+      ? body.photoUrls.filter((u: unknown) => typeof u === "string").slice(0, 10)
+      : [];
+    const videoUrl: string | null =
+      typeof body.videoUrl === "string" && body.videoUrl.trim() ? body.videoUrl.trim() : null;
+    const [p] = await db
+      .insert(orgPosts)
+      .values({
+        organizationId: orgId,
+        authorId: me.id,
+        title,
+        body: typeof body.body === "string" ? body.body : "",
+        coverImageUrl: photoUrls[0] ?? null,
+        videoUrl,
+        photoUrls: photoUrls.length > 0 ? photoUrls : null,
+        status: "published",
+        publishedAt: new Date(),
+      })
+      .returning();
+    res.status(201).json(orgPostToPost(p, { org, author: me }));
   }),
 );
 
@@ -1955,6 +2112,7 @@ router.post(
           position: positionRaw === "coach" ? null : positionRaw,
         })
         .returning();
+      await ensureOrgFollowedForTeam(userId, teamId);
       await db.insert(notifications).values({
         userId,
         kind: "roster_invite",
@@ -2127,6 +2285,7 @@ router.post(
         position: invite.position,
       })
       .returning();
+    await ensureOrgFollowedForTeam(me.id, invite.teamId);
     await db
       .update(rosterInvites)
       .set({ status: "accepted" })
@@ -2179,6 +2338,7 @@ router.post(
         position: "player",
       })
       .returning();
+    await ensureOrgFollowedForTeam(me.id, invite.teamId);
     res.status(201).json({
       child: {
         id: child.id,
@@ -2422,9 +2582,28 @@ router.get(
       .where(or(...highlightConds))
       .orderBy(desc(highlights.createdAt))
       .limit(20);
+
+    // Org-level announcements from followed organizations.
+    const orgPostRows = followedOrgIds.length
+      ? await db
+          .select({ p: orgPosts, org: organizations, author: users })
+          .from(orgPosts)
+          .innerJoin(organizations, eq(orgPosts.organizationId, organizations.id))
+          .leftJoin(users, eq(orgPosts.authorId, users.id))
+          .where(
+            and(
+              eq(orgPosts.status, "published"),
+              inArray(orgPosts.organizationId, followedOrgIds),
+            ),
+          )
+          .orderBy(desc(orgPosts.createdAt))
+          .limit(20)
+      : [];
+
     const stats = await loadPostStats(me?.id ?? null, [
       ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
     ]);
     const items = [
       ...arts.map((r) =>
@@ -2441,6 +2620,13 @@ router.get(
           org: r.org,
           author: r.uploader,
           ...statsFor(stats, "highlight", r.h.id),
+        }),
+      ),
+      ...orgPostRows.map((r) =>
+        orgPostToPost(r.p, {
+          org: r.org,
+          author: r.author,
+          ...statsFor(stats, "org_post", r.p.id),
         }),
       ),
     ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -2604,6 +2790,32 @@ router.get(
           org: row.org,
           author: row.author,
           ...statsFor(stats, "article", row.a.id),
+        }),
+      );
+      return;
+    }
+    if (parsed.kind === "org_post") {
+      const [row] = await db
+        .select({ p: orgPosts, org: organizations, author: users })
+        .from(orgPosts)
+        .innerJoin(organizations, eq(orgPosts.organizationId, organizations.id))
+        .leftJoin(users, eq(orgPosts.authorId, users.id))
+        .where(eq(orgPosts.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      if (row.p.status !== "published") {
+        const isAuthor = !!me && row.p.authorId === me.id;
+        const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
+        if (!isAuthor && !isOrgAdmin) return notFound(res);
+      }
+      const stats = await loadPostStats(me?.id ?? null, [
+        { kind: "org_post", refId: row.p.id },
+      ]);
+      res.json(
+        orgPostToPost(row.p, {
+          org: row.org,
+          author: row.author,
+          ...statsFor(stats, "org_post", row.p.id),
         }),
       );
       return;

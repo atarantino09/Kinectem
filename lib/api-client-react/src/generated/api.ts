@@ -37,6 +37,7 @@ import type {
   CreateConsentRequest,
   CreateConversationRequest,
   CreateInviteRequest,
+  CreateOrgPostRequest,
   CreateOrganizationRequest,
   CreatePhoneRequest,
   CreatePostRequest,
@@ -3826,6 +3827,111 @@ export function useListOrgPosts<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Create an organization-level announcement post (admins only)
+ */
+export const getCreateOrgPostUrl = (orgId: string) => {
+  return `/api/v1/organizations/${orgId}/posts`;
+};
+
+export const createOrgPost = async (
+  orgId: string,
+  createOrgPostRequest: CreateOrgPostRequest,
+  options?: RequestInit,
+): Promise<PostResponse> => {
+  return customFetch<PostResponse>(getCreateOrgPostUrl(orgId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createOrgPostRequest),
+  });
+};
+
+export const getCreateOrgPostMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOrgPost>>,
+    TError,
+    { orgId: string; data: BodyType<CreateOrgPostRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createOrgPost>>,
+  TError,
+  { orgId: string; data: BodyType<CreateOrgPostRequest> },
+  TContext
+> => {
+  const mutationKey = ["createOrgPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createOrgPost>>,
+    { orgId: string; data: BodyType<CreateOrgPostRequest> }
+  > = (props) => {
+    const { orgId, data } = props ?? {};
+
+    return createOrgPost(orgId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateOrgPostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createOrgPost>>
+>;
+export type CreateOrgPostMutationBody = BodyType<CreateOrgPostRequest>;
+export type CreateOrgPostMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Create an organization-level announcement post (admins only)
+ */
+export const useCreateOrgPost = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOrgPost>>,
+    TError,
+    { orgId: string; data: BodyType<CreateOrgPostRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createOrgPost>>,
+  TError,
+  { orgId: string; data: BodyType<CreateOrgPostRequest> },
+  TContext
+> => {
+  return useMutation(getCreateOrgPostMutationOptions(options));
+};
 
 /**
  * @summary Follow a user

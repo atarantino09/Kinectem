@@ -1300,6 +1300,29 @@ export const ListOrgPostsResponse = zod.object({
 });
 
 /**
+ * @summary Create an organization-level announcement post (admins only)
+ */
+export const CreateOrgPostParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const createOrgPostBodyTitleMax = 200;
+
+export const createOrgPostBodyBodyMax = 50000;
+
+export const createOrgPostBodyPhotoUrlsMax = 10;
+
+export const CreateOrgPostBody = zod.object({
+  title: zod.string().max(createOrgPostBodyTitleMax),
+  body: zod.string().max(createOrgPostBodyBodyMax).optional(),
+  photoUrls: zod
+    .array(zod.string())
+    .max(createOrgPostBodyPhotoUrlsMax)
+    .optional(),
+  videoUrl: zod.string().nullish(),
+});
+
+/**
  * @summary Follow a user
  */
 export const FollowUserParams = zod.object({
@@ -2994,11 +3017,17 @@ export const ListFeedResponse = zod.object({
 
  * @summary Suggested organizations, teams, and athletes to follow
  */
+export const listFollowSuggestionsResponseOrganizationsItemFollowerCountMin = 0;
+
 export const listFollowSuggestionsResponseTeamsItemFollowerCountMin = 0;
 
 export const listFollowSuggestionsResponseUsersItemNicknameMax = 100;
 
 export const listFollowSuggestionsResponseUsersItemBioMax = 1000;
+
+export const listFollowSuggestionsResponseUsersItemFollowerCountMin = 0;
+
+export const listFollowSuggestionsResponseUsersItemFollowingCountMin = 0;
 
 export const ListFollowSuggestionsResponse = zod.object({
   organizations: zod.array(
@@ -3010,6 +3039,10 @@ export const ListFollowSuggestionsResponse = zod.object({
       website: zod.string().url().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
+      followerCount: zod
+        .number()
+        .min(listFollowSuggestionsResponseOrganizationsItemFollowerCountMin)
+        .optional(),
       role: zod.enum(["owner", "admin", "member"]).nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -3072,6 +3105,14 @@ export const ListFollowSuggestionsResponse = zod.object({
       isOwnProfile: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       isConnection: zod.boolean().optional(),
+      followerCount: zod
+        .number()
+        .min(listFollowSuggestionsResponseUsersItemFollowerCountMin)
+        .optional(),
+      followingCount: zod
+        .number()
+        .min(listFollowSuggestionsResponseUsersItemFollowingCountMin)
+        .optional(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),

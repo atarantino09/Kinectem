@@ -746,6 +746,17 @@ export interface CreatePostRequest {
   assetIds?: string[];
 }
 
+export interface CreateOrgPostRequest {
+  /** @maxLength 200 */
+  title: string;
+  /** @maxLength 50000 */
+  body?: string;
+  /** @maxItems 10 */
+  photoUrls?: string[];
+  /** @nullable */
+  videoUrl?: string | null;
+}
+
 export interface UpdatePostRequest {
   /**
    * @maxLength 200

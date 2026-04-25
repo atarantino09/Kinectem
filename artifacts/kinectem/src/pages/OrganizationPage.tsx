@@ -22,6 +22,7 @@ import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
+import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
@@ -32,6 +33,7 @@ export default function OrganizationPage() {
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
+  const [newPostOpen, setNewPostOpen] = useState(false);
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
   const { data: postsResp } = useListOrgPosts(orgId);
@@ -306,14 +308,43 @@ export default function OrganizationPage() {
 
       {/* Posts */}
       <section>
-        <h2 className="text-xl font-black tracking-tight mb-4">Recent Posts</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-black tracking-tight">Recent Posts</h2>
+          {(organization.role === "admin" || organization.role === "owner") && (
+            <Button
+              size="sm"
+              onClick={() => setNewPostOpen(true)}
+              className="font-bold rounded-full"
+              data-testid="btn-new-org-post"
+            >
+              <Plus className="w-4 h-4 mr-1" /> New post
+            </Button>
+          )}
+        </div>
+        <NewOrgPostDialog
+          orgId={orgId}
+          orgName={organization.name}
+          open={newPostOpen}
+          onOpenChange={setNewPostOpen}
+        />
         <div className="space-y-3">
           {posts.length > 0 ? (
             posts.map((p) => <PostCard key={p.id} post={p} />)
           ) : (
             <Card className="rounded-xl border border-border">
-              <CardContent className="p-6 text-center text-sm text-muted-foreground">
-                No posts yet.
+              <CardContent className="p-6 text-center text-sm text-muted-foreground space-y-3">
+                <p>No posts yet.</p>
+                {(organization.role === "admin" ||
+                  organization.role === "owner") && (
+                  <Button
+                    size="sm"
+                    onClick={() => setNewPostOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-empty-new-org-post"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Be the first to post
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}

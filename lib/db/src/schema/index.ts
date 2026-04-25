@@ -6,7 +6,8 @@ export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
 export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);
 export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
-export const postKindEnum = pgEnum("post_kind", ["article", "highlight"]);
+export const postKindEnum = pgEnum("post_kind", ["article", "highlight", "org_post"]);
+export const orgPostStatusEnum = pgEnum("org_post_status", ["draft", "published"]);
 export const reactionTypeEnum = pgEnum("reaction_type", ["like"]);
 export const conversationTypeEnum = pgEnum("conversation_type", ["direct", "user_to_org", "org_to_org"]);
 export const participantTypeEnum = pgEnum("participant_type", ["user", "organization"]);
@@ -170,6 +171,21 @@ export const highlights = pgTable("highlights", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const orgPosts = pgTable("org_posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  coverImageUrl: text("cover_image_url"),
+  videoUrl: text("video_url"),
+  photoUrls: text("photo_urls").array(),
+  status: orgPostStatusEnum("status").notNull().default("published"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const articleTags = pgTable("article_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
   articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
@@ -283,6 +299,12 @@ export const organizationsRelations = relations(organizations, ({ many, one }) =
   teams: many(teams),
   admins: many(organizationAdmins),
   createdBy: one(users, { fields: [organizations.createdById], references: [users.id] }),
+  posts: many(orgPosts),
+}));
+
+export const orgPostsRelations = relations(orgPosts, ({ one }) => ({
+  organization: one(organizations, { fields: [orgPosts.organizationId], references: [organizations.id] }),
+  author: one(users, { fields: [orgPosts.authorId], references: [users.id] }),
 }));
 
 export const organizationAdminsRelations = relations(organizationAdmins, ({ one }) => ({

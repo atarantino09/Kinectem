@@ -968,6 +968,36 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createOrgPost
+      summary: Create an organization-level announcement post (admins only)
+      tags:
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrgPostRequest'
+      responses:
+        '201':
+          description: Organization post created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /users/{userId}/follow:
     post:
@@ -4664,6 +4694,26 @@ components:
             type: string
             format: uuid
           maxItems: 10
+
+    CreateOrgPostRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+          maxLength: 50000
+        photoUrls:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+        videoUrl:
+          type: string
+          nullable: true
 
     UpdatePostRequest:
       type: object

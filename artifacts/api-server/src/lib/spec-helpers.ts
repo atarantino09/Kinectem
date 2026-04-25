@@ -6,6 +6,7 @@ import type {
   rosterInvites,
   articles,
   highlights,
+  orgPosts,
   notifications,
   conversations,
   messages,
@@ -21,6 +22,7 @@ type RosterRow = typeof rosterEntries.$inferSelect;
 type InviteRow = typeof rosterInvites.$inferSelect;
 type ArticleRow = typeof articles.$inferSelect;
 type HighlightRow = typeof highlights.$inferSelect;
+type OrgPostRow = typeof orgPosts.$inferSelect;
 type NotificationRow = typeof notifications.$inferSelect;
 
 // ---------------------------------------------------------------------------
@@ -56,9 +58,14 @@ export function articlePostId(id: string): string {
 export function highlightPostId(id: string): string {
   return `highlight-${id}`;
 }
-export function parsePostId(postId: string): { kind: "article" | "highlight"; id: string } | null {
+export function orgPostPostId(id: string): string {
+  return `orgpost-${id}`;
+}
+export type PostKind = "article" | "highlight" | "org_post";
+export function parsePostId(postId: string): { kind: PostKind; id: string } | null {
   if (postId.startsWith("article-")) return { kind: "article", id: postId.slice(8) };
   if (postId.startsWith("highlight-")) return { kind: "highlight", id: postId.slice(10) };
+  if (postId.startsWith("orgpost-")) return { kind: "org_post", id: postId.slice(8) };
   return null;
 }
 
@@ -280,7 +287,7 @@ export function toInvite(i: InviteRow, invitedBy: UserRow | null) {
 // ---------------------------------------------------------------------------
 
 interface PostExtras {
-  team: TeamRow;
+  team?: TeamRow | null;
   org: OrgRow;
   author: UserRow | null;
   reactionCount?: number;
@@ -320,6 +327,40 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     createdAt: (a.publishedAt ?? a.createdAt).toISOString(),
     updatedAt: a.updatedAt.toISOString(),
     extras,
+  });
+}
+
+export function orgPostToPost(p: OrgPostRow, extras: PostExtras) {
+  const photos = Array.isArray(p.photoUrls) && p.photoUrls.length > 0
+    ? p.photoUrls
+    : p.coverImageUrl
+      ? [p.coverImageUrl]
+      : [];
+  const assets = photos.map((url, i) => ({
+    id: `photo-${p.id}-${i}`,
+    fileType: "image/jpeg",
+    url,
+    displayOrder: i,
+  }));
+  if (p.videoUrl) {
+    assets.push({
+      id: `video-${p.id}`,
+      fileType: "video/mp4",
+      url: p.videoUrl,
+      displayOrder: assets.length,
+    });
+  }
+  return basePost({
+    id: orgPostPostId(p.id),
+    postType: "long" as const,
+    title: p.title,
+    description: null,
+    body: p.body || null,
+    assets,
+    isEdited: p.updatedAt.getTime() > p.createdAt.getTime() + 1000,
+    createdAt: (p.publishedAt ?? p.createdAt).toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+    extras: { ...extras, team: null },
   });
 }
 
@@ -371,6 +412,24 @@ function basePost(p: {
   const author = p.extras.author
     ? toPostAuthor(p.extras.author)
     : { id: "system", displayName: "System", avatarUrl: null };
+  const team = p.extras.team;
+  const context = team
+    ? {
+        type: "team" as const,
+        id: team.id,
+        name: team.name,
+        slug: slugify(team.name),
+        orgSlug: slugify(p.extras.org.name),
+        avatarUrl: team.logoUrl ?? null,
+      }
+    : {
+        type: "organization" as const,
+        id: p.extras.org.id,
+        name: p.extras.org.name,
+        slug: slugify(p.extras.org.name),
+        orgSlug: null,
+        avatarUrl: p.extras.org.logoUrl ?? null,
+      };
   return {
     id: p.id,
     postType: p.postType,
@@ -382,14 +441,7 @@ function basePost(p: {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     author,
-    context: {
-      type: "team" as const,
-      id: p.extras.team.id,
-      name: p.extras.team.name,
-      slug: slugify(p.extras.team.name),
-      orgSlug: slugify(p.extras.org.name),
-      avatarUrl: p.extras.team.logoUrl ?? null,
-    },
+    context,
     assets: p.assets,
     reactionCount: p.extras.reactionCount ?? 0,
     hasReacted: p.extras.hasReacted ?? false,
@@ -505,7 +557,12 @@ export function toComment(
 ) {
   return {
     id: c.id,
-    postId: c.postKind === "article" ? articlePostId(c.postRefId) : highlightPostId(c.postRefId),
+    postId:
+      c.postKind === "article"
+        ? articlePostId(c.postRefId)
+        : c.postKind === "highlight"
+          ? highlightPostId(c.postRefId)
+          : orgPostPostId(c.postRefId),
     body: c.deletedAt ? "" : c.body,
     author: {
       id: author?.id ?? null,
