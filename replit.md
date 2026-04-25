@@ -42,6 +42,15 @@ schemas are generated from the spec.
   (`useGetUnreadNotificationCount` + `useListNotifications`). Post cards in the
   feed have inline like + comment-count buttons (reaction-toggle invalidates
   `getListFeedQueryKey()`).
+- `artifacts/dev-portal` — public Kinectem Developer Portal at `/dev-portal`.
+  React + Vite + Tailwind, distinct cream/terracotta visual identity (separate
+  from kinectem's purple-blue). Pages: Overview, Getting Started, Authentication,
+  Conventions, API Reference (Scalar via `@scalar/api-reference-react`), Code
+  Samples, Changelog. The OpenAPI spec is the source of truth: a `predev`/
+  `prebuild` script (`scripts/copy-spec.mjs`) copies
+  `lib/api-spec/openapi.yaml` into `public/openapi.yaml` so Scalar fetches it
+  at runtime. Code samples and conventions content is hand-authored to mirror
+  `API_CONVENTIONS.md`.
 - `artifacts/mockup-sandbox` — design sandbox.
 
 ## Key Commands

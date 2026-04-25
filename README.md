@@ -15,6 +15,7 @@ deployable artifacts and four shared libraries:
 | --- | --- |
 | `artifacts/kinectem` | Web client — React 19 + Vite 7 + Tailwind 4 + TanStack Query |
 | `artifacts/api-server` | REST API — Express 5, cookie sessions, OpenAPI-validated |
+| `artifacts/dev-portal` | Developer portal — docs, conventions, and Scalar-rendered API reference |
 | `artifacts/mockup-sandbox` | Component / design preview |
 | `lib/api-spec` | **Source of truth** — `openapi.yaml` + codegen |
 | `lib/api-client-react` | Generated React-Query client used by the web app |
@@ -74,11 +75,16 @@ is the **single source of truth** — the server validates every request
 against it via `express-openapi-validator`, and the typed client and
 Zod schemas are generated from it.
 
-For interactive docs, run the API server and open `/api/docs` (a
-Scalar-rendered version of the spec).
+**Building against the API? Start at the developer portal:**
+[`artifacts/dev-portal`](./artifacts/dev-portal) (mounted at `/dev-portal`
+in dev). It renders the same `openapi.yaml` interactively and adds
+walk-throughs for authentication, error handling, pagination, and
+ready-to-paste curl + TypeScript samples.
 
-For the rules every endpoint follows — naming, error envelope,
-pagination, auth — see [`API_CONVENTIONS.md`](./API_CONVENTIONS.md).
+You can also run the API server and open `/api/docs` for a no-frills
+Scalar view of the spec, or read the rules every endpoint follows —
+naming, error envelope, pagination, auth — in
+[`API_CONVENTIONS.md`](./API_CONVENTIONS.md).
 
 In short:
 
