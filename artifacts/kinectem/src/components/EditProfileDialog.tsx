@@ -27,6 +27,87 @@ import { getInitials } from "@/lib/format";
 
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const AVATAR_MAX_DIMENSION = 1024;
+const AVATAR_OUTPUT_QUALITY = 0.85;
+const AVATAR_SHRINK_SKIP_BYTES = 200 * 1024;
+
+type DrawableImage = ImageBitmap | HTMLImageElement;
+
+async function loadImage(
+  file: File,
+): Promise<{ source: DrawableImage; width: number; height: number; cleanup: () => void }> {
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(file);
+    return {
+      source: bitmap,
+      width: bitmap.width,
+      height: bitmap.height,
+      cleanup: () => bitmap.close(),
+    };
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("Could not read image"));
+      i.src = url;
+    });
+    return {
+      source: img,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      cleanup: () => URL.revokeObjectURL(url),
+    };
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    throw err;
+  }
+}
+
+async function shrinkAvatarFile(file: File): Promise<File> {
+  // Animated GIFs would lose their animation through canvas; leave them alone.
+  if (file.type === "image/gif") return file;
+  // Tiny files don't need any work.
+  if (file.size <= AVATAR_SHRINK_SKIP_BYTES) return file;
+
+  let loaded: Awaited<ReturnType<typeof loadImage>>;
+  try {
+    loaded = await loadImage(file);
+  } catch {
+    return file;
+  }
+
+  try {
+    const { source, width, height } = loaded;
+    if (!width || !height) return file;
+    const scale = Math.min(1, AVATAR_MAX_DIMENSION / Math.max(width, height));
+    const targetW = Math.max(1, Math.round(width * scale));
+    const targetH = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(source, 0, 0, targetW, targetH);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", AVATAR_OUTPUT_QUALITY),
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "avatar";
+    return new File([blob], `${baseName}.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  } finally {
+    loaded.cleanup();
+  }
+}
 
 async function uploadAvatarFile(file: File): Promise<string> {
   const upload = await requestUpload({
@@ -164,7 +245,9 @@ export function EditProfileDialog({
     const myGen = ++uploadGenRef.current;
     setAvatarUploading(true);
     try {
-      const url = await uploadAvatarFile(file);
+      const prepared = await shrinkAvatarFile(file);
+      if (uploadGenRef.current !== myGen) return;
+      const url = await uploadAvatarFile(prepared);
       if (uploadGenRef.current !== myGen) return;
       setAvatarUrl(url);
     } catch (err) {
