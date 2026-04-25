@@ -157,6 +157,11 @@ export const GetUserByIdResponse = zod.union([
       zod.object({
         email: zod.string().email(),
         dateOfBirth: zod.coerce.date().nullish(),
+        role: zod
+          .enum(["athlete", "coach", "admin", "parent"])
+          .describe(
+            "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+          ),
       }),
     ),
   zod.object({
@@ -268,6 +273,11 @@ export const UpdateUserResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -330,6 +340,11 @@ export const SetUserCoverPhotoResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -385,6 +400,11 @@ export const DeleteUserCoverPhotoResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -444,6 +464,11 @@ export const SetUserAvatarResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -499,6 +524,11 @@ export const DeleteUserAvatarResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -638,6 +668,11 @@ export const GetLoggedInUserResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 

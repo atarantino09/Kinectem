@@ -52,6 +52,28 @@ describe("auth", () => {
     expect(me.body.id).toBe(user.id);
   });
 
+  it("returns the caller's role on /users/me so role-gated UI can render", async () => {
+    const { agent: athleteAgent } = await loginAs((u) => u.role === "athlete");
+    const athleteMe = await athleteAgent.get("/api/v1/users/me");
+    expect(athleteMe.status).toBe(200);
+    expect(athleteMe.body.role).toBe("athlete");
+
+    // The /family (Guardian) page gates on me.role === "parent", so this
+    // assertion must hard-fail (not silently skip) if the seed loses its
+    // parent user. Otherwise the GuardianPage gate could regress unnoticed.
+    const seedUsers = await listSeedUsers();
+    const seedParent = seedUsers.find((u) => u.role === "parent");
+    expect(
+      seedParent,
+      "expected a seeded user with role=parent to exist for the GuardianPage gate test",
+    ).toBeDefined();
+
+    const { agent: parentAgent } = await loginAs((u) => u.role === "parent");
+    const parentMe = await parentAgent.get("/api/v1/users/me");
+    expect(parentMe.status).toBe(200);
+    expect(parentMe.body.role).toBe("parent");
+  });
+
   it("rejects login with the wrong password", async () => {
     const users = await listSeedUsers();
     const someone = users.find((u) => u.email)!;

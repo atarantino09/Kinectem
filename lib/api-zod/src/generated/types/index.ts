@@ -335,6 +335,7 @@ export * from "./postResponsePostType";
 export * from "./postRevisionEditor";
 export * from "./postRevisionResponse";
 export * from "./privateUserResponse";
+export * from "./privateUserResponseRole";
 export * from "./publicUserResponse";
 export * from "./publishPost200";
 export * from "./putAssetData200";

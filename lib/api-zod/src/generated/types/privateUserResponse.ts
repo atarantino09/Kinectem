@@ -65,10 +65,13 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { PrivateUserResponseRole } from "./privateUserResponseRole";
 import type { PublicUserResponse } from "./publicUserResponse";
 
 export type PrivateUserResponse = PublicUserResponse & {
   email: string;
   /** @nullable */
   dateOfBirth?: Date | null;
+  /** The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page). */
+  role: PrivateUserResponseRole;
 };

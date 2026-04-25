@@ -112,10 +112,25 @@ export interface PublicUserResponse {
   updatedAt: string;
 }
 
+/**
+ * The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
+ */
+export type PrivateUserResponseRole =
+  (typeof PrivateUserResponseRole)[keyof typeof PrivateUserResponseRole];
+
+export const PrivateUserResponseRole = {
+  athlete: "athlete",
+  coach: "coach",
+  admin: "admin",
+  parent: "parent",
+} as const;
+
 export type PrivateUserResponse = PublicUserResponse & {
   email: string;
   /** @nullable */
   dateOfBirth?: string | null;
+  /** The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page). */
+  role: PrivateUserResponseRole;
 };
 
 export interface UpdateUserRequest {

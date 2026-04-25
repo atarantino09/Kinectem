@@ -5387,6 +5387,7 @@ components:
         - type: object
           required:
             - email
+            - role
           properties:
             email:
               type: string
@@ -5395,6 +5396,10 @@ components:
               type: string
               format: date
               nullable: true
+            role:
+              type: string
+              enum: [athlete, coach, admin, parent]
+              description: The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
 
     UpdateUserRequest:
       type: object

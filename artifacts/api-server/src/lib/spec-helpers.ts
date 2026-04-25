@@ -196,6 +196,7 @@ export function toPrivateUser(
     }),
     email: u.email ?? "",
     dateOfBirth: u.dateOfBirth ? u.dateOfBirth.toISOString().slice(0, 10) : null,
+    role: u.role,
   };
 }
 
