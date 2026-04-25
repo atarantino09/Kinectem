@@ -370,10 +370,12 @@ export default function UserProfilePage() {
         </section>
       )}
 
-      {/* Posts */}
+      {/* Posts (authored + tagged) */}
       <section>
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-xl font-black tracking-tight">Posts</h2>
+          <h2 className="text-xl font-black tracking-tight">
+            {user.isOwnProfile ? "Posts" : "Posts & tagged in"}
+          </h2>
           {teams.length > 0 && (
             <Select value={teamFilter} onValueChange={setTeamFilter}>
               <SelectTrigger
