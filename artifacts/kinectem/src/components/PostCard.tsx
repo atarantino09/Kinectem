@@ -180,11 +180,21 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           )}
           <div className="px-5 py-4">
             {post.title && (
-              <Link href={`/posts/${post.id}`}>
-                <h3 className="font-black text-xl tracking-tight leading-tight mb-2 hover:underline cursor-pointer">
-                  {post.title}
-                </h3>
-              </Link>
+              <div className="flex items-start gap-2 mb-2">
+                <Link href={`/posts/${post.id}`} className="flex-1 min-w-0">
+                  <h3 className="font-black text-xl tracking-tight leading-tight hover:underline cursor-pointer">
+                    {post.title}
+                  </h3>
+                </Link>
+                {"tagStatus" in post && post.tagStatus === "pending" && (
+                  <span
+                    className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
+                    title="You were tagged in this game recap. It is hidden from other viewers until you approve the tag."
+                  >
+                    Pending tag
+                  </span>
+                )}
+              </div>
             )}
             {post.description && (
               <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-2">

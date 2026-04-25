@@ -852,6 +852,19 @@ paths:
     post:
       operationId: createPost
       summary: Create a new post
+      description: |
+        Creates a new short or long-form post.
+
+        For long-form posts, when the request includes a `gameDate`,
+        the post is treated as a **game recap** and the server
+        auto-tags every accepted player on the team's roster (role
+        = `player`, status = `accepted`). Each auto-tag is recorded
+        as `approved` unless the tagged player or their parent has
+        `requireTagConsent` enabled, in which case the tag is
+        `pending` and only surfaces to the player, their parent, and
+        admins until consent is granted. Any explicit `taggedUserIds`
+        are merged with the auto-tag set (deduped by user; pending
+        wins over approved).
       tags:
         - Posts
       requestBody:
@@ -1259,6 +1272,24 @@ paths:
     get:
       operationId: listUserPosts
       summary: List posts for a user
+      description: |
+        Returns the chronological archive on a user's profile.
+        The list merges two sources:
+
+        1. Articles the user authored, AND
+        2. Articles the user is tagged in via `article_tags`.
+
+        Stranger viewers only see tagged articles where the tag is
+        `approved`. The user themselves, their parent, and admins
+        also see articles where their tag is still `pending`; on
+        those rows the response carries `tagStatus: "pending"` so the
+        client can render a "Pending tag" affordance. Articles the
+        user authored are always returned without a `tagStatus`.
+
+        Results are ordered by `gameDate` (descending, nulls last)
+        then `createdAt` (descending), and deduped by article id —
+        if the user is both author and tagged, the authored copy
+        wins.
       tags:
         - Posts
       parameters:
@@ -6255,6 +6286,39 @@ components:
             type: string
             format: uuid
           maxItems: 10
+        gameDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            For long-form posts only. When set, the article is treated
+            as a game recap and every accepted player on the team's
+            roster is auto-tagged. Tags default to status `approved`,
+            but become `pending` when either the player or their parent
+            has `requireTagConsent` enabled (the existing pending-tags
+            consent model).
+        opponentName:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: For long-form game recaps. Free-form opponent name displayed on the article.
+        gameScore:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: |
+            For long-form game recaps. Format `"<team>-<opponent>"`,
+            e.g. `"34-14"`. Other formats are silently ignored.
+        taggedUserIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 50
+          description: |
+            Optional explicit tag list for long-form posts. Always
+            inserted as `approved`, then merged with the auto-tag fan-out
+            (deduped by user; pending wins over approved).
     CreateOrgPostRequest:
       type: object
       required:
@@ -6427,6 +6491,18 @@ components:
           type: string
           nullable: true
           description: Display name of the most recent reactor (if any), for "X and N others reacted" UI hints.
+        tagStatus:
+          type: string
+          enum:
+            - approved
+            - pending
+          nullable: true
+          description: |
+            Only set on `listUserPosts` results, and only when the
+            article was surfaced via the user's own `article_tags` row
+            and the tag is still `pending`. Clients should render a
+            small "Pending tag" affordance for these posts. Authored
+            posts and approved tags omit this field.
         createdAt:
           type: string
           format: date-time

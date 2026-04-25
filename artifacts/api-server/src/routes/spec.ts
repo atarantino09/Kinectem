@@ -1081,17 +1081,35 @@ router.patch(
 router.get(
   "/users/:userId/posts",
   asyncHandler(async (req, res) => {
-    // Posts authored by user or where user is tagged. Simple: tagged.
+    // The Posts tab on a profile is a chronological archive of:
+    //   1. Articles the user authored, AND
+    //   2. Articles the user is tagged in (via article_tags).
+    // Visibility rules for #2:
+    //   - Strangers only see articles where their tag is approved.
+    //   - The user themselves, their real (non-masquerading) parent,
+    //     and real admins also see pending-tag articles, with a small
+    //     `tagStatus: "pending"` annotation so the client can render a
+    //     "Pending tag" affordance.
+    // Ordering: gameDate desc nulls last, then createdAt desc.
+    // Articles authored AND tagged are merged into a single row
+    // (authored takes precedence so no `tagStatus` is set on those).
     const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
     if (!u) return notFound(res);
 
+    const me = req.sessionUser;
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
-    const userPostsConds = [
-      eq(articles.authorId, u.id),
-      eq(articles.status, "published"),
-    ];
-    if (!isAdmin) userPostsConds.push(isNull(articles.hiddenAt));
-    const arts = await db
+    const isSelf = me?.id === u.id;
+    let isParent = false;
+    if (!isSelf && !isAdmin && me && !req.isMasquerading && u.parentId) {
+      isParent = u.parentId === me.id;
+    }
+    const canSeePending = isSelf || isAdmin || isParent;
+
+    const baseConds = [eq(articles.status, "published")];
+    if (!isAdmin) baseConds.push(isNull(articles.hiddenAt));
+
+    // 1) Articles the user authored.
+    const authored = await db
       .select({
         a: articles,
         team: teams,
@@ -1102,13 +1120,78 @@ router.get(
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(...userPostsConds))
-      .orderBy(desc(articles.createdAt))
-      .limit(20);
+      .where(and(eq(articles.authorId, u.id), ...baseConds));
 
-    const posts = arts.map((row) =>
-      articleToPost(row.a, { team: row.team, org: row.org, author: row.author }),
-    );
+    // 2) Articles the user is tagged in. Stranger viewers only see
+    //    approved tags; self/parent/admin also see pending.
+    //    Declined / removed tags are NEVER surfaced — once a user has
+    //    actively rejected or pulled a tag the article must drop off
+    //    their profile feed for everyone (including admins).
+    const tagConds = [
+      eq(articleTags.userId, u.id),
+      canSeePending
+        ? inArray(articleTags.status, ["approved", "pending"] as const)
+        : eq(articleTags.status, "approved"),
+    ];
+    const tagged = await db
+      .select({
+        a: articles,
+        team: teams,
+        org: organizations,
+        author: users,
+        tagStatus: articleTags.status,
+      })
+      .from(articleTags)
+      .innerJoin(articles, eq(articleTags.articleId, articles.id))
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(and(...tagConds), ...baseConds));
+
+    // Merge by article id (authored wins so the tag annotation drops).
+    type MergedRow = {
+      a: typeof articles.$inferSelect;
+      team: typeof teams.$inferSelect;
+      org: typeof organizations.$inferSelect;
+      author: typeof users.$inferSelect | null;
+      tagStatus?: "approved" | "pending";
+    };
+    const seen = new Map<string, MergedRow>();
+    for (const row of authored) {
+      seen.set(row.a.id, row);
+    }
+    for (const row of tagged) {
+      if (seen.has(row.a.id)) continue;
+      seen.set(row.a.id, {
+        a: row.a,
+        team: row.team,
+        org: row.org,
+        author: row.author,
+        tagStatus: row.tagStatus as "approved" | "pending",
+      });
+    }
+    // Order: gameDate desc nulls last, then createdAt desc.
+    const ordered = Array.from(seen.values()).sort((x, y) => {
+      const xd = x.a.gameDate ? x.a.gameDate.getTime() : -Infinity;
+      const yd = y.a.gameDate ? y.a.gameDate.getTime() : -Infinity;
+      if (xd !== yd) return yd - xd;
+      return y.a.createdAt.getTime() - x.a.createdAt.getTime();
+    });
+    const limited = ordered.slice(0, 20);
+
+    const posts = limited.map((row) => {
+      const post = articleToPost(row.a, {
+        team: row.team,
+        org: row.org,
+        author: row.author,
+      });
+      // Only annotate when the article was surfaced via the user's
+      // pending tag — clients render the badge for these.
+      if (row.tagStatus === "pending") {
+        return { ...post, tagStatus: "pending" as const };
+      }
+      return post;
+    });
     res.json(paginate(posts));
   }),
 );
@@ -3301,6 +3384,26 @@ router.post(
       const photoUrls: string[] = Array.isArray(body.photoUrls)
         ? body.photoUrls.filter((u: unknown) => typeof u === "string")
         : [];
+      // Game-recap fields. The presence of `gameDate` is what marks
+      // an article as a recap and triggers the auto-tag fan-out below.
+      let gameDate: Date | null = null;
+      if (typeof body.gameDate === "string" && body.gameDate.length > 0) {
+        const parsed = new Date(body.gameDate);
+        if (!Number.isNaN(parsed.getTime())) gameDate = parsed;
+      }
+      const opponentName: string | null =
+        typeof body.opponentName === "string" && body.opponentName.trim().length > 0
+          ? body.opponentName.trim()
+          : null;
+      let teamScore: number | null = null;
+      let opponentScore: number | null = null;
+      if (typeof body.gameScore === "string") {
+        const m = /^(\d+)\s*-\s*(\d+)$/.exec(body.gameScore.trim());
+        if (m) {
+          teamScore = Number(m[1]);
+          opponentScore = Number(m[2]);
+        }
+      }
       const [a] = await db
         .insert(articles)
         .values({
@@ -3312,10 +3415,85 @@ router.post(
           coverImageUrl: body.coverImageUrl ?? photoUrls[0] ?? null,
           videoUrl: body.videoUrl ?? null,
           photoUrls: photoUrls.length > 0 ? photoUrls : null,
+          opponentName,
+          teamScore,
+          opponentScore,
+          gameDate,
           status,
           publishedAt: status === "published" ? new Date() : null,
         })
         .returning();
+
+      // Build the auto-tag set:
+      //   - explicit body.taggedUserIds (always)
+      //   - if gameDate is set: every accepted player on the team's
+      //     roster, marked pending if that user OR their parent has
+      //     requireTagConsent = true, else approved.
+      //   - merged + deduped on userId; pending wins over approved when
+      //     both sources disagree (safer for the under-13 case).
+      const explicitIds: string[] = Array.isArray(body.taggedUserIds)
+        ? body.taggedUserIds.filter((u: unknown): u is string => typeof u === "string")
+        : [];
+      const tagMap = new Map<string, "approved" | "pending">();
+      for (const uid of explicitIds) {
+        tagMap.set(uid, "approved");
+      }
+      if (gameDate) {
+        const players = await db
+          .select({
+            userId: rosterEntries.userId,
+            requireTagConsent: users.requireTagConsent,
+            parentId: users.parentId,
+          })
+          .from(rosterEntries)
+          .innerJoin(users, eq(rosterEntries.userId, users.id))
+          .where(
+            and(
+              eq(rosterEntries.teamId, teamId),
+              eq(rosterEntries.role, "player"),
+              eq(rosterEntries.status, "accepted"),
+            ),
+          );
+        // Bulk-look-up parent consent flags so we don't N+1.
+        const parentIds = Array.from(
+          new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
+        );
+        const parentConsent = new Map<string, boolean>();
+        if (parentIds.length > 0) {
+          const parents = await db
+            .select({ id: users.id, flag: users.requireTagConsent })
+            .from(users)
+            .where(inArray(users.id, parentIds));
+          for (const p of parents) parentConsent.set(p.id, !!p.flag);
+        }
+        for (const p of players) {
+          const parentRequires = p.parentId
+            ? !!parentConsent.get(p.parentId)
+            : false;
+          const requires = !!p.requireTagConsent || parentRequires;
+          const status: "approved" | "pending" = requires ? "pending" : "approved";
+          // Pending wins over approved (safer for consent-required users)
+          if (tagMap.get(p.userId) === "pending" || status === "pending") {
+            tagMap.set(p.userId, "pending");
+          } else if (!tagMap.has(p.userId)) {
+            tagMap.set(p.userId, "approved");
+          }
+        }
+      }
+      if (tagMap.size > 0) {
+        await db
+          .insert(articleTags)
+          .values(
+            Array.from(tagMap.entries()).map(([userId, tagStatus]) => ({
+              articleId: a.id,
+              userId,
+              taggerUserId: me.id,
+              status: tagStatus,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+
       res.status(201).json({
         ...articleToPost(a, { team, org, author: me }),
         approvalStatus: status,

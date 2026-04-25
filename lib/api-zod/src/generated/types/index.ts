@@ -332,6 +332,7 @@ export * from "./postPreviewResponseAuthor";
 export * from "./postPreviewResponsePostType";
 export * from "./postResponse";
 export * from "./postResponsePostType";
+export * from "./postResponseTagStatus";
 export * from "./postRevisionEditor";
 export * from "./postRevisionResponse";
 export * from "./privateUserResponse";

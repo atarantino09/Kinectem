@@ -65,50 +65,21 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { CreatePostRequestPostType } from "./createPostRequestPostType";
 
-export interface CreatePostRequest {
-  postType: CreatePostRequestPostType;
-  /** @maxLength 200 */
-  title?: string;
-  /** @maxLength 50000 */
-  description?: string;
-  /** @maxLength 50000 */
-  body?: string;
-  organizationId?: string;
-  /** @maxItems 10 */
-  assetIds?: string[];
-  /**
-   * For long-form posts only. When set, the article is treated
-as a game recap and every accepted player on the team's
-roster is auto-tagged. Tags default to status `approved`,
-but become `pending` when either the player or their parent
-has `requireTagConsent` enabled (the existing pending-tags
-consent model).
+/**
+ * Only set on `listUserPosts` results, and only when the
+article was surfaced via the user's own `article_tags` row
+and the tag is still `pending`. Clients should render a
+small "Pending tag" affordance for these posts. Authored
+posts and approved tags omit this field.
 
-   * @nullable
-   */
-  gameDate?: Date | null;
-  /**
-   * For long-form game recaps. Free-form opponent name displayed on the article.
-   * @maxLength 200
-   * @nullable
-   */
-  opponentName?: string | null;
-  /**
-   * For long-form game recaps. Format `"<team>-<opponent>"`,
-e.g. `"34-14"`. Other formats are silently ignored.
+ * @nullable
+ */
+export type PostResponseTagStatus =
+  | (typeof PostResponseTagStatus)[keyof typeof PostResponseTagStatus]
+  | null;
 
-   * @maxLength 20
-   * @nullable
-   */
-  gameScore?: string | null;
-  /**
-   * Optional explicit tag list for long-form posts. Always
-inserted as `approved`, then merged with the auto-tag fan-out
-(deduped by user; pending wins over approved).
-
-   * @maxItems 50
-   */
-  taggedUserIds?: string[];
-}
+export const PostResponseTagStatus = {
+  approved: "approved",
+  pending: "pending",
+} as const;

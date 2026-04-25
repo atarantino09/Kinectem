@@ -3337,6 +3337,19 @@ export const useRemoveMember = <
 };
 
 /**
+ * Creates a new short or long-form post.
+
+For long-form posts, when the request includes a `gameDate`,
+the post is treated as a **game recap** and the server
+auto-tags every accepted player on the team's roster (role
+= `player`, status = `accepted`). Each auto-tag is recorded
+as `approved` unless the tagged player or their parent has
+`requireTagConsent` enabled, in which case the tag is
+`pending` and only surfaces to the player, their parent, and
+admins until consent is granted. Any explicit `taggedUserIds`
+are merged with the auto-tag set (deduped by user; pending
+wins over approved).
+
  * @summary Create a new post
  */
 export const getCreatePostUrl = () => {
@@ -5102,6 +5115,24 @@ export const useUpdateOrgPrivacy = <
 };
 
 /**
+ * Returns the chronological archive on a user's profile.
+The list merges two sources:
+
+1. Articles the user authored, AND
+2. Articles the user is tagged in via `article_tags`.
+
+Stranger viewers only see tagged articles where the tag is
+`approved`. The user themselves, their parent, and admins
+also see articles where their tag is still `pending`; on
+those rows the response carries `tagStatus: "pending"` so the
+client can render a "Pending tag" affordance. Articles the
+user authored are always returned without a `tagStatus`.
+
+Results are ordered by `gameDate` (descending, nulls last)
+then `createdAt` (descending), and deduped by article id —
+if the user is both author and tagged, the authored copy
+wins.
+
  * @summary List posts for a user
  */
 export const getListUserPostsUrl = (

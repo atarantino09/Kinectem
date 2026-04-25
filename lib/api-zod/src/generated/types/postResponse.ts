@@ -69,6 +69,7 @@ import type { PostAssetResponse } from "./postAssetResponse";
 import type { PostAuthor } from "./postAuthor";
 import type { PostContext } from "./postContext";
 import type { PostResponsePostType } from "./postResponsePostType";
+import type { PostResponseTagStatus } from "./postResponseTagStatus";
 
 export interface PostResponse {
   id: string;
@@ -93,6 +94,16 @@ export interface PostResponse {
    * @nullable
    */
   recentReactorName?: string | null;
+  /**
+   * Only set on `listUserPosts` results, and only when the
+article was surfaced via the user's own `article_tags` row
+and the tag is still `pending`. Clients should render a
+small "Pending tag" affordance for these posts. Authored
+posts and approved tags omit this field.
+
+   * @nullable
+   */
+  tagStatus?: PostResponseTagStatus;
   createdAt: Date;
   updatedAt: Date;
 }

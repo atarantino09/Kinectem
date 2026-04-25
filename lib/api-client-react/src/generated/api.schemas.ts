@@ -610,6 +610,24 @@ export interface PostAssetResponse {
   displayOrder: number;
 }
 
+/**
+ * Only set on `listUserPosts` results, and only when the
+article was surfaced via the user's own `article_tags` row
+and the tag is still `pending`. Clients should render a
+small "Pending tag" affordance for these posts. Authored
+posts and approved tags omit this field.
+
+ * @nullable
+ */
+export type PostResponseTagStatus =
+  | (typeof PostResponseTagStatus)[keyof typeof PostResponseTagStatus]
+  | null;
+
+export const PostResponseTagStatus = {
+  approved: "approved",
+  pending: "pending",
+} as const;
+
 export interface PostResponse {
   id: string;
   postType: PostResponsePostType;
@@ -633,6 +651,16 @@ export interface PostResponse {
    * @nullable
    */
   recentReactorName?: string | null;
+  /**
+   * Only set on `listUserPosts` results, and only when the
+article was surfaced via the user's own `article_tags` row
+and the tag is still `pending`. Clients should render a
+small "Pending tag" affordance for these posts. Authored
+posts and approved tags omit this field.
+
+   * @nullable
+   */
+  tagStatus?: PostResponseTagStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -861,6 +889,39 @@ export interface CreatePostRequest {
   organizationId?: string;
   /** @maxItems 10 */
   assetIds?: string[];
+  /**
+   * For long-form posts only. When set, the article is treated
+as a game recap and every accepted player on the team's
+roster is auto-tagged. Tags default to status `approved`,
+but become `pending` when either the player or their parent
+has `requireTagConsent` enabled (the existing pending-tags
+consent model).
+
+   * @nullable
+   */
+  gameDate?: string | null;
+  /**
+   * For long-form game recaps. Free-form opponent name displayed on the article.
+   * @maxLength 200
+   * @nullable
+   */
+  opponentName?: string | null;
+  /**
+   * For long-form game recaps. Format `"<team>-<opponent>"`,
+e.g. `"34-14"`. Other formats are silently ignored.
+
+   * @maxLength 20
+   * @nullable
+   */
+  gameScore?: string | null;
+  /**
+   * Optional explicit tag list for long-form posts. Always
+inserted as `approved`, then merged with the auto-tag fan-out
+(deduped by user; pending wins over approved).
+
+   * @maxItems 50
+   */
+  taggedUserIds?: string[];
 }
 
 export interface CreateOrgPostRequest {

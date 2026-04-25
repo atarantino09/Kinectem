@@ -1162,6 +1162,19 @@ export const RemoveMemberParams = zod.object({
 });
 
 /**
+ * Creates a new short or long-form post.
+
+For long-form posts, when the request includes a `gameDate`,
+the post is treated as a **game recap** and the server
+auto-tags every accepted player on the team's roster (role
+= `player`, status = `accepted`). Each auto-tag is recorded
+as `approved` unless the tagged player or their parent has
+`requireTagConsent` enabled, in which case the tag is
+`pending` and only surfaces to the player, their parent, and
+admins until consent is granted. Any explicit `taggedUserIds`
+are merged with the auto-tag set (deduped by user; pending
+wins over approved).
+
  * @summary Create a new post
  */
 export const createPostBodyTitleMax = 200;
@@ -1171,6 +1184,12 @@ export const createPostBodyDescriptionMax = 50000;
 export const createPostBodyBodyMax = 50000;
 
 export const createPostBodyAssetIdsMax = 10;
+
+export const createPostBodyOpponentNameMax = 200;
+
+export const createPostBodyGameScoreMax = 20;
+
+export const createPostBodyTaggedUserIdsMax = 50;
 
 export const CreatePostBody = zod.object({
   postType: zod.enum(["short", "long"]),
@@ -1182,6 +1201,33 @@ export const CreatePostBody = zod.object({
     .array(zod.string().uuid())
     .max(createPostBodyAssetIdsMax)
     .optional(),
+  gameDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "For long-form posts only. When set, the article is treated\nas a game recap and every accepted player on the team's\nroster is auto-tagged. Tags default to status `approved`,\nbut become `pending` when either the player or their parent\nhas `requireTagConsent` enabled (the existing pending-tags\nconsent model).\n",
+    ),
+  opponentName: zod
+    .string()
+    .max(createPostBodyOpponentNameMax)
+    .nullish()
+    .describe(
+      "For long-form game recaps. Free-form opponent name displayed on the article.",
+    ),
+  gameScore: zod
+    .string()
+    .max(createPostBodyGameScoreMax)
+    .nullish()
+    .describe(
+      'For long-form game recaps. Format `\"<team>-<opponent>\"`,\ne.g. `\"34-14\"`. Other formats are silently ignored.\n',
+    ),
+  taggedUserIds: zod
+    .array(zod.string().uuid())
+    .max(createPostBodyTaggedUserIdsMax)
+    .optional()
+    .describe(
+      "Optional explicit tag list for long-form posts. Always\ninserted as `approved`, then merged with the auto-tag fan-out\n(deduped by user; pending wins over approved).\n",
+    ),
 });
 
 /**
@@ -1241,6 +1287,12 @@ export const GetPostResponse = zod.object({
     .nullish()
     .describe(
       'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
+  tagStatus: zod
+    .enum(["approved", "pending"])
+    .nullish()
+    .describe(
+      'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
     ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -1321,6 +1373,12 @@ export const UpdatePostResponse = zod.object({
     .nullish()
     .describe(
       'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
+  tagStatus: zod
+    .enum(["approved", "pending"])
+    .nullish()
+    .describe(
+      'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
     ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -1439,6 +1497,12 @@ export const ListOrgPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      tagStatus: zod
+        .enum(["approved", "pending"])
+        .nullish()
+        .describe(
+          'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -1664,6 +1728,24 @@ export const UpdateOrgPrivacyResponse = zod.object({
 });
 
 /**
+ * Returns the chronological archive on a user's profile.
+The list merges two sources:
+
+1. Articles the user authored, AND
+2. Articles the user is tagged in via `article_tags`.
+
+Stranger viewers only see tagged articles where the tag is
+`approved`. The user themselves, their parent, and admins
+also see articles where their tag is still `pending`; on
+those rows the response carries `tagStatus: "pending"` so the
+client can render a "Pending tag" affordance. Articles the
+user authored are always returned without a `tagStatus`.
+
+Results are ordered by `gameDate` (descending, nulls last)
+then `createdAt` (descending), and deduped by article id —
+if the user is both author and tagged, the authored copy
+wins.
+
  * @summary List posts for a user
  */
 export const ListUserPostsParams = zod.object({
@@ -1749,6 +1831,12 @@ export const ListUserPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      tagStatus: zod
+        .enum(["approved", "pending"])
+        .nullish()
+        .describe(
+          'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -3807,6 +3895,12 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
         ),
+      tagStatus: zod
+        .enum(["approved", "pending"])
+        .nullish()
+        .describe(
+          'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -4220,6 +4314,12 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
               ),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .nullish()
+              .describe(
+                'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+              ),
             createdAt: zod.coerce.date(),
             updatedAt: zod.coerce.date(),
           })
@@ -4314,6 +4414,12 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
         ),
+      tagStatus: zod
+        .enum(["approved", "pending"])
+        .nullish()
+        .describe(
+          'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -4397,6 +4503,12 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      tagStatus: zod
+        .enum(["approved", "pending"])
+        .nullish()
+        .describe(
+          'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
