@@ -22,6 +22,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
 
+function getContextHref(context: {
+  type: "team" | "organization" | "user";
+  id: string;
+}): string {
+  switch (context.type) {
+    case "team":
+      return `/teams/${context.id}`;
+    case "organization":
+      return `/organizations/${context.id}`;
+    case "user":
+      return `/users/${context.id}`;
+  }
+}
+
 function parseSyntheticPostId(
   id: string,
 ): { contentType: ReportContentType; contentId: string } {
@@ -83,14 +97,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
       <CardContent className="p-0">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
           <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href={
-                post.context.type === "team"
-                  ? `/teams/${post.context.id}`
-                  : `/organizations/${post.context.id}`
-              }
-              className="shrink-0"
-            >
+            <Link href={getContextHref(post.context)} className="shrink-0">
               <Avatar className="w-10 h-10 rounded-lg">
                 {post.context.avatarUrl && (
                   <AvatarImage src={post.context.avatarUrl} />
@@ -101,13 +108,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               </Avatar>
             </Link>
             <div className="min-w-0">
-              <Link
-                href={
-                  post.context.type === "team"
-                    ? `/teams/${post.context.id}`
-                    : `/organizations/${post.context.id}`
-                }
-              >
+              <Link href={getContextHref(post.context)}>
                 <p className="font-bold text-sm truncate hover:underline">
                   {post.context.name ?? post.context.type}
                 </p>
