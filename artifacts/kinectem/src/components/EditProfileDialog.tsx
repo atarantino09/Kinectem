@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useUpdateUser,
@@ -50,10 +50,35 @@ async function uploadAvatarFile(file: File): Promise<string> {
   return confirmed.url;
 }
 
-export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
+interface EditProfileDialogProps {
+  user: PrivateUserResponse;
+  /**
+   * When provided, the dialog is fully controlled by the parent component
+   * and renders no trigger button of its own. When omitted, the dialog
+   * manages its own open state and renders the default "Edit Profile"
+   * trigger button.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /**
+   * Optional callback invoked after a successful save. Useful when the
+   * dialog edits a user other than the logged-in caller (e.g. a parent
+   * editing a child) and the parent screen needs to refresh its list.
+   */
+  onSaved?: () => void;
+}
+
+export function EditProfileDialog({
+  user,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  onSaved,
+}: EditProfileDialogProps) {
+  const isControlled = controlledOpen !== undefined;
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
   const [firstName, setFirstName] = useState(user.firstName);
   const [lastName, setLastName] = useState(user.lastName);
   const [nickname, setNickname] = useState(user.nickname ?? "");
@@ -64,13 +89,35 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadGenRef = useRef(0);
 
+  // When opened (especially when controlled by a parent that may swap the
+  // user prop between children), reset the form fields to match the
+  // currently-selected user so we never show stale values from a previous
+  // edit session.
+  useEffect(() => {
+    if (open) {
+      setFirstName(user.firstName);
+      setLastName(user.lastName);
+      setNickname(user.nickname ?? "");
+      setBio(user.bio ?? "");
+      setAvatarUrl(user.avatarUrl ?? null);
+      setAvatarError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, user.id]);
+
   const update = useUpdateUser({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getGetUserByIdQueryKey(user.id) });
-        qc.invalidateQueries({ queryKey: getGetLoggedInUserQueryKey() });
+        // Only the logged-in user's own /users/me cache needs busting when
+        // they edit themselves. When a parent edits a child, leave the
+        // parent's own cached profile alone.
+        if (user.isOwnProfile) {
+          qc.invalidateQueries({ queryKey: getGetLoggedInUserQueryKey() });
+        }
         toast({ title: "Profile updated" });
-        setOpen(false);
+        handleOpenChange(false);
+        onSaved?.();
       },
       onError: () =>
         toast({
@@ -80,6 +127,24 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
         }),
     },
   });
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      uploadGenRef.current += 1;
+      setAvatarUploading(false);
+      setFirstName(user.firstName);
+      setLastName(user.lastName);
+      setNickname(user.nickname ?? "");
+      setBio(user.bio ?? "");
+      setAvatarUrl(user.avatarUrl ?? null);
+      setAvatarError(null);
+    }
+    if (isControlled) {
+      controlledOnOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  };
 
   const onPickFile = () => fileInputRef.current?.click();
 
@@ -119,20 +184,6 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
     setAvatarUrl(null);
   };
 
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      uploadGenRef.current += 1;
-      setAvatarUploading(false);
-      setFirstName(user.firstName);
-      setLastName(user.lastName);
-      setNickname(user.nickname ?? "");
-      setBio(user.bio ?? "");
-      setAvatarUrl(user.avatarUrl ?? null);
-      setAvatarError(null);
-    }
-  };
-
   const onSave = () => {
     update.mutate({
       userId: user.id,
@@ -149,21 +200,25 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
   const initials = getInitials(`${firstName} ${lastName}`.trim() || user.firstName);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          className="font-bold rounded-full px-6 gap-2"
-          data-testid="button-edit-profile"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-          Edit Profile
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            className="font-bold rounded-full px-6 gap-2"
+            data-testid="button-edit-profile"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Edit Profile
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-black tracking-tight">
-            Edit Profile
+            {user.isOwnProfile
+              ? "Edit Profile"
+              : `Edit ${user.firstName}'s profile`}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -286,7 +341,7 @@ export function EditProfileDialog({ user }: { user: PrivateUserResponse }) {
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             className="font-bold"
           >
             Cancel

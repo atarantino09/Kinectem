@@ -3,6 +3,7 @@ import { useParams, Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserById,
+  useGetLoggedInUser,
   useListUserPosts,
   useListUserOrganizations,
   useListUserTeams,
@@ -13,6 +14,7 @@ import {
   getListFeedQueryKey,
   getListConversationsQueryKey,
   getGetUnreadMessageCountQueryKey,
+  type PrivateUserResponse,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -39,6 +41,7 @@ export default function UserProfilePage() {
   const [followersOpen, setFollowersOpen] = useState(false);
   const [followingOpen, setFollowingOpen] = useState(false);
   const { data: user, isLoading } = useGetUserById(userId);
+  const { data: me } = useGetLoggedInUser();
   const { data: postsResp } = useListUserPosts(userId);
   const { data: orgsResp } = useListUserOrganizations(userId);
   const { data: teamsResp } = useListUserTeams(userId);
@@ -102,6 +105,13 @@ export default function UserProfilePage() {
   const displayName = `${user.firstName} ${user.lastName}`;
   const orgs = orgsResp?.data ?? [];
   const teams = teamsResp?.data ?? [];
+  // Server returns the private response (with `parentId`) when the viewer
+  // is the linked parent, so the simple comparison below is sufficient.
+  const isParentOfThisUser =
+    !!me &&
+    "parentId" in user &&
+    !!user.parentId &&
+    user.parentId === me.id;
 
   return (
     <div className="space-y-6">
@@ -136,7 +146,14 @@ export default function UserProfilePage() {
                     Manage Tags
                   </Button>
                 </Link>
-                <EditProfileDialog user={user} />
+                <EditProfileDialog user={user as PrivateUserResponse} />
+              </div>
+            ) : isParentOfThisUser ? (
+              <div
+                className="mt-14 flex items-center gap-2"
+                data-testid="parent-actions"
+              >
+                <EditProfileDialog user={user as PrivateUserResponse} />
               </div>
             ) : (
               <div className="mt-14 flex items-center gap-2">

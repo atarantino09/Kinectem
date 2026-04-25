@@ -131,6 +131,12 @@ export type PrivateUserResponse = PublicUserResponse & {
   dateOfBirth?: string | null;
   /** The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page). */
   role: PrivateUserResponseRole;
+  /**
+   * The user's linked parent/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.
+
+   * @nullable
+   */
+  parentId?: string | null;
 };
 
 export interface UpdateUserRequest {

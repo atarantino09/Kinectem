@@ -923,14 +923,28 @@ router.get(
       .select({ followingCount: sql<number>`count(*)::int` })
       .from(userFollowers)
       .where(eq(userFollowers.followerUserId, u.id));
-    const base = isOwnProfile
-      ? toPrivateUser(u, { followerCount, followingCount })
-      : toPublicUser(u, {
-          isOwnProfile: false,
-          isFollowing,
-          followerCount,
-          followingCount,
-        });
+    // A linked parent of the target user gets the same private fields the
+    // user would see for themselves (email, role, parentId) so the parent
+    // can edit the child's profile from `/family` and `/users/<childId>`.
+    // Strangers still get the public-only view. The `isOwnProfile` flag on
+    // the response stays `false` for the parent so the frontend doesn't
+    // mistake them for the user themselves and render self-only UI.
+    const isLinkedParentViewer =
+      !!me && !!u.parentId && u.parentId === me.id;
+    const base =
+      isOwnProfile || isLinkedParentViewer
+        ? toPrivateUser(u, {
+            followerCount,
+            followingCount,
+            isOwnProfile,
+            isFollowing,
+          })
+        : toPublicUser(u, {
+            isOwnProfile: false,
+            isFollowing,
+            followerCount,
+            followingCount,
+          });
     res.json({ ...base, linkedAccounts });
   }),
 );
@@ -947,7 +961,18 @@ router.patch(
       .limit(1);
     if (!existing) return notFound(res);
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
-    if (existing.id !== me.id && !isAdmin) {
+    // Soft-deleted users are hidden from non-admins — same rule GET uses.
+    // Without this, a linked parent of a soft-deleted child could still
+    // mutate the row.
+    if (existing.deletedAt && !isAdmin) return notFound(res);
+    // A linked parent (existing.parentId === me.id) may edit their own
+    // child's profile fields. Masqueraded sessions don't get this power —
+    // it's a real-account-only check, the same rule the admin branch uses.
+    const isLinkedParent =
+      !!existing.parentId &&
+      existing.parentId === me.id &&
+      !req.isMasquerading;
+    if (existing.id !== me.id && !isAdmin && !isLinkedParent) {
       return apiError(res, 403, "Forbidden");
     }
     const body = req.body ?? {};

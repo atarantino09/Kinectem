@@ -186,17 +186,31 @@ export function toPublicUser(
 
 export function toPrivateUser(
   u: UserRow,
-  opts: { followerCount?: number; followingCount?: number } = {},
+  opts: {
+    followerCount?: number;
+    followingCount?: number;
+    /**
+     * Whether the caller is viewing their OWN profile. Defaults to true
+     * because the most common caller is `GET /users/me`, but a linked
+     * parent viewing their child's profile also receives the private
+     * response and must pass `false` so the frontend doesn't render
+     * self-only UI (Manage Tags, etc.).
+     */
+    isOwnProfile?: boolean;
+    isFollowing?: boolean;
+  } = {},
 ) {
   return {
     ...toPublicUser(u, {
-      isOwnProfile: true,
+      isOwnProfile: opts.isOwnProfile ?? true,
+      isFollowing: opts.isFollowing ?? false,
       followerCount: opts.followerCount,
       followingCount: opts.followingCount,
     }),
     email: u.email ?? "",
     dateOfBirth: u.dateOfBirth ? u.dateOfBirth.toISOString().slice(0, 10) : null,
     role: u.role,
+    parentId: u.parentId ?? null,
   };
 }
 

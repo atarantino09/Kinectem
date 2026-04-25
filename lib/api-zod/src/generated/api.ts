@@ -162,6 +162,13 @@ export const GetUserByIdResponse = zod.union([
           .describe(
             "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
           ),
+        parentId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+          ),
       }),
     ),
   zod.object({
@@ -195,7 +202,9 @@ export const GetUserByIdResponse = zod.union([
 ]);
 
 /**
- * @summary Update user profile (self only)
+ * Updates editable profile fields (name, nickname, bio, avatar, etc.). The caller must be one of: the user themselves; a real (non-masquerading) admin; or a real (non-masquerading) parent whose `users.parentId` matches the target user. Anyone else gets 403. The `avatarUrl` field, when provided, must reference a confirmed asset uploaded by the caller (not the target user) so a parent uploading on behalf of their child works correctly.
+
+ * @summary Update user profile
  */
 export const UpdateUserParams = zod.object({
   userId: zod.coerce.string().uuid(),
@@ -275,6 +284,13 @@ export const UpdateUserResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
     }),
   );
 
@@ -342,6 +358,13 @@ export const SetUserCoverPhotoResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
     }),
   );
 
@@ -401,6 +424,13 @@ export const DeleteUserCoverPhotoResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
         ),
     }),
   );
@@ -466,6 +496,13 @@ export const SetUserAvatarResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
     }),
   );
 
@@ -525,6 +562,13 @@ export const DeleteUserAvatarResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
         ),
     }),
   );
@@ -669,6 +713,13 @@ export const GetLoggedInUserResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
         ),
     }),
   );
@@ -5013,6 +5064,13 @@ export const UpdateAdminUserResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
     }),
   );
 
@@ -5072,6 +5130,13 @@ export const SoftDeleteAdminUserResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
     }),
   );
 
@@ -5130,6 +5195,13 @@ export const RestoreAdminUserResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
         ),
     }),
   );
@@ -5476,6 +5548,13 @@ export const AuthLoginResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      parentId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
         ),
     }),
   );

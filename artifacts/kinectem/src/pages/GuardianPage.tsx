@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
+import {
+  customFetch,
+  useGetLoggedInUser,
+  type PrivateUserResponse,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +12,21 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Shield, UserPlus, Search, Users, CheckCircle2, Clock, AlertTriangle, Mail, BellOff } from "lucide-react";
+import {
+  Shield,
+  UserPlus,
+  Search,
+  Users,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Mail,
+  BellOff,
+  Pencil,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, getInitials } from "@/lib/format";
+import { EditProfileDialog } from "@/components/EditProfileDialog";
 
 interface Child {
   id: string;
@@ -48,6 +64,27 @@ export default function GuardianPage() {
   const [emailOptOut, setEmailOptOut] = useState(false);
   const [emailPrefLoading, setEmailPrefLoading] = useState(true);
   const [savingEmailPref, setSavingEmailPref] = useState(false);
+  const [editingChild, setEditingChild] =
+    useState<PrivateUserResponse | null>(null);
+  const [loadingEditFor, setLoadingEditFor] = useState<string | null>(null);
+
+  const openEditDialog = async (child: Child) => {
+    setLoadingEditFor(child.id);
+    try {
+      const full = await customFetch<PrivateUserResponse>(
+        `/api/v1/users/${child.id}`,
+      );
+      setEditingChild(full);
+    } catch {
+      toast({
+        title: "Could not open editor",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingEditFor(null);
+    }
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -319,6 +356,17 @@ export default function GuardianPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="font-bold rounded-full gap-1.5"
+                        disabled={loadingEditFor === c.id}
+                        onClick={() => openEditDialog(c)}
+                        data-testid={`btn-edit-child-${c.id}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        {loadingEditFor === c.id ? "Loading…" : "Edit profile"}
+                      </Button>
                       <div className="text-right text-xs">
                         <p className="font-bold">Require tag consent</p>
                         <p className="text-muted-foreground">
@@ -408,6 +456,20 @@ export default function GuardianPage() {
           )}
         </CardContent>
       </Card>
+
+      {editingChild && (
+        <EditProfileDialog
+          user={editingChild}
+          open={true}
+          onOpenChange={(next) => {
+            if (!next) setEditingChild(null);
+          }}
+          onSaved={() => {
+            setEditingChild(null);
+            void refresh();
+          }}
+        />
+      )}
 
       {/* Link a new child */}
       <Card className="rounded-xl border-border">
