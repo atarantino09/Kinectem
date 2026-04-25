@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
+import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 
 function isDeleted(
   m: MessageResponse | DeletedMessageStub,
@@ -51,7 +52,7 @@ function isDeleted(
   return (m as DeletedMessageStub).deleted === true;
 }
 
-const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const ATTACHMENT_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const ATTACHMENT_MAX_COUNT = 10;
 
 type AttachmentDraft = {
@@ -418,7 +419,7 @@ function NewMessageDialog({
     }
   }, [open]);
 
-  const onPickFiles = (files: FileList | null) => {
+  const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const room = ATTACHMENT_MAX_COUNT - attachments.length;
     if (room <= 0) {
@@ -430,7 +431,7 @@ function NewMessageDialog({
       return;
     }
     const incoming = Array.from(files).slice(0, room);
-    const accepted: AttachmentDraft[] = [];
+    const validFiles: File[] = [];
     for (const file of incoming) {
       if (!file.type.startsWith("image/")) {
         toast({
@@ -443,20 +444,21 @@ function NewMessageDialog({
       if (file.size > ATTACHMENT_MAX_BYTES) {
         toast({
           title: "Image too large",
-          description: `${file.name} exceeds the 10 MB limit.`,
+          description: `${file.name} exceeds the 5 MB limit.`,
           variant: "destructive",
         });
         continue;
       }
-      accepted.push({
-        localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-      });
+      validFiles.push(file);
     }
-    if (accepted.length > 0) {
-      setAttachments((prev) => [...prev, ...accepted]);
-    }
+    if (validFiles.length === 0) return;
+    const shrunk = await Promise.all(validFiles.map(shrinkImage));
+    const accepted: AttachmentDraft[] = shrunk.map((file) => ({
+      localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    setAttachments((prev) => [...prev, ...accepted]);
   };
 
   const removeAttachment = (localId: string) => {

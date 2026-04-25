@@ -20,6 +20,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  shrinkImageToDataUrl,
+  IMAGE_UPLOAD_MAX_BYTES,
+} from "@/lib/shrinkImage";
 
 function slugify(s: string) {
   return s
@@ -73,17 +77,16 @@ export function CreateOrgDialog({
       toast({ title: "Please pick an image file", variant: "destructive" });
       return;
     }
-    if (file.size > 1_500_000) {
-      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
+    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+      toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
-    const dataUrl: string = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-    setLogoUrl(dataUrl);
+    try {
+      const dataUrl = await shrinkImageToDataUrl(file);
+      setLogoUrl(dataUrl);
+    } catch {
+      toast({ title: "Couldn't read that image", variant: "destructive" });
+    }
   };
 
   const onNameChange = (v: string) => {

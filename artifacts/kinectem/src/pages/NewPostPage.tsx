@@ -32,6 +32,10 @@ import {
   Video,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  shrinkImageToDataUrl,
+  IMAGE_UPLOAD_MAX_BYTES,
+} from "@/lib/shrinkImage";
 
 type DraftPayload = {
   id: string;
@@ -539,22 +543,37 @@ function MediaSection({
   onVideoUrlChange: (next: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const { toast } = useToast();
 
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const readers = Array.from(files)
-      .filter((f) => f.type.startsWith("image/"))
-      .map(
-        (f) =>
-          new Promise<string>((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = () => resolve(String(r.result));
-            r.onerror = reject;
-            r.readAsDataURL(f);
-          }),
-      );
-    const next = await Promise.all(readers);
-    onPhotosChange([...photos, ...next]);
+    const accepted: File[] = [];
+    let rejectedTooLarge = 0;
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith("image/")) continue;
+      if (f.size > IMAGE_UPLOAD_MAX_BYTES) {
+        rejectedTooLarge += 1;
+        continue;
+      }
+      accepted.push(f);
+    }
+    if (rejectedTooLarge > 0) {
+      toast({
+        title:
+          rejectedTooLarge === 1
+            ? "Photo too large"
+            : `${rejectedTooLarge} photos too large`,
+        description: "Images must be under 5 MB.",
+        variant: "destructive",
+      });
+    }
+    if (accepted.length === 0) return;
+    try {
+      const next = await Promise.all(accepted.map(shrinkImageToDataUrl));
+      onPhotosChange([...photos, ...next]);
+    } catch {
+      toast({ title: "Couldn't read those photos", variant: "destructive" });
+    }
   };
 
   const removeAt = (idx: number) => {

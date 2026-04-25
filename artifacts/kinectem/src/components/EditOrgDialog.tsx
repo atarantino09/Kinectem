@@ -18,6 +18,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
+import {
+  shrinkImageToDataUrl,
+  IMAGE_UPLOAD_MAX_BYTES,
+} from "@/lib/shrinkImage";
 
 type OrgLike = {
   id: string;
@@ -96,18 +100,13 @@ export function EditOrgDialog({
       toast({ title: "Please pick an image file", variant: "destructive" });
       return;
     }
-    if (file.size > 1_500_000) {
-      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
+    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+      toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
     setUploading(true);
     try {
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await shrinkImageToDataUrl(file);
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

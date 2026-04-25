@@ -13,11 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, ImagePlus, Trash2, X } from "lucide-react";
-import { useAlbum, fileToDataUrl, type AlbumPhoto } from "@/lib/photoAlbum";
+import { useAlbum, type AlbumPhoto } from "@/lib/photoAlbum";
 import { useGetLoggedInUser } from "@workspace/api-client-react";
 import { timeAgo } from "@/lib/format";
+import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 
 export function GamePhotoAlbum({ postId }: { postId: string }) {
   const { photos, addPhoto, removePhoto } = useAlbum(postId);
@@ -46,7 +47,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       if (f.size > MAX_BYTES) {
         toast({
           title: "Photo too large",
-          description: `${f.name} is over 4 MB.`,
+          description: `${f.name} is over 5 MB.`,
           variant: "destructive",
         });
         continue;
@@ -54,9 +55,25 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       picked.push(f);
     }
     if (picked.length === 0) return;
-    setFiles(picked);
-    const previewUrls = await Promise.all(picked.map(fileToDataUrl));
-    setPreviews(previewUrls);
+    try {
+      const shrunk = await Promise.all(picked.map(shrinkImage));
+      setFiles(shrunk);
+      // shrunk files are already small, so a plain FileReader is enough.
+      const previewUrls = await Promise.all(
+        shrunk.map(
+          (f) =>
+            new Promise<string>((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () => resolve(String(r.result));
+              r.onerror = () => reject(r.error ?? new Error("Read failed"));
+              r.readAsDataURL(f);
+            }),
+        ),
+      );
+      setPreviews(previewUrls);
+    } catch {
+      toast({ title: "Couldn't read those photos", variant: "destructive" });
+    }
   };
 
   const reset = () => {
