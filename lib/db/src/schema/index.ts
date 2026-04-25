@@ -81,6 +81,15 @@ export const organizationFollowers = pgTable("organization_followers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
 
+// When a user manually unfollows an organization, we record an opt-out so
+// that automatic follow flows (e.g. joining a team in the org) do not silently
+// re-follow them. Cleared when the user explicitly follows again.
+export const organizationFollowOptouts = pgTable("organization_follow_optouts", {
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  unfollowedAt: timestamp("unfollowed_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
+
 export const userFollowers = pgTable("user_followers", {
   followingUserId: uuid("following_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   followerUserId: uuid("follower_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),

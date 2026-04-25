@@ -5,6 +5,7 @@ import {
   organizations,
   organizationAdmins,
   organizationFollowers,
+  organizationFollowOptouts,
   userFollowers,
   teamFollowers,
   teams,
@@ -352,6 +353,19 @@ async function ensureOrgFollowedForTeam(userId: string, teamId: string): Promise
       .where(eq(teams.id, teamId))
       .limit(1);
     if (!team) return;
+    // Respect a prior manual unfollow: if the user has explicitly opted out,
+    // we do not silently re-follow them when they join a team in this org.
+    const [optout] = await db
+      .select()
+      .from(organizationFollowOptouts)
+      .where(
+        and(
+          eq(organizationFollowOptouts.organizationId, team.orgId),
+          eq(organizationFollowOptouts.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (optout) return;
     await db
       .insert(organizationFollowers)
       .values({ organizationId: team.orgId, userId })
@@ -1544,6 +1558,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return res.status(401).json({ error: "Not authenticated" });
+    // Explicit follow clears any prior opt-out so future auto-follows work.
+    await db
+      .delete(organizationFollowOptouts)
+      .where(
+        and(
+          eq(organizationFollowOptouts.organizationId, req.params.orgId),
+          eq(organizationFollowOptouts.userId, me.id),
+        ),
+      );
     await db
       .insert(organizationFollowers)
       .values({ organizationId: req.params.orgId, userId: me.id })
@@ -1568,6 +1591,11 @@ router.delete(
           eq(organizationFollowers.userId, me.id),
         ),
       );
+    // Record an opt-out so auto-follow flows do not silently re-follow.
+    await db
+      .insert(organizationFollowOptouts)
+      .values({ organizationId: req.params.orgId, userId: me.id })
+      .onConflictDoNothing();
     res.status(204).end();
   }),
 );
