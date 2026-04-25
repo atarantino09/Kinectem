@@ -288,9 +288,12 @@ export default function TeamPage() {
                 {parents.map((p) => (
                   <Link key={p.id} href={`/users/${p.id}`}>
                     <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
-                        {getInitials(p.displayName)}
-                      </div>
+                      <Avatar className="w-7 h-7">
+                        {p.avatarUrl && <AvatarImage src={p.avatarUrl} />}
+                        <AvatarFallback className="bg-blue-100 text-blue-700 text-[10px] font-bold">
+                          {getInitials(p.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
                       <span className="font-semibold">{p.displayName}</span>
                       <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none font-bold uppercase tracking-wider text-[10px]">
                         Parent
