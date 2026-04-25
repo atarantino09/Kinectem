@@ -76,7 +76,7 @@ export default function OrganizationPage() {
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
         <div className="h-32 brand-gradient relative" />
-        <div className="px-6 pb-6 -mt-10 flex items-end justify-between gap-4 flex-wrap relative z-10">
+        <div className="px-6 pb-6 -mt-20 flex items-end justify-between gap-4 flex-wrap relative z-10">
           <div className="flex items-end gap-4">
             <div className="shrink-0">
               <AvatarLightbox
@@ -88,7 +88,7 @@ export default function OrganizationPage() {
                 dialogTestId="dialog-org-logo-lightbox"
                 imageTestId="img-org-logo-lightbox"
               >
-                <div className="w-20 h-20 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
+                <div className="w-36 h-36 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
                   {organization.logoUrl ? (
                     <img
                       src={organization.logoUrl}
@@ -96,7 +96,7 @@ export default function OrganizationPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="text-2xl font-black text-primary tracking-tighter">
+                    <div className="text-5xl font-black text-primary tracking-tighter">
                       {getInitials(organization.name)}
                     </div>
                   )}

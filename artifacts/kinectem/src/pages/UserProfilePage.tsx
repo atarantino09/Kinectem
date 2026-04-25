@@ -137,16 +137,16 @@ export default function UserProfilePage() {
               imageTestId="img-avatar-lightbox"
             >
               <Avatar
-                className={`w-24 h-24 border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
+                className={`w-36 h-36 border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
               >
                 {user.avatarUrl && <AvatarImage src={user.avatarUrl} />}
-                <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-2xl">
+                <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-5xl">
                   {getInitials(displayName)}
                 </AvatarFallback>
               </Avatar>
             </AvatarLightbox>
             {user.isOwnProfile && "email" in user ? (
-              <div className="mt-14 flex items-center gap-2">
+              <div className="mt-24 flex items-center gap-2">
                 <Link href="/me/tags">
                   <Button
                     variant="outline"
@@ -161,13 +161,13 @@ export default function UserProfilePage() {
               </div>
             ) : isParentOfThisUser ? (
               <div
-                className="mt-14 flex items-center gap-2"
+                className="mt-24 flex items-center gap-2"
                 data-testid="parent-actions"
               >
                 <EditProfileDialog user={user as PrivateUserResponse} />
               </div>
             ) : (
-              <div className="mt-14 flex items-center gap-2">
+              <div className="mt-24 flex items-center gap-2">
                 <Button
                   variant="outline"
                   className="font-bold rounded-full"
