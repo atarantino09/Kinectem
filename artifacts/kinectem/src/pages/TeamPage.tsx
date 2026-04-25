@@ -44,6 +44,7 @@ import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { PostCard } from "@/components/PostCard";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -360,20 +361,38 @@ export default function TeamPage() {
           </div>
           <div className="flex items-start gap-6 mb-3">
             <div className="shrink-0">
-              <div className="w-36 h-36 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
-                {(team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl) ? (
-                  <img
-                    src={team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl || ""}
-                    alt={team.name}
-                    className="w-full h-full object-cover"
-                    data-testid="img-team-photo"
-                  />
-                ) : (
-                  <span className="text-5xl font-black text-primary">
-                    {team.name.slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-              </div>
+              {(() => {
+                const logoUrl =
+                  team.avatarUrl ||
+                  (team.organization as { avatarUrl?: string | null })?.avatarUrl ||
+                  "";
+                return (
+                  <AvatarLightbox
+                    avatarUrl={logoUrl || null}
+                    displayName={team.name}
+                    ariaLabel={`View ${team.name}'s logo`}
+                    triggerClassName="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    triggerTestId="btn-open-team-logo-lightbox"
+                    dialogTestId="dialog-team-logo-lightbox"
+                    imageTestId="img-team-logo-lightbox"
+                  >
+                    <div className="w-36 h-36 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
+                      {logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={team.name}
+                          className="w-full h-full object-cover"
+                          data-testid="img-team-photo"
+                        />
+                      ) : (
+                        <span className="text-5xl font-black text-primary">
+                          {team.name.slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </AvatarLightbox>
+                );
+              })()}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-3 flex-wrap">

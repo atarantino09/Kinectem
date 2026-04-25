@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Users, ChevronRight, Plus, Pencil } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
@@ -78,19 +79,29 @@ export default function OrganizationPage() {
         <div className="px-6 pb-6 -mt-10 flex items-end justify-between gap-4 flex-wrap relative z-10">
           <div className="flex items-end gap-4">
             <div className="shrink-0">
-              <div className="w-20 h-20 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
-                {organization.logoUrl ? (
-                  <img
-                    src={organization.logoUrl}
-                    alt={`${organization.name} logo`}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-2xl font-black text-primary tracking-tighter">
-                    {getInitials(organization.name)}
-                  </div>
-                )}
-              </div>
+              <AvatarLightbox
+                avatarUrl={organization.logoUrl}
+                displayName={organization.name}
+                ariaLabel={`View ${organization.name}'s logo`}
+                triggerClassName="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                triggerTestId="btn-open-org-logo-lightbox"
+                dialogTestId="dialog-org-logo-lightbox"
+                imageTestId="img-org-logo-lightbox"
+              >
+                <div className="w-20 h-20 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
+                  {organization.logoUrl ? (
+                    <img
+                      src={organization.logoUrl}
+                      alt={`${organization.name} logo`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-2xl font-black text-primary tracking-tighter">
+                      {getInitials(organization.name)}
+                    </div>
+                  )}
+                </div>
+              </AvatarLightbox>
             </div>
             <div className="pb-2">
               <h1 className="text-4xl font-black tracking-tight leading-none">
