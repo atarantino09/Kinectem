@@ -5387,6 +5387,7 @@ components:
         - type: object
           required:
             - email
+            - role
           properties:
             email:
               type: string
@@ -5395,6 +5396,10 @@ components:
               type: string
               format: date
               nullable: true
+            role:
+              type: string
+              enum: [athlete, coach, admin, parent]
+              description: The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
 
     UpdateUserRequest:
       type: object
@@ -5422,6 +5427,11 @@ components:
           type: string
           nullable: true
           maxLength: 50
+        avatarUrl:
+          type: string
+          nullable: true
+          maxLength: 4096
+          description: URL of the user's profile picture. Use the asset upload flow to obtain a confirmed URL, or pass null to remove the current avatar.
 
     SetAssetIdRequest:
       type: object
