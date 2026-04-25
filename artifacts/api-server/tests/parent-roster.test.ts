@@ -255,6 +255,244 @@ describe("parent-controlled team membership", () => {
   });
 });
 
+describe("guardian pending team invites", () => {
+  it("lets a parent list their child's pending team invites", async () => {
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const samiraId = await findUserId("samira@kinectem.demo");
+
+    // Reset Samira so we have exactly one known pending row on this team
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      );
+    const created = await coach
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: samiraId, position: "player" });
+    expect(created.status).toBe(201);
+    const entryId = created.body.id as string;
+
+    const { agent: lisa } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const res = await lisa.get(
+      `/api/v1/users/me/children/${samiraId}/pending-team-invites`,
+    );
+    expect(res.status).toBe(200);
+    const data = res.body.data as Array<{
+      entryId: string;
+      teamId: string;
+      teamName: string;
+      organization: { id: string; name: string };
+      role: string;
+      position: string | null;
+      invitedAt: string;
+    }>;
+    const row = data.find((d) => d.entryId === entryId);
+    expect(row).toBeDefined();
+    expect(row?.teamId).toBe(teamId);
+    expect(row?.teamName).toBe("Varsity Football");
+    expect(row?.organization.id).toBe(orgId);
+    expect(row?.role).toBe("player");
+    expect(row?.invitedAt).toBeTruthy();
+  });
+
+  it("forbids a non-guardian from listing a child's pending invites", async () => {
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const { agent: stranger } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const res = await stranger.get(
+      `/api/v1/users/me/children/${samiraId}/pending-team-invites`,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("requires an authenticated session to list pending invites", async () => {
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const res = await request(app).get(
+      `/api/v1/users/me/children/${samiraId}/pending-team-invites`,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("excludes accepted/declined entries from the pending list", async () => {
+    const { teamId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const samiraId = await findUserId("samira@kinectem.demo");
+
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      );
+    const created = await coach
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: samiraId, position: "player" });
+    const entryId = created.body.id as string;
+
+    const { agent: lisa } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const accept = await lisa
+      .post(`/api/v1/teams/${teamId}/members/${entryId}/accept`)
+      .send({});
+    expect(accept.status).toBe(200);
+
+    const res = await lisa.get(
+      `/api/v1/users/me/children/${samiraId}/pending-team-invites`,
+    );
+    expect(res.status).toBe(200);
+    const data = res.body.data as Array<{ entryId: string }>;
+    expect(data.find((d) => d.entryId === entryId)).toBeUndefined();
+  });
+});
+
+describe("email-invite path fan-out to guardians", () => {
+  it("notifies the linked parent when a coach emails an existing child by email", async () => {
+    const { teamId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+    const [samira] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, samiraId))
+      .limit(1);
+    expect(samira?.email).toBeTruthy();
+
+    // Wipe any existing roster entry so the email-invite path takes the
+    // "create + fan-out" branch rather than the no-op short-circuit.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      );
+
+    const before = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "roster_invite_for_child"),
+        ),
+      );
+    const beforeIds = new Set(before.map((n) => n.id));
+
+    const res = await coach
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: samira!.email, position: "player" });
+    expect(res.status).toBe(201);
+
+    // Pending roster row was created for the matched user.
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      )
+      .limit(1);
+    expect(entry).toBeDefined();
+    expect(entry?.status).toBe("pending");
+
+    // Parent got the new fan-out notification with the right deep-link.
+    const after = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "roster_invite_for_child"),
+        ),
+      )
+      .orderBy(desc(notifications.createdAt));
+    const newOnes = after.filter((n) => !beforeIds.has(n.id));
+    expect(newOnes.length).toBeGreaterThanOrEqual(1);
+    const fresh = newOnes[0];
+    expect(fresh.message).toMatch(/Samira/);
+    expect(fresh.message).toMatch(/Varsity Football/);
+    expect(fresh.link).toMatch(/childId=/);
+    expect(fresh.link).toMatch(/entryId=/);
+    expect(fresh.link).toMatch(/teamId=/);
+  });
+
+  it("does not double-fan-out when the existing user already has a roster row", async () => {
+    const { teamId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+    const [samira] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, samiraId))
+      .limit(1);
+
+    // Seed the roster row first via the direct-add path (which itself
+    // produces a fan-out). The follow-up email invite should NOT add a
+    // second notification because there's nothing new to react to.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      );
+    await coach
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: samiraId, position: "player" });
+
+    const before = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "roster_invite_for_child"),
+        ),
+      );
+    const beforeCount = before.length;
+
+    const res = await coach
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: samira!.email, position: "player" });
+    expect(res.status).toBe(201);
+
+    const after = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "roster_invite_for_child"),
+        ),
+      );
+    expect(after.length).toBe(beforeCount);
+  });
+});
+
 describe("/users/:userId visibility", () => {
   it("hides pending team rows from strangers but shows them to the parent", async () => {
     const { teamId } = await getFootballTeam();

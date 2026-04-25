@@ -2638,7 +2638,171 @@ router.post(
         invitedById: me.id,
       })
       .returning();
+
+    // If a Kinectem account already exists for this email, also place that
+    // user on the roster as pending so they (and their linked guardian, if
+    // any) can accept the spot in-app without waiting for the email link.
+    // This mirrors the direct-add path's notification fan-out so that
+    // parents of children invited by email get the same /family deep-link
+    // they get from the direct-add path.
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()))
+      .limit(1);
+    if (existingUser) {
+      const [existingEntry] = await db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, existingUser.id),
+          ),
+        )
+        .limit(1);
+      if (!existingEntry) {
+        const [entry] = await db
+          .insert(rosterEntries)
+          .values({
+            teamId,
+            userId: existingUser.id,
+            role: dbRole,
+            status: "pending",
+            position: positionRaw === "coach" ? null : positionRaw,
+          })
+          .returning();
+        await ensureOrgFollowedForTeam(existingUser.id, teamId);
+        await db.insert(notifications).values({
+          userId: existingUser.id,
+          kind: "roster_invite",
+          message: `${displayName(me)} invited you to ${t.name}. Tap to accept or decline.`,
+          link: `/teams/${teamId}`,
+        });
+        if (existingUser.parentId) {
+          const childFirstName =
+            (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
+              ? existingUser.name!.trim().split(/\s+/)[0]
+              : "your child";
+          await db.insert(notifications).values({
+            userId: existingUser.parentId,
+            kind: "roster_invite_for_child",
+            message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
+            link: `/family?childId=${existingUser.id}&entryId=${entry.id}&teamId=${teamId}`,
+          });
+        }
+      }
+    }
+
     res.status(201).json(toInvite(invite, me));
+  }),
+);
+
+// Pending team-invites for a guardian-managed child. The parent (or a real
+// admin) needs a single endpoint that returns every team that has invited
+// this child but isn't accepted yet, plus enough metadata to render the
+// row without follow-up round-trips.
+router.get(
+  "/users/me/children/:childId/pending-team-invites",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const childId = req.params.childId;
+    const [child] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, childId))
+      .limit(1);
+    if (!child) return notFound(res);
+
+    // Same authorization shape as GET /users/:userId/teams: the linked
+    // guardian on a real (non-masquerading) parent session, or a real admin.
+    const isRealAdmin =
+      req.realUser?.role === "admin" && !req.isMasquerading;
+    const isGuardian =
+      child.parentId === me.id && !req.isMasquerading;
+    if (!isGuardian && !isRealAdmin) {
+      return apiError(res, 403, "Forbidden");
+    }
+
+    const rows = await db
+      .select({ entry: rosterEntries, team: teams, org: organizations })
+      .from(rosterEntries)
+      .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(
+        and(
+          eq(rosterEntries.userId, childId),
+          eq(rosterEntries.status, "pending"),
+        ),
+      )
+      .orderBy(desc(rosterEntries.createdAt));
+
+    // Best-effort lookup of "who invited" via the related rosterInvites row
+    // (the email-invite path stores `invitedById`). Direct-add roster rows
+    // have no such link, so the inviter falls back to null.
+    const teamIds = rows.map((r) => r.team.id);
+    const inviteByTeam = new Map<string, string | null>();
+    if (child.email && teamIds.length > 0) {
+      const invs = await db
+        .select({
+          teamId: rosterInvites.teamId,
+          invitedById: rosterInvites.invitedById,
+          createdAt: rosterInvites.createdAt,
+        })
+        .from(rosterInvites)
+        .where(
+          and(
+            eq(rosterInvites.invitedEmail, child.email),
+            inArray(rosterInvites.teamId, teamIds),
+          ),
+        )
+        .orderBy(desc(rosterInvites.createdAt));
+      for (const i of invs) {
+        if (!inviteByTeam.has(i.teamId)) {
+          inviteByTeam.set(i.teamId, i.invitedById);
+        }
+      }
+    }
+    const inviterIds = Array.from(
+      new Set(
+        Array.from(inviteByTeam.values()).filter(
+          (id): id is string => !!id,
+        ),
+      ),
+    );
+    const inviterMap = new Map<string, typeof users.$inferSelect>();
+    if (inviterIds.length > 0) {
+      const inviterRows = await db
+        .select()
+        .from(users)
+        .where(inArray(users.id, inviterIds));
+      for (const u of inviterRows) inviterMap.set(u.id, u);
+    }
+
+    const data = rows.map((r) => {
+      const inviterId = inviteByTeam.get(r.team.id) ?? null;
+      const inviter = inviterId ? inviterMap.get(inviterId) ?? null : null;
+      return {
+        entryId: r.entry.id,
+        teamId: r.team.id,
+        teamName: r.team.name,
+        teamLogoUrl: r.team.logoUrl ?? null,
+        organization: { id: r.org.id, name: r.org.name },
+        role: r.entry.role === "coach" ? "coach" : "player",
+        position: r.entry.position ?? null,
+        invitedAt: r.entry.createdAt.toISOString(),
+        invitedBy: inviter
+          ? {
+              id: inviter.id,
+              displayName: displayName(inviter),
+              avatarUrl: inviter.avatarUrl ?? null,
+            }
+          : null,
+      };
+    });
+
+    res.json({ data });
   }),
 );
 

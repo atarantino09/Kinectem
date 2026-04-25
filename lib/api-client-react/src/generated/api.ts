@@ -162,6 +162,7 @@ import type {
   ListAdminReportsParams,
   ListAdminUsers200,
   ListAdminUsersParams,
+  ListChildPendingTeamInvites200,
   ListCommentReactorsParams,
   ListConversationsParams,
   ListDrafts200,
@@ -18342,6 +18343,107 @@ export const useUpdateChildVisibility = <
 > => {
   return useMutation(getUpdateChildVisibilityMutationOptions(options));
 };
+
+/**
+ * @summary List pending team-roster invites for a guardian-managed child
+ */
+export const getListChildPendingTeamInvitesUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/pending-team-invites`;
+};
+
+export const listChildPendingTeamInvites = async (
+  childId: string,
+  options?: RequestInit,
+): Promise<ListChildPendingTeamInvites200> => {
+  return customFetch<ListChildPendingTeamInvites200>(
+    getListChildPendingTeamInvitesUrl(childId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListChildPendingTeamInvitesQueryKey = (childId: string) => {
+  return [`/api/v1/users/me/children/${childId}/pending-team-invites`] as const;
+};
+
+export const getListChildPendingTeamInvitesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listChildPendingTeamInvites>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChildPendingTeamInvites>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListChildPendingTeamInvitesQueryKey(childId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listChildPendingTeamInvites>>
+  > = ({ signal }) =>
+    listChildPendingTeamInvites(childId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!childId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listChildPendingTeamInvites>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListChildPendingTeamInvitesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listChildPendingTeamInvites>>
+>;
+export type ListChildPendingTeamInvitesQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary List pending team-roster invites for a guardian-managed child
+ */
+
+export function useListChildPendingTeamInvites<
+  TData = Awaited<ReturnType<typeof listChildPendingTeamInvites>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChildPendingTeamInvites>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListChildPendingTeamInvitesQueryOptions(
+    childId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Resend the guardian-confirmation email for a child account

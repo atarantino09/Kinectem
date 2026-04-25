@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearch } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useGetLoggedInUser,
@@ -23,9 +24,10 @@ import {
   Mail,
   BellOff,
   Pencil,
+  Inbox,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatDate, getInitials } from "@/lib/format";
+import { formatDate, getInitials, timeAgo } from "@/lib/format";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 
 interface Child {
@@ -52,9 +54,27 @@ interface SearchUser {
   avatarUrl: string | null;
 }
 
+interface PendingTeamInvite {
+  entryId: string;
+  teamId: string;
+  teamName: string;
+  teamLogoUrl: string | null;
+  organization: { id: string; name: string };
+  role: string;
+  position: string | null;
+  invitedAt: string;
+  invitedBy: {
+    id: string;
+    displayName: string;
+    avatarUrl: string | null;
+  } | null;
+}
+
 export default function GuardianPage() {
   const { data: me } = useGetLoggedInUser();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const search = useSearch();
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -68,6 +88,20 @@ export default function GuardianPage() {
   const [editingChild, setEditingChild] =
     useState<PrivateUserResponse | null>(null);
   const [loadingEditFor, setLoadingEditFor] = useState<string | null>(null);
+  const [pendingByChild, setPendingByChild] = useState<
+    Record<string, PendingTeamInvite[]>
+  >({});
+  const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
+  const childRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const deepLink = useMemo(() => {
+    const params = new URLSearchParams(search ?? "");
+    return {
+      childId: params.get("childId"),
+      entryId: params.get("entryId"),
+      teamId: params.get("teamId"),
+    };
+  }, [search]);
 
   const openEditDialog = async (child: Child) => {
     setLoadingEditFor(child.id);
@@ -87,6 +121,17 @@ export default function GuardianPage() {
     }
   };
 
+  const fetchPendingForChild = async (childId: string) => {
+    try {
+      const r = await customFetch<{ data: PendingTeamInvite[] }>(
+        `/api/v1/users/me/children/${childId}/pending-team-invites`,
+      );
+      setPendingByChild((prev) => ({ ...prev, [childId]: r.data ?? [] }));
+    } catch {
+      setPendingByChild((prev) => ({ ...prev, [childId]: [] }));
+    }
+  };
+
   const refresh = async () => {
     setLoading(true);
     try {
@@ -94,6 +139,12 @@ export default function GuardianPage() {
         "/api/v1/users/me/children",
       );
       setChildren(r.data);
+      // Fan out the pending-invite lookups so each card has its data ready
+      // by the time the user looks at it. Failures are swallowed per-child
+      // so one slow child can't hide the rest.
+      await Promise.all(
+        (r.data ?? []).map((c) => fetchPendingForChild(c.id)),
+      );
     } catch {
       // ignore
     } finally {
@@ -231,6 +282,102 @@ export default function GuardianPage() {
     }
   };
 
+  const handlePendingAction = async (
+    child: Child,
+    invite: PendingTeamInvite,
+    action: "accept" | "decline",
+  ) => {
+    setActingOnEntryId(invite.entryId);
+    try {
+      await customFetch(
+        `/api/v1/teams/${invite.teamId}/members/${invite.entryId}/${action}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      // Optimistically drop the row from local state, then refresh anything
+      // that depends on this child's roster (their profile, their team list,
+      // any open team rosters) using the same predicate the bell uses.
+      setPendingByChild((prev) => ({
+        ...prev,
+        [child.id]: (prev[child.id] ?? []).filter(
+          (i) => i.entryId !== invite.entryId,
+        ),
+      }));
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k)) return false;
+          const url = typeof k[0] === "string" ? k[0] : "";
+          if (url.includes(`/users/${child.id}`)) return true;
+          if (url.includes("/teams/") && url.endsWith("/roster")) return true;
+          return false;
+        },
+      });
+      // Re-fetch the parent's bell so the matching notification clears its
+      // unread state alongside the row removal.
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k)) return false;
+          const url = typeof k[0] === "string" ? k[0] : "";
+          return url.includes("/notifications");
+        },
+      });
+      toast({
+        title:
+          action === "accept"
+            ? `Accepted ${invite.teamName} for ${child.firstName}`
+            : `Declined ${invite.teamName} for ${child.firstName}`,
+      });
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Failed to update roster spot";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setActingOnEntryId(null);
+    }
+  };
+
+  // Deep-link from the notifications bell: /family?childId=…&entryId=…&teamId=…
+  // Scroll the matching child card into view and briefly highlight the
+  // matching pending-invite row so the parent lands directly on what the
+  // notification was about.
+  useEffect(() => {
+    const { childId, entryId } = deepLink;
+    if (!childId) return;
+    if (loading) return;
+    const node = childRefs.current[childId];
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (!entryId) return;
+    // Small delay so the row is mounted by the time we run query-selector.
+    const t = window.setTimeout(() => {
+      const row = document.querySelector(
+        `[data-pending-entry-id="${entryId}"]`,
+      );
+      if (row) {
+        row.classList.add(
+          "ring-2",
+          "ring-primary",
+          "ring-offset-2",
+          "ring-offset-background",
+        );
+        window.setTimeout(() => {
+          row.classList.remove(
+            "ring-2",
+            "ring-primary",
+            "ring-offset-2",
+            "ring-offset-background",
+          );
+        }, 2400);
+      }
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [deepLink, loading, pendingByChild]);
+
   const toggleConsent = async (child: Child, value: boolean) => {
     try {
       await customFetch(
@@ -336,7 +483,10 @@ export default function GuardianPage() {
               {children.map((c) => (
                 <div
                   key={c.id}
-                  className="flex flex-col gap-3 p-3 rounded-lg border border-border"
+                  ref={(el) => {
+                    childRefs.current[c.id] = el;
+                  }}
+                  className="flex flex-col gap-3 p-3 rounded-lg border border-border scroll-mt-4"
                   data-testid={`row-child-${c.id}`}
                 >
                   <div className="flex items-center gap-3">
@@ -457,6 +607,89 @@ export default function GuardianPage() {
                             : "Resend confirmation link"}
                         </Button>
                       )}
+                    </div>
+                  )}
+
+                  {(pendingByChild[c.id] ?? []).length > 0 && (
+                    <div
+                      className="pt-2 border-t border-border space-y-2"
+                      data-testid={`section-pending-invites-${c.id}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Inbox className="w-3.5 h-3.5 text-primary" />
+                        <p className="text-xs font-black uppercase tracking-wider text-primary">
+                          Pending team invites
+                        </p>
+                      </div>
+                      {(pendingByChild[c.id] ?? []).map((inv) => {
+                        const acting = actingOnEntryId === inv.entryId;
+                        const positionLabel =
+                          inv.position && inv.position.length > 0
+                            ? inv.position.charAt(0).toUpperCase() +
+                              inv.position.slice(1).replace(/_/g, " ")
+                            : inv.role === "coach"
+                              ? "Coach"
+                              : "Player";
+                        return (
+                          <div
+                            key={inv.entryId}
+                            data-pending-entry-id={inv.entryId}
+                            data-testid={`row-pending-invite-${inv.entryId}`}
+                            className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30 transition-shadow"
+                          >
+                            <Avatar className="w-9 h-9 border border-border shrink-0">
+                              {inv.teamLogoUrl && (
+                                <AvatarImage src={inv.teamLogoUrl} />
+                              )}
+                              <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                                {getInitials(inv.teamName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className="font-bold text-sm truncate"
+                                data-testid={`text-pending-team-${inv.entryId}`}
+                              >
+                                {inv.teamName}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {inv.organization.name} · {positionLabel}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {inv.invitedBy
+                                  ? `Invited by ${inv.invitedBy.displayName}`
+                                  : "Invited"}{" "}
+                                · {timeAgo(inv.invitedAt)}
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-2 shrink-0 sm:flex-row">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="font-bold rounded-full h-7 px-3 text-xs"
+                                disabled={acting}
+                                onClick={() =>
+                                  void handlePendingAction(c, inv, "decline")
+                                }
+                                data-testid={`btn-decline-pending-${inv.entryId}`}
+                              >
+                                Decline
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="font-bold rounded-full h-7 px-3 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
+                                disabled={acting}
+                                onClick={() =>
+                                  void handlePendingAction(c, inv, "accept")
+                                }
+                                data-testid={`btn-accept-pending-${inv.entryId}`}
+                              >
+                                {acting ? "Working…" : "Accept"}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

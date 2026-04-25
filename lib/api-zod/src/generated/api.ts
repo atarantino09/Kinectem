@@ -5895,6 +5895,17 @@ export const UpdateChildVisibilityResponse = zod.record(
 );
 
 /**
+ * @summary List pending team-roster invites for a guardian-managed child
+ */
+export const ListChildPendingTeamInvitesParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const ListChildPendingTeamInvitesResponse = zod.object({
+  data: zod.array(zod.record(zod.string(), zod.unknown())),
+});
+
+/**
  * @summary Resend the guardian-confirmation email for a child account
  */
 export const ResendChildGuardianConfirmParams = zod.object({

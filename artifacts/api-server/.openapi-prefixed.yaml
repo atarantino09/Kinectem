@@ -5017,6 +5017,40 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/users/me/children/{childId}/pending-team-invites:
+    get:
+      operationId: listChildPendingTeamInvites
+      summary: List pending team-roster invites for a guardian-managed child
+      tags:
+        - Family
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pending team invites for the child.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/users/me/children/{childId}/resend-guardian-confirm:
     post:
       operationId: resendChildGuardianConfirm

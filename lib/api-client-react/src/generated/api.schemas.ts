@@ -3303,6 +3303,12 @@ export type UpdateChildVisibilityBody = { [key: string]: unknown };
 
 export type UpdateChildVisibility200 = { [key: string]: unknown };
 
+export type ListChildPendingTeamInvites200DataItem = { [key: string]: unknown };
+
+export type ListChildPendingTeamInvites200 = {
+  data: ListChildPendingTeamInvites200DataItem[];
+};
+
 export type ResendChildGuardianConfirm200 = {
   ok?: boolean;
 };

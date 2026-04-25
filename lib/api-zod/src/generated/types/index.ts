@@ -237,6 +237,8 @@ export * from "./listAdminUsers200";
 export * from "./listAdminUsersIncludeDeleted";
 export * from "./listAdminUsersParams";
 export * from "./listAdminUsersRole";
+export * from "./listChildPendingTeamInvites200";
+export * from "./listChildPendingTeamInvites200DataItem";
 export * from "./listCommentReactorsParams";
 export * from "./listConversationsParams";
 export * from "./listDrafts200";
