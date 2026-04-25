@@ -203,6 +203,8 @@ function OrgRow({
   isOrgAdmin: boolean;
   memberTeams: { id: string; name: string }[];
 }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const showLogo = !!orgLogoUrl && !logoFailed;
   const { data: teamsResp } = useListOrgTeams(orgId, undefined, {
     query: { enabled: isOpen && isOrgAdmin } as never,
   });
@@ -228,10 +230,11 @@ function OrgRow({
             isOpen ? "rotate-90" : ""
           }`}
         />
-        {orgLogoUrl ? (
+        {showLogo ? (
           <img
-            src={orgLogoUrl}
+            src={orgLogoUrl as string}
             alt=""
+            onError={() => setLogoFailed(true)}
             className="w-5 h-5 rounded-md object-cover bg-muted shrink-0"
           />
         ) : (
