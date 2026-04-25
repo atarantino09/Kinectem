@@ -2,16 +2,77 @@ openapi: 3.0.3
 info:
   title: Kinectem API
   version: 0.1.0
-  description: Youth sports recruiting platform API
+  description: |
+    Kinectem is a youth-sports recruiting platform. This is the JSON API
+    that powers the web client (`artifacts/kinectem`) and is the contract
+    that any future mobile client or third-party integrator must follow.
+
+    This OpenAPI document is the single source of truth for the API. The
+    Express server in `artifacts/api-server` is wrapped by the
+    [`express-openapi-validator`](https://github.com/cdimascio/express-openapi-validator)
+    middleware, so a request that does not match this spec is rejected
+    before it reaches a handler. The TypeScript clients in
+    `lib/api-codegen` and the Zod schemas in `lib/api-zod` are generated
+    from this file — see `pnpm --filter @workspace/api-spec run codegen`.
+
+    ## Conventions
+
+    ### Naming
+    - Resource paths are lower-kebab-case plurals: `/organizations`,
+      `/team-members`, `/asset-messages`.
+    - Path parameters and JSON property names are **camelCase**
+      (`{orgId}`, `coverPhotoUrl`, `nextCursor`).
+    - Operation IDs are camelCase verb-first (`listOrganizations`,
+      `createTeam`, `setUserCoverPhoto`).
+
+    ### Errors
+    Every error response uses the same envelope:
+
+    ```json
+    { "error": "Human-readable message", "code": "MACHINE_READABLE_CODE" }
+    ```
+
+    See [`API_CONVENTIONS.md`](../../API_CONVENTIONS.md) for the full
+    list of `code` values. Clients should branch on `code` and surface
+    `error` to humans. The optional `correlationId` field is reserved
+    for future structured logging.
+
+    ### Pagination
+    Paginated list endpoints return:
+
+    ```json
+    { "data": [...], "pagination": { "nextCursor": "...", "hasMore": true, "totalCount": 42 } }
+    ```
+
+    Pass the previous response's `nextCursor` as the `cursor` query
+    parameter to fetch the next page. `totalCount` may be omitted for
+    very large or expensive queries.
+
+    ### Authentication
+    The current production auth model is a **server-issued cookie
+    session**. `POST /auth/login` (and `POST /auth/signup`) sets an
+    `HttpOnly` cookie named `kinectem_session`; subsequent requests
+    must send this cookie. There is no JWT or bearer token in the
+    current release.
+
+    A future release will add a long-lived **API key** scheme for
+    server-to-server callers; it is documented here for forward
+    compatibility but is not yet implemented.
+
+    ### Versioning & deprecation
+    The base path is `/api/v1`. Backwards-incompatible changes go to
+    `/api/v2`. Endpoints that are kept only for backwards compatibility
+    are marked `deprecated: true` in this spec.
 
 servers:
   - url: /api/v1
     description: Versioned API base path
 
-# All endpoints require Clerk session authentication.
-# Auth is enforced by clerkMiddleware + requireAuth before the validator runs.
+# Default: every endpoint requires a valid `kinectem_session` cookie.
+# Endpoints that are intentionally public (login, signup, password
+# reset, guardian confirmation, /health) override this with `security: []`.
 security:
-  - clerkSession: []
+  - cookieSession: []
 
 paths:
   /users:
@@ -20,7 +81,7 @@ paths:
       summary: Search users by name
       tags: [Users]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: search
           in: query
@@ -49,11 +110,11 @@ paths:
                     items:
                       $ref: '#/components/schemas/UserSearchResult'
         '400':
-          description: Missing or too-short search parameter
+          $ref: '#/components/responses/BadRequest'
         '401':
-          description: Authentication required
+          $ref: '#/components/responses/Unauthorized'
         '429':
-          description: Rate limited
+          $ref: '#/components/responses/TooManyRequests'
 
   /users/{userId}:
     get:
@@ -138,11 +199,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/PrivateUserResponse'
         '400':
-          description: Asset is not an image type.
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Asset not found or not confirmed.
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
     delete:
@@ -1607,6 +1668,30 @@ paths:
           $ref: '#/components/responses/InternalServerError'
 
   /notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationAsReadAlias
+      summary: Mark a notification as read (alias)
+      description: |
+        Convenience alias for `PATCH /notifications/{notificationId}/read`.
+        Kept for backwards compatibility — new clients should use `PATCH`.
+      deprecated: true
+      tags:
+        - Notifications
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     patch:
       operationId: markNotificationAsRead
       summary: Mark a notification as read
@@ -1666,6 +1751,34 @@ paths:
     patch:
       operationId: updateEmailPreference
       summary: Update email notification preference
+      tags:
+        - Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEmailPreferenceRequest'
+      responses:
+        '200':
+          description: Updated email preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailPreferenceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      operationId: updateEmailPreferenceAlias
+      summary: Update email notification preference (alias)
+      description: |
+        Convenience alias for `PATCH /notifications/email-preference`.
+        Kept for backwards compatibility — new clients should use `PATCH`.
+      deprecated: true
       tags:
         - Notifications
       requestBody:
@@ -2619,6 +2732,35 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   /posts/{postId}/reactions:
+    post:
+      operationId: addPostReactionAlias
+      summary: Add a reaction on a post (alias)
+      description: |
+        Convenience alias for `PUT /posts/{postId}/reactions` kept for
+        backwards compatibility with older clients. New clients should
+        use `PUT`.
+      deprecated: true
+      tags:
+        - Reactions
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddReactionRequest'
+      responses:
+        '204':
+          description: Reaction added or already existed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     put:
       operationId: addPostReaction
       summary: Add or upsert a reaction on a post
@@ -3697,7 +3839,7 @@ paths:
       summary: Search users, organizations, and teams by name
       tags: [Search]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: q
           in: query
@@ -3797,7 +3939,7 @@ paths:
       summary: User-facing — report a piece of content for moderator review (deduped per user/content)
       tags: [Reports]
       security:
-        - clerkSession: []
+        - cookieSession: []
       requestBody:
         required: true
         content:
@@ -3830,7 +3972,7 @@ paths:
       summary: Check whether the current user has already reported a specific piece of content
       tags: [Reports]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: contentType
           in: query
@@ -3885,7 +4027,7 @@ paths:
       summary: Admin dashboard analytics (totals, time series, top lists)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Aggregate analytics for the admin dashboard
@@ -3904,7 +4046,7 @@ paths:
       summary: List users (admin) with optional search, role filter, soft-deleted inclusion, and pagination
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: q
           in: query
@@ -3964,7 +4106,7 @@ paths:
       summary: Create a user account (admin)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       requestBody:
         required: true
         content:
@@ -3995,7 +4137,7 @@ paths:
       summary: Update a user's profile / role / guardian fields (admin)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       requestBody:
         required: true
         content:
@@ -4022,7 +4164,7 @@ paths:
       summary: Soft-delete (deactivate) a user account
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Deactivated
@@ -4047,7 +4189,7 @@ paths:
       summary: Restore a soft-deleted user
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Restored user
@@ -4070,7 +4212,7 @@ paths:
       summary: Force-reset a user's password and revoke their existing sessions
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: New temporary password
@@ -4097,7 +4239,7 @@ paths:
       summary: List moderatable content of a specific type (capped at 200)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: hidden
           in: query
@@ -4143,7 +4285,7 @@ paths:
       summary: Hide a piece of content from non-admin viewers
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Content hidden
@@ -4167,7 +4309,7 @@ paths:
       summary: Un-hide a piece of content
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Content un-hidden
@@ -4191,7 +4333,7 @@ paths:
       summary: Permanently delete a piece of content (admin)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Deleted
@@ -4212,7 +4354,7 @@ paths:
       summary: List content reports (admin moderation queue, capped at 200)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: status
           in: query
@@ -4254,7 +4396,7 @@ paths:
       summary: Resolve, dismiss, or take moderation action on a report
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       requestBody:
         required: true
         content:
@@ -4299,7 +4441,7 @@ paths:
       summary: Admin audit log with optional admin user / action type filters
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       parameters:
         - name: adminUserId
           in: query
@@ -4354,7 +4496,7 @@ paths:
       summary: Distinct admins who have entries in the activity log (for filter dropdowns)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Distinct admins
@@ -4381,7 +4523,7 @@ paths:
       summary: Begin masquerading as another user (admin)
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Masquerade started
@@ -4410,7 +4552,7 @@ paths:
       summary: Stop the current masquerade and return to the real admin session
       tags: [Admin]
       security:
-        - clerkSession: []
+        - cookieSession: []
       responses:
         '200':
           description: Masquerade stopped
@@ -4424,6 +4566,748 @@ paths:
                     type: boolean
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # Authentication
+  # -------------------------------------------------------------------------
+  # The endpoints in this section are intentionally public — they bootstrap
+  # or tear down the cookie session, so they explicitly opt out of the
+  # global `cookieSession: []` requirement with `security: []`.
+
+  /auth/login:
+    post:
+      operationId: authLogin
+      summary: Log in with email + password
+      description: |
+        Verifies credentials and, on success, sets the `kinectem_session`
+        HttpOnly cookie. Subsequent requests should send that cookie.
+
+        If the account is an under-13 athlete whose guardian has not yet
+        confirmed, returns `403` with an extended error body that
+        includes `pendingGuardianConfirmation: true` and
+        `guardianConfirmExpired: boolean`.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Logged in. Sets the `kinectem_session` cookie.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Account is waiting on guardian confirmation. Body includes
+            `pendingGuardianConfirmation: true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/signup:
+    post:
+      operationId: authSignup
+      summary: Create a new account
+      description: |
+        Creates a new user. Athletes under 13 must supply
+        `guardianEmail` and `guardianConsent: true`; in that case the
+        account is created in a "pending guardian confirmation" state
+        and the response body includes `pendingGuardianConfirmation:
+        true` instead of setting a session cookie.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, email, password, role]
+              properties:
+                firstName:
+                  type: string
+                  minLength: 1
+                lastName:
+                  type: string
+                  minLength: 1
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [athlete, coach, parent, admin]
+                dateOfBirth:
+                  type: string
+                  format: date
+                  nullable: true
+                parentId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                guardianEmail:
+                  type: string
+                  format: email
+                  nullable: true
+                guardianConsent:
+                  type: boolean
+      responses:
+        '201':
+          description: Account created. Sets a session cookie unless guardian confirmation is pending.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PrivateUserResponse'
+                  - type: object
+                    properties:
+                      pendingGuardianConfirmation:
+                        type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      operationId: authLogout
+      summary: Log out the current session
+      description: Destroys the server-side session and clears the cookie.
+      tags: [Auth]
+      responses:
+        '204':
+          description: Logged out (idempotent).
+
+  /auth/password-reset/request:
+    post:
+      operationId: authPasswordResetRequest
+      summary: Request a password reset email
+      description: |
+        Always returns `200` even when the email is unknown, to avoid
+        leaking which addresses are registered.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Reset email sent if the address is registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, message]
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/password-reset/complete:
+    post:
+      operationId: authPasswordResetComplete
+      summary: Complete a password reset
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/guardian-confirm:
+    post:
+      operationId: authGuardianConfirm
+      summary: Guardian confirms an under-13 athlete account
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, guardianEmail]
+              properties:
+                token:
+                  type: string
+                guardianEmail:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Guardian confirmation succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, athleteName, guardianEmail]
+                properties:
+                  ok:
+                    type: boolean
+                  athleteName:
+                    type: string
+                  guardianEmail:
+                    type: string
+                    format: email
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /auth/guardian-resend:
+    post:
+      operationId: authGuardianResend
+      summary: Resend a guardian-confirmation email
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Confirmation email re-sent to the guardian on file.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, guardianEmail]
+                properties:
+                  ok:
+                    type: boolean
+                  guardianEmail:
+                    type: string
+                    format: email
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/users:
+    get:
+      operationId: listSeedUsers
+      summary: List seed users (development helper)
+      description: |
+        **Development helper**. Returns up to 100 user records that
+        existing seed/test fixtures can pick from to log in. This
+        endpoint will be removed before any external launch — do not
+        build production clients on top of it.
+      tags: [Auth]
+      deprecated: true
+      security: []
+      responses:
+        '200':
+          description: List of seed users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, firstName, lastName, role]
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    firstName:
+                      type: string
+                    lastName:
+                      type: string
+                    role:
+                      type: string
+                      enum: [athlete, coach, admin, parent]
+                    email:
+                      type: string
+                      nullable: true
+                    avatarUrl:
+                      type: string
+                      nullable: true
+                    sport:
+                      type: string
+                      nullable: true
+                    position:
+                      type: string
+                      nullable: true
+
+  # -------------------------------------------------------------------------
+  # Health
+  # -------------------------------------------------------------------------
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Liveness probe
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+
+  # -------------------------------------------------------------------------
+  # Drafts
+  # -------------------------------------------------------------------------
+
+  /drafts:
+    get:
+      operationId: listDrafts
+      summary: List the current user's draft posts
+      tags: [Drafts]
+      responses:
+        '200':
+          description: Draft list. Shape mirrors the post list responses.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # Family / guardian-managed children
+  # -------------------------------------------------------------------------
+
+  /users/me/children:
+    get:
+      operationId: listMyChildren
+      summary: List children linked to the current user as their guardian
+      tags: [Family]
+      responses:
+        '200':
+          description: List of child accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createMyChild
+      summary: Create a guardian-managed child account
+      tags: [Family]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Child account created.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/children/{childId}/visibility:
+    patch:
+      operationId: updateChildVisibility
+      summary: Update visibility settings for a guardian-managed child
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated visibility settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/me/children/{childId}/resend-guardian-confirm:
+    post:
+      operationId: resendChildGuardianConfirm
+      summary: Resend the guardian-confirmation email for a child account
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Confirmation email re-sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/me/tags:
+    get:
+      operationId: listMyTags
+      summary: List posts the current user has been tagged in
+      tags: [Users]
+      responses:
+        '200':
+          description: Tagged-post list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/tag-consent:
+    patch:
+      operationId: updateTagConsent
+      summary: Update the current user's tag-consent setting
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated consent setting.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # Invites — token landing page (public preview is /invites/{token}/preview)
+  # -------------------------------------------------------------------------
+
+  /invites/{token}:
+    get:
+      operationId: getInviteByToken
+      summary: Look up an invite by its share token
+      tags: [Invites]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite details.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Invite has expired or been revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /invites/{token}/children:
+    post:
+      operationId: acceptInviteForChild
+      summary: Accept a roster invite on behalf of a guardian-managed child
+      tags: [Invites]
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Invite accepted for the child.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # -------------------------------------------------------------------------
+  # Posts — co-authors, publish, reaction alias
+  # -------------------------------------------------------------------------
+
+  /posts/{postId}/co-authors:
+    get:
+      operationId: listPostCoAuthors
+      summary: List co-authors of a post
+      tags: [Posts]
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Co-author list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: addPostCoAuthor
+      summary: Add a co-author to a post
+      tags: [Posts]
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Co-author added.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /posts/{postId}/co-authors/{userId}:
+    delete:
+      operationId: removePostCoAuthor
+      summary: Remove a co-author from a post
+      tags: [Posts]
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Co-author removed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /posts/{postId}/publish:
+    post:
+      operationId: publishPost
+      summary: Publish a draft post
+      tags: [Posts]
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Published post.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # -------------------------------------------------------------------------
+  # Internal asset upload completion
+  # -------------------------------------------------------------------------
+
+  /assets/{assetId}/data:
+    put:
+      operationId: putAssetData
+      summary: Internal asset-upload completion endpoint
+      description: |
+        **Internal**. Used by the upload pipeline to mark an asset
+        upload as complete and store the binary payload reference.
+        Not intended for direct client use.
+      tags: [Assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Asset data accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Payload too large.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
@@ -4824,18 +5708,38 @@ components:
 
     ErrorResponse:
       type: object
+      description: |
+        Standard error envelope used by every non-2xx response. Clients
+        should branch on `code` (machine-readable, stable) and surface
+        `error` (human-readable, may change) to the user. Some endpoints
+        attach extra contextual fields alongside `error`/`code` (for
+        example `pendingGuardianConfirmation` on the guardian-gated
+        login path) — those are documented on the operation that emits
+        them.
       required:
-        - code
         - error
-        - correlationId
+        - code
       properties:
-        code:
-          type: string
         error:
           type: string
+          description: Human-readable error message.
+        code:
+          type: string
+          description: |
+            Stable, machine-readable error code. The current set is:
+            `AUTH_REQUIRED`, `FORBIDDEN`, `NOT_FOUND`,
+            `VALIDATION_ERROR`, `CONFLICT`, `GONE`,
+            `PAYLOAD_TOO_LARGE`, `UNPROCESSABLE`, `RATE_LIMITED`,
+            `INTERNAL_ERROR`. Endpoints may also emit endpoint-specific
+            codes (e.g. `DELETE_NOT_SUPPORTED`).
         correlationId:
           type: string
           format: uuid
+          description: |
+            Request correlation ID, suitable for support tickets.
+            Reserved for future structured logging — the current server
+            does not emit this field.
+      additionalProperties: true
 
     OrganizationResponse:
       type: object
@@ -7768,11 +8672,26 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   securitySchemes:
-    clerkSession:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Clerk-issued session token. Enforced by clerkMiddleware before the OpenAPI validator runs.
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: kinectem_session
+      description: |
+        Server-issued session token, stored as an `HttpOnly` cookie named
+        `kinectem_session`. Set by `POST /auth/login` and `POST /auth/signup`,
+        cleared by `POST /auth/logout`. Sessions live for 30 days.
+
+        Browsers send this cookie automatically; `fetch` callers must use
+        `credentials: "include"`.
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        **Planned, not yet implemented.** Long-lived API key for
+        server-to-server integrations. Listed here so that clients can
+        anticipate the future shape; the server currently rejects this
+        header with `401`.
 
   parameters:
     UserId:
@@ -7952,6 +8871,7 @@ components:
       schema:
         type: string
         format: uuid
+
     AdminContentType:
       name: contentType
       in: path

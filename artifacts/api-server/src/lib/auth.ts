@@ -105,7 +105,9 @@ export function clearSessionCookie(res: Response) {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.sessionUser) {
-    res.status(401).json({ error: "Not authenticated" });
+    res
+      .status(401)
+      .json({ error: "Not authenticated", code: "AUTH_REQUIRED" });
     return;
   }
   next();

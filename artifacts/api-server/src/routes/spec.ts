@@ -77,6 +77,8 @@ import {
   toMessage,
   toAssetResponse,
   toJoinRequest,
+  apiError,
+  ErrorCodes,
 } from "../lib/spec-helpers";
 
 // ---------------------------------------------------------------------------
@@ -462,7 +464,7 @@ router.post(
       .limit(1);
     const ok = user ? await verifyPassword(body.password, user.passwordHash) : false;
     if (!user || !ok) {
-      res.status(401).json({ error: "Incorrect email or password." });
+      apiError(res, 401, "Incorrect email or password.");
       return;
     }
     if (user.deletedAt) {
@@ -474,13 +476,18 @@ router.post(
         !user.guardianConfirmToken ||
         !user.guardianConfirmTokenExpiresAt ||
         user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
-      res.status(403).json({
-        error:
-          "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
-        pendingGuardianConfirmation: true,
-        guardianConfirmExpired: expired,
-        ...(expired ? { guardianConfirmUrl: null } : {}),
-      });
+      apiError(
+        res,
+        403,
+        "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
+        {
+          extras: {
+            pendingGuardianConfirmation: true,
+            guardianConfirmExpired: expired,
+            ...(expired ? { guardianConfirmUrl: null } : {}),
+          },
+        },
+      );
       return;
     }
     const sess = await createSession(user.id);
@@ -502,10 +509,7 @@ router.post(
       guardianRequired = ageYears < 13;
     }
     if (guardianRequired && !body.guardianEmail) {
-      res.status(400).json({
-        error:
-          "Athletes under 13 must provide a parent or guardian email so we can confirm the account.",
-      });
+      apiError(res, 400, "Athletes under 13 must provide a parent or guardian email so we can confirm the account.");
       return;
     }
     if (
@@ -513,24 +517,18 @@ router.post(
       body.guardianEmail &&
       body.guardianEmail.toLowerCase() === body.email.toLowerCase()
     ) {
-      res.status(400).json({
-        error:
-          "The guardian email must be different from the athlete's email address.",
-      });
+      apiError(res, 400, "The guardian email must be different from the athlete's email address.");
       return;
     }
     if (guardianRequired && !body.guardianConsent) {
-      res.status(400).json({
-        error:
-          "Please confirm a parent or guardian has agreed to receive a confirmation email.",
-      });
+      apiError(res, 400, "Please confirm a parent or guardian has agreed to receive a confirmation email.");
       return;
     }
 
     const email = body.email.toLowerCase();
     const [exists] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (exists) {
-      res.status(409).json({ error: "An account with that email already exists." });
+      apiError(res, 409, "An account with that email already exists.");
       return;
     }
 
@@ -618,7 +616,7 @@ router.post(
       .where(eq(passwordResets.tokenHash, tokenHash))
       .limit(1);
     if (!reset || reset.usedAt || reset.expiresAt.getTime() < Date.now()) {
-      res.status(400).json({ error: "This reset link is invalid or has expired." });
+      apiError(res, 400, "This reset link is invalid or has expired.");
       return;
     }
     const passwordHash = await hashPassword(body.newPassword);
@@ -641,26 +639,19 @@ router.post(
       .where(eq(users.guardianConfirmToken, body.token))
       .limit(1);
     if (!user) {
-      res.status(400).json({ error: "This confirmation link is invalid or has already been used." });
+      apiError(res, 400, "This confirmation link is invalid or has already been used.");
       return;
     }
     if (
       !user.guardianConfirmTokenExpiresAt ||
       user.guardianConfirmTokenExpiresAt.getTime() < Date.now()
     ) {
-      res.status(400).json({
-        error:
-          "This confirmation link has expired. Ask the athlete to sign in and request a new link.",
-        expired: true,
-      });
+      apiError(res, 400, "This confirmation link has expired. Ask the athlete to sign in and request a new link.", { extras: { expired: true } });
       return;
     }
     const submittedEmail = body.guardianEmail.trim().toLowerCase();
     if (!user.guardianEmail || submittedEmail !== user.guardianEmail.toLowerCase()) {
-      res.status(403).json({
-        error:
-          "The email you entered doesn't match the guardian email on file for this account.",
-      });
+      apiError(res, 403, "The email you entered doesn't match the guardian email on file for this account.");
       return;
     }
     // If a real user account exists for the guardian's email, link it via parentId
@@ -695,13 +686,11 @@ router.post(
       .limit(1);
     const ok = user ? await verifyPassword(body.password, user.passwordHash) : false;
     if (!user || !ok) {
-      res.status(401).json({ error: "Incorrect email or password." });
+      apiError(res, 401, "Incorrect email or password.");
       return;
     }
     if (!user.guardianEmail || user.guardianConfirmedAt) {
-      res.status(400).json({
-        error: "This account does not need a guardian confirmation link.",
-      });
+      apiError(res, 400, "This account does not need a guardian confirmation link.");
       return;
     }
     const newToken = generateToken();
@@ -775,7 +764,7 @@ router.get(
   "/users/me",
   asyncHandler(async (req, res) => {
     const u = req.sessionUser;
-    if (!u) return res.status(401).json({ error: "Not authenticated" });
+    if (!u) return apiError(res, 401, "Not authenticated");
     if (u.role === "parent") {
       try {
         await notifyExpiredGuardianConfirmations(u.id);
@@ -1091,9 +1080,9 @@ router.post(
   "/organizations",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const name = String(req.body?.name ?? "").trim();
-    if (!name) return res.status(400).json({ error: "name required" });
+    if (!name) return apiError(res, 400, "name required");
     const [org] = await db
       .insert(organizations)
       .values({
@@ -1172,7 +1161,7 @@ router.patch(
   "/organizations/:orgId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [existing] = await db
       .select()
       .from(organizations)
@@ -1180,7 +1169,7 @@ router.patch(
       .limit(1);
     if (!existing) return notFound(res);
     if (!(await canManageOrganization(me.id, req.params.orgId))) {
-      return res.status(403).json({ error: "Forbidden" });
+      return apiError(res, 403, "Forbidden");
     }
     const body = req.body ?? {};
     const patch: Record<string, unknown> = {};
@@ -1339,19 +1328,19 @@ router.post(
   "/organizations/:orgId/posts",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const orgId = req.params.orgId;
     if (!(await canManageOrganization(me.id, orgId))) {
-      return res.status(403).json({ error: "Org admins only" });
+      return apiError(res, 403, "Org admins only");
     }
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     if (!org) return notFound(res);
     const body = req.body ?? {};
     const title = String(body.title ?? "").trim();
-    if (!title) return res.status(400).json({ error: "title required" });
-    if (title.length > 200) return res.status(400).json({ error: "title too long" });
+    if (!title) return apiError(res, 400, "title required");
+    if (title.length > 200) return apiError(res, 400, "title too long");
     const bodyText = typeof body.body === "string" ? body.body : "";
-    if (bodyText.length > 50000) return res.status(400).json({ error: "body too long" });
+    if (bodyText.length > 50000) return apiError(res, 400, "body too long");
     const photoUrls: string[] = Array.isArray(body.photoUrls)
       ? body.photoUrls.filter((u: unknown) => typeof u === "string").slice(0, 10)
       : [];
@@ -1380,9 +1369,9 @@ router.get(
   "/organizations/:orgId/join-requests",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const isAdmin = await canManageOrganization(me.id, req.params.orgId);
-    if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+    if (!isAdmin) return apiError(res, 403, "Org admins only");
     const status = (req.query.status as string | undefined) ?? "pending";
     const validStatuses = ["pending", "approved", "declined", "withdrawn"] as const;
     type JRStatus = (typeof validStatuses)[number];
@@ -1408,7 +1397,7 @@ router.post(
   "/organizations/:orgId/join-requests",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [existing] = await db
       .select()
       .from(organizationJoinRequests)
@@ -1435,16 +1424,16 @@ async function decideJoinRequest(
   decision: "approved" | "declined",
 ) {
   const me = req.sessionUser;
-  if (!me) return res.status(401).json({ error: "Not authenticated" });
+  if (!me) return apiError(res, 401, "Not authenticated");
   const isAdmin = await canManageOrganization(me.id, req.params.orgId);
-  if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+  if (!isAdmin) return apiError(res, 403, "Org admins only");
   const [r] = await db
     .select()
     .from(organizationJoinRequests)
     .where(eq(organizationJoinRequests.id, req.params.requestId))
     .limit(1);
   if (!r || r.organizationId !== req.params.orgId) return notFound(res);
-  if (r.status !== "pending") return res.status(409).json({ error: `Request already ${r.status}` });
+  if (r.status !== "pending") return apiError(res, 409, `Request already ${r.status}`);
   const [updated] = await db
     .update(organizationJoinRequests)
     .set({
@@ -1486,7 +1475,7 @@ router.delete(
   "/organizations/:orgId/join-requests/:requestId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [r] = await db
       .select()
       .from(organizationJoinRequests)
@@ -1494,9 +1483,9 @@ router.delete(
       .limit(1);
     if (!r || r.organizationId !== req.params.orgId) return notFound(res);
     if (r.userId !== me.id)
-      return res.status(403).json({ error: "Only the requester can withdraw" });
+      return apiError(res, 403, "Only the requester can withdraw");
     if (r.status !== "pending")
-      return res.status(409).json({ error: `Request already ${r.status}` });
+      return apiError(res, 409, `Request already ${r.status}`);
     const [updated] = await db
       .update(organizationJoinRequests)
       .set({ status: "withdrawn", decidedAt: new Date(), updatedAt: new Date() })
@@ -1510,9 +1499,9 @@ router.get(
   "/organizations/:orgId/post-approvals",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const isAdmin = await canManageOrganization(me.id, req.params.orgId);
-    if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+    if (!isAdmin) return apiError(res, 403, "Org admins only");
     const rows = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
@@ -1558,9 +1547,9 @@ async function transitionApproval(
   next: "published" | "draft",
 ) {
   const me = req.sessionUser;
-  if (!me) return res.status(401).json({ error: "Not authenticated" });
+  if (!me) return apiError(res, 401, "Not authenticated");
   const isAdmin = await canManageOrganization(me.id, req.params.orgId);
-  if (!isAdmin) return res.status(403).json({ error: "Org admins only" });
+  if (!isAdmin) return apiError(res, 403, "Org admins only");
   const parsed = parsePostId(req.params.id);
   if (!parsed || parsed.kind !== "article") return notFound(res);
   const [a] = await db
@@ -1594,7 +1583,7 @@ router.post(
   "/organizations/:orgId/follow",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     // Explicit follow clears any prior opt-out so future auto-follows work.
     await db
       .delete(organizationFollowOptouts)
@@ -1619,7 +1608,7 @@ router.delete(
   "/organizations/:orgId/follow",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     await db
       .delete(organizationFollowers)
       .where(
@@ -1641,9 +1630,9 @@ router.post(
   "/users/:userId/follow",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     if (me.id === req.params.userId) {
-      return res.status(400).json({ error: "Cannot follow yourself" });
+      return apiError(res, 400, "Cannot follow yourself");
     }
     const [target] = await db
       .select({ id: users.id })
@@ -1667,7 +1656,7 @@ router.delete(
   "/users/:userId/follow",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     await db
       .delete(userFollowers)
       .where(
@@ -1684,7 +1673,7 @@ router.post(
   "/teams/:teamId/follow",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [target] = await db
       .select({ id: teams.id })
       .from(teams)
@@ -1707,7 +1696,7 @@ router.delete(
   "/teams/:teamId/follow",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     await db
       .delete(teamFollowers)
       .where(
@@ -1841,7 +1830,7 @@ router.get(
     const cursor = decodeFollowCursor(req.query["cursor"]);
     const userId =
       req.params.userId === "me" ? req.sessionUser?.id : req.params.userId;
-    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    if (!userId) return apiError(res, 401, "Not authenticated");
     const conds = [eq(userFollowers.followingUserId, userId)];
     if (cursor) {
       conds.push(
@@ -1885,7 +1874,7 @@ router.get(
     const cursor = decodeFollowCursor(req.query["cursor"]);
     const userId =
       req.params.userId === "me" ? req.sessionUser?.id : req.params.userId;
-    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    if (!userId) return apiError(res, 401, "Not authenticated");
     // Combine followed users + followed organizations, sort by createdAt desc.
     const userConds = [eq(userFollowers.followerUserId, userId)];
     const userRows = await db
@@ -1974,7 +1963,7 @@ router.post(
       .limit(1);
     if (!org) return notFound(res);
     const name = String(req.body?.name ?? "").trim();
-    if (!name) return res.status(400).json({ error: "name required" });
+    if (!name) return apiError(res, 400, "name required");
     const [team] = await db
       .insert(teams)
       .values({
@@ -2028,7 +2017,7 @@ router.patch(
   "/teams/:teamId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "unauthorized" });
+    if (!me) return apiError(res, 401, "unauthorized");
     const [existing] = await db
       .select()
       .from(teams)
@@ -2045,7 +2034,7 @@ router.patch(
         ),
       )
       .limit(1);
-    if (!adminRow) return res.status(403).json({ error: "forbidden" });
+    if (!adminRow) return apiError(res, 403, "forbidden");
     const body = req.body ?? {};
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name.trim();
@@ -2055,7 +2044,7 @@ router.patch(
     if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
     if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
     if (Object.keys(patch).length === 0) {
-      return res.status(400).json({ error: "no updatable fields" });
+      return apiError(res, 400, "no updatable fields");
     }
     const [t] = await db
       .update(teams)
@@ -2147,14 +2136,14 @@ router.post(
   "/teams/:teamId/members",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const teamId = req.params.teamId;
     const userId = String(req.body?.userId ?? "");
-    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (!userId) return apiError(res, 400, "userId required");
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
     if (!(await canManageTeam(me.id, t)))
-      return res.status(403).json({ error: "Team coaches or org admins only" });
+      return apiError(res, 403, "Team coaches or org admins only");
     const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!u) return notFound(res);
     const positionRaw = String(req.body?.position ?? "player");
@@ -2208,7 +2197,7 @@ router.post(
   "/teams/:teamId/members/:memberId/accept",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [entry] = await db
       .select()
       .from(rosterEntries)
@@ -2220,7 +2209,7 @@ router.post(
       )
       .limit(1);
     if (!entry) return notFound(res);
-    if (entry.userId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    if (entry.userId !== me.id) return apiError(res, 403, "Forbidden");
     const [updated] = await db
       .update(rosterEntries)
       .set({ status: "accepted" })
@@ -2234,7 +2223,7 @@ router.post(
   "/teams/:teamId/members/:memberId/decline",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [entry] = await db
       .select()
       .from(rosterEntries)
@@ -2246,7 +2235,7 @@ router.post(
       )
       .limit(1);
     if (!entry) return notFound(res);
-    if (entry.userId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    if (entry.userId !== me.id) return apiError(res, 403, "Forbidden");
     await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
     res.status(204).end();
   }),
@@ -2257,14 +2246,14 @@ router.post(
   "/teams/:teamId/invites",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const teamId = req.params.teamId;
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
     if (!(await canManageTeam(me.id, t)))
-      return res.status(403).json({ error: "Team coaches or org admins only" });
+      return apiError(res, 403, "Team coaches or org admins only");
     const email = String(req.body?.email ?? "").trim();
-    if (!email) return res.status(400).json({ error: "email required" });
+    if (!email) return apiError(res, 400, "email required");
     const positionRaw = String(req.body?.position ?? "player");
     const dbRole: "player" | "coach" =
       positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
@@ -2309,7 +2298,7 @@ router.post(
   "/invites/:token/accept",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [invite] = await db
       .select()
       .from(rosterInvites)
@@ -2317,7 +2306,7 @@ router.post(
       .limit(1);
     if (!invite) return notFound(res);
     if (invite.status !== "pending")
-      return res.status(409).json({ error: "Invite no longer pending" });
+      return apiError(res, 409, "Invite no longer pending");
 
     // Player invites are addressed to the parent / guardian. The accepting
     // user does NOT become a player; instead they're prompted to add their
@@ -2364,7 +2353,7 @@ router.post(
   "/invites/:token/children",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [invite] = await db
       .select()
       .from(rosterInvites)
@@ -2372,16 +2361,12 @@ router.post(
       .limit(1);
     if (!invite) return notFound(res);
     if (invite.position !== "player") {
-      return res
-        .status(400)
-        .json({ error: "Only player invites support adding children" });
+      return apiError(res, 400, "Only player invites support adding children");
     }
     const firstName = String(req.body?.firstName ?? "").trim();
     const lastName = String(req.body?.lastName ?? "").trim();
     if (!firstName || !lastName) {
-      return res
-        .status(400)
-        .json({ error: "firstName and lastName required" });
+      return apiError(res, 400, "firstName and lastName required");
     }
     const [child] = await db
       .insert(users)
@@ -2436,7 +2421,7 @@ router.post(
   "/teams/:teamId/join-link",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const teamId = req.params.teamId;
     // Only org admins of the owning organization can mint join links.
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -2451,7 +2436,7 @@ router.post(
         ),
       )
       .limit(1);
-    if (!adminRow) return res.status(403).json({ error: "Not a team admin" });
+    if (!adminRow) return apiError(res, 403, "Not a team admin");
     // Reuse a pending email-less player invite for this team if one exists,
     // so admins always share a stable parent-onboarding link.
     const [existing] = await db
@@ -2521,7 +2506,7 @@ router.get(
   "/feed",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
 
     const [followedOrgRows, followedTeamRows, followedUserRows] = await Promise.all([
       db
@@ -2716,7 +2701,7 @@ router.get(
   "/follow-suggestions",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
 
     const SUGGESTION_LIMIT = 5;
 
@@ -2951,11 +2936,11 @@ router.post(
   "/posts/:postId/comments",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     const body = String(req.body?.body ?? "").trim();
-    if (!body) return res.status(400).json({ error: "Comment body is required" });
+    if (!body) return apiError(res, 400, "Comment body is required");
     const [c] = await db
       .insert(postComments)
       .values({
@@ -2973,7 +2958,7 @@ router.delete(
   "/posts/:postId/comments/:commentId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [c] = await db
       .select()
       .from(postComments)
@@ -2981,7 +2966,7 @@ router.delete(
       .limit(1);
     if (!c) return notFound(res);
     if (c.authorId !== me.id)
-      return res.status(403).json({ error: "Only the author can delete this comment" });
+      return apiError(res, 403, "Only the author can delete this comment");
     await db
       .update(postComments)
       .set({ deletedAt: new Date() })
@@ -2994,7 +2979,7 @@ router.post(
   "/posts/:postId/reactions",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     await db
@@ -3014,7 +2999,7 @@ router.delete(
   "/posts/:postId/reactions",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     await db
@@ -3083,7 +3068,7 @@ router.post(
   "/posts",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const body = req.body ?? {};
     // Spec uses organizationId; we pick first team in that org as a default context.
     let teamId: string | undefined = body.context?.id ?? body.teamId;
@@ -3099,7 +3084,7 @@ router.post(
       const [anyTeam] = await db.select().from(teams).limit(1);
       teamId = anyTeam?.id;
     }
-    if (!teamId) return res.status(400).json({ error: "no team context available" });
+    if (!teamId) return apiError(res, 400, "no team context available");
     if (body.postType === "long") {
       const isDraft = body.status === "draft";
       const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -3109,9 +3094,7 @@ router.post(
       if (!team || !org) return notFound(res);
       const allowed = await canCreateRecap(me.id, team);
       if (!allowed)
-        return res
-          .status(403)
-          .json({ error: "Only admins, coaches, and authors can create game recaps" });
+        return apiError(res, 403, "Only admins, coaches, and authors can create game recaps");
       const isAdmin = await canManageOrganization(me.id, team.organizationId);
       const status: "draft" | "pending_approval" | "published" = isDraft
         ? "draft"
@@ -3204,7 +3187,7 @@ router.patch(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
     const [a] = await db
@@ -3227,7 +3210,7 @@ router.patch(
           )
           .limit(1);
     if (!isAuthor && !coAuthor)
-      return res.status(403).json({ error: "Not an author" });
+      return apiError(res, 403, "Not an author");
     const body = req.body ?? {};
     const updates: Record<string, unknown> = {};
     if (typeof body.title === "string") updates["title"] = body.title;
@@ -3243,7 +3226,7 @@ router.patch(
       if (!("coverImageUrl" in updates)) updates["coverImageUrl"] = arr[0] ?? null;
     }
     if (Object.keys(updates).length === 0)
-      return res.status(400).json({ error: "no changes" });
+      return apiError(res, 400, "no changes");
     const [updated] = await db
       .update(articles)
       .set(updates)
@@ -3265,7 +3248,7 @@ router.post(
   "/posts/:postId/publish",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
     const [a] = await db
@@ -3287,7 +3270,7 @@ router.post(
           )
           .limit(1);
     if (a.authorId !== me.id && !coAuthor)
-      return res.status(403).json({ error: "Only the author can publish" });
+      return apiError(res, 403, "Only the author can publish");
     const [teamRow] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
     if (!teamRow) return notFound(res);
     const isAdmin = await canManageOrganization(me.id, teamRow.organizationId);
@@ -3334,7 +3317,7 @@ router.post(
   "/posts/:postId/co-authors",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
     const [a] = await db
@@ -3344,9 +3327,9 @@ router.post(
       .limit(1);
     if (!a) return notFound(res);
     if (a.authorId !== me.id)
-      return res.status(403).json({ error: "Only the author can add co-authors" });
+      return apiError(res, 403, "Only the author can add co-authors");
     const userId = String(req.body?.userId ?? "");
-    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (!userId) return apiError(res, 400, "userId required");
     await db
       .insert(articleAuthors)
       .values({ articleId: a.id, userId })
@@ -3365,7 +3348,7 @@ router.delete(
   "/posts/:postId/co-authors/:userId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed || parsed.kind !== "article") return notFound(res);
     const [a] = await db
@@ -3375,7 +3358,7 @@ router.delete(
       .limit(1);
     if (!a) return notFound(res);
     if (a.authorId !== me.id && me.id !== req.params.userId)
-      return res.status(403).json({ error: "Forbidden" });
+      return apiError(res, 403, "Forbidden");
     await db
       .delete(articleAuthors)
       .where(
@@ -3631,13 +3614,13 @@ router.post(
   "/conversations",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const recipientId: string | undefined = req.body?.recipientId;
     const recipientType: "user" | "organization" =
       req.body?.recipientType === "organization" ? "organization" : "user";
-    if (!recipientId) return res.status(400).json({ error: "recipientId is required" });
+    if (!recipientId) return apiError(res, 400, "recipientId is required");
     if (recipientType === "user" && recipientId === me.id)
-      return res.status(400).json({ error: "Cannot start a conversation with yourself" });
+      return apiError(res, 400, "Cannot start a conversation with yourself");
 
     // Look for an existing direct conversation
     const meParts = await db
@@ -3687,9 +3670,7 @@ router.post(
       ? (req.body.message.assetIds as unknown[])
       : [];
     if (rawAssetIds.length > 10) {
-      return res
-        .status(400)
-        .json({ error: "A message can attach at most 10 assets" });
+      return apiError(res, 400, "A message can attach at most 10 assets");
     }
     const assetIds: string[] = [];
     for (const v of rawAssetIds) {
@@ -3704,15 +3685,11 @@ router.post(
         .from(assets)
         .where(and(inArray(assets.id, assetIds), eq(assets.ownerId, me.id)));
       if (validAssets.length !== assetIds.length) {
-        return res
-          .status(400)
-          .json({ error: "One or more assetIds are invalid or not owned by you" });
+        return apiError(res, 400, "One or more assetIds are invalid or not owned by you");
       }
       const unconfirmed = validAssets.find((a) => a.status !== "confirmed");
       if (unconfirmed) {
-        return res
-          .status(400)
-          .json({ error: "All assets must be confirmed before attaching" });
+        return apiError(res, 400, "All assets must be confirmed before attaching");
       }
     }
 
@@ -3745,7 +3722,7 @@ router.post(
     }
 
     const view = await loadConversationView(conv, me.id);
-    if (!view) return res.status(500).json({ error: "Failed to load conversation" });
+    if (!view) return apiError(res, 500, "Failed to load conversation");
     res.status(isNew ? 201 : 200).json(view);
   }),
 );
@@ -3754,10 +3731,10 @@ router.get(
   "/conversations/search/contacts",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const q = String(req.query.q ?? "").trim();
     if (q.length < 1) {
-      return res.status(400).json({ error: "q is required" });
+      return apiError(res, 400, "q is required");
     }
     const limitRaw = Number(req.query.limit);
     const limit =
@@ -3791,7 +3768,7 @@ router.get(
   "/conversations/:id",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [conv] = await db
       .select()
       .from(conversations)
@@ -3809,7 +3786,7 @@ router.get(
         ),
       )
       .limit(1);
-    if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
+    if (!iAmIn) return apiError(res, 403, "Not a participant");
     const view = await loadConversationView(conv, me.id);
     if (!view) return notFound(res);
     res.json(view);
@@ -3820,7 +3797,7 @@ router.delete(
   "/conversations/:id",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     await db
       .update(conversationParticipants)
       .set({ leftAt: new Date() })
@@ -3839,7 +3816,7 @@ router.get(
   "/conversations/:id/messages",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [iAmIn] = await db
       .select()
       .from(conversationParticipants)
@@ -3851,7 +3828,7 @@ router.get(
         ),
       )
       .limit(1);
-    if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
+    if (!iAmIn) return apiError(res, 403, "Not a participant");
     const rows = await db
       .select({ m: messages, sender: users })
       .from(messages)
@@ -3883,7 +3860,7 @@ router.post(
   "/conversations/:id/messages",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [iAmIn] = await db
       .select()
       .from(conversationParticipants)
@@ -3895,15 +3872,13 @@ router.post(
         ),
       )
       .limit(1);
-    if (!iAmIn) return res.status(403).json({ error: "Not a participant" });
+    if (!iAmIn) return apiError(res, 403, "Not a participant");
     const body = String(req.body?.body ?? "").trim();
     const rawAssetIds = Array.isArray(req.body?.assetIds)
       ? (req.body.assetIds as unknown[])
       : [];
     if (rawAssetIds.length > 10) {
-      return res
-        .status(400)
-        .json({ error: "A message can attach at most 10 assets" });
+      return apiError(res, 400, "A message can attach at most 10 assets");
     }
     const assetIds: string[] = [];
     for (const v of rawAssetIds) {
@@ -3912,7 +3887,7 @@ router.post(
       }
     }
     if (!body && assetIds.length === 0) {
-      return res.status(400).json({ error: "Message body or assetIds required" });
+      return apiError(res, 400, "Message body or assetIds required");
     }
     let validAssets: (typeof assets.$inferSelect)[] = [];
     if (assetIds.length > 0) {
@@ -3921,15 +3896,11 @@ router.post(
         .from(assets)
         .where(and(inArray(assets.id, assetIds), eq(assets.ownerId, me.id)));
       if (validAssets.length !== assetIds.length) {
-        return res
-          .status(400)
-          .json({ error: "One or more assetIds are invalid or not owned by you" });
+        return apiError(res, 400, "One or more assetIds are invalid or not owned by you");
       }
       const unconfirmed = validAssets.find((a) => a.status !== "confirmed");
       if (unconfirmed) {
-        return res
-          .status(400)
-          .json({ error: "All assets must be confirmed before attaching" });
+        return apiError(res, 400, "All assets must be confirmed before attaching");
       }
     }
     const [m] = await db
@@ -3972,7 +3943,7 @@ router.post(
   "/conversations/:id/read",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     await db
       .update(conversationParticipants)
       .set({ lastReadAt: new Date() })
@@ -4004,21 +3975,21 @@ router.post(
   "/assets/upload",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const fileName = String(req.body?.fileName ?? "").trim();
     const fileType = String(req.body?.fileType ?? "").trim();
     const fileSize = Number(req.body?.fileSize);
     if (!fileName || fileName.length > 255) {
-      return res.status(400).json({ error: "fileName is required (max 255)" });
+      return apiError(res, 400, "fileName is required (max 255)");
     }
     if (!fileType) {
-      return res.status(400).json({ error: "fileType is required" });
+      return apiError(res, 400, "fileType is required");
     }
     if (!Number.isFinite(fileSize) || fileSize <= 0) {
-      return res.status(400).json({ error: "fileSize must be a positive integer" });
+      return apiError(res, 400, "fileSize must be a positive integer");
     }
     if (fileSize > ASSET_MAX_BYTES) {
-      return res.status(400).json({ error: "fileSize exceeds the 10 MB limit" });
+      return apiError(res, 400, "fileSize exceeds the 10 MB limit");
     }
     const [created] = await db
       .insert(assets)
@@ -4049,20 +4020,20 @@ router.put(
   express.raw({ type: () => true, limit: `${ASSET_MAX_BYTES}b` }),
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [a] = await db
       .select()
       .from(assets)
       .where(eq(assets.id, req.params.assetId))
       .limit(1);
     if (!a) return notFound(res);
-    if (a.ownerId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    if (a.ownerId !== me.id) return apiError(res, 403, "Forbidden");
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
     if (!buf || buf.length === 0) {
-      return res.status(400).json({ error: "Request body is empty" });
+      return apiError(res, 400, "Request body is empty");
     }
     if (buf.length > ASSET_MAX_BYTES) {
-      return res.status(413).json({ error: "Upload exceeds 10 MB" });
+      return apiError(res, 413, "Upload exceeds 10 MB");
     }
     const mime = a.fileType || "application/octet-stream";
     const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
@@ -4078,18 +4049,16 @@ router.post(
   "/assets/:assetId/confirm",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [a] = await db
       .select()
       .from(assets)
       .where(eq(assets.id, req.params.assetId))
       .limit(1);
     if (!a) return notFound(res);
-    if (a.ownerId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    if (a.ownerId !== me.id) return apiError(res, 403, "Forbidden");
     if (!a.url) {
-      return res
-        .status(422)
-        .json({ error: "Upload has not been received yet" });
+      return apiError(res, 422, "Upload has not been received yet");
     }
     const [updated] =
       a.status === "confirmed"
@@ -4107,7 +4076,7 @@ router.get(
   "/assets/:assetId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [a] = await db
       .select()
       .from(assets)
@@ -4122,14 +4091,14 @@ router.delete(
   "/assets/:assetId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [a] = await db
       .select()
       .from(assets)
       .where(eq(assets.id, req.params.assetId))
       .limit(1);
     if (!a) return notFound(res);
-    if (a.ownerId !== me.id) return res.status(403).json({ error: "Forbidden" });
+    if (a.ownerId !== me.id) return apiError(res, 403, "Forbidden");
     await db.delete(assets).where(eq(assets.id, a.id));
     res.status(204).end();
   }),
@@ -4190,12 +4159,12 @@ async function decidePendingTag(
   decision: "approved" | "declined",
 ) {
   const me = req.sessionUser;
-  if (!me) return res.status(401).json({ error: "Not authenticated" });
+  if (!me) return apiError(res, 401, "Not authenticated");
   const tagId = req.params.tagId;
   const [a] = await db.select().from(articleTags).where(eq(articleTags.id, tagId)).limit(1);
   if (a) {
     if (a.userId !== me.id)
-      return res.status(403).json({ error: "Only the tagged user can decide this tag" });
+      return apiError(res, 403, "Only the tagged user can decide this tag");
     const [updated] = await db
       .update(articleTags)
       .set({ status: decision, updatedAt: new Date() })
@@ -4217,7 +4186,7 @@ async function decidePendingTag(
   const [h] = await db.select().from(highlightTags).where(eq(highlightTags.id, tagId)).limit(1);
   if (!h) return notFound(res);
   if (h.userId !== me.id)
-    return res.status(403).json({ error: "Only the tagged user can decide this tag" });
+    return apiError(res, 403, "Only the tagged user can decide this tag");
   const [updated] = await db
     .update(highlightTags)
     .set({ status: decision, updatedAt: new Date() })
@@ -4309,7 +4278,7 @@ router.delete(
   "/article-tags/:tagId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [t] = await db
       .select()
       .from(articleTags)
@@ -4317,7 +4286,7 @@ router.delete(
       .limit(1);
     if (!t) return res.status(204).end();
     if (t.userId !== me.id)
-      return res.status(403).json({ error: "Not your tag" });
+      return apiError(res, 403, "Not your tag");
     await db.delete(articleTags).where(eq(articleTags.id, t.id));
     res.status(204).end();
   }),
@@ -4327,7 +4296,7 @@ router.delete(
   "/highlight-tags/:tagId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [t] = await db
       .select()
       .from(highlightTags)
@@ -4335,7 +4304,7 @@ router.delete(
       .limit(1);
     if (!t) return res.status(204).end();
     if (t.userId !== me.id)
-      return res.status(403).json({ error: "Not your tag" });
+      return apiError(res, 403, "Not your tag");
     await db.delete(highlightTags).where(eq(highlightTags.id, t.id));
     res.status(204).end();
   }),
@@ -4347,7 +4316,7 @@ router.patch(
   "/users/me/tag-consent",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const requireTagConsent = !!req.body?.requireTagConsent;
     const [updated] = await db
       .update(users)
@@ -4416,7 +4385,7 @@ router.get(
   "/users/me/children",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     if (me.role === "parent") {
       try {
         await notifyExpiredGuardianConfirmations(me.id);
@@ -4473,24 +4442,20 @@ router.post(
   "/users/me/children",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     if (me.role !== "parent") {
-      return res
-        .status(403)
-        .json({ error: "Only parent accounts can link children" });
+      return apiError(res, 403, "Only parent accounts can link children");
     }
     const childId = String(req.body?.childId ?? "").trim();
-    if (!childId) return res.status(400).json({ error: "childId required" });
+    if (!childId) return apiError(res, 400, "childId required");
     const [child] = await db
       .select()
       .from(users)
       .where(eq(users.id, childId))
       .limit(1);
-    if (!child) return res.status(404).json({ error: "User not found" });
+    if (!child) return apiError(res, 404, "User not found");
     if (child.parentId && child.parentId !== me.id) {
-      return res
-        .status(409)
-        .json({ error: "Already linked to another guardian" });
+      return apiError(res, 409, "Already linked to another guardian");
     }
     const [updated] = await db
       .update(users)
@@ -4514,24 +4479,20 @@ router.post(
   "/users/me/children/:childId/resend-guardian-confirm",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [child] = await db
       .select()
       .from(users)
       .where(eq(users.id, req.params.childId))
       .limit(1);
     if (!child || child.parentId !== me.id) {
-      return res.status(404).json({ error: "Child not found" });
+      return apiError(res, 404, "Child not found");
     }
     if (!child.guardianEmail) {
-      return res.status(400).json({
-        error: "This account does not require guardian confirmation.",
-      });
+      return apiError(res, 400, "This account does not require guardian confirmation.");
     }
     if (child.guardianConfirmedAt) {
-      return res.status(400).json({
-        error: "This account has already been confirmed.",
-      });
+      return apiError(res, 400, "This account has already been confirmed.");
     }
     const newToken = generateToken();
     await db
@@ -4556,14 +4517,14 @@ router.patch(
   "/users/me/children/:childId/visibility",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return res.status(401).json({ error: "Not authenticated" });
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [child] = await db
       .select()
       .from(users)
       .where(eq(users.id, req.params.childId))
       .limit(1);
     if (!child || child.parentId !== me.id) {
-      return res.status(404).json({ error: "Child not found" });
+      return apiError(res, 404, "Child not found");
     }
     const requireTagConsent = !!req.body?.requireTagConsent;
     const [updated] = await db
@@ -4815,7 +4776,7 @@ router.get(
 // ---------------------------------------------------------------------------
 
 function notFound(res: Response) {
-  return res.status(404).json({ error: "Not found" });
+  return apiError(res, 404, "Not found");
 }
 
 // Suppress unused warning for requireAuth (kept for future use)

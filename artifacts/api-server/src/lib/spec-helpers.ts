@@ -1,3 +1,4 @@
+import type { Response } from "express";
 import type {
   users,
   organizations,
@@ -14,6 +15,73 @@ import type {
   organizationJoinRequests,
   assets,
 } from "@workspace/db";
+
+// ---------------------------------------------------------------------------
+// Standard API error envelope
+// ---------------------------------------------------------------------------
+
+export const ErrorCodes = {
+  AUTH_REQUIRED: "AUTH_REQUIRED",
+  FORBIDDEN: "FORBIDDEN",
+  NOT_FOUND: "NOT_FOUND",
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  CONFLICT: "CONFLICT",
+  GONE: "GONE",
+  PAYLOAD_TOO_LARGE: "PAYLOAD_TOO_LARGE",
+  UNPROCESSABLE: "UNPROCESSABLE",
+  RATE_LIMITED: "RATE_LIMITED",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+} as const;
+
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+
+function defaultCodeForStatus(status: number): ErrorCode {
+  switch (status) {
+    case 400:
+      return ErrorCodes.VALIDATION_ERROR;
+    case 401:
+      return ErrorCodes.AUTH_REQUIRED;
+    case 403:
+      return ErrorCodes.FORBIDDEN;
+    case 404:
+      return ErrorCodes.NOT_FOUND;
+    case 409:
+      return ErrorCodes.CONFLICT;
+    case 410:
+      return ErrorCodes.GONE;
+    case 413:
+      return ErrorCodes.PAYLOAD_TOO_LARGE;
+    case 422:
+      return ErrorCodes.UNPROCESSABLE;
+    case 429:
+      return ErrorCodes.RATE_LIMITED;
+    default:
+      return ErrorCodes.INTERNAL_ERROR;
+  }
+}
+
+/**
+ * Send a standardized API error response.
+ *
+ * Body shape: `{ error, code, ...extras }` — matches the `ErrorResponse`
+ * schema in `lib/api-spec/openapi.yaml`. Returns the Express response so
+ * callers can do `return apiError(...)`.
+ *
+ * Pass `extras` for fields that some endpoints carry alongside the error
+ * (e.g. `pendingGuardianConfirmation` on the guardian-gated login path).
+ */
+export function apiError(
+  res: Response,
+  status: number,
+  message: string,
+  options: { code?: ErrorCode | string; extras?: Record<string, unknown> } = {},
+): Response {
+  return res.status(status).json({
+    error: message,
+    code: options.code ?? defaultCodeForStatus(status),
+    ...(options.extras ?? {}),
+  });
+}
 
 type UserRow = typeof users.$inferSelect;
 type OrgRow = typeof organizations.$inferSelect;
