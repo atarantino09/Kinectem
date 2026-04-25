@@ -8,6 +8,7 @@ import { Play, FileText } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
@@ -64,12 +65,22 @@ export default function PostPage() {
       )}
 
       <div className="flex items-center gap-3">
-        <Avatar className="w-10 h-10">
-          {post.author.avatarUrl && <AvatarImage src={post.author.avatarUrl} />}
-          <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-            {getInitials(post.author.displayName)}
-          </AvatarFallback>
-        </Avatar>
+        <AvatarLightbox
+          avatarUrl={post.author.avatarUrl}
+          displayName={post.author.displayName}
+          triggerTestId={`btn-open-post-author-avatar-lightbox-${post.id}`}
+          dialogTestId={`dialog-post-author-avatar-lightbox-${post.id}`}
+          imageTestId={`img-post-author-avatar-lightbox-${post.id}`}
+        >
+          <Avatar
+            className={`w-10 h-10 ${post.author.avatarUrl ? "cursor-pointer" : ""}`}
+          >
+            {post.author.avatarUrl && <AvatarImage src={post.author.avatarUrl} />}
+            <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
+              {getInitials(post.author.displayName)}
+            </AvatarFallback>
+          </Avatar>
+        </AvatarLightbox>
         <div>
           <Link href={`/users/${post.author.id}`}>
             <p className="font-bold text-sm hover:text-primary cursor-pointer">

@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 
 function getContextHref(context: {
   type: "team" | "organization" | "user";
@@ -97,8 +98,17 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
       <CardContent className="p-0">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
           <div className="flex items-center gap-3 min-w-0">
-            <Link href={getContextHref(post.context)} className="shrink-0">
-              <Avatar className="w-10 h-10 rounded-lg">
+            <AvatarLightbox
+              avatarUrl={post.context.avatarUrl}
+              displayName={post.context.name ?? post.context.type}
+              triggerClassName="shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              triggerTestId={`btn-open-post-avatar-lightbox-${post.id}`}
+              dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
+              imageTestId={`img-post-avatar-lightbox-${post.id}`}
+            >
+              <Avatar
+                className={`w-10 h-10 rounded-lg shrink-0 ${post.context.avatarUrl ? "cursor-pointer" : ""}`}
+              >
                 {post.context.avatarUrl && (
                   <AvatarImage src={post.context.avatarUrl} />
                 )}
@@ -106,7 +116,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                   {getInitials(post.context.name ?? post.context.type)}
                 </AvatarFallback>
               </Avatar>
-            </Link>
+            </AvatarLightbox>
             <div className="min-w-0">
               <Link href={getContextHref(post.context)}>
                 <p className="font-bold text-sm truncate hover:underline">

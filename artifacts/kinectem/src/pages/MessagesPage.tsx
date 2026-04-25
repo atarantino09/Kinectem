@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 
 function isDeleted(
   m: MessageResponse | DeletedMessageStub,
@@ -157,14 +158,24 @@ export default function MessagesPage() {
           </Card>
         ) : (
           items.map((c: ConversationListItem) => (
-            <Link key={c.id} href={`/messages/${c.id}`}>
-              <button
-                className={`w-full text-left p-3 rounded-lg flex gap-3 cursor-pointer ${
-                  activeId === c.id ? "bg-muted" : "hover:bg-muted/60"
-                }`}
-                data-testid={`conversation-${c.id}`}
+            <div
+              key={c.id}
+              className={`w-full p-3 rounded-lg flex gap-3 ${
+                activeId === c.id ? "bg-muted" : "hover:bg-muted/60"
+              }`}
+              data-testid={`conversation-${c.id}`}
+            >
+              <AvatarLightbox
+                avatarUrl={c.participant.avatarUrl}
+                displayName={c.participant.displayName}
+                triggerClassName="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                triggerTestId={`btn-open-conversation-avatar-lightbox-${c.id}`}
+                dialogTestId={`dialog-conversation-avatar-lightbox-${c.id}`}
+                imageTestId={`img-conversation-avatar-lightbox-${c.id}`}
               >
-                <Avatar className="w-10 h-10 shrink-0">
+                <Avatar
+                  className={`w-10 h-10 shrink-0 ${c.participant.avatarUrl ? "cursor-pointer" : ""}`}
+                >
                   {c.participant.avatarUrl && (
                     <AvatarImage src={c.participant.avatarUrl} />
                   )}
@@ -172,23 +183,27 @@ export default function MessagesPage() {
                     {getInitials(c.participant.displayName)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-sm truncate">
-                      {c.participant.displayName}
-                    </p>
-                    {c.unreadCount > 0 && (
-                      <Badge className="text-[10px] font-black bg-primary text-primary-foreground h-4 px-1.5">
-                        {c.unreadCount}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {c.lastMessage?.bodyPreview ?? "No messages yet"}
+              </AvatarLightbox>
+              <Link
+                href={`/messages/${c.id}`}
+                className="min-w-0 flex-1 text-left cursor-pointer"
+                data-testid={`link-conversation-${c.id}`}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-sm truncate">
+                    {c.participant.displayName}
                   </p>
+                  {c.unreadCount > 0 && (
+                    <Badge className="text-[10px] font-black bg-primary text-primary-foreground h-4 px-1.5">
+                      {c.unreadCount}
+                    </Badge>
+                  )}
                 </div>
-              </button>
-            </Link>
+                <p className="text-xs text-muted-foreground truncate">
+                  {c.lastMessage?.bodyPreview ?? "No messages yet"}
+                </p>
+              </Link>
+            </div>
           ))
         )}
       </aside>
