@@ -211,8 +211,6 @@ export const updateUserBodyNicknameMax = 100;
 
 export const updateUserBodyLevelMax = 50;
 
-export const updateUserBodyAvatarUrlMax = 4096;
-
 export const UpdateUserBody = zod.object({
   firstName: zod.string().max(updateUserBodyFirstNameMax).optional(),
   lastName: zod.string().max(updateUserBodyLastNameMax).optional(),
@@ -225,10 +223,9 @@ export const UpdateUserBody = zod.object({
   level: zod.string().max(updateUserBodyLevelMax).nullish(),
   avatarUrl: zod
     .string()
-    .max(updateUserBodyAvatarUrlMax)
     .nullish()
     .describe(
-      "URL of the user's profile picture. Use the asset upload flow to obtain a confirmed URL, or pass null to remove the current avatar.",
+      "URL of the user's profile picture. Must reference a confirmed\nasset previously uploaded by the caller via the upload + confirm\nflow, or null to remove the current avatar. The server enforces\nownership and confirmation, so arbitrary external URLs are\nrejected with 400. No fixed maxLength is set because uploaded\nassets are stored as base64 `data:` URLs that can be many MB\nlong; the server caps the length to match the asset upload\nsize limit.\n",
     ),
 });
 
@@ -5011,6 +5008,11 @@ export const UpdateAdminUserResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -5065,6 +5067,11 @@ export const SoftDeleteAdminUserResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -5119,6 +5126,11 @@ export const RestoreAdminUserResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 
@@ -5460,6 +5472,11 @@ export const AuthLoginResponse = zod
     zod.object({
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
+      role: zod
+        .enum(["athlete", "coach", "admin", "parent"])
+        .describe(
+          "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
     }),
   );
 

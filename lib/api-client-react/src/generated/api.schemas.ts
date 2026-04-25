@@ -156,8 +156,15 @@ export interface UpdateUserRequest {
    */
   level?: string | null;
   /**
-   * URL of the user's profile picture. Use the asset upload flow to obtain a confirmed URL, or pass null to remove the current avatar.
-   * @maxLength 4096
+   * URL of the user's profile picture. Must reference a confirmed
+asset previously uploaded by the caller via the upload + confirm
+flow, or null to remove the current avatar. The server enforces
+ownership and confirmation, so arbitrary external URLs are
+rejected with 400. No fixed maxLength is set because uploaded
+assets are stored as base64 `data:` URLs that can be many MB
+long; the server caps the length to match the asset upload
+size limit.
+
    * @nullable
    */
   avatarUrl?: string | null;

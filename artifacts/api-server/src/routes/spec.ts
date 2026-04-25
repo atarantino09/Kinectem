@@ -961,7 +961,15 @@ router.patch(
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {
         return apiError(res, 400, "avatarUrl must be a string or null");
       }
-      if (typeof body.avatarUrl === "string" && body.avatarUrl.length > 4096) {
+      // Assets are stored as `data:<mime>;base64,<...>` URLs in this codebase,
+      // so the avatar URL can be as long as ceil(ASSET_MAX_BYTES / 3) * 4 plus
+      // a small prefix for `data:<mime>;base64,`. Tied to the asset upload
+      // cap so the two stay in sync if that limit ever changes.
+      const MAX_AVATAR_URL_LENGTH = Math.ceil(ASSET_MAX_BYTES / 3) * 4 + 64;
+      if (
+        typeof body.avatarUrl === "string" &&
+        body.avatarUrl.length > MAX_AVATAR_URL_LENGTH
+      ) {
         return apiError(res, 400, "avatarUrl is too long");
       }
       if (typeof body.avatarUrl === "string") {
