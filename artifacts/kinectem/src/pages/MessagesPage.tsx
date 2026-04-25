@@ -236,6 +236,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const messages = msgsResp?.data ?? [];
   const { data: currentUser } = useGetLoggedInUser();
   const myId = currentUser?.id ?? null;
+  const { data: convsResp } = useListConversations();
+  const activeConversation = convsResp?.data?.find((c) => c.id === conversationId);
+  const participant = activeConversation?.participant;
 
   const invalidate = () => {
     qc.invalidateQueries({
@@ -267,8 +270,58 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   return (
     <Card className="rounded-xl border border-border flex flex-col min-h-[500px]">
       <CardContent className="p-4 flex flex-col flex-1 gap-3">
-        <div className="flex items-center justify-between border-b border-border pb-3">
-          <h3 className="font-black tracking-tight text-base">Conversation</h3>
+        <div className="flex items-center justify-between border-b border-border pb-3 gap-2">
+          {participant ? (
+            participant.type === "user" ? (
+              <Link
+                href={`/users/${participant.id}`}
+                className="flex items-center gap-2 min-w-0 cursor-pointer hover:underline"
+                data-testid="link-conversation-header-participant"
+              >
+                <Avatar className="w-7 h-7 shrink-0">
+                  {participant.avatarUrl && (
+                    <AvatarImage src={participant.avatarUrl} />
+                  )}
+                  <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
+                    {getInitials(participant.displayName)}
+                  </AvatarFallback>
+                </Avatar>
+                <h3
+                  className="font-black tracking-tight text-base truncate"
+                  data-testid="text-conversation-header-name"
+                >
+                  {participant.displayName}
+                </h3>
+              </Link>
+            ) : (
+              <div
+                className="flex items-center gap-2 min-w-0"
+                data-testid="conversation-header-participant"
+              >
+                <Avatar className="w-7 h-7 shrink-0">
+                  {participant.avatarUrl && (
+                    <AvatarImage src={participant.avatarUrl} />
+                  )}
+                  <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
+                    {getInitials(participant.displayName)}
+                  </AvatarFallback>
+                </Avatar>
+                <h3
+                  className="font-black tracking-tight text-base truncate"
+                  data-testid="text-conversation-header-name"
+                >
+                  {participant.displayName}
+                </h3>
+              </div>
+            )
+          ) : (
+            <h3
+              className="font-black tracking-tight text-base"
+              data-testid="text-conversation-header-name"
+            >
+              Conversation
+            </h3>
+          )}
           <Button
             variant="ghost"
             size="sm"
