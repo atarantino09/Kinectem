@@ -14,6 +14,7 @@ import {
   getListMessagesQueryKey,
   getListConversationsQueryKey,
   getGetUnreadMessageCountQueryKey,
+  getSearchConversationContactsQueryKey,
   type ConversationListItem,
   type ConversationContactResult,
   type MessageResponse,
@@ -492,7 +493,15 @@ function NewMessageDialog({
   const { data: searchResp, isFetching: isSearching } =
     useSearchConversationContacts(
       { q: debounced, limit: 8 },
-      { query: { enabled: enableSearch } },
+      {
+        query: {
+          queryKey: getSearchConversationContactsQueryKey({
+            q: debounced,
+            limit: 8,
+          }),
+          enabled: enableSearch,
+        },
+      },
     );
   const results = searchResp?.data ?? [];
 

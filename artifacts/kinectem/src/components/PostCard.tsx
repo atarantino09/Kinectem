@@ -206,7 +206,9 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             )}
             {!isShort && allImages.length > 0 && (
               <PhotoAlbum
-                images={allImages.map((a) => a.url)}
+                images={allImages
+                  .map((a) => a.url)
+                  .filter((u): u is string => typeof u === "string")}
                 postId={post.id}
               />
             )}

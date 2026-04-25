@@ -30,7 +30,7 @@ type OrgLike = {
   website?: string | null;
   city?: string | null;
   state?: string | null;
-  avatarUrl?: string | null;
+  logoUrl?: string | null;
   role?: string | null;
 };
 
@@ -175,9 +175,9 @@ export function EditOrgDialog({
                 <Label className="font-bold">Logo</Label>
                 <div className="flex items-center gap-3">
                   <div className="w-16 h-16 bg-muted rounded-xl border border-border flex items-center justify-center overflow-hidden shrink-0">
-                    {organization.avatarUrl ? (
+                    {organization.logoUrl ? (
                       <img
-                        src={organization.avatarUrl}
+                        src={organization.logoUrl}
                         alt={`${organization.name} logo`}
                         className="w-full h-full object-cover"
                       />
@@ -207,11 +207,11 @@ export function EditOrgDialog({
                     >
                       {uploading
                         ? "Working..."
-                        : organization.avatarUrl
+                        : organization.logoUrl
                           ? "Change logo"
                           : "Upload logo"}
                     </Button>
-                    {organization.avatarUrl && (
+                    {organization.logoUrl && (
                       <Button
                         type="button"
                         size="sm"

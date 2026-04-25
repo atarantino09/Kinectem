@@ -793,6 +793,7 @@ export const ListUserOrganizationsResponse = zod.object({
       slug: zod.string(),
       description: zod.string().nullish(),
       website: zod.string().url().nullish(),
+      logoUrl: zod.string().url().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       followerCount: zod
@@ -868,6 +869,7 @@ export const ListOrganizationsResponse = zod.object({
       slug: zod.string(),
       description: zod.string().nullish(),
       website: zod.string().url().nullish(),
+      logoUrl: zod.string().url().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       followerCount: zod
@@ -901,6 +903,7 @@ export const GetOrganizationByIdResponse = zod.object({
   slug: zod.string(),
   description: zod.string().nullish(),
   website: zod.string().url().nullish(),
+  logoUrl: zod.string().url().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
   followerCount: zod
@@ -936,6 +939,7 @@ export const UpdateOrganizationResponse = zod.object({
   slug: zod.string(),
   description: zod.string().nullish(),
   website: zod.string().url().nullish(),
+  logoUrl: zod.string().url().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
   followerCount: zod
@@ -3372,6 +3376,7 @@ export const ListFollowSuggestionsResponse = zod.object({
       slug: zod.string(),
       description: zod.string().nullish(),
       website: zod.string().url().nullish(),
+      logoUrl: zod.string().url().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       followerCount: zod
@@ -4083,6 +4088,7 @@ export const SetOrgAvatarResponse = zod.object({
   slug: zod.string(),
   description: zod.string().nullish(),
   website: zod.string().url().nullish(),
+  logoUrl: zod.string().url().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
   followerCount: zod

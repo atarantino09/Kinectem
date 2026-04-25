@@ -79,9 +79,9 @@ export default function OrganizationPage() {
           <div className="flex items-end gap-4">
             <div className="shrink-0">
               <div className="w-20 h-20 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
-                {organization.avatarUrl ? (
+                {organization.logoUrl ? (
                   <img
-                    src={organization.avatarUrl}
+                    src={organization.logoUrl}
                     alt={`${organization.name} logo`}
                     className="w-full h-full object-cover"
                   />

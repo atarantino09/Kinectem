@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   useGetLoggedInUser,
   useGetUnreadMessageCount,
+  getGetLoggedInUserQueryKey,
 } from "@workspace/api-client-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ import { useWhoami } from "@/hooks/useWhoami";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser, error: currentUserError } = useGetLoggedInUser({
-    query: { retry: false },
+    query: { queryKey: getGetLoggedInUserQueryKey(), retry: false },
   });
   const { data: unreadMsgs } = useGetUnreadMessageCount();
   const { data: whoami } = useWhoami();

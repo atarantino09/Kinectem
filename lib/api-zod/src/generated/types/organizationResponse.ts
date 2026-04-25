@@ -75,6 +75,8 @@ export interface OrganizationResponse {
   description?: string | null;
   /** @nullable */
   website?: string | null;
+  /** @nullable */
+  logoUrl?: string | null;
   isMember: boolean;
   isFollowing?: boolean;
   /** @minimum 0 */

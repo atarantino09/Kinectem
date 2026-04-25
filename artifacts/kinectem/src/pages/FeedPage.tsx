@@ -102,7 +102,7 @@ export default function FeedPage() {
                       key={org.id}
                       orgId={org.id}
                       orgName={org.name}
-                      orgLogoUrl={org.avatarUrl ?? null}
+                      orgLogoUrl={org.logoUrl ?? null}
                       isOpen={openOrgId === org.id}
                       onClick={() => handleOrgClick(org.id)}
                       isOrgAdmin={isOrgAdmin}
