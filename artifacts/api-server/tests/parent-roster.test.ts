@@ -112,19 +112,36 @@ describe("parent-controlled team membership", () => {
         ),
       );
 
-    await coach
-      .post(`/api/v1/teams/${teamId}/members`)
-      .send({ userId: candidateId, position: "player" });
-
-    // No row should exist where some unrelated user got a
-    // roster_invite_for_child for this candidate. Since the candidate has
-    // no parentId, the fan-out branch never runs.
+    // Sanity: candidate truly has no parent before we exercise the path
     const [u] = await db
       .select({ parentId: users.parentId })
       .from(users)
       .where(eq(users.id, candidateId))
       .limit(1);
     expect(u?.parentId).toBeFalsy();
+
+    // Snapshot every existing roster_invite_for_child notification so we can
+    // assert no NEW one was created by this invite.
+    const before = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.kind, "roster_invite_for_child"));
+    const beforeIds = new Set(before.map((n) => n.id));
+
+    const res = await coach
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: candidateId, position: "player" });
+    expect(res.status).toBeGreaterThanOrEqual(200);
+    expect(res.status).toBeLessThan(300);
+
+    // No new fan-out row anywhere in the table — the parentless branch
+    // must never insert a roster_invite_for_child notification.
+    const after = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.kind, "roster_invite_for_child"));
+    const newOnes = after.filter((n) => !beforeIds.has(n.id));
+    expect(newOnes).toHaveLength(0);
   });
 
   it("lets a real parent accept a child's pending roster spot", async () => {

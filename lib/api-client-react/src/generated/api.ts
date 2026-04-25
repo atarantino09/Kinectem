@@ -9833,6 +9833,16 @@ export const useRemoveTeamMember = <
 };
 
 /**
+ * Accepts a pending roster spot for a team.
+
+Authorization: the request must be made by the **invited athlete
+themselves**, or by their **parent of record** (the user whose id
+equals the athlete's `parentId`). In both cases the request
+cannot be made while masquerading — guardian-on-behalf actions
+are intentionally restricted to the real parent's own session,
+not to admins impersonating that parent. Anyone else (including
+coaches and team admins) receives `403 Forbidden`.
+
  * @summary Accept a pending team membership invite
  */
 export const getAcceptTeamInviteUrl = (teamId: string, memberId: string) => {
@@ -9939,6 +9949,15 @@ export const useAcceptTeamInvite = <
 };
 
 /**
+ * Declines a pending roster spot for a team (soft delete).
+
+Authorization: same rules as `acceptTeamInvite` — the request
+must be made by the **invited athlete themselves** or by their
+**parent of record** (the user whose id equals the athlete's
+`parentId`). Neither call may be made while masquerading.
+Anyone else (including coaches and team admins) receives
+`403 Forbidden`.
+
  * @summary Decline a pending team membership invite
  */
 export const getDeclineTeamInviteUrl = (teamId: string, memberId: string) => {
