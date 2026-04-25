@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Shield, UserPlus, Search, Users, CheckCircle2, Clock, AlertTriangle, Mail } from "lucide-react";
+import { Shield, UserPlus, Search, Users, CheckCircle2, Clock, AlertTriangle, Mail, BellOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, getInitials } from "@/lib/format";
 
@@ -45,6 +45,9 @@ export default function GuardianPage() {
   const [searching, setSearching] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
   const [resending, setResending] = useState<string | null>(null);
+  const [emailOptOut, setEmailOptOut] = useState(false);
+  const [emailPrefLoading, setEmailPrefLoading] = useState(true);
+  const [savingEmailPref, setSavingEmailPref] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -63,6 +66,63 @@ export default function GuardianPage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    if (!me || me.role !== "parent") {
+      setEmailPrefLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setEmailPrefLoading(true);
+      try {
+        const r = await customFetch<{ emailOptOut: boolean }>(
+          "/api/v1/notifications/email-preference",
+        );
+        if (!cancelled) setEmailOptOut(!!r.emailOptOut);
+      } catch {
+        // ignore — leave the toggle in its default state
+      } finally {
+        if (!cancelled) setEmailPrefLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [me]);
+
+  const toggleExpiredEmail = async (silenced: boolean) => {
+    // The switch represents "Email me" — when it is OFF the parent is
+    // opting out of the expired-confirmation email.
+    const optOut = !silenced;
+    setSavingEmailPref(true);
+    setEmailOptOut(optOut);
+    try {
+      const r = await customFetch<{ emailOptOut: boolean }>(
+        "/api/v1/notifications/email-preference",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emailOptOut: optOut }),
+        },
+      );
+      setEmailOptOut(!!r.emailOptOut);
+      toast({
+        title: r.emailOptOut
+          ? "Expired-confirmation emails turned off"
+          : "Expired-confirmation emails turned on",
+      });
+    } catch {
+      // revert on failure
+      setEmailOptOut(!optOut);
+      toast({
+        title: "Failed to update email preference",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEmailPref(false);
+    }
+  };
 
   useEffect(() => {
     if (!query.trim() || query.trim().length < 2) {
@@ -188,6 +248,39 @@ export default function GuardianPage() {
           </p>
         </div>
       </div>
+
+      {/* Notification preferences */}
+      <Card className="rounded-xl border-border" data-testid="card-email-pref">
+        <CardContent className="p-6 space-y-3">
+          <div className="flex items-center gap-2">
+            <BellOff className="w-4 h-4 text-primary" />
+            <h2 className="font-black tracking-tight">
+              Notification preferences
+            </h2>
+          </div>
+          {emailPrefLoading ? (
+            <Skeleton className="h-12 rounded-lg" />
+          ) : (
+            <div className="flex items-start gap-3 p-3 rounded-lg border border-border">
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm">
+                  Email me when a confirmation link expires
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You'll always see expired links in your in-app notifications.
+                  Turn this off if those reminders are enough.
+                </p>
+              </div>
+              <Switch
+                checked={!emailOptOut}
+                disabled={savingEmailPref}
+                onCheckedChange={toggleExpiredEmail}
+                data-testid="switch-expired-email"
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Linked children */}
       <Card className="rounded-xl border-border">

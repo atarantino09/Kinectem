@@ -3480,12 +3480,36 @@ router.post(
   }),
 );
 
-router.get("/notifications/email-preference", (_req, res) =>
-  res.json({ emailOptOut: false }),
+router.get(
+  "/notifications/email-preference",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [row] = await db
+      .select({ optOut: users.guardianExpiredEmailOptOut })
+      .from(users)
+      .where(eq(users.id, me.id))
+      .limit(1);
+    res.json({ emailOptOut: !!row?.optOut });
+  }),
 );
-router.put("/notifications/email-preference", (req, res) =>
-  res.json({ emailOptOut: !!req.body?.emailOptOut }),
-);
+
+const updateEmailPreference = asyncHandler(async (req, res) => {
+  const me = req.sessionUser;
+  if (!me) return apiError(res, 401, "Not authenticated");
+  if (typeof req.body?.emailOptOut !== "boolean") {
+    return apiError(res, 400, "emailOptOut must be a boolean");
+  }
+  const optOut = req.body.emailOptOut;
+  await db
+    .update(users)
+    .set({ guardianExpiredEmailOptOut: optOut })
+    .where(eq(users.id, me.id));
+  res.json({ emailOptOut: optOut });
+});
+
+router.patch("/notifications/email-preference", updateEmailPreference);
+router.put("/notifications/email-preference", updateEmailPreference);
 
 // ---------------------------------------------------------------------------
 // Conversations / Messages (stubs)
@@ -4448,13 +4472,22 @@ async function notifyExpiredGuardianConfirmations(
   // per child per expiry cycle: a fresh /auth/guardian-resend clears
   // guardianExpiredEmailSentAt so the next expiry sends a new email. When
   // the child row has no guardianEmail on file, fall back to the parent
-  // account's own email so they are still reached.
+  // account's own email so they are still reached. Parents who have opted
+  // out of the expired-confirmation email (managed from the family settings
+  // screen) skip the email entirely — the in-app notification above is
+  // unaffected.
   const parentRow = await db
-    .select({ email: users.email })
+    .select({
+      email: users.email,
+      optOut: users.guardianExpiredEmailOptOut,
+    })
     .from(users)
     .where(eq(users.id, parentUserId))
     .limit(1);
   const parentEmail = parentRow[0]?.email ?? null;
+  const parentOptedOut = !!parentRow[0]?.optOut;
+
+  if (parentOptedOut) return;
 
   for (const child of expiredChildren) {
     if (child.guardianExpiredEmailSentAt) continue;

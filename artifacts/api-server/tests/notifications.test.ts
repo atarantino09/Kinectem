@@ -292,6 +292,108 @@ describe("notifications", () => {
       expect(expiredEmails).toHaveLength(0);
     });
 
+    it("does not email when the parent has opted out of expired-confirmation emails", async () => {
+      const { agent, childId } = await setupExpiredChild();
+      // Opt the parent out via the public endpoint, then trigger a refresh.
+      const pref = await agent
+        .patch("/api/v1/notifications/email-preference")
+        .send({ emailOptOut: true });
+      expect(pref.status).toBe(200);
+      expect(pref.body.emailOptOut).toBe(true);
+
+      sentEmails.length = 0;
+      const me = await agent.get("/api/v1/users/me");
+      expect(me.status).toBe(200);
+
+      // No email should have been sent.
+      expect(
+        sentEmails.filter((e) => /expired/i.test(e.subject)),
+      ).toHaveLength(0);
+
+      // The in-app notification, however, must still be created.
+      const list = await agent.get("/api/v1/notifications");
+      const expired = list.body.data.find(
+        (n: { type: string; data: { link: string } | null }) =>
+          n.type === "guardian_expired" &&
+          n.data?.link === `/guardian?childId=${childId}`,
+      );
+      expect(expired).toBeDefined();
+
+      // And the per-child sent-at tracker must remain null so a future
+      // opt-in still gets the next expiry email.
+      const [child] = await db
+        .select({ sentAt: users.guardianExpiredEmailSentAt })
+        .from(users)
+        .where(eq(users.id, childId))
+        .limit(1);
+      expect(child.sentAt).toBeNull();
+    });
+
+    it("resumes sending the expired email after the parent opts back in", async () => {
+      const { agent, childId } = await setupExpiredChild();
+      // Opt out, trigger (no email), then opt back in and trigger again.
+      await agent
+        .patch("/api/v1/notifications/email-preference")
+        .send({ emailOptOut: true });
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      expect(
+        sentEmails.filter((e) => /expired/i.test(e.subject)),
+      ).toHaveLength(0);
+
+      await agent
+        .patch("/api/v1/notifications/email-preference")
+        .send({ emailOptOut: false });
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      expect(
+        sentEmails.filter((e) => /expired/i.test(e.subject)),
+      ).toHaveLength(1);
+      // And the per-child sent-at tracker should now be populated.
+      const [child] = await db
+        .select({ sentAt: users.guardianExpiredEmailSentAt })
+        .from(users)
+        .where(eq(users.id, childId))
+        .limit(1);
+      expect(child.sentAt).not.toBeNull();
+    });
+
+    it("persists the email preference across requests via GET", async () => {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      // Reset to a known state.
+      await agent
+        .patch("/api/v1/notifications/email-preference")
+        .send({ emailOptOut: false });
+
+      const before = await agent.get("/api/v1/notifications/email-preference");
+      expect(before.status).toBe(200);
+      expect(before.body.emailOptOut).toBe(false);
+
+      const set = await agent
+        .patch("/api/v1/notifications/email-preference")
+        .send({ emailOptOut: true });
+      expect(set.body.emailOptOut).toBe(true);
+
+      const after = await agent.get("/api/v1/notifications/email-preference");
+      expect(after.body.emailOptOut).toBe(true);
+
+      // The deprecated PUT alias should still work too.
+      const putRes = await agent
+        .put("/api/v1/notifications/email-preference")
+        .send({ emailOptOut: false });
+      expect(putRes.status).toBe(200);
+      expect(putRes.body.emailOptOut).toBe(false);
+    });
+
+    it("rejects unauthenticated email-preference requests", async () => {
+      const res = await request(app).get(
+        "/api/v1/notifications/email-preference",
+      );
+      expect(res.status).toBe(401);
+    });
+
     it("sends a fresh email after the link is resent and expires again", async () => {
       const { agent, childId } = await setupExpiredChild();
       sentEmails.length = 0;
