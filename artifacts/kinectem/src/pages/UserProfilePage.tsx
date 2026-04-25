@@ -284,6 +284,59 @@ export default function UserProfilePage() {
         );
       })()}
 
+      {/* Teams */}
+      {teams.length > 0 && (
+        <section>
+          <h2 className="text-xl font-black tracking-tight mb-4">Teams</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {teams.map((t) => {
+              const isPending = t.status === "pending";
+              return (
+                <Link key={t.id} href={`/teams/${t.teamId}`}>
+                  <Card
+                    className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+                    data-testid={`card-team-${t.teamId}`}
+                  >
+                    <CardContent className="p-4 flex items-center gap-3">
+                      <Avatar className="w-10 h-10">
+                        {t.teamAvatarUrl && (
+                          <AvatarImage src={t.teamAvatarUrl} />
+                        )}
+                        <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
+                          {getInitials(t.teamName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm truncate">
+                          {t.teamName}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] uppercase tracking-wider font-bold"
+                          >
+                            {t.organization.name}
+                          </Badge>
+                          {isPending && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
+                              data-testid={`badge-team-pending-${t.teamId}`}
+                            >
+                              Pending
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Organizations */}
       {orgs.length > 0 && (
         <section>

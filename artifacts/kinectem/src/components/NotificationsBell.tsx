@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Bell, ShieldAlert } from "lucide-react";
+import { Bell, ShieldAlert, Users } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,6 +35,24 @@ function getChildIdFromLink(link: string | null): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function getEntryIdFromLink(link: string | null): string | null {
+  if (!link) return null;
+  const match = link.match(/entryId=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getTeamIdFromLink(link: string | null): string | null {
+  if (!link) return null;
+  const match = link.match(/teamId=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getChildFirstNameFromTitle(title: string): string {
+  // Notification copy is: "<Coach Name> invited <Child First Name> to join <Team Name>."
+  const m = title.match(/invited\s+(.+?)\s+to join/);
+  return m ? m[1] : "your child";
+}
+
 export function NotificationsBell() {
   const qc = useQueryClient();
   const [, navigate] = useLocation();
@@ -42,6 +60,7 @@ export function NotificationsBell() {
   const { data: countData } = useGetUnreadNotificationCount();
   const { data: notifs, isLoading } = useListNotifications();
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetUnreadNotificationCountQueryKey() });
@@ -72,7 +91,72 @@ export function NotificationsBell() {
       navigate(childId ? `/family?childId=${childId}` : "/family");
       return;
     }
+    if (n.type === "roster_invite_for_child") {
+      // Send the parent to /family so they can review the invite next to
+      // the child it concerns. The Accept/Decline buttons live in the
+      // notification row itself, so the click here is just navigation.
+      const childId = getChildIdFromLink(link);
+      navigate(childId ? `/family?childId=${childId}` : "/family");
+      return;
+    }
     if (link) navigate(link);
+  };
+
+  const handleRosterAction = async (
+    n: NotificationResponse,
+    action: "accept" | "decline",
+  ) => {
+    const link = getNotificationLink(n);
+    const entryId = getEntryIdFromLink(link);
+    const teamId = getTeamIdFromLink(link);
+    const childId = getChildIdFromLink(link);
+    if (!entryId || !teamId) {
+      toast({
+        title: "Couldn't find the roster spot to update.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setActingOnEntryId(entryId);
+    try {
+      await customFetch(
+        `/api/v1/teams/${teamId}/members/${entryId}/${action}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      if (!n.isRead) {
+        await markRead(n.id);
+      } else {
+        invalidate();
+      }
+      // Refresh anything that displays the child's roster: their profile,
+      // their team list, and any open team rosters. Using a predicate
+      // keeps this resilient to query-key shape changes.
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k)) return false;
+          const url = typeof k[0] === "string" ? k[0] : "";
+          if (childId && url.includes(`/users/${childId}`)) return true;
+          if (url.includes("/teams/") && url.endsWith("/roster")) return true;
+          return false;
+        },
+      });
+      toast({
+        title:
+          action === "accept"
+            ? "Roster spot accepted"
+            : "Roster spot declined",
+      });
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Failed to update roster spot";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setActingOnEntryId(null);
+    }
   };
 
   const handleResend = async (n: NotificationResponse) => {
@@ -151,6 +235,14 @@ export function NotificationsBell() {
           ) : (
             items.map((n: NotificationResponse) => {
               const isExpired = n.type === "guardian_expired";
+              const isChildInvite = n.type === "roster_invite_for_child";
+              const childFirst = isChildInvite
+                ? getChildFirstNameFromTitle(n.title)
+                : "";
+              const entryId = isChildInvite
+                ? getEntryIdFromLink(getNotificationLink(n))
+                : null;
+              const acting = entryId !== null && actingOnEntryId === entryId;
               return (
                 <div
                   key={n.id}
@@ -177,6 +269,13 @@ export function NotificationsBell() {
                         >
                           <ShieldAlert className="w-4 h-4" />
                         </span>
+                      ) : isChildInvite ? (
+                        <span
+                          className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center"
+                          aria-hidden="true"
+                        >
+                          <Users className="w-4 h-4" />
+                        </span>
                       ) : (
                         !n.isRead && (
                           <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
@@ -186,6 +285,11 @@ export function NotificationsBell() {
                         {isExpired && (
                           <p className="text-[10px] uppercase tracking-wider font-black text-amber-700 dark:text-amber-300 mb-0.5">
                             Guardian link expired
+                          </p>
+                        )}
+                        {isChildInvite && (
+                          <p className="text-[10px] uppercase tracking-wider font-black text-primary mb-0.5">
+                            Team invite for your child
                           </p>
                         )}
                         <p
@@ -220,6 +324,38 @@ export function NotificationsBell() {
                         data-testid={`button-resend-guardian-${n.id}`}
                       >
                         {resendingId === n.id ? "Resending…" : "Resend link"}
+                      </Button>
+                    </div>
+                  )}
+                  {isChildInvite && entryId && (
+                    <div className="px-4 pb-3 -mt-1 flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-3 rounded-full text-xs font-bold"
+                        disabled={acting}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRosterAction(n, "decline");
+                        }}
+                        data-testid={`button-decline-child-invite-${n.id}`}
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 px-3 rounded-full text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground"
+                        disabled={acting}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRosterAction(n, "accept");
+                        }}
+                        data-testid={`button-accept-child-invite-${n.id}`}
+                      >
+                        {acting
+                          ? "Working…"
+                          : `Accept for ${childFirst}`}
                       </Button>
                     </div>
                   )}

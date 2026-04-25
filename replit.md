@@ -88,4 +88,22 @@ schemas are generated from the spec.
 - Brand: purple→blue gradient (`brand-gradient`, `brand-gradient-dark` utilities).
 - Typography: `font-black tracking-tight` for headings; `rounded-xl` cards. No emojis.
 
+## Routing gotcha (api-server)
+
+`artifacts/api-server/src/routes/index.ts` mounts ONLY `admin` and `spec.ts`.
+The standalone files `routes/users.ts`, `routes/notifications.ts`, and
+`routes/invites.ts` are NOT mounted — any handlers in them are dead code.
+All real route logic lives in `routes/spec.ts`. When adding behavior to an
+existing endpoint, edit it in `spec.ts`, not in the matching standalone
+file. (If you ever need to revive those, mount them in `routes/index.ts`.)
+
+## Roster status mapping
+
+The DB column `roster_entries.status` uses `accepted | pending | declined`,
+but the public team-member API representation maps `accepted → "active"`
+and everything else → `"pending"` via `toTeamMember` in
+`lib/spec-helpers.ts`. Tests and clients should expect `"active"` from
+`/teams/:teamId/members*` and `/users/:userId/teams` responses, not
+`"accepted"`.
+
 See the `pnpm-workspace` skill for workspace structure and TypeScript project references.

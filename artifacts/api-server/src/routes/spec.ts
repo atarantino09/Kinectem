@@ -851,13 +851,23 @@ router.get(
     const isOwnProfile = me?.id === u.id;
 
     // Linked accounts (parent ↔ child) are sensitive on a youth-sports
-    // product. Only show them to: the user themself, their linked parents
-    // or children, or an org admin of an organization that the profile
-    // user belongs to.
-    let canSeeFamily = isOwnProfile;
-    if (!canSeeFamily && me) {
+    // product, but with different rules for the two halves:
+    //
+    //   • `parents` (who is *my* guardian) is private. Only the user
+    //     themself, the linked parent/child, or an org admin who shares
+    //     a team with the profile user can see it.
+    //   • `children` of a parent profile are intentionally public to
+    //     any logged-in user — visiting a parent's profile and seeing
+    //     "Family: Samira, Riley, Cameron" with avatars is the navigation
+    //     hook that lets coaches and other parents reach the kids'
+    //     pages. Each child link is just `id + name + avatar`, the same
+    //     fields the children already expose via search and team
+    //     rosters, so there is no new data leak. Privacy on the child's
+    //     own profile (DOB, email, COPPA flags) is unchanged.
+    let canSeeParents = isOwnProfile;
+    if (!canSeeParents && me) {
       if (me.parentId === u.id || u.parentId === me.id) {
-        canSeeFamily = true;
+        canSeeParents = true;
       } else {
         // Org admin of any org that owns a team the profile user is on.
         const sharedAdmin = await db
@@ -872,19 +882,32 @@ router.get(
             ),
           )
           .limit(1);
-        if (sharedAdmin.length > 0) canSeeFamily = true;
+        if (sharedAdmin.length > 0) canSeeParents = true;
       }
     }
+    const canSeeChildren = !!me; // any logged-in viewer sees the family card
 
     let linkedAccounts: { parents: unknown[]; children: unknown[] } | undefined;
-    if (canSeeFamily) {
-      const parentRows = u.parentId
-        ? await db.select().from(users).where(eq(users.id, u.parentId)).limit(1)
+    if (canSeeParents || canSeeChildren) {
+      // IMPORTANT: filter soft-deleted accounts out of the family card.
+      // The route already 404s on a deleted profile owner, but the
+      // linked-account queries used to ignore `deletedAt` — which would
+      // leak a deleted child's id/name/avatar through any non-deleted
+      // parent's profile. Both halves now respect `deletedAt`.
+      const parentRows =
+        canSeeParents && u.parentId
+          ? await db
+              .select()
+              .from(users)
+              .where(and(eq(users.id, u.parentId), isNull(users.deletedAt)))
+              .limit(1)
+          : [];
+      const childRows = canSeeChildren
+        ? await db
+            .select()
+            .from(users)
+            .where(and(eq(users.parentId, u.id), isNull(users.deletedAt)))
         : [];
-      const childRows = await db
-        .select()
-        .from(users)
-        .where(eq(users.parentId, u.id));
       const toLinked = (row: typeof users.$inferSelect) => {
         const { firstName, lastName } = splitName(row.name);
         return {
@@ -895,10 +918,15 @@ router.get(
           avatarUrl: row.avatarUrl ?? null,
         };
       };
-      linkedAccounts = {
-        parents: parentRows.map(toLinked),
-        children: childRows.map(toLinked),
-      };
+      // Only emit the section when there is something to render so the
+      // frontend's "no Family card" path stays clean for users with no
+      // linked accounts.
+      if (parentRows.length > 0 || childRows.length > 0) {
+        linkedAccounts = {
+          parents: parentRows.map(toLinked),
+          children: childRows.map(toLinked),
+        };
+      }
     }
 
     let isFollowing = false;
@@ -1119,12 +1147,38 @@ router.get(
 router.get(
   "/users/:userId/teams",
   asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    const targetId = req.params.userId;
+    // A profile's pending invites should only be visible to people who
+    // can actually act on them: the user themselves, their real
+    // (non-masquerading) parent, or a real admin. Everyone else only
+    // sees teams they have actually joined.
+    const isSelf = me?.id === targetId;
+    const isRealAdmin =
+      !!me && req.realUser?.role === "admin" && !req.isMasquerading;
+    let isParent = false;
+    if (!isSelf && !isRealAdmin && me && !req.isMasquerading) {
+      const [child] = await db
+        .select({ parentId: users.parentId })
+        .from(users)
+        .where(eq(users.id, targetId))
+        .limit(1);
+      isParent = !!child && child.parentId === me.id;
+    }
+    const showPending = isSelf || isRealAdmin || isParent;
     const rows = await db
       .select({ r: rosterEntries, t: teams, org: organizations })
       .from(rosterEntries)
       .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(rosterEntries.userId, req.params.userId));
+      .where(
+        showPending
+          ? eq(rosterEntries.userId, targetId)
+          : and(
+              eq(rosterEntries.userId, targetId),
+              eq(rosterEntries.status, "accepted"),
+            ),
+      );
     const data = rows.map((r) => ({
       id: r.r.id,
       teamId: r.t.id,
@@ -2253,6 +2307,21 @@ router.post(
         message: `${displayName(me)} added you to ${t.name}. Tap to accept or decline.`,
         link: `/teams/${teamId}`,
       });
+      // Fan out to the linked guardian, if any. A parent managing an
+      // under-13 athlete needs to see the invite in their own bell and
+      // be able to accept on the child's behalf from /family.
+      if (u.parentId) {
+        const childFirstName =
+          (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
+            ? u.name!.trim().split(/\s+/)[0]
+            : "your child";
+        await db.insert(notifications).values({
+          userId: u.parentId,
+          kind: "roster_invite_for_child",
+          message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
+          link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
+        });
+      }
     }
     res.status(201).json(toTeamMember(entry, u));
   }),
@@ -2273,6 +2342,35 @@ router.delete(
   }),
 );
 
+// A roster spot can be acted on by either the entry's user themselves
+// (real, non-masquerading session) or the entry user's linked guardian
+// acting from a real (non-masquerading) parent session. This lets a
+// parent accept/decline a child's roster spot from /family or the
+// notifications bell on the child's behalf, without giving admins or
+// strangers the same power even if they impersonate.
+async function rosterEntryActor(
+  req: Request,
+  entryUserId: string,
+): Promise<{ allowed: boolean; actor: typeof users.$inferSelect | null }> {
+  const me = req.sessionUser;
+  if (!me) return { allowed: false, actor: null };
+  if (entryUserId === me.id && !req.isMasquerading) {
+    const [self] = await db.select().from(users).where(eq(users.id, me.id)).limit(1);
+    return { allowed: true, actor: self ?? null };
+  }
+  if (req.isMasquerading) return { allowed: false, actor: null };
+  const [child] = await db
+    .select({ parentId: users.parentId })
+    .from(users)
+    .where(eq(users.id, entryUserId))
+    .limit(1);
+  if (child && child.parentId === me.id) {
+    const [target] = await db.select().from(users).where(eq(users.id, entryUserId)).limit(1);
+    return { allowed: true, actor: target ?? null };
+  }
+  return { allowed: false, actor: null };
+}
+
 router.post(
   "/teams/:teamId/members/:memberId/accept",
   asyncHandler(async (req, res) => {
@@ -2289,13 +2387,14 @@ router.post(
       )
       .limit(1);
     if (!entry) return notFound(res);
-    if (entry.userId !== me.id) return apiError(res, 403, "Forbidden");
+    const { allowed, actor } = await rosterEntryActor(req, entry.userId);
+    if (!allowed || !actor) return apiError(res, 403, "Forbidden");
     const [updated] = await db
       .update(rosterEntries)
       .set({ status: "accepted" })
       .where(eq(rosterEntries.id, entry.id))
       .returning();
-    res.json(toTeamMember(updated, me));
+    res.json(toTeamMember(updated, actor));
   }),
 );
 
@@ -2315,7 +2414,8 @@ router.post(
       )
       .limit(1);
     if (!entry) return notFound(res);
-    if (entry.userId !== me.id) return apiError(res, 403, "Forbidden");
+    const { allowed } = await rosterEntryActor(req, entry.userId);
+    if (!allowed) return apiError(res, 403, "Forbidden");
     await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
     res.status(204).end();
   }),
