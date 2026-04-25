@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Shield, UserPlus, Search, Users, CheckCircle2, Clock, AlertTriangle, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getInitials } from "@/lib/format";
+import { formatDate, getInitials } from "@/lib/format";
 
 interface Child {
   id: string;
@@ -248,15 +248,25 @@ export default function GuardianPage() {
                       data-testid={`status-confirmation-${c.id}`}
                     >
                       {c.confirmationStatus === "confirmed" && (
-                        <Badge
-                          variant="outline"
-                          className="font-bold gap-1 border-green-600 text-green-700 dark:text-green-400"
-                        >
-                          <CheckCircle2 className="w-3 h-3" />
-                          {c.confirmedByMe
-                            ? "Confirmed by you"
-                            : "Confirmed"}
-                        </Badge>
+                        <>
+                          <Badge
+                            variant="outline"
+                            className="font-bold gap-1 border-green-600 text-green-700 dark:text-green-400"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            {c.confirmedByMe
+                              ? "Confirmed by you"
+                              : "Confirmed"}
+                          </Badge>
+                          {c.guardianConfirmedAt && (
+                            <span
+                              className="text-xs text-muted-foreground"
+                              data-testid={`text-confirmed-on-${c.id}`}
+                            >
+                              Confirmed on {formatDate(c.guardianConfirmedAt)}
+                            </span>
+                          )}
+                        </>
                       )}
                       {c.confirmationStatus === "pending" && (
                         <Badge
