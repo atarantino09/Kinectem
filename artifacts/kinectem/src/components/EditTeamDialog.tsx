@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
@@ -42,14 +42,17 @@ type TeamLike = {
   description?: string | null;
   sport?: string | null;
   level?: string | null;
+  avatarUrl?: string | null;
 };
 
 export function EditTeamDialog({
   team,
+  canManageLogo = false,
   open,
   onOpenChange,
 }: {
   team: TeamLike;
+  canManageLogo?: boolean;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -60,6 +63,8 @@ export function EditTeamDialog({
   const [sport, setSport] = useState(team.sport ?? "");
   const [level, setLevel] = useState(team.level ?? "");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -68,7 +73,64 @@ export function EditTeamDialog({
       setSport(team.sport ?? "");
       setLevel(team.level ?? "");
     }
-  }, [open, team]);
+    // Only re-seed the form when the dialog transitions to open, or when
+    // a different team is being edited. Refetches caused by in-dialog logo
+    // changes must not wipe the user's unsaved text edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, team.id]);
+
+  const onPickPhoto = () => fileInputRef.current?.click();
+
+  const onRemovePhoto = async () => {
+    setUploading(true);
+    try {
+      await customFetch(`/api/v1/teams/${team.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: null }),
+      });
+      await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
+      toast({ title: "Logo removed" });
+    } catch {
+      toast({ title: "Failed to remove logo", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please pick an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > 1_500_000) {
+      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      await customFetch(`/api/v1/teams/${team.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: dataUrl }),
+      });
+      await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
+      toast({ title: "Logo updated" });
+    } catch {
+      toast({ title: "Failed to upload logo", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +174,64 @@ export function EditTeamDialog({
           </DialogHeader>
 
           <div className="space-y-3">
+            {canManageLogo && (
+              <div className="space-y-1.5">
+                <Label className="font-bold">Logo</Label>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 bg-muted rounded-xl border border-border flex items-center justify-center overflow-hidden shrink-0">
+                    {team.avatarUrl ? (
+                      <img
+                        src={team.avatarUrl}
+                        alt={`${team.name} logo`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-xl font-black text-primary tracking-tighter">
+                        {team.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onPhotoChange}
+                    data-testid="input-team-logo"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="font-bold rounded-full"
+                      onClick={onPickPhoto}
+                      disabled={uploading}
+                      data-testid="btn-upload-team-logo"
+                    >
+                      {uploading
+                        ? "Working..."
+                        : team.avatarUrl
+                          ? "Change logo"
+                          : "Upload logo"}
+                    </Button>
+                    {team.avatarUrl && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="font-bold rounded-full"
+                        onClick={onRemovePhoto}
+                        disabled={uploading}
+                        data-testid="btn-remove-team-logo"
+                      >
+                        Remove logo
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="edit-team-name" className="font-bold">
                 Team name
@@ -177,7 +297,7 @@ export function EditTeamDialog({
             </Button>
             <Button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploading}
               className="font-bold"
               data-testid="btn-save-edit-team"
             >

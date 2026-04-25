@@ -55,7 +55,6 @@ export default function TeamPage() {
   const { toast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(
     () => new Set<string>(),
   );
@@ -63,7 +62,6 @@ export default function TeamPage() {
     "posts",
   );
   const [followersOpen, setFollowersOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: team, isLoading } = useGetTeamById(teamId);
   const followTeam = useFollowTeam();
@@ -159,42 +157,6 @@ export default function TeamPage() {
       toast({ title: "Welcome to the team!" });
     } catch {
       toast({ title: "Failed to accept", variant: "destructive" });
-    }
-  };
-
-  const onPickPhoto = () => fileInputRef.current?.click();
-
-  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please pick an image file", variant: "destructive" });
-      return;
-    }
-    if (file.size > 1_500_000) {
-      toast({ title: "Image must be under 1.5 MB", variant: "destructive" });
-      return;
-    }
-    setUploading(true);
-    try {
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      await customFetch(`/api/v1/teams/${teamId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logoUrl: dataUrl }),
-      });
-      await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
-      toast({ title: "Team photo updated" });
-    } catch {
-      toast({ title: "Failed to upload photo", variant: "destructive" });
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -390,7 +352,7 @@ export default function TeamPage() {
             )}
           </div>
           <div className="flex items-start gap-6 mb-3">
-            <div className="relative shrink-0">
+            <div className="shrink-0">
               <div className="w-36 h-36 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
                 {(team.avatarUrl || (team.organization as { avatarUrl?: string | null })?.avatarUrl) ? (
                   <img
@@ -405,32 +367,6 @@ export default function TeamPage() {
                   </span>
                 )}
               </div>
-              {isAdmin && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={onPhotoChange}
-                    data-testid="input-team-photo"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="absolute -bottom-3 left-1/2 -translate-x-1/2 h-7 px-3 text-xs font-bold rounded-full whitespace-nowrap"
-                    onClick={onPickPhoto}
-                    disabled={uploading}
-                    data-testid="btn-upload-team-photo"
-                  >
-                    {uploading
-                      ? "Uploading..."
-                      : team.avatarUrl
-                        ? "Change"
-                        : "Upload"}
-                  </Button>
-                </>
-              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-3 flex-wrap">
@@ -735,7 +671,9 @@ export default function TeamPage() {
           description: team.description,
           sport: team.sport,
           level: team.level,
+          avatarUrl: team.avatarUrl,
         }}
+        canManageLogo={isAdmin}
         open={editOpen}
         onOpenChange={setEditOpen}
       />
