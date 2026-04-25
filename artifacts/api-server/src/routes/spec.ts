@@ -1026,7 +1026,10 @@ router.patch(
     const [updated] = Object.keys(updates).length
       ? await db.update(users).set(updates).where(eq(users.id, existing.id)).returning()
       : [existing];
-    res.json(toPrivateUser(updated));
+    // Keep the response's `isOwnProfile` flag honest: when a parent or
+    // admin patches someone else's profile, the response shouldn't claim
+    // it belongs to the caller. Matches the GET /users/:userId behavior.
+    res.json(toPrivateUser(updated, { isOwnProfile: existing.id === me.id }));
   }),
 );
 
