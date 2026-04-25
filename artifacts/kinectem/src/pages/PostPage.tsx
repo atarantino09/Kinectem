@@ -37,12 +37,20 @@ export default function PostPage() {
           {label}
         </Badge>
         {post.context.name && (
-          <Link href={
-            post.context.type === "organization"
-              ? `/organizations/${post.context.id}`
-              : `/users/${post.context.id}`
-          }>
-            <Badge variant="outline" className="font-bold cursor-pointer">
+          <Link
+            href={
+              post.context.type === "team"
+                ? `/teams/${post.context.id}`
+                : post.context.type === "organization"
+                  ? `/organizations/${post.context.id}`
+                  : `/users/${post.context.id}`
+            }
+          >
+            <Badge
+              variant="outline"
+              className="font-bold cursor-pointer"
+              data-testid={`link-post-context-${post.context.type}`}
+            >
               {post.context.name}
             </Badge>
           </Link>
