@@ -1315,6 +1315,9 @@ router.post(
     const body = req.body ?? {};
     const title = String(body.title ?? "").trim();
     if (!title) return res.status(400).json({ error: "title required" });
+    if (title.length > 200) return res.status(400).json({ error: "title too long" });
+    const bodyText = typeof body.body === "string" ? body.body : "";
+    if (bodyText.length > 50000) return res.status(400).json({ error: "body too long" });
     const photoUrls: string[] = Array.isArray(body.photoUrls)
       ? body.photoUrls.filter((u: unknown) => typeof u === "string").slice(0, 10)
       : [];
@@ -1326,7 +1329,7 @@ router.post(
         organizationId: orgId,
         authorId: me.id,
         title,
-        body: typeof body.body === "string" ? body.body : "",
+        body: bodyText,
         coverImageUrl: photoUrls[0] ?? null,
         videoUrl,
         photoUrls: photoUrls.length > 0 ? photoUrls : null,
