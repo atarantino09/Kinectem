@@ -59,6 +59,7 @@ export const users = pgTable("users", {
   guardianConfirmTokenExpiresAt: timestamp("guardian_confirm_token_expires_at"),
   guardianConfirmedAt: timestamp("guardian_confirmed_at"),
   guardianConfirmedByUserId: uuid("guardian_confirmed_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  guardianExpiredEmailSentAt: timestamp("guardian_expired_email_sent_at"),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
   lastSignInAt: timestamp("last_sign_in_at"),
   deletedAt: timestamp("deleted_at"),

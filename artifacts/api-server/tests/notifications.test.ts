@@ -1,7 +1,43 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
+
+const sentEmails: Array<{ to: string; subject: string; text: string }> = [];
+
+vi.mock("../src/lib/email", () => ({
+  isEmailConfigured: () => true,
+  sendEmail: vi.fn(async (m: { to: string; subject: string; text: string }) => {
+    sentEmails.push(m);
+  }),
+  sendPasswordResetEmail: vi.fn(async (to: string, token: string) => {
+    sentEmails.push({
+      to,
+      subject: "Reset your Kinectem password",
+      text: `/reset-password/${token}`,
+    });
+  }),
+  sendGuardianConfirmationEmail: vi.fn(
+    async (to: string, _name: string, token: string) => {
+      sentEmails.push({
+        to,
+        subject: "Guardian confirmation",
+        text: `/guardian-confirm/${token}`,
+      });
+    },
+  ),
+  sendGuardianExpiredEmail: vi.fn(async (to: string, name: string) => {
+    sentEmails.push({
+      to,
+      subject: `${name}'s Kinectem confirmation link has expired`,
+      text: `/family`,
+    });
+  }),
+}));
+
+beforeEach(() => {
+  sentEmails.length = 0;
+});
 
 describe("notifications", () => {
   it("returns the seeded notification for samira", async () => {
@@ -71,6 +107,7 @@ describe("notifications", () => {
           guardianConfirmedByUserId: null,
           guardianConfirmToken: "expired-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
+          guardianExpiredEmailSentAt: null,
         })
         .where(eq(users.id, child.id));
       return { agent, childId: child.id as string };
@@ -149,6 +186,153 @@ describe("notifications", () => {
         (n: { type: string }) => n.type === "guardian_expired",
       );
       expect(expired).toHaveLength(0);
+    });
+  });
+
+  describe("guardian confirmation expired emails", () => {
+    async function setupExpiredChild() {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const childRes = await agent.get("/api/v1/users/me/children");
+      const child = childRes.body.data[0];
+      await db
+        .update(users)
+        .set({
+          guardianEmail: "lisa@kinectem.demo",
+          guardianConfirmedAt: null,
+          guardianConfirmedByUserId: null,
+          guardianConfirmToken: "expired-token-test",
+          guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
+          guardianExpiredEmailSentAt: null,
+        })
+        .where(eq(users.id, child.id));
+      return { agent, childId: child.id as string };
+    }
+
+    it("emails the guardian when a child's confirmation link expires", async () => {
+      const { agent, childId } = await setupExpiredChild();
+      sentEmails.length = 0;
+      const me = await agent.get("/api/v1/users/me");
+      expect(me.status).toBe(200);
+      const expiredEmails = sentEmails.filter((e) =>
+        /expired/i.test(e.subject),
+      );
+      expect(expiredEmails).toHaveLength(1);
+      expect(expiredEmails[0].to).toBe("lisa@kinectem.demo");
+      expect(expiredEmails[0].text).toContain("/family");
+      const [child] = await db
+        .select({ sentAt: users.guardianExpiredEmailSentAt })
+        .from(users)
+        .where(eq(users.id, childId))
+        .limit(1);
+      expect(child.sentAt).not.toBeNull();
+    });
+
+    it("does not send a duplicate expired email on subsequent requests", async () => {
+      const { agent } = await setupExpiredChild();
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      await agent.get("/api/v1/users/me/children");
+      await agent.get("/api/v1/users/me");
+      const expiredEmails = sentEmails.filter((e) =>
+        /expired/i.test(e.subject),
+      );
+      expect(expiredEmails).toHaveLength(1);
+    });
+
+    it("falls back to the parent's account email when guardianEmail is null", async () => {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const childRes = await agent.get("/api/v1/users/me/children");
+      const child = childRes.body.data[0];
+      await db
+        .update(users)
+        .set({
+          guardianEmail: null,
+          guardianConfirmedAt: null,
+          guardianConfirmedByUserId: null,
+          guardianConfirmToken: "expired-token-test",
+          guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
+          guardianExpiredEmailSentAt: null,
+        })
+        .where(eq(users.id, child.id));
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      const expiredEmails = sentEmails.filter((e) =>
+        /expired/i.test(e.subject),
+      );
+      expect(expiredEmails).toHaveLength(1);
+      expect(expiredEmails[0].to).toBe("lisa@kinectem.demo");
+    });
+
+    it("does not email when the child's confirmation is still pending", async () => {
+      const { agent } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const childRes = await agent.get("/api/v1/users/me/children");
+      const child = childRes.body.data[0];
+      await db
+        .update(users)
+        .set({
+          guardianEmail: "lisa@kinectem.demo",
+          guardianConfirmedAt: null,
+          guardianConfirmedByUserId: null,
+          guardianConfirmToken: "valid-token-test",
+          guardianConfirmTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
+          guardianExpiredEmailSentAt: null,
+        })
+        .where(eq(users.id, child.id));
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      const expiredEmails = sentEmails.filter((e) =>
+        /expired/i.test(e.subject),
+      );
+      expect(expiredEmails).toHaveLength(0);
+    });
+
+    it("sends a fresh email after the link is resent and expires again", async () => {
+      const { agent, childId } = await setupExpiredChild();
+      sentEmails.length = 0;
+      // First expiry cycle: email is sent.
+      await agent.get("/api/v1/users/me");
+      expect(
+        sentEmails.filter((e) => /expired/i.test(e.subject)),
+      ).toHaveLength(1);
+
+      // Parent resends the link. The resend route requires the parent's
+      // password, but here we simulate the resend's effect on the child row
+      // directly: a new token + expiry is set and the expired-email tracker
+      // is cleared. Then we expire again to trigger a new email.
+      await db
+        .update(users)
+        .set({
+          guardianConfirmToken: "new-token-test",
+          guardianConfirmTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
+          guardianExpiredEmailSentAt: null,
+        })
+        .where(eq(users.id, childId));
+
+      // Trigger again while still pending: no new email.
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      expect(
+        sentEmails.filter((e) => /expired/i.test(e.subject)),
+      ).toHaveLength(0);
+
+      // Now expire the new token and verify a fresh email is sent.
+      await db
+        .update(users)
+        .set({
+          guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
+        })
+        .where(eq(users.id, childId));
+      sentEmails.length = 0;
+      await agent.get("/api/v1/users/me");
+      expect(
+        sentEmails.filter((e) => /expired/i.test(e.subject)),
+      ).toHaveLength(1);
     });
   });
 });

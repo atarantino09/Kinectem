@@ -78,6 +78,10 @@ export function buildGuardianConfirmUrl(token: string): string {
   return `${appBaseUrl()}/guardian-confirm/${token}`;
 }
 
+export function buildFamilyUrl(): string {
+  return `${appBaseUrl()}/family`;
+}
+
 export async function sendPasswordResetEmail(
   to: string,
   token: string,
@@ -118,5 +122,26 @@ If you don't recognize this signup, you can ignore this email and the account wi
 <p>Because they are under 13, the account cannot be used until you confirm it. Open this link to confirm:</p>
 <p><a href="${url}">${url}</a></p>
 <p>If you don't recognize this signup, you can ignore this email and the account will stay locked.</p>`,
+  });
+}
+
+export async function sendGuardianExpiredEmail(
+  to: string,
+  athleteName: string,
+): Promise<void> {
+  const url = buildFamilyUrl();
+  await sendEmail({
+    to,
+    subject: `${athleteName}'s Kinectem confirmation link has expired`,
+    text: `The guardian-confirmation link for ${athleteName}'s Kinectem account has expired before it was confirmed.
+
+Open your Family page to send ${athleteName} a new link so they don't lose access:
+${url}
+
+If you no longer want to confirm this account, you can ignore this email and it will stay locked.`,
+    html: `<p>The guardian-confirmation link for <strong>${athleteName}</strong>'s Kinectem account has expired before it was confirmed.</p>
+<p>Open your Family page to send ${athleteName} a new link so they don't lose access:</p>
+<p><a href="${url}">${url}</a></p>
+<p>If you no longer want to confirm this account, you can ignore this email and it will stay locked.</p>`,
   });
 }

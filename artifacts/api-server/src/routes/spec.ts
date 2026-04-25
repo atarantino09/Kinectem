@@ -37,6 +37,7 @@ import { asyncHandler } from "../lib/async-handler";
 import { logger } from "../lib/logger";
 import {
   sendGuardianConfirmationEmail,
+  sendGuardianExpiredEmail,
   sendPasswordResetEmail,
 } from "../lib/email";
 import {
@@ -699,6 +700,10 @@ router.post(
       .set({
         guardianConfirmToken: newToken,
         guardianConfirmTokenExpiresAt: new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS),
+        // Resending the link starts a new expiry cycle, so reset the
+        // expired-email tracker. If the new token also expires, the parent
+        // should get a fresh email.
+        guardianExpiredEmailSentAt: null,
       })
       .where(eq(users.id, user.id));
 
@@ -4377,47 +4382,90 @@ async function notifyExpiredGuardianConfirmations(
   parentUserId: string,
 ): Promise<void> {
   const expiredChildren = await db
-    .select({ id: users.id, name: users.name })
+    .select({
+      id: users.id,
+      name: users.name,
+      guardianEmail: users.guardianEmail,
+      guardianExpiredEmailSentAt: users.guardianExpiredEmailSentAt,
+    })
     .from(users)
     .where(
       and(
         eq(users.parentId, parentUserId),
         isNull(users.guardianConfirmedAt),
-        sql`${users.guardianEmail} IS NOT NULL`,
         sql`${users.guardianConfirmTokenExpiresAt} IS NOT NULL`,
         lt(users.guardianConfirmTokenExpiresAt, new Date()),
       ),
     );
   if (expiredChildren.length === 0) return;
 
-  const links = expiredChildren.map((c) => `/guardian?childId=${c.id}`);
-  const existing = await db
-    .select({ link: notifications.link })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.userId, parentUserId),
-        eq(notifications.kind, "guardian_expired"),
-        inArray(notifications.link, links),
-      ),
+  // In-app notifications retain their existing eligibility: only children
+  // whose row carries a guardianEmail get the bell-menu entry. This keeps
+  // the existing notification behavior unchanged.
+  const notifiableChildren = expiredChildren.filter((c) => c.guardianEmail);
+  if (notifiableChildren.length > 0) {
+    const links = notifiableChildren.map((c) => `/guardian?childId=${c.id}`);
+    const existing = await db
+      .select({ link: notifications.link })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, parentUserId),
+          eq(notifications.kind, "guardian_expired"),
+          inArray(notifications.link, links),
+        ),
+      );
+    const alreadyNotified = new Set(
+      existing.map((n) => n.link).filter((l): l is string => !!l),
     );
-  const alreadyNotified = new Set(
-    existing.map((n) => n.link).filter((l): l is string => !!l),
-  );
 
-  const toInsert = expiredChildren
-    .filter((c) => !alreadyNotified.has(`/guardian?childId=${c.id}`))
-    .map((c) => {
-      const [first] = c.name.split(" ");
-      return {
-        userId: parentUserId,
-        kind: "guardian_expired",
-        message: `${first ?? c.name}'s guardian confirmation link has expired. Send a new one so they don't lose access.`,
-        link: `/guardian?childId=${c.id}`,
-      };
-    });
-  if (toInsert.length === 0) return;
-  await db.insert(notifications).values(toInsert);
+    const toInsert = notifiableChildren
+      .filter((c) => !alreadyNotified.has(`/guardian?childId=${c.id}`))
+      .map((c) => {
+        const [first] = c.name.split(" ");
+        return {
+          userId: parentUserId,
+          kind: "guardian_expired",
+          message: `${first ?? c.name}'s guardian confirmation link has expired. Send a new one so they don't lose access.`,
+          link: `/guardian?childId=${c.id}`,
+        };
+      });
+    if (toInsert.length > 0) {
+      await db.insert(notifications).values(toInsert);
+    }
+  }
+
+  // Email the parent at the same moment the in-app notification is created
+  // so that parents who don't open the app still see the expiry. We dedupe
+  // per child per expiry cycle: a fresh /auth/guardian-resend clears
+  // guardianExpiredEmailSentAt so the next expiry sends a new email. When
+  // the child row has no guardianEmail on file, fall back to the parent
+  // account's own email so they are still reached.
+  const parentRow = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, parentUserId))
+    .limit(1);
+  const parentEmail = parentRow[0]?.email ?? null;
+
+  for (const child of expiredChildren) {
+    if (child.guardianExpiredEmailSentAt) continue;
+    const to = child.guardianEmail ?? parentEmail;
+    if (!to) continue;
+    try {
+      await sendGuardianExpiredEmail(to, child.name);
+    } catch (err) {
+      logger.error(
+        { err, childId: child.id },
+        "Failed to send guardian-expired email",
+      );
+      continue;
+    }
+    await db
+      .update(users)
+      .set({ guardianExpiredEmailSentAt: new Date() })
+      .where(eq(users.id, child.id));
+  }
 }
 
 router.get(
