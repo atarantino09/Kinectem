@@ -118,7 +118,7 @@ export default function UserProfilePage() {
     <div className="space-y-6">
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
-        <div className="h-36 brand-gradient relative">
+        <div className="h-24 brand-gradient relative">
           {user.coverPhotoUrl && (
             <img
               src={user.coverPhotoUrl}
@@ -127,7 +127,7 @@ export default function UserProfilePage() {
             />
           )}
         </div>
-        <div className="px-6 pb-6 -mt-12">
+        <div className="px-6 pb-6 -mt-16">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <AvatarLightbox
               avatarUrl={user.avatarUrl}
@@ -189,16 +189,16 @@ export default function UserProfilePage() {
               </div>
             )}
           </div>
-          <div className="mt-3">
+          <div className="mt-2">
             <h1 className="text-4xl font-black tracking-tight leading-[1.05]">
               {displayName}
             </h1>
             {user.nickname && (
-              <p className="text-sm font-bold text-primary uppercase tracking-wider mt-2">
+              <p className="text-sm font-bold text-primary uppercase tracking-wider mt-1">
                 @{user.nickname}
               </p>
             )}
-            <div className="flex items-center gap-5 mt-3">
+            <div className="flex items-center gap-5 mt-2">
               <button
                 type="button"
                 onClick={() => setFollowersOpen(true)}
