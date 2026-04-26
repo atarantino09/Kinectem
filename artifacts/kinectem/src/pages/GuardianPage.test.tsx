@@ -7,46 +7,31 @@ import {
   vi,
   type MockInstance,
 } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+
+import { createMockApi, renderWithProviders } from "@/test";
+import { setMockSearch, wouterMock } from "@/test/mocks/wouter";
+import { useToastMock } from "@/test/mocks/toast";
 
 // ---------------------------------------------------------------------------
-// Module mocks
-//
-// These run before GuardianPage is imported because vi.mock() is hoisted by
-// vitest. The mocks shadow:
-//   - wouter:                    so we can drive useSearch() and Link()
-//   - @workspace/api-client-react: so we can stub the parent + customFetch
-//   - @/hooks/use-toast:         so the toast side-effects are inert
-//   - @/components/EditProfileDialog: avoids pulling in the real form chain
+// Module mocks. vi.mock() is hoisted, but its factory runs lazily, so it can
+// safely reference the imports above.
 // ---------------------------------------------------------------------------
 
-let mockedSearch = "";
-const setMockSearch = (next: string) => {
-  mockedSearch = next;
-};
-
-vi.mock("wouter", () => ({
-  Link: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useSearch: () => mockedSearch,
+vi.mock("wouter", () => wouterMock);
+vi.mock("@/hooks/use-toast", () => useToastMock);
+vi.mock("@/components/EditProfileDialog", () => ({
+  EditProfileDialog: () => null,
 }));
 
-const customFetchMock = vi.fn();
+const api = createMockApi();
 const useGetLoggedInUserMock = vi.fn();
 
 vi.mock("@workspace/api-client-react", () => ({
-  customFetch: (...args: unknown[]) => customFetchMock(...args),
+  customFetch: (...args: unknown[]) =>
+    api.fetch(...(args as [string, RequestInit?])),
   useGetLoggedInUser: (...args: unknown[]) => useGetLoggedInUserMock(...args),
-}));
-
-vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn(), dismiss: vi.fn(), toasts: [] }),
-}));
-
-vi.mock("@/components/EditProfileDialog", () => ({
-  EditProfileDialog: () => null,
 }));
 
 // Now safe to import the component under test.
@@ -106,47 +91,18 @@ const pendingFixture = {
   ],
 };
 
-function setupCustomFetch() {
-  customFetchMock.mockReset();
-  customFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (url === "/api/v1/users/me/children" && method === "GET") {
-      return { data: structuredClone(childrenFixture) };
-    }
-    if (
-      url === `/api/v1/users/me/children/${CHILD_ID}/pending-team-invites` &&
-      method === "GET"
-    ) {
-      return structuredClone(pendingFixture);
-    }
-    if (url === "/api/v1/notifications/email-preference" && method === "GET") {
-      return { emailOptOut: false };
-    }
-    if (
-      url === `/api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/accept` &&
-      method === "POST"
-    ) {
-      return { ok: true };
-    }
-    if (
-      url === `/api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/decline` &&
-      method === "POST"
-    ) {
-      return { ok: true };
-    }
-    throw new Error(`Unexpected fetch in test: ${method} ${url}`);
+function installDefaultHandlers() {
+  api.reset();
+  api.setHandlers({
+    "GET /api/v1/users/me/children": () => ({
+      data: structuredClone(childrenFixture),
+    }),
+    [`GET /api/v1/users/me/children/${CHILD_ID}/pending-team-invites`]: () =>
+      structuredClone(pendingFixture),
+    "GET /api/v1/notifications/email-preference": { emailOptOut: false },
+    [`POST /api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/accept`]: { ok: true },
+    [`POST /api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/decline`]: { ok: true },
   });
-}
-
-function renderPage() {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <GuardianPage />
-    </QueryClientProvider>,
-  );
 }
 
 let scrollIntoViewSpy: MockInstance;
@@ -159,7 +115,7 @@ beforeEach(() => {
     data: { id: PARENT_ID, role: "parent" },
     isLoading: false,
   });
-  setupCustomFetch();
+  installDefaultHandlers();
 });
 
 afterEach(() => {
@@ -171,7 +127,7 @@ describe("GuardianPage — parent invite deep-link", () => {
   it("renders pending-invite rows and highlights the row matching the deep-link query", async () => {
     setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
 
-    renderPage();
+    renderWithProviders(<GuardianPage />);
 
     // Pending section appears once the children + invites resolve.
     const pendingSection = await screen.findByTestId(
@@ -209,7 +165,7 @@ describe("GuardianPage — parent invite deep-link", () => {
     setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
 
     const user = userEvent.setup();
-    renderPage();
+    renderWithProviders(<GuardianPage />);
 
     const acceptBtn = await screen.findByTestId(
       `btn-accept-pending-${ENTRY_ID}`,
@@ -218,7 +174,7 @@ describe("GuardianPage — parent invite deep-link", () => {
 
     // The accept call should have been dispatched.
     await waitFor(() => {
-      expect(customFetchMock).toHaveBeenCalledWith(
+      expect(api.fetch).toHaveBeenCalledWith(
         `/api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/accept`,
         expect.objectContaining({ method: "POST" }),
       );
@@ -377,7 +333,7 @@ describe("GuardianPage — parent invite deep-link", () => {
     setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
 
     const user = userEvent.setup();
-    renderPage();
+    renderWithProviders(<GuardianPage />);
 
     const declineBtn = await screen.findByTestId(
       `btn-decline-pending-${ENTRY_ID}`,
@@ -385,7 +341,7 @@ describe("GuardianPage — parent invite deep-link", () => {
     await user.click(declineBtn);
 
     await waitFor(() => {
-      expect(customFetchMock).toHaveBeenCalledWith(
+      expect(api.fetch).toHaveBeenCalledWith(
         `/api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/decline`,
         expect.objectContaining({ method: "POST" }),
       );
