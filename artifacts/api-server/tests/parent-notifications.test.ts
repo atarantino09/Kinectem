@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   db,
   users,
@@ -942,6 +942,146 @@ describe("parent inbox: per-child unified notifications", () => {
             eq(userFollowers.followingUserId, otherUserId),
           ),
         );
+    });
+
+    it("end-to-end: real POST /reactions creates a like notification with actorUserId, and Remove undoes the like", async () => {
+      // This guards the wiring the family dashboard needs: the
+      // notification row produced by the live like endpoint must
+      // carry `actorUserId` so the parent's Remove action can
+      // revoke the underlying reaction. If actorUserId regresses
+      // to null, the Remove handler falls back to "just dismiss"
+      // and the like quietly stays — exactly the bug this task
+      // closes.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [post] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: samiraId,
+          title: "Round-trip like test",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const postId = `article-${post.id}`;
+
+      // Coach hits the real reactions endpoint.
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const likeRes = await coach.post(`/api/v1/posts/${postId}/reactions`);
+      expect(likeRes.status).toBe(204);
+
+      // The notification row exists, addressed to Samira, with
+      // actorUserId pointing at the coach and a parseable post link.
+      const [notif] = await db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, samiraId),
+            eq(notifications.actorUserId, coachId),
+            eq(notifications.link, `/posts/${postId}`),
+          ),
+        )
+        .limit(1);
+      expect(notif).toBeDefined();
+      expect(notif!.actorUserId).toBe(coachId);
+      expect(/like|react/i.test(notif!.message)).toBe(true);
+
+      // Parent removes the notification — the reaction must vanish.
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `notification:${notif!.id}`,
+          decision: "removed",
+        });
+      expect(decideRes.status).toBe(200);
+
+      const reactionAfter = await db
+        .select()
+        .from(postReactions)
+        .where(
+          and(
+            eq(postReactions.postKind, "article"),
+            eq(postReactions.postRefId, post.id),
+            eq(postReactions.userId, coachId),
+          ),
+        );
+      expect(reactionAfter.length).toBe(0);
+
+      await db.delete(notifications).where(eq(notifications.id, notif!.id));
+    });
+
+    it("end-to-end: real POST /users/:id/follow creates a follow notification with actorUserId, and Remove undoes the follow", async () => {
+      // Same shape as the like round-trip, for follows. Confirms the
+      // follow endpoint writes the notification row with actorUserId
+      // set so the parent's Remove can revoke the (follower → child)
+      // edge end-to-end.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+
+      // Make sure no stale follow edge exists from a prior run so the
+      // real endpoint actually inserts one (and creates the bell row).
+      await db
+        .delete(userFollowers)
+        .where(
+          and(
+            eq(userFollowers.followerUserId, coachId),
+            eq(userFollowers.followingUserId, samiraId),
+          ),
+        );
+
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const followRes = await coach.post(`/api/v1/users/${samiraId}/follow`);
+      expect(followRes.status).toBe(201);
+
+      const [notif] = await db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, samiraId),
+            eq(notifications.actorUserId, coachId),
+            eq(notifications.kind, "follow"),
+          ),
+        )
+        .orderBy(desc(notifications.createdAt))
+        .limit(1);
+      expect(notif).toBeDefined();
+      expect(notif!.actorUserId).toBe(coachId);
+      expect(/follow/i.test(notif!.message)).toBe(true);
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `notification:${notif!.id}`,
+          decision: "removed",
+        });
+      expect(decideRes.status).toBe(200);
+
+      const followAfter = await db
+        .select()
+        .from(userFollowers)
+        .where(
+          and(
+            eq(userFollowers.followerUserId, coachId),
+            eq(userFollowers.followingUserId, samiraId),
+          ),
+        );
+      expect(followAfter.length).toBe(0);
+
+      await db.delete(notifications).where(eq(notifications.id, notif!.id));
     });
 
     it("approve-all stamps every visible item and zeroes the unread count", async () => {

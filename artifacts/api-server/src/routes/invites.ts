@@ -61,6 +61,7 @@ router.post(
         kind: "roster_invite",
         message: `You've been invited to join ${team.name}. Accept your roster spot to make it active.`,
         link: `/u/${existing.id}`,
+        actorUserId: req.sessionUser!.id,
       });
       // Return as an invite-shaped record by also storing it
       const [invite] = await db

@@ -340,6 +340,37 @@ function statsFor(
   );
 }
 
+// Resolve the owner (author / uploader) of a post given its parsed
+// (kind, id). Used by the like-notification path to address the bell
+// row to the correct user. Returns null when the post can't be
+// located — callers treat that as "no notification".
+async function loadPostOwnerId(
+  parsed: { kind: "article" | "highlight" | "org_post"; id: string },
+): Promise<string | null> {
+  if (parsed.kind === "article") {
+    const [a] = await db
+      .select({ id: articles.authorId })
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    return a?.id ?? null;
+  }
+  if (parsed.kind === "highlight") {
+    const [h] = await db
+      .select({ id: highlights.uploaderId })
+      .from(highlights)
+      .where(eq(highlights.id, parsed.id))
+      .limit(1);
+    return h?.id ?? null;
+  }
+  const [o] = await db
+    .select({ id: orgPosts.authorId })
+    .from(orgPosts)
+    .where(eq(orgPosts.id, parsed.id))
+    .limit(1);
+  return o?.id ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
 // ---------------------------------------------------------------------------
@@ -457,6 +488,11 @@ async function notifyNewlyTaggedInRecap(args: {
   userIds: string[];
   articleId: string;
   articleTitle: string | null;
+  // Tagger — typically the article author or the coach who published
+  // the recap. Stamped on each notification row so the family
+  // dashboard's Remove action knows which actor to attribute the tag
+  // to (parity with like/follow notifications).
+  actorUserId: string | null;
 }): Promise<void> {
   if (args.userIds.length === 0) return;
   const link = `/posts/${args.articleId}`;
@@ -482,6 +518,7 @@ async function notifyNewlyTaggedInRecap(args: {
       kind: "post_tag",
       message: `You were tagged in "${title}"`,
       link,
+      actorUserId: args.actorUserId,
     })),
   );
 }
@@ -2022,10 +2059,25 @@ router.post(
       .where(eq(users.id, req.params.userId))
       .limit(1);
     if (!target) return notFound(res);
-    await db
+    const inserted = await db
       .insert(userFollowers)
       .values({ followingUserId: req.params.userId, followerUserId: me.id })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ followerUserId: userFollowers.followerUserId });
+    // Bell-notify the followed user. Stamp `actorUserId` with the
+    // follower so the family dashboard's Remove action can revoke
+    // exactly this (follower → child) edge. Only insert when the
+    // follow was actually new — re-following someone who already
+    // follows them shouldn't re-ring the bell.
+    if (inserted.length > 0) {
+      await db.insert(notifications).values({
+        userId: req.params.userId,
+        kind: "follow",
+        message: `${displayName(me)} started following you`,
+        link: `/users/${me.id}`,
+        actorUserId: me.id,
+      });
+    }
     res.status(201).json({
       followerId: me.id,
       followingUserId: req.params.userId,
@@ -2555,6 +2607,7 @@ router.post(
         kind: "roster_invite",
         message: `${displayName(me)} added you to ${t.name}. Tap to accept or decline.`,
         link: `/teams/${teamId}`,
+        actorUserId: me.id,
       });
       // Fan out to the linked guardian, if any. A parent managing an
       // under-13 athlete needs to see the invite in their own bell and
@@ -2569,6 +2622,7 @@ router.post(
           kind: "roster_invite_for_child",
           message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
           link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
+          actorUserId: me.id,
         });
       }
     }
@@ -2740,6 +2794,7 @@ router.post(
           kind: "roster_invite",
           message: `${displayName(me)} invited you to ${t.name}. Tap to accept or decline.`,
           link: `/teams/${teamId}`,
+          actorUserId: me.id,
         });
         if (existingUser.parentId) {
           const childFirstName =
@@ -2751,6 +2806,7 @@ router.post(
             kind: "roster_invite_for_child",
             message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
             link: `/family?childId=${existingUser.id}&entryId=${entry.id}&teamId=${teamId}`,
+            actorUserId: me.id,
           });
         }
       }
@@ -4319,7 +4375,7 @@ router.post(
     if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
-    await db
+    const inserted = await db
       .insert(postReactions)
       .values({
         postKind: parsed.kind,
@@ -4327,7 +4383,26 @@ router.post(
         userId: me.id,
         reactionType: "like",
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ userId: postReactions.userId });
+    // Bell-notify the post owner exactly once per fresh like. We
+    // look up the owner per post kind. The notification carries
+    // `actorUserId` so the family dashboard's Remove can revoke
+    // this specific like row, and a `/posts/<postId>` link so the
+    // Remove handler can locate the post unambiguously. Self-likes
+    // and re-likes (no insert happened) skip the bell.
+    if (inserted.length > 0) {
+      const ownerId = await loadPostOwnerId(parsed);
+      if (ownerId && ownerId !== me.id) {
+        await db.insert(notifications).values({
+          userId: ownerId,
+          kind: "like",
+          message: `${displayName(me)} liked your post`,
+          link: `/posts/${req.params.postId}`,
+          actorUserId: me.id,
+        });
+      }
+    }
     res.status(204).end();
   }),
 );
@@ -4655,6 +4730,7 @@ router.patch(
           userIds: inserted,
           articleId: updated.id,
           articleTitle: updated.title,
+          actorUserId: updated.authorId ?? me.id,
         });
       } else if (wasRecap && !isRecap) {
         // Coach turned tagging OFF for a published recap. Remove only
@@ -4838,6 +4914,7 @@ router.post(
       kind: "mention",
       message: `${me.firstName} ${me.lastName} added you as a co-author on "${a.title ?? "Untitled"}"`,
       link: `/posts/${a.id}`,
+      actorUserId: me.id,
     });
     res.status(201).json({ ok: true });
   }),
