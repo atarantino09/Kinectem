@@ -1201,6 +1201,63 @@ describe("parent inbox: per-child unified notifications", () => {
       expect(afterIds).not.toContain(tag.id);
     });
 
+    it("remove on a pending highlight tag declines it AND drops the row from the feed", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Remove highlight tag clip",
+          videoUrl: "https://example.com/clip.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const itemKey = `tag:${tag.id}`;
+      // Sanity: the pending highlight tag surfaces in the family inbox.
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const beforeKeys = (before.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(beforeKeys).toContain(itemKey);
+
+      const res = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(res.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(tagAfter?.status).toBe("declined");
+
+      const after = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const afterKeys = (after.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(afterKeys).not.toContain(itemKey);
+    });
+
     it("approve does NOT revive a tag that was already declined", async () => {
       const samiraId = await findUserId("samira@kinectem.demo");
       const coachId = await findUserId("coach@kinectem.demo");

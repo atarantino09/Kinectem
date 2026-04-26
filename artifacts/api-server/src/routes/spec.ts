@@ -3970,10 +3970,26 @@ async function applyRemoveAction(
 ): Promise<void> {
   const refId = item.itemKey.split(":").slice(1).join(":");
   if (item.kind === "tag") {
+    // The tagId may belong to either article_tags OR highlight_tags
+    // (both flow through the family inbox under the same `tag:` key),
+    // so mirror the dispatch used by `applyApproveTagAction`. The
+    // highlight-tag flip is intentionally scoped to rows currently
+    // `pending` so that an already-`approved` highlight tag isn't
+    // silently revoked from a stale inbox row, matching the
+    // conservative shape of the approve helper.
     await db
       .update(articleTags)
       .set({ status: "declined" })
       .where(eq(articleTags.id, refId));
+    await db
+      .update(highlightTags)
+      .set({ status: "declined", updatedAt: new Date() })
+      .where(
+        and(
+          eq(highlightTags.id, refId),
+          eq(highlightTags.status, "pending"),
+        ),
+      );
     return;
   }
   if (item.kind === "comment") {
