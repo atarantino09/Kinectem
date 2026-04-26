@@ -62,6 +62,13 @@ export default function NewPostPage() {
   const params = new URLSearchParams(search);
   const initialType = params.get("type") === "short" ? "short" : "long";
   const initialDraftId = params.get("draftId");
+  // editId is the same shape as draftId (a post id that already
+  // exists), but it points at an already-PUBLISHED post and the
+  // composer must not re-call /publish on submit. This is the
+  // "Edit a published recap" path — used today mainly so a coach
+  // can flip the "Tag every rostered player" checkbox after the
+  // fact, but it also supports edits to title/body/media/date.
+  const initialEditId = params.get("editId");
   const initialTeamId = params.get("teamId");
   const { toast } = useToast();
 
@@ -81,6 +88,8 @@ export default function NewPostPage() {
   // null` and skips the fan-out.
   const [tagRoster, setTagRoster] = useState<boolean>(true);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
+  const editId = initialEditId;
+  const isEditingPublished = !!editId;
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -94,30 +103,42 @@ export default function NewPostPage() {
     qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
   const lockedToTeam = !!initialTeamId;
 
-  // Load existing draft
+  // Load existing draft OR existing published post (when editing).
+  // Both paths read the same /posts/:id payload — the only divergence
+  // is in the submit handler below, which skips /publish for editId.
   useEffect(() => {
-    if (!initialDraftId) return;
+    const loadId = initialDraftId ?? initialEditId;
+    if (!loadId) return;
     customFetch<
       DraftPayload & { videoUrl?: string | null; photoUrls?: string[] | null }
-    >(`/posts/${initialDraftId}`, { method: "GET" })
+    >(`/api/v1/posts/${loadId}`, { method: "GET" })
       .then((d) => {
         setTitle(d.title ?? "");
         setBody(d.body ?? "");
         setVideoUrl(d.videoUrl ?? "");
         setPhotos(Array.isArray(d.photoUrls) ? d.photoUrls : []);
         // Pre-fill the date input. Trim ISO datetime down to
-        // YYYY-MM-DD; if the draft has no gameDate, fall back to
-        // today so the next publish still tags the roster (the box
-        // below defaults to checked for date-less drafts too).
+        // YYYY-MM-DD; if the post has no gameDate, fall back to
+        // today so the date input has something visible. The
+        // checkbox below decides whether the date is actually sent
+        // (and the auto-tag fan-out fires).
         const hasDate =
           typeof d.gameDate === "string" && d.gameDate.length >= 10;
         setGameDate(hasDate ? d.gameDate!.slice(0, 10) : todayLocalIso());
+        // Reflect the post's actual tagging state. A published recap
+        // with no game date should leave the checkbox UNchecked so
+        // the coach has to explicitly opt back in (otherwise auto-
+        // saving / re-submitting would silently fan out tags).
+        setTagRoster(hasDate);
         setPostType("long");
       })
       .catch(() => {
-        toast({ title: "Couldn't load draft", variant: "destructive" });
+        toast({
+          title: initialEditId ? "Couldn't load post" : "Couldn't load draft",
+          variant: "destructive",
+        });
       });
-  }, [initialDraftId, toast]);
+  }, [initialDraftId, initialEditId, toast]);
 
   // Build the ISO datetime sent to the API. Noon UTC keeps the
   // calendar date stable across timezones. Returning null when the
@@ -130,15 +151,18 @@ export default function NewPostPage() {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   };
 
-  // Auto-save (debounced) when we already have a draft id
+  // Auto-save (debounced) when we already have a draft id. Skip
+  // auto-save entirely when editing an already-published post —
+  // those changes only land when the coach hits Save explicitly,
+  // so a stray keystroke doesn't silently mutate a live post.
   const debouncedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!draftId) return;
+    if (!draftId || isEditingPublished) return;
     if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     debouncedRef.current = window.setTimeout(async () => {
       try {
         setSaving(true);
-        await customFetch(`/posts/${draftId}`, {
+        await customFetch(`/api/v1/posts/${draftId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -160,7 +184,7 @@ export default function NewPostPage() {
       if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, body, videoUrl, photos, gameDate, tagRoster, draftId]);
+  }, [title, body, videoUrl, photos, gameDate, tagRoster, draftId, isEditingPublished]);
 
   const isShort = postType === "short";
   const heading = isShort ? "New Highlight" : "New Game Recap";
@@ -192,8 +216,13 @@ export default function NewPostPage() {
       return;
     }
     try {
-      if (draftId) {
-        await customFetch(`/posts/${draftId}`, {
+      if (isEditingPublished && editId) {
+        // Editing an already-published recap: PATCH only — do NOT
+        // re-call /publish. The PATCH handler reacts to a gameDate
+        // transition (null <-> non-null) by running or unwinding
+        // the auto-tag fan-out, which is the whole reason this
+        // path exists.
+        await customFetch(`/api/v1/posts/${editId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -204,7 +233,22 @@ export default function NewPostPage() {
             gameDate: gameDateForApi(),
           }),
         });
-        await customFetch(`/posts/${draftId}/publish`, { method: "POST" });
+        invalidateFeed();
+        toast({ title: "Saved" });
+        setLocation(`/posts/${editId}`);
+      } else if (draftId) {
+        await customFetch(`/api/v1/posts/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || "Untitled",
+            body,
+            videoUrl: videoUrl || null,
+            photoUrls: photos,
+            gameDate: gameDateForApi(),
+          }),
+        });
+        await customFetch(`/api/v1/posts/${draftId}/publish`, { method: "POST" });
         invalidateFeed();
         toast({ title: "Published!" });
         setLocation(initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`);
@@ -227,7 +271,7 @@ export default function NewPostPage() {
     try {
       setSaving(true);
       if (draftId) {
-        await customFetch(`/posts/${draftId}`, {
+        await customFetch(`/api/v1/posts/${draftId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -269,10 +313,14 @@ export default function NewPostPage() {
           </Button>
           <div className="flex items-center gap-2 text-sm font-bold">
             <Icon className="w-4 h-4" />
-            {draftId ? "Editing Draft" : heading}
+            {isEditingPublished
+              ? "Editing Recap"
+              : draftId
+                ? "Editing Draft"
+                : heading}
           </div>
           <div className="flex items-center gap-2">
-            {!isShort && (
+            {!isShort && !isEditingPublished && (
               <Button
                 type="button"
                 variant="outline"
@@ -295,9 +343,11 @@ export default function NewPostPage() {
             >
               {createPost.isPending
                 ? "Posting…"
-                : draftId
-                  ? "Publish"
-                  : "Post"}
+                : isEditingPublished
+                  ? "Save"
+                  : draftId
+                    ? "Publish"
+                    : "Post"}
             </Button>
           </div>
         </div>
@@ -468,7 +518,7 @@ export default function NewPostPage() {
               )}
 
               <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
-                {!isShort && (
+                {!isShort && !isEditingPublished && (
                   <Button
                     type="button"
                     variant="outline"
@@ -489,17 +539,19 @@ export default function NewPostPage() {
                 >
                   {createPost.isPending
                     ? "Posting…"
-                    : draftId
-                      ? "Publish"
-                      : "Post"}
+                    : isEditingPublished
+                      ? "Save"
+                      : draftId
+                        ? "Publish"
+                        : "Post"}
                 </Button>
               </div>
             </form>
           </CardContent>
         </Card>
 
-        {draftId && (
-          <CoAuthorsSection postId={draftId} myId={me?.id ?? ""} />
+        {(draftId || editId) && (
+          <CoAuthorsSection postId={(draftId ?? editId)!} myId={me?.id ?? ""} />
         )}
       </main>
     </div>
@@ -517,7 +569,7 @@ function CoAuthorsSection({ postId, myId }: { postId: string; myId: string }) {
   >([]);
 
   const refresh = () =>
-    customFetch<{ data: typeof coAuthors }>(`/posts/${postId}/co-authors`, {
+    customFetch<{ data: typeof coAuthors }>(`/api/v1/posts/${postId}/co-authors`, {
       method: "GET",
     }).then((res) => setCoAuthors(res.data ?? []));
 
@@ -544,7 +596,7 @@ function CoAuthorsSection({ postId, myId }: { postId: string; myId: string }) {
 
   const add = async (userId: string) => {
     try {
-      await customFetch(`/posts/${postId}/co-authors`, {
+      await customFetch(`/api/v1/posts/${postId}/co-authors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
@@ -560,7 +612,7 @@ function CoAuthorsSection({ postId, myId }: { postId: string; myId: string }) {
 
   const remove = async (userId: string) => {
     try {
-      await customFetch(`/posts/${postId}/co-authors/${userId}`, {
+      await customFetch(`/api/v1/posts/${postId}/co-authors/${userId}`, {
         method: "DELETE",
       });
       await refresh();

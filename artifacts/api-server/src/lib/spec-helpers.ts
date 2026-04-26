@@ -377,6 +377,9 @@ interface PostExtras {
   hasReacted?: boolean;
   commentCount?: number;
   recentReactorName?: string | null;
+  // Set by GET /posts/:postId only — list endpoints leave this off
+  // since the Edit affordance only matters on the post detail page.
+  canEdit?: boolean;
 }
 
 export function articleToPost(a: ArticleRow, extras: PostExtras) {
@@ -536,6 +539,10 @@ function basePost(p: {
     hasReacted: p.extras.hasReacted ?? false,
     commentCount: p.extras.commentCount ?? 0,
     recentReactorName: p.extras.recentReactorName ?? null,
+    // Default false; GET /posts/:postId computes this per-viewer.
+    // List endpoints omit it (always false) — the Edit button is
+    // only rendered on the detail page.
+    canEdit: p.extras.canEdit ?? false,
   };
 }
 

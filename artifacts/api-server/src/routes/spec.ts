@@ -354,11 +354,17 @@ async function applyArticleTagFanout(args: {
   explicitUserIds: string[];
   gameDate: Date | null;
 }): Promise<void> {
-  const tagMap = new Map<string, "approved" | "pending">();
-  // Explicit tags from the request always start as approved; pending
-  // wins below if the same user is also consent-required.
+  // Track status AND source per user. Source defaults to "auto" for
+  // fan-out roster picks; explicit `taggedUserIds` override to
+  // "manual" so a later "untag the roster" sweep (PATCH gameDate ->
+  // null on a published article) leaves them alone.
+  type Entry = { status: "approved" | "pending"; source: "manual" | "auto" };
+  const tagMap = new Map<string, Entry>();
+  // Explicit tags from the request always start as approved + manual;
+  // pending status may still win below if the same user is also
+  // consent-required, but source stays "manual".
   for (const uid of args.explicitUserIds) {
-    tagMap.set(uid, "approved");
+    tagMap.set(uid, { status: "approved", source: "manual" });
   }
   if (args.gameDate) {
     const players = await db
@@ -393,12 +399,14 @@ async function applyArticleTagFanout(args: {
         ? !!parentConsent.get(p.parentId)
         : false;
       const requires = !!p.requireTagConsent || parentRequires;
-      const status: "approved" | "pending" = requires ? "pending" : "approved";
-      // Pending wins over approved (safer for consent-required users)
-      if (tagMap.get(p.userId) === "pending" || status === "pending") {
-        tagMap.set(p.userId, "pending");
-      } else if (!tagMap.has(p.userId)) {
-        tagMap.set(p.userId, "approved");
+      const rosterStatus: "approved" | "pending" = requires ? "pending" : "approved";
+      const existing = tagMap.get(p.userId);
+      if (existing) {
+        // Already explicit (manual). Keep source = manual but let
+        // pending status override an approved one.
+        if (rosterStatus === "pending") existing.status = "pending";
+      } else {
+        tagMap.set(p.userId, { status: rosterStatus, source: "auto" });
       }
     }
   }
@@ -417,11 +425,12 @@ async function applyArticleTagFanout(args: {
   await db
     .insert(articleTags)
     .values(
-      Array.from(tagMap.entries()).map(([userId, tagStatus]) => ({
+      Array.from(tagMap.entries()).map(([userId, entry]) => ({
         articleId: args.articleId,
         userId,
         taggerUserId: args.taggerUserId,
-        status: tagStatus,
+        status: entry.status,
+        source: entry.source,
       })),
     )
     .onConflictDoNothing();
@@ -3769,11 +3778,30 @@ router.get(
         .limit(1);
       if (!row) return notFound(res);
       if (row.a.hiddenAt && !isAdmin) return notFound(res);
-      if (row.a.status !== "published") {
-        const isAuthor = !!me && row.a.authorId === me.id;
-        const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
-        if (!isAuthor && !isOrgAdmin) return notFound(res);
+      const isAuthor = !!me && row.a.authorId === me.id;
+      const isOrgAdmin =
+        !!me && (await canManageOrganization(me.id, row.org.id));
+      if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
+        return notFound(res);
       }
+      // Co-authors get the same edit affordance as the author. Skip
+      // the lookup if we already know the viewer can edit (author/admin)
+      // or if they're not logged in.
+      let isCoAuthor = false;
+      if (me && !isAuthor) {
+        const [coRow] = await db
+          .select({ id: articleAuthors.userId })
+          .from(articleAuthors)
+          .where(
+            and(
+              eq(articleAuthors.articleId, row.a.id),
+              eq(articleAuthors.userId, me.id),
+            ),
+          )
+          .limit(1);
+        isCoAuthor = !!coRow;
+      }
+      const canEdit = isAuthor || isCoAuthor || isOrgAdmin;
       const stats = await loadPostStats(me?.id ?? null, [
         { kind: "article", refId: row.a.id },
       ]);
@@ -3782,6 +3810,7 @@ router.get(
           team: row.team,
           org: row.org,
           author: row.author,
+          canEdit,
           ...statsFor(stats, "article", row.a.id),
         }),
       );
@@ -4159,6 +4188,11 @@ router.patch(
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!a) return notFound(res);
+    const [team] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
+    if (!team) return notFound(res);
+    // Author + co-authors can always edit. Org admins of the team's
+    // org can also edit (so they can fix a coach's recap, including
+    // toggling the auto-tag fan-out on/off after publish).
     const isAuthor = a.authorId === me.id;
     const [coAuthor] = isAuthor
       ? [null]
@@ -4172,7 +4206,11 @@ router.patch(
             ),
           )
           .limit(1);
-    if (!isAuthor && !coAuthor)
+    const isOrgAdmin =
+      isAuthor || coAuthor
+        ? false
+        : await canManageOrganization(me.id, team.organizationId);
+    if (!isAuthor && !coAuthor && !isOrgAdmin)
       return apiError(res, 403, "Not an author");
     const body = req.body ?? {};
     const updates: Record<string, unknown> = {};
@@ -4188,14 +4226,23 @@ router.patch(
       updates["photoUrls"] = arr.length > 0 ? arr : null;
       if (!("coverImageUrl" in updates)) updates["coverImageUrl"] = arr[0] ?? null;
     }
-    // gameDate: presence (or absence) marks the article as a recap. We
-    // don't run the auto-tag fan-out here — it fires at publish time.
+    // gameDate: presence (or absence) marks the article as a recap.
+    // For drafts we keep the historical behavior — the fan-out fires
+    // at publish, never on PATCH. For already-published articles we
+    // need to react to the transition right here so a coach can flip
+    // the "Tag every rostered player" checkbox on the Edit screen and
+    // see it take effect immediately.
+    let nextGameDate: Date | null | undefined; // undefined = unchanged
     if ("gameDate" in body) {
       if (body.gameDate === null || body.gameDate === "") {
+        nextGameDate = null;
         updates["gameDate"] = null;
       } else if (typeof body.gameDate === "string") {
-        const parsed = new Date(body.gameDate);
-        if (!Number.isNaN(parsed.getTime())) updates["gameDate"] = parsed;
+        const parsedDate = new Date(body.gameDate);
+        if (!Number.isNaN(parsedDate.getTime())) {
+          nextGameDate = parsedDate;
+          updates["gameDate"] = parsedDate;
+        }
       }
     }
     if (Object.keys(updates).length === 0)
@@ -4205,15 +4252,54 @@ router.patch(
       .set(updates)
       .where(eq(articles.id, a.id))
       .returning();
-    const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
-    const [org] = team
-      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
-      : [null];
+    // Auto-tag fan-out maintenance for already-published recaps.
+    // Drafts skip this — the publish handler runs the fan-out then.
+    if (a.status === "published" && nextGameDate !== undefined) {
+      const wasRecap = !!a.gameDate;
+      const isRecap = !!nextGameDate;
+      if (!wasRecap && isRecap) {
+        // Coach turned tagging ON for a published recap. Insert any
+        // missing roster tags as `source = "auto"`. Existing rows
+        // (manual or auto, any status) are preserved untouched.
+        await applyArticleTagFanout({
+          articleId: updated.id,
+          teamId: updated.teamId,
+          taggerUserId: updated.authorId ?? me.id,
+          explicitUserIds: [],
+          gameDate: nextGameDate,
+        });
+      } else if (wasRecap && !isRecap) {
+        // Coach turned tagging OFF for a published recap. Remove only
+        // the rows the fan-out created (`source = "auto"`). Manual
+        // tags — explicit @-mentions, or rows somebody approved/declined
+        // through the consent flow — are preserved.
+        await db
+          .delete(articleTags)
+          .where(
+            and(
+              eq(articleTags.articleId, updated.id),
+              eq(articleTags.source, "auto"),
+            ),
+          );
+      }
+    }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, team.organizationId))
+      .limit(1);
     const [author] = updated.authorId
       ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
       : [null];
-    if (!team || !org) return notFound(res);
-    res.json(articleToPost(updated, { team, org, author }));
+    if (!org) return notFound(res);
+    res.json(
+      articleToPost(updated, {
+        team,
+        org,
+        author,
+        canEdit: true,
+      }),
+    );
   }),
 );
 

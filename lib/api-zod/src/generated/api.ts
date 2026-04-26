@@ -1298,6 +1298,12 @@ export const GetPostResponse = zod.object({
     .describe(
       'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
     ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+    ),
   tagStatus: zod
     .enum(["approved", "pending"])
     .nullish()
@@ -1335,7 +1341,7 @@ export const UpdatePostBody = zod.object({
     .date()
     .nullish()
     .describe(
-      "For long-form posts. Pass an ISO datetime to mark the\narticle as a game recap (or update the recap's date);\npass `null` to clear it. When the article is later\npublished with `gameDate` set, every accepted player on\nthe team's roster is auto-tagged (idempotent — re-runs\nnever create duplicate tags).\n",
+      "For long-form posts. Pass an ISO datetime to mark the\narticle as a game recap (or update the recap's date);\npass `null` to clear it.\n\nDrafts: the auto-tag fan-out fires at publish time, not\non PATCH. Already-published recaps react to the\ntransition immediately — adding a `gameDate` tags every\nrostered player (idempotent: existing tags are\npreserved); clearing a `gameDate` removes only the\nroster tags the fan-out itself created. Manual tags\n(explicit @-mentions, or rows somebody approved\/declined\nthrough the consent flow) are always left alone.\n",
     ),
 });
 
@@ -1395,6 +1401,12 @@ export const UpdatePostResponse = zod.object({
     .nullish()
     .describe(
       'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+    ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
     ),
   tagStatus: zod
     .enum(["approved", "pending"])
@@ -1525,6 +1537,12 @@ export const ListOrgPostsResponse = zod.object({
         .nullish()
         .describe(
           'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+        ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -1865,6 +1883,12 @@ export const ListUserPostsResponse = zod.object({
         .nullish()
         .describe(
           'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+        ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -3936,6 +3960,12 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
         ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+        ),
       tagStatus: zod
         .enum(["approved", "pending"])
         .nullish()
@@ -4362,6 +4392,12 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
               ),
+            canEdit: zod
+              .boolean()
+              .optional()
+              .describe(
+                "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+              ),
             tagStatus: zod
               .enum(["approved", "pending"])
               .nullish()
@@ -4468,6 +4504,12 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
         ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+        ),
       tagStatus: zod
         .enum(["approved", "pending"])
         .nullish()
@@ -4563,6 +4605,12 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .nullish()
         .describe(
           'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+        ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])

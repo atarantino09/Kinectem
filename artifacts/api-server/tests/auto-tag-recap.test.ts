@@ -4,6 +4,7 @@ import {
   db,
   articles,
   articleTags,
+  organizationAdmins,
   organizations,
   rosterEntries,
   teams,
@@ -482,6 +483,331 @@ describe("auto-tag rostered players on game-recap articles", () => {
     }
     // No duplicates: tag count == distinct user count.
     expect(allTags.length).toBe(taggedSet.size);
+  });
+
+  // ---------- Edit-published-recap fan-out maintenance ----------
+  // These tests cover the path where a coach publishes a recap and
+  // then later edits it to flip the "tag every rostered player"
+  // checkbox. The PATCH handler must run the fan-out when gameDate
+  // goes null -> non-null and must remove ONLY auto rows when it
+  // goes non-null -> null (manual @-mention tags survive).
+
+  it("PATCH null->date on a published recap fans out missing roster tags as auto", async () => {
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // Publish a long-form post WITHOUT a gameDate — no fan-out yet.
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Off-day thoughts",
+      body: "Not a recap (yet).",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    // No tags yet — confirm the baseline before the edit.
+    let tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows).toHaveLength(0);
+
+    // Coach goes back to the post and adds a gameDate. The article
+    // is already published, so the PATCH handler — not the publish
+    // handler — must run the fan-out.
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-10-17T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows.length).toBeGreaterThan(0);
+    // Every fan-out row must be marked source = "auto".
+    for (const t of tagRows) {
+      expect(t.source).toBe("auto");
+    }
+    // Sanity: every accepted player on the team is now tagged.
+    const accepted = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    const taggedSet = new Set(tagRows.map((t) => t.userId));
+    for (const r of accepted) {
+      expect(taggedSet.has(r.userId)).toBe(true);
+    }
+  });
+
+  it("PATCH date->null on a published recap removes ONLY auto rows; manual @-mentions survive", async () => {
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // Publish a recap with gameDate so the fan-out runs and creates
+    // auto rows for the whole roster.
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Westfield 24, Cranford 21",
+      body: "OT thriller.",
+      gameDate: new Date("2025-10-24T19:00:00Z").toISOString(),
+      // Jordan is also passed explicitly — the create handler marks
+      // explicit ids as source = "manual" (manual wins on collision).
+      taggedUserIds: [jordanId],
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    // Confirm Jordan's row is manual and at least one other row is auto.
+    const before = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const jordanBefore = before.find((t) => t.userId === jordanId);
+    expect(jordanBefore?.source).toBe("manual");
+    expect(before.some((t) => t.source === "auto")).toBe(true);
+
+    // Coach unchecks the "tag roster" box: PATCH sets gameDate=null.
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: null,
+    });
+    expect(patched.status).toBe(200);
+
+    const after = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    // Every remaining row must be manual.
+    for (const t of after) {
+      expect(t.source).toBe("manual");
+    }
+    // Jordan (manual) survives.
+    expect(after.some((t) => t.userId === jordanId)).toBe(true);
+    // Some auto row that existed before must now be gone.
+    const autoBefore = before.filter((t) => t.source === "auto");
+    expect(autoBefore.length).toBeGreaterThan(0);
+    for (const t of autoBefore) {
+      expect(after.some((r) => r.userId === t.userId)).toBe(false);
+    }
+    // Article's gameDate is cleared on disk.
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    expect(a.gameDate).toBeNull();
+    expect(teamId).toBeTruthy();
+  });
+
+  it("PATCH null->date->null round-trip leaves only the original manual tags", async () => {
+    // Belt-and-suspenders: a coach who toggles tagging on then back
+    // off should land in the same state as if they had never toggled
+    // it on. No leftover auto rows, manual rows untouched.
+    const { orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const jordanId = await findUserId("jordan@kinectem.demo");
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Toggle test",
+      body: "Flip the checkbox twice.",
+      // No gameDate, but one manual @-mention. The create handler
+      // skips the fan-out (no gameDate) and stores Jordan as manual.
+      taggedUserIds: [jordanId],
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    const initial = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(initial).toHaveLength(1);
+    expect(initial[0].userId).toBe(jordanId);
+    expect(initial[0].source).toBe("manual");
+
+    // Toggle ON: PATCH adds a gameDate, fan-out fires.
+    let patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-10-31T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+    const mid = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(mid.length).toBeGreaterThan(1);
+    // Jordan stays manual even though the fan-out ran.
+    expect(mid.find((t) => t.userId === jordanId)?.source).toBe("manual");
+
+    // Toggle OFF: PATCH clears gameDate, only auto rows are deleted.
+    patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: null,
+    });
+    expect(patched.status).toBe(200);
+    const final = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    // Back to exactly Jordan's manual row.
+    expect(final).toHaveLength(1);
+    expect(final[0].userId).toBe(jordanId);
+    expect(final[0].source).toBe("manual");
+  });
+
+  it("PATCH gameDate change (non-null -> non-null) does NOT re-run the fan-out", async () => {
+    // Only the on/off transition matters. Moving an existing recap
+    // from one date to another shouldn't churn the tag table — the
+    // roster is the same, the existing rows are still valid.
+    const { orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Wrong date initially",
+      body: "Will fix the date.",
+      gameDate: new Date("2025-11-07T19:00:00Z").toISOString(),
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    const before = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(before.length).toBeGreaterThan(0);
+    const beforeKey = before
+      .map((t) => `${t.userId}:${t.status}:${t.source}`)
+      .sort();
+
+    // Move the date by a week. Fan-out should be skipped — the
+    // before/after row sets must be identical.
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-11-14T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    const after = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const afterKey = after
+      .map((t) => `${t.userId}:${t.status}:${t.source}`)
+      .sort();
+    expect(afterKey).toEqual(beforeKey);
+  });
+
+  it("org admins can PATCH a published recap to toggle tagging", async () => {
+    // The Edit button on PostPage is also visible to org admins, not
+    // just the author. The PATCH endpoint must accept their writes.
+    const { orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // Coach publishes a regular long-form post (no gameDate, no tags).
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Pre-game presser notes",
+      body: "Not a recap.",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    expect(
+      (
+        await db
+          .select()
+          .from(articleTags)
+          .where(eq(articleTags.articleId, articleId))
+      ).length,
+    ).toBe(0);
+
+    // Promote a non-author seed user to org admin so we can prove the
+    // permission check passes for them. Using Lisa (parent) keeps her
+    // distinct from the coach who authored the post.
+    const lisaId = await findUserId("lisa@kinectem.demo");
+    const existingAdmin = await db
+      .select()
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, orgId),
+          eq(organizationAdmins.userId, lisaId),
+        ),
+      )
+      .limit(1);
+    if (existingAdmin.length === 0) {
+      await db
+        .insert(organizationAdmins)
+        .values({ organizationId: orgId, userId: lisaId });
+    }
+
+    const { agent: admin } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const patched = await admin.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-11-21T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    // Org admin's PATCH ran the fan-out — same as if the coach did it.
+    const tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows.length).toBeGreaterThan(0);
+    for (const t of tagRows) {
+      expect(t.source).toBe("auto");
+    }
+  });
+
+  it("non-admin, non-author cannot PATCH a published recap", async () => {
+    // Negative path for the permission check: a regular logged-in
+    // user (not author, not co-author, not org admin) gets 403.
+    const { orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Permission probe",
+      body: "Stranger should not edit this.",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+
+    const { agent: stranger } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const denied = await stranger.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-11-28T19:00:00Z").toISOString(),
+    });
+    expect(denied.status).toBe(403);
   });
 });
 

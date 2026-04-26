@@ -13,6 +13,7 @@ export const conversationTypeEnum = pgEnum("conversation_type", ["direct", "user
 export const participantTypeEnum = pgEnum("participant_type", ["user", "organization"]);
 export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "approved", "declined", "withdrawn"]);
 export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "declined", "removed"]);
+export const tagSourceEnum = pgEnum("tag_source", ["manual", "auto"]);
 export const assetStatusEnum = pgEnum("asset_status", ["pending", "confirmed"]);
 export const reportContentTypeEnum = pgEnum("report_content_type", ["article", "highlight", "org_post", "comment"]);
 export const reportStatusEnum = pgEnum("report_status", ["open", "resolved", "dismissed"]);
@@ -240,6 +241,7 @@ export const articleTags = pgTable("article_tags", {
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   taggerUserId: uuid("tagger_user_id").references(() => users.id, { onDelete: "set null" }),
   status: tagStatusEnum("status").notNull().default("approved"),
+  source: tagSourceEnum("source").notNull().default("manual"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -2,9 +2,10 @@ import { useParams, Link } from "wouter";
 import { useGetPost } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Play, FileText } from "lucide-react";
+import { Play, FileText, Pencil } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
@@ -81,7 +82,7 @@ export default function PostPage() {
             </AvatarFallback>
           </Avatar>
         </AvatarLightbox>
-        <div>
+        <div className="flex-1 min-w-0">
           <Link href={`/users/${post.author.id}`}>
             <p className="font-bold text-sm hover:text-primary cursor-pointer">
               {post.author.displayName}
@@ -92,6 +93,19 @@ export default function PostPage() {
             {post.isEdited && " • edited"}
           </p>
         </div>
+        {post.canEdit && !isShort && (
+          <Link href={`/posts/new?editId=${encodeURIComponent(post.id)}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold rounded-full"
+              data-testid="button-edit-post"
+            >
+              <Pencil className="w-3.5 h-3.5 mr-1.5" />
+              Edit
+            </Button>
+          </Link>
+        )}
       </div>
 
       {images.length > 0 && (

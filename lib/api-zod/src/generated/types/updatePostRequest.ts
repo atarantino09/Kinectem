@@ -87,10 +87,16 @@ export interface UpdatePostRequest {
   /**
    * For long-form posts. Pass an ISO datetime to mark the
 article as a game recap (or update the recap's date);
-pass `null` to clear it. When the article is later
-published with `gameDate` set, every accepted player on
-the team's roster is auto-tagged (idempotent — re-runs
-never create duplicate tags).
+pass `null` to clear it.
+
+Drafts: the auto-tag fan-out fires at publish time, not
+on PATCH. Already-published recaps react to the
+transition immediately — adding a `gameDate` tags every
+rostered player (idempotent: existing tags are
+preserved); clearing a `gameDate` removes only the
+roster tags the fan-out itself created. Manual tags
+(explicit @-mentions, or rows somebody approved/declined
+through the consent flow) are always left alone.
 
    * @nullable
    */

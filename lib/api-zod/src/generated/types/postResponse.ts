@@ -104,6 +104,13 @@ saved draft.
    * @nullable
    */
   gameDate?: Date | null;
+  /** True when the requesting user is the author, a co-author,
+or an org admin of the team that owns the post — i.e.
+allowed to PATCH this post. Only computed on the
+`getPost` (detail) endpoint; list endpoints always return
+`false` here.
+ */
+  canEdit?: boolean;
   /**
    * Only set on `listUserPosts` results, and only when the
 article was surfaced via the user's own `article_tags` row
