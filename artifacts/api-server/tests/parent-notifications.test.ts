@@ -7,6 +7,8 @@ import {
   parentChildNotificationReads,
   articles,
   articleTags,
+  highlights,
+  highlightTags,
   postComments,
   postReactions,
   userFollowers,
@@ -1083,6 +1085,294 @@ describe("parent inbox: per-child unified notifications", () => {
 
       await db.delete(notifications).where(eq(notifications.id, notif!.id));
     });
+
+    it("approve on a pending article tag flips it to approved and drops it from the child's pending-tags list", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Approve flips pending article tag",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      // Sanity: the child sees this tag as pending before the parent acts.
+      const { agent: samira } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const before = await samira.get("/api/v1/tags/pending");
+      expect(before.status).toBe(200);
+      const beforeIds = (before.body.data as Array<{ id: string }>).map(
+        (t) => t.id,
+      );
+      expect(beforeIds).toContain(tag.id);
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey: `tag:${tag.id}`, decision: "approved" });
+      expect(decideRes.status).toBe(200);
+      expect(decideRes.body.decision).toBe("approved");
+
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(tagAfter?.status).toBe("approved");
+
+      // The child's own pending-tags list no longer surfaces this tag.
+      const after = await samira.get("/api/v1/tags/pending");
+      expect(after.status).toBe(200);
+      const afterIds = (after.body.data as Array<{ id: string }>).map(
+        (t) => t.id,
+      );
+      expect(afterIds).not.toContain(tag.id);
+    });
+
+    it("approve on a pending highlight tag flips it to approved and drops it from the child's pending-tags list", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Big play clip",
+          videoUrl: "https://example.com/clip.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      const { agent: samira } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const before = await samira.get("/api/v1/tags/pending");
+      expect(before.status).toBe(200);
+      const beforeIds = (before.body.data as Array<{ id: string }>).map(
+        (t) => t.id,
+      );
+      expect(beforeIds).toContain(tag.id);
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey: `tag:${tag.id}`, decision: "approved" });
+      expect(decideRes.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(tagAfter?.status).toBe("approved");
+
+      const after = await samira.get("/api/v1/tags/pending");
+      const afterIds = (after.body.data as Array<{ id: string }>).map(
+        (t) => t.id,
+      );
+      expect(afterIds).not.toContain(tag.id);
+    });
+
+    it("approve does NOT revive a tag that was already declined", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Approve must not revive declined",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      // Hand-insert a declined tag and a prior parent decision so the
+      // membership check passes via the `prior` lookup (the loader
+      // skips declined tags).
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "declined",
+        })
+        .returning();
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      await db.insert(parentChildNotificationReads).values({
+        parentId: lisaId,
+        childId: samiraId,
+        itemKey: `tag:${tag.id}`,
+        decision: "removed",
+        decidedAt: new Date(),
+      });
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey: `tag:${tag.id}`, decision: "approved" });
+      expect(decideRes.status).toBe(200);
+
+      // Status must remain `declined` — parent approval cannot
+      // resurrect a previously-declined tag.
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(tagAfter?.status).toBe("declined");
+    });
+
+    it("approve-all flips every pending article and highlight tag in the visible stream", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      // One pending article tag…
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Approve-all article tag",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [aTag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      // …and one pending highlight tag.
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Approve-all highlight tag",
+          videoUrl: "https://example.com/clip.mp4",
+        })
+        .returning();
+      const [hTag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      // Sanity: both tags surface in the family inbox before approve-all.
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const beforeKeys = (before.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(beforeKeys).toContain(`tag:${aTag.id}`);
+      expect(beforeKeys).toContain(`tag:${hTag.id}`);
+
+      const res = await lisa.post(
+        `/api/v1/users/me/children/${samiraId}/notifications/approve-all`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.approvedCount).toBeGreaterThanOrEqual(2);
+
+      const [aAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, aTag.id));
+      const [hAfter] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, hTag.id));
+      expect(aAfter?.status).toBe("approved");
+      expect(hAfter?.status).toBe("approved");
+    });
+
+    it("approve-all does not clobber an already-declined tag in the visible stream", async () => {
+      // A declined tag is filtered out by the loader, so it isn't part
+      // of the visible stream and approve-all must leave it as declined.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Approve-all leaves declined alone",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [declinedTag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "declined",
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa.post(
+        `/api/v1/users/me/children/${samiraId}/notifications/approve-all`,
+      );
+      expect(res.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, declinedTag.id));
+      expect(tagAfter?.status).toBe("declined");
+    });
+
 
     it("approve-all stamps every visible item and zeroes the unread count", async () => {
       const samiraId = await findUserId("samira@kinectem.demo");

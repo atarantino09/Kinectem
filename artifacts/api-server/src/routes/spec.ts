@@ -3037,6 +3037,52 @@ async function loadChildNotificationItems(
     });
   }
 
+  // 2b. Highlight-clip tags for the child (only approved/pending — same
+  //     filter as article tags). Surfaced in the family inbox so a parent
+  //     can approve/decline highlight tags on behalf of their child.
+  const highlightTagRows = await db
+    .select({
+      t: highlightTags,
+      h: highlights,
+      tagger: users,
+    })
+    .from(highlightTags)
+    .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
+    .leftJoin(users, eq(highlightTags.taggerUserId, users.id))
+    .where(
+      and(
+        eq(highlightTags.userId, childId),
+        inArray(highlightTags.status, ["approved", "pending"] as const),
+        gt(highlightTags.createdAt, since),
+      ),
+    )
+    .orderBy(desc(highlightTags.createdAt))
+    .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  for (const r of highlightTagRows) {
+    const taggerName = r.tagger ? displayName(r.tagger) : "Someone";
+    const highlightTitle = r.h.title ?? "Untitled";
+    items.push({
+      itemKey: `tag:${r.t.id}`,
+      kind: "tag",
+      title: `${taggerName} tagged ${childFirst} in "${highlightTitle}"`,
+      body:
+        r.t.status === "pending"
+          ? "Pending consent — review the tag for your child."
+          : null,
+      link: `/posts/${highlightPostId(r.h.id)}?asChild=${childId}`,
+      isRead: false,
+      decision: null,
+      createdAt: r.t.createdAt.toISOString(),
+      actor: r.tagger
+        ? {
+            id: r.tagger.id,
+            displayName: displayName(r.tagger),
+            avatarUrl: r.tagger.avatarUrl ?? null,
+          }
+        : null,
+    });
+  }
+
   // 3. Comments on articles where the child is the author OR is tagged
   //    (status approved/pending — declined tag means the child isn't
   //    publicly associated with the article and shouldn't see comments).
@@ -3646,6 +3692,13 @@ router.post(
           ],
           set: { decision: "approved", decidedAt: now },
         });
+      // Bulk approve must mirror the per-item approve flow for tag
+      // items: flip the underlying article_tags / highlight_tags row
+      // from `pending` to `approved`. Idempotent and safe to re-run.
+      if (item.kind === "tag") {
+        const refId = item.itemKey.split(":").slice(1).join(":");
+        if (refId) await applyApproveTagAction(refId);
+      }
     }
     res.json({ approvedCount: visible.length });
   }),
@@ -3729,6 +3782,17 @@ router.post(
 
     if (decision === "removed" && underlyingItem) {
       await applyRemoveAction(underlyingItem, child.id);
+    }
+    // Parent approval on a tag item must also flip the underlying tag
+    // row from `pending` to `approved`. Without this, the recap article
+    // and the child's pending-tags list keep treating the tag as still
+    // awaiting consent — even though the parent has already approved
+    // it on the child's behalf. Other item kinds (comment, message,
+    // roster, notification) intentionally do not mutate any underlying
+    // row on approve; the decision row alone is enough to drop them
+    // from the feed.
+    if (decision === "approved" && underlyingItem?.kind === "tag") {
+      await applyApproveTagAction(refId);
     }
 
     const now = new Date();
@@ -3856,6 +3920,36 @@ async function applyUnsetAction(
   // roster + notification: reversal is not reliably possible, so the
   // caller will simply clear the decision row and the item will come
   // back only if it still surfaces in the live stream.
+}
+
+// When a parent approves a tag for their child from the family inbox,
+// the underlying tag row must also flip from `pending` to `approved` so
+// the rest of the app (recap article, child's pending-tags list, etc.)
+// stops treating it as awaiting consent. The flip is intentionally
+// idempotent and conservative:
+//   * only rows currently `pending` are touched (a `declined` or already
+//     `approved` row is left alone — parent approval cannot revive a
+//     previously declined tag, and re-running on an approved row is a
+//     harmless no-op);
+//   * the tagId may belong to either article_tags OR highlight_tags
+//     (both flow through the family inbox under the same `tag:` key);
+//   * a missing underlying row is silently ignored — the parent's
+//     decision row is still recorded by the caller, so the item drops
+//     out of the feed even if the source tag was deleted in the meantime.
+async function applyApproveTagAction(tagId: string): Promise<void> {
+  const now = new Date();
+  await db
+    .update(articleTags)
+    .set({ status: "approved", updatedAt: now })
+    .where(
+      and(eq(articleTags.id, tagId), eq(articleTags.status, "pending")),
+    );
+  await db
+    .update(highlightTags)
+    .set({ status: "approved", updatedAt: now })
+    .where(
+      and(eq(highlightTags.id, tagId), eq(highlightTags.status, "pending")),
+    );
 }
 
 // Dispatch table for the "Remove" action. Each branch is intentionally
