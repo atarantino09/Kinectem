@@ -136,7 +136,7 @@ export function SuggestionsPanel({
                   href={`/users/${u.id}`}
                   avatar={
                     <Avatar className="w-9 h-9">
-                      {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                      <AvatarImage src={u.avatarUrl ?? undefined} />
                       <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-[10px]">
                         {getInitials(name)}
                       </AvatarFallback>
@@ -172,7 +172,7 @@ export function SuggestionsPanel({
                 href={`/teams/${t.id}`}
                 avatar={
                   <Avatar className="w-9 h-9">
-                    {t.avatarUrl && <AvatarImage src={t.avatarUrl} />}
+                    <AvatarImage src={t.avatarUrl ?? undefined} />
                     <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-[10px]">
                       {getInitials(t.name)}
                     </AvatarFallback>
@@ -239,7 +239,7 @@ export function SuggestionsPanel({
                 href={`/teams/${team.id}`}
                 avatar={
                   <Avatar className="w-10 h-10">
-                    {team.avatarUrl && <AvatarImage src={team.avatarUrl} />}
+                    <AvatarImage src={team.avatarUrl ?? undefined} />
                     <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-xs">
                       {getInitials(team.name)}
                     </AvatarFallback>
@@ -268,7 +268,7 @@ export function SuggestionsPanel({
                   href={`/users/${u.id}`}
                   avatar={
                     <Avatar className="w-10 h-10">
-                      {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                      <AvatarImage src={u.avatarUrl ?? undefined} />
                       <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-xs">
                         {getInitials(name)}
                       </AvatarFallback>

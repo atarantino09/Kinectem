@@ -74,7 +74,7 @@ export function FollowListDialog({ open, onOpenChange, title, variant }: Props) 
                       data-testid={`follow-item-${it.id}`}
                     >
                       <Avatar className="w-10 h-10">
-                        {it.avatarUrl && <AvatarImage src={it.avatarUrl} />}
+                        <AvatarImage src={it.avatarUrl ?? undefined} />
                         <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
                           {getInitials(it.displayName)}
                         </AvatarFallback>

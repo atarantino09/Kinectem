@@ -277,7 +277,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   data-testid="btn-user-menu"
                 >
                   <Avatar className="w-9 h-9 border border-border hover:ring-2 hover:ring-primary transition-all">
-                    {currentUser.avatarUrl && <AvatarImage src={currentUser.avatarUrl} />}
+                    <AvatarImage src={currentUser.avatarUrl ?? undefined} />
                     <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
                       {getInitials(displayName)}
                     </AvatarFallback>

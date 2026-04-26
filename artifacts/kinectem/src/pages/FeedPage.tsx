@@ -60,7 +60,7 @@ export default function FeedPage() {
             <CardContent className="p-4 -mt-8">
               <Link href={`/users/${me.id}`}>
                 <Avatar className="w-16 h-16 border-4 border-card cursor-pointer">
-                  {me.avatarUrl && <AvatarImage src={me.avatarUrl} />}
+                  <AvatarImage src={me.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-100 text-slate-800 font-bold">
                     {getInitials(displayName)}
                   </AvatarFallback>

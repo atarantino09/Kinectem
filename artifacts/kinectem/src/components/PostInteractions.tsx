@@ -111,7 +111,7 @@ export function PostInteractions({ post }: { post: PostResponse }) {
       {me && (
         <form onSubmit={onSubmitComment} className="flex gap-3">
           <Avatar className="w-9 h-9 mt-1">
-            {me.avatarUrl && <AvatarImage src={me.avatarUrl} />}
+            <AvatarImage src={me.avatarUrl ?? undefined} />
             <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
               {getInitials(`${me.firstName} ${me.lastName}`)}
             </AvatarFallback>
@@ -179,9 +179,7 @@ function CommentRow({
       <CardContent className="p-3">
         <div className="flex gap-3">
           <Avatar className="w-8 h-8">
-            {comment.author.avatarUrl && (
-              <AvatarImage src={comment.author.avatarUrl} />
-            )}
+            <AvatarImage src={comment.author.avatarUrl ?? undefined} />
             <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-[10px]">
               {getInitials(comment.author.displayName)}
             </AvatarFallback>

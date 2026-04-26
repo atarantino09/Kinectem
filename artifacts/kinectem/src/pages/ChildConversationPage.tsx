@@ -169,9 +169,7 @@ export default function ChildConversationPage() {
                     data-testid="conversation-header-participant"
                   >
                     <Avatar className="w-8 h-8 shrink-0">
-                      {participant.avatarUrl && (
-                        <AvatarImage src={participant.avatarUrl} />
-                      )}
+                      <AvatarImage src={participant.avatarUrl ?? undefined} />
                       <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
                         {getInitials(participant.displayName)}
                       </AvatarFallback>
@@ -263,9 +261,7 @@ export default function ChildConversationPage() {
                                       : ""
                                   }`}
                                 >
-                                  {m.senderAvatarUrl && (
-                                    <AvatarImage src={m.senderAvatarUrl} />
-                                  )}
+                                  <AvatarImage src={m.senderAvatarUrl ?? undefined} />
                                   <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
                                     {getInitials(m.senderDisplayName)}
                                   </AvatarFallback>

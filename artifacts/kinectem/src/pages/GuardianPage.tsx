@@ -826,7 +826,7 @@ export default function GuardianPage() {
                 >
                   <div className="flex items-center gap-3">
                     <Avatar className="w-10 h-10 border border-border shrink-0">
-                      {c.avatarUrl && <AvatarImage src={c.avatarUrl} />}
+                      <AvatarImage src={c.avatarUrl ?? undefined} />
                       <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
                         {getInitials(`${c.firstName} ${c.lastName}`)}
                       </AvatarFallback>
@@ -1283,9 +1283,7 @@ export default function GuardianPage() {
                             className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30 transition-shadow"
                           >
                             <Avatar className="w-9 h-9 border border-border shrink-0">
-                              {inv.teamLogoUrl && (
-                                <AvatarImage src={inv.teamLogoUrl} />
-                              )}
+                              <AvatarImage src={inv.teamLogoUrl ?? undefined} />
                               <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
                                 {getInitials(inv.teamName)}
                               </AvatarFallback>
@@ -1396,7 +1394,7 @@ export default function GuardianPage() {
                       className="flex items-center gap-3 p-3 rounded-lg border border-border"
                     >
                       <Avatar className="w-9 h-9 border border-border shrink-0">
-                        {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                        <AvatarImage src={u.avatarUrl ?? undefined} />
                         <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
                           {getInitials(`${u.firstName} ${u.lastName}`)}
                         </AvatarFallback>

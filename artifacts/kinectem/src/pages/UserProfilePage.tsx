@@ -139,7 +139,7 @@ export default function UserProfilePage() {
               <Avatar
                 className={`w-36 h-36 border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
               >
-                {user.avatarUrl && <AvatarImage src={user.avatarUrl} />}
+                <AvatarImage src={user.avatarUrl ?? undefined} />
                 <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-5xl">
                   {getInitials(displayName)}
                 </AvatarFallback>
@@ -271,7 +271,7 @@ export default function UserProfilePage() {
                     >
                       <CardContent className="p-4 flex items-center gap-3">
                         <Avatar className="w-10 h-10">
-                          {m.avatarUrl && <AvatarImage src={m.avatarUrl} />}
+                          <AvatarImage src={m.avatarUrl ?? undefined} />
                           <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
                             {getInitials(name)}
                           </AvatarFallback>
@@ -310,9 +310,7 @@ export default function UserProfilePage() {
                   >
                     <CardContent className="p-4 flex items-center gap-3">
                       <Avatar className="w-10 h-10">
-                        {t.teamAvatarUrl && (
-                          <AvatarImage src={t.teamAvatarUrl} />
-                        )}
+                        <AvatarImage src={t.teamAvatarUrl ?? undefined} />
                         <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
                           {getInitials(t.teamName)}
                         </AvatarFallback>

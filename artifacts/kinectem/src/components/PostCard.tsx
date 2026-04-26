@@ -109,9 +109,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               <Avatar
                 className={`w-10 h-10 rounded-lg shrink-0 ${post.context.avatarUrl ? "cursor-pointer" : ""}`}
               >
-                {post.context.avatarUrl && (
-                  <AvatarImage src={post.context.avatarUrl} />
-                )}
+                <AvatarImage src={post.context.avatarUrl ?? undefined} />
                 <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-black rounded-lg">
                   {getInitials(post.context.name ?? post.context.type)}
                 </AvatarFallback>

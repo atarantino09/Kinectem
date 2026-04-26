@@ -261,7 +261,7 @@ export default function TeamPage() {
             <Link href={`/users/${m.userId}`}>
               <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
                 <Avatar className="w-8 h-8">
-                  {m.avatarUrl && <AvatarImage src={m.avatarUrl} />}
+                  <AvatarImage src={m.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
                     {getInitials(m.displayName)}
                   </AvatarFallback>
@@ -289,7 +289,7 @@ export default function TeamPage() {
                   <Link key={p.id} href={`/users/${p.id}`}>
                     <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
                       <Avatar className="w-7 h-7">
-                        {p.avatarUrl && <AvatarImage src={p.avatarUrl} />}
+                        <AvatarImage src={p.avatarUrl ?? undefined} />
                         <AvatarFallback className="bg-blue-100 text-blue-700 text-[10px] font-bold">
                           {getInitials(p.displayName)}
                         </AvatarFallback>
@@ -321,7 +321,7 @@ export default function TeamPage() {
           <Link href={`/users/${m.userId}`}>
             <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
               <Avatar className="w-8 h-8">
-                {m.avatarUrl && <AvatarImage src={m.avatarUrl} />}
+                <AvatarImage src={m.avatarUrl ?? undefined} />
                 <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
                   {getInitials(m.displayName)}
                 </AvatarFallback>

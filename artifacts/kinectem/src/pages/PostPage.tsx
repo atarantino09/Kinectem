@@ -159,7 +159,7 @@ export default function PostPage() {
           <Avatar
             className={`w-10 h-10 ${post.author.avatarUrl ? "cursor-pointer" : ""}`}
           >
-            {post.author.avatarUrl && <AvatarImage src={post.author.avatarUrl} />}
+            <AvatarImage src={post.author.avatarUrl ?? undefined} />
             <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
               {getInitials(post.author.displayName)}
             </AvatarFallback>

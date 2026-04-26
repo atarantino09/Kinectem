@@ -65,7 +65,7 @@ export default function SearchPage() {
               <Link key={u.id} href={`/users/${u.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
                   <Avatar className="w-10 h-10">
-                    {u.avatarUrl && <AvatarImage src={u.avatarUrl} />}
+                    <AvatarImage src={u.avatarUrl ?? undefined} />
                     <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
                       {getInitials(u.displayName)}
                     </AvatarFallback>
@@ -116,7 +116,7 @@ export default function SearchPage() {
               <Link key={t.id} href={`/teams/${t.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
                   <Avatar className="w-10 h-10 rounded-lg">
-                    {t.avatarUrl && <AvatarImage src={t.avatarUrl} />}
+                    <AvatarImage src={t.avatarUrl ?? undefined} />
                     <AvatarFallback className="rounded-lg bg-slate-100 text-slate-800 font-bold text-xs">
                       {getInitials(t.name)}
                     </AvatarFallback>

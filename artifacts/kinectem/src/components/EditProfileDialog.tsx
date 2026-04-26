@@ -231,7 +231,7 @@ export function EditProfileDialog({
                 className="w-20 h-20 border-2 border-border"
                 data-testid="avatar-edit-preview"
               >
-                {avatarUrl && <AvatarImage src={avatarUrl} alt="Profile" />}
+                <AvatarImage src={avatarUrl ?? undefined} alt="Profile" />
                 <AvatarFallback className="text-lg font-bold">
                   {initials}
                 </AvatarFallback>

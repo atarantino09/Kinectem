@@ -176,9 +176,7 @@ export default function MessagesPage() {
                 <Avatar
                   className={`w-10 h-10 shrink-0 ${c.participant.avatarUrl ? "cursor-pointer" : ""}`}
                 >
-                  {c.participant.avatarUrl && (
-                    <AvatarImage src={c.participant.avatarUrl} />
-                  )}
+                  <AvatarImage src={c.participant.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
                     {getInitials(c.participant.displayName)}
                   </AvatarFallback>
@@ -279,9 +277,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 data-testid="link-conversation-header-participant"
               >
                 <Avatar className="w-7 h-7 shrink-0">
-                  {participant.avatarUrl && (
-                    <AvatarImage src={participant.avatarUrl} />
-                  )}
+                  <AvatarImage src={participant.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
                     {getInitials(participant.displayName)}
                   </AvatarFallback>
@@ -299,9 +295,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 data-testid="conversation-header-participant"
               >
                 <Avatar className="w-7 h-7 shrink-0">
-                  {participant.avatarUrl && (
-                    <AvatarImage src={participant.avatarUrl} />
-                  )}
+                  <AvatarImage src={participant.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
                     {getInitials(participant.displayName)}
                   </AvatarFallback>
@@ -384,9 +378,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                           <Avatar
                             className={`w-7 h-7 ${m.senderAvatarUrl ? "cursor-pointer hover:opacity-80" : ""}`}
                           >
-                            {m.senderAvatarUrl && (
-                              <AvatarImage src={m.senderAvatarUrl} />
-                            )}
+                            <AvatarImage src={m.senderAvatarUrl ?? undefined} />
                             <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
                               {getInitials(m.senderDisplayName)}
                             </AvatarFallback>
@@ -677,7 +669,7 @@ function NewMessageDialog({
                       data-testid={`contact-result-${c.id}`}
                     >
                       <Avatar className="w-9 h-9 shrink-0">
-                        {c.avatarUrl && <AvatarImage src={c.avatarUrl} />}
+                        <AvatarImage src={c.avatarUrl ?? undefined} />
                         <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
                           {getInitials(c.displayName)}
                         </AvatarFallback>
@@ -709,9 +701,7 @@ function NewMessageDialog({
                 data-testid="link-recipient-avatar"
               >
                 <Avatar className="w-9 h-9 shrink-0 cursor-pointer hover:opacity-80">
-                  {recipient.avatarUrl && (
-                    <AvatarImage src={recipient.avatarUrl} />
-                  )}
+                  <AvatarImage src={recipient.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
                     {getInitials(recipient.displayName)}
                   </AvatarFallback>
