@@ -35,6 +35,40 @@ export const ErrorCodes = {
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
 
+// ---------------------------------------------------------------------------
+// Avatar URL guard
+// ---------------------------------------------------------------------------
+//
+// Avatar URLs in this codebase are stored either as ordinary `http(s)://` URLs
+// or as inline `data:<mime>;base64,...` payloads (the asset upload flow stores
+// the latter). Because a user's `avatarUrl` is fanned out across many list
+// responses (feed, posts, comments, mentions, message threads, search,
+// follow lists, ...), shipping a multi-megabyte data URL on every list item
+// produces a perceptible "blank then pop" — the browser has to decode the
+// data URL each time the avatar mounts, and Radix's Avatar primitive renders
+// nothing while it's still loading.
+//
+// The cap below is the maximum length we are willing to ship for an inline
+// data URL. Anything larger is treated as missing at egress, which makes the
+// client render the initials fallback instead of an empty circle. The cap
+// is intentionally well above a reasonable square-cropped JPEG/WebP avatar
+// (~tens of KB) but well below the 10 MB asset ceiling used elsewhere.
+//
+// `data:` URLs are length-checked because their length is what costs us on
+// the wire and at decode time. `http(s)://` URLs are passed through as-is
+// regardless of length — they're fetched separately by the browser and
+// don't bloat the JSON response.
+export const MAX_AVATAR_DATA_URL_LENGTH = 512 * 1024;
+
+export function safeAvatarUrl(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  if (raw.startsWith("data:") && raw.length > MAX_AVATAR_DATA_URL_LENGTH) {
+    return null;
+  }
+  return raw;
+}
+
 function defaultCodeForStatus(status: number): ErrorCode {
   switch (status) {
     case 400:
@@ -172,7 +206,7 @@ export function toPublicUser(
     lastName,
     nickname: u.nickname ?? null,
     bio: u.bio ?? null,
-    avatarUrl: u.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(u.avatarUrl),
     coverPhotoUrl: null as string | null,
     isOwnProfile: opts.isOwnProfile ?? false,
     isFollowing: opts.isFollowing ?? false,
@@ -218,7 +252,7 @@ export function toPostAuthor(u: UserRow) {
   return {
     id: u.id,
     displayName: displayName(u),
-    avatarUrl: u.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(u.avatarUrl),
   };
 }
 
@@ -261,7 +295,7 @@ export function toMember(u: UserRow, role: "owner" | "admin" | "member", joinedA
   return {
     userId: u.id,
     displayName: displayName(u),
-    avatarUrl: u.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(u.avatarUrl),
     role,
     joinedAt: joinedAt.toISOString(),
   };
@@ -325,7 +359,7 @@ export function toTeamMember(r: RosterRow, u: UserRow) {
     id: r.id,
     userId: u.id,
     displayName: displayName(u),
-    avatarUrl: u.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(u.avatarUrl),
     teamId: r.teamId,
     seasonId: r.teamId,
     role: (r.role === "coach" ? "admin" : "member") as "owner" | "admin" | "member",
@@ -577,7 +611,7 @@ export function toConversation(
       id: participant.id,
       type: participant.type,
       displayName: participant.displayName,
-      avatarUrl: participant.avatarUrl,
+      avatarUrl: safeAvatarUrl(participant.avatarUrl),
     },
     lastMessage: lastMessage
       ? {
@@ -624,7 +658,7 @@ export function toMessage(
     id: m.id,
     senderId: sender?.id ?? m.senderUserId ?? "00000000-0000-0000-0000-000000000000",
     senderDisplayName: sender?.displayName ?? "Unknown",
-    senderAvatarUrl: sender?.avatarUrl ?? null,
+    senderAvatarUrl: safeAvatarUrl(sender?.avatarUrl ?? null),
     body: m.body ?? "",
     assets: assetRows.map(toMessageAsset),
     createdAt: m.createdAt.toISOString(),
@@ -663,7 +697,7 @@ export function toComment(
     author: {
       id: author?.id ?? null,
       displayName: author ? displayName(author) : "Deleted user",
-      avatarUrl: author?.avatarUrl ?? null,
+      avatarUrl: safeAvatarUrl(author?.avatarUrl ?? null),
     },
     reactionCount,
     hasReacted,
@@ -684,7 +718,7 @@ export function toJoinRequest(
       ? {
           id: user.id,
           displayName: displayName(user),
-          avatarUrl: user.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(user.avatarUrl),
         }
       : null,
     status: r.status,

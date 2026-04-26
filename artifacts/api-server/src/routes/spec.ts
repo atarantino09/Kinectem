@@ -82,6 +82,8 @@ import {
   toJoinRequest,
   apiError,
   ErrorCodes,
+  safeAvatarUrl,
+  MAX_AVATAR_DATA_URL_LENGTH,
 } from "../lib/spec-helpers";
 
 // ---------------------------------------------------------------------------
@@ -937,7 +939,7 @@ router.get(
           lastName,
           role: u.role,
           email: u.email ?? null,
-          avatarUrl: u.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(u.avatarUrl),
           sport: u.sport ?? null,
           position: u.position ?? null,
         };
@@ -1017,7 +1019,7 @@ router.get(
           lastName,
           role: u.role,
           email: u.email ?? null,
-          avatarUrl: u.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(u.avatarUrl),
           nickname: null,
         };
       }),
@@ -1100,7 +1102,7 @@ router.get(
           firstName,
           lastName,
           role: row.role,
-          avatarUrl: row.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(row.avatarUrl),
         };
       };
       // Only emit the section when there is something to render so the
@@ -1216,14 +1218,17 @@ router.patch(
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {
         return apiError(res, 400, "avatarUrl must be a string or null");
       }
-      // Assets are stored as `data:<mime>;base64,<...>` URLs in this codebase,
-      // so the avatar URL can be as long as ceil(ASSET_MAX_BYTES / 3) * 4 plus
-      // a small prefix for `data:<mime>;base64,`. Tied to the asset upload
-      // cap so the two stay in sync if that limit ever changes.
-      const MAX_AVATAR_URL_LENGTH = Math.ceil(ASSET_MAX_BYTES / 3) * 4 + 64;
+      // The asset upload pipeline still allows up to ASSET_MAX_BYTES (10 MB)
+      // for general assets, but a profile avatar is shipped inline on every
+      // user-bearing response (feed items, comments, mentions, message
+      // threads, search, follow lists, etc.). To keep those payloads sane
+      // we cap the *avatar* URL well below the general asset cap. The same
+      // cap is applied at egress by `safeAvatarUrl()` so any pre-existing
+      // oversize row in the database is already filtered to null.
       if (
         typeof body.avatarUrl === "string" &&
-        body.avatarUrl.length > MAX_AVATAR_URL_LENGTH
+        body.avatarUrl.startsWith("data:") &&
+        body.avatarUrl.length > MAX_AVATAR_DATA_URL_LENGTH
       ) {
         return apiError(res, 400, "avatarUrl is too long");
       }
@@ -2207,7 +2212,7 @@ async function listOrgFollowers(req: Request, res: Response) {
     data: page.map((r) => ({
       id: r.id,
       displayName: displayName({ name: r.name }),
-      avatarUrl: r.avatarUrl ?? null,
+      avatarUrl: safeAvatarUrl(r.avatarUrl),
       followedAt: r.followedAt.toISOString(),
     })),
     pagination: { nextCursor, hasMore, totalCount: 0 },
@@ -2249,7 +2254,7 @@ router.get(
       data: page.map((r) => ({
         id: r.id,
         displayName: displayName({ name: r.name }),
-        avatarUrl: r.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(r.avatarUrl),
         followedAt: r.followedAt.toISOString(),
       })),
       pagination: { nextCursor, hasMore, totalCount: 0 },
@@ -2293,7 +2298,7 @@ router.get(
       data: page.map((r) => ({
         id: r.id,
         displayName: displayName({ name: r.name }),
-        avatarUrl: r.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(r.avatarUrl),
         followedAt: r.followedAt.toISOString(),
       })),
       pagination: { nextCursor, hasMore, totalCount: 0 },
@@ -2338,14 +2343,14 @@ router.get(
       ...userRows.map((r) => ({
         id: r.id,
         displayName: displayName({ name: r.name }),
-        avatarUrl: r.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(r.avatarUrl),
         entityType: "user" as const,
         followedAt: r.followedAt,
       })),
       ...orgRows.map((r) => ({
         id: r.id,
         displayName: r.name,
-        avatarUrl: r.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(r.avatarUrl),
         entityType: "organization" as const,
         followedAt: r.followedAt,
       })),
@@ -2374,7 +2379,7 @@ router.get(
       data: page.map((r) => ({
         id: r.id,
         displayName: r.displayName,
-        avatarUrl: r.avatarUrl,
+        avatarUrl: safeAvatarUrl(r.avatarUrl),
         entityType: r.entityType,
         followedAt: r.followedAt.toISOString(),
       })),
@@ -2542,7 +2547,7 @@ router.get(
                 id: parent.id,
                 displayName: parent.name || "Parent",
                 email: canSeeParentEmail ? (parent.email ?? null) : null,
-                avatarUrl: parent.avatarUrl ?? null,
+                avatarUrl: safeAvatarUrl(parent.avatarUrl),
               },
             ]
           : [],
@@ -2891,7 +2896,7 @@ router.get(
           ? {
               id: inviter.id,
               displayName: displayName(inviter),
-              avatarUrl: inviter.avatarUrl ?? null,
+              avatarUrl: safeAvatarUrl(inviter.avatarUrl),
             }
           : null,
       };
@@ -3031,7 +3036,7 @@ async function loadChildNotificationItems(
         ? {
             id: r.tagger.id,
             displayName: displayName(r.tagger),
-            avatarUrl: r.tagger.avatarUrl ?? null,
+            avatarUrl: safeAvatarUrl(r.tagger.avatarUrl),
           }
         : null,
     });
@@ -3077,7 +3082,7 @@ async function loadChildNotificationItems(
         ? {
             id: r.tagger.id,
             displayName: displayName(r.tagger),
-            avatarUrl: r.tagger.avatarUrl ?? null,
+            avatarUrl: safeAvatarUrl(r.tagger.avatarUrl),
           }
         : null,
     });
@@ -3149,7 +3154,7 @@ async function loadChildNotificationItems(
           ? {
               id: r.author.id,
               displayName: displayName(r.author),
-              avatarUrl: r.author.avatarUrl ?? null,
+              avatarUrl: safeAvatarUrl(r.author.avatarUrl),
             }
           : null,
       });
@@ -3216,7 +3221,7 @@ async function loadChildNotificationItems(
           ? {
               id: r.sender.id,
               displayName: displayName(r.sender),
-              avatarUrl: r.sender.avatarUrl ?? null,
+              avatarUrl: safeAvatarUrl(r.sender.avatarUrl),
             }
           : null,
       });
@@ -3389,7 +3394,7 @@ async function loadDecidedExtraItems(
             ? {
                 id: r.tagger.id,
                 displayName: displayName(r.tagger),
-                avatarUrl: r.tagger.avatarUrl ?? null,
+                avatarUrl: safeAvatarUrl(r.tagger.avatarUrl),
               }
             : null,
         };
@@ -3425,7 +3430,7 @@ async function loadDecidedExtraItems(
             ? {
                 id: r.author.id,
                 displayName: displayName(r.author),
-                avatarUrl: r.author.avatarUrl ?? null,
+                avatarUrl: safeAvatarUrl(r.author.avatarUrl),
               }
             : null,
         };
@@ -3457,7 +3462,7 @@ async function loadDecidedExtraItems(
             ? {
                 id: r.sender.id,
                 displayName: displayName(r.sender),
-                avatarUrl: r.sender.avatarUrl ?? null,
+                avatarUrl: safeAvatarUrl(r.sender.avatarUrl),
               }
             : null,
         };
@@ -4211,7 +4216,7 @@ router.post(
         id: child.id,
         firstName,
         lastName,
-        avatarUrl: child.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(child.avatarUrl),
       },
       member: toTeamMember(entry, child),
     });
@@ -5326,7 +5331,7 @@ router.get(
         id: r.u.id,
         firstName: r.u.firstName,
         lastName: r.u.lastName,
-        avatarUrl: r.u.avatarUrl,
+        avatarUrl: safeAvatarUrl(r.u.avatarUrl),
       })),
     });
   }),
@@ -5500,7 +5505,7 @@ async function getOtherParticipant(conversationId: string, meId: string) {
       id: u.id,
       type: "user" as const,
       displayName: displayName(u),
-      avatarUrl: u.avatarUrl ?? null,
+      avatarUrl: safeAvatarUrl(u.avatarUrl),
     };
   }
   const [o] = await db
@@ -5802,7 +5807,7 @@ router.get(
       data: rows.map((u) => ({
         id: u.id,
         displayName: u.name,
-        avatarUrl: u.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(u.avatarUrl),
       })),
     });
   }),
@@ -5900,7 +5905,7 @@ router.get(
               ? {
                   id: r.sender.id,
                   displayName: displayName(r.sender),
-                  avatarUrl: r.sender.avatarUrl ?? null,
+                  avatarUrl: safeAvatarUrl(r.sender.avatarUrl),
                 }
               : null,
             assetsByMessage.get(r.m.id) ?? [],
@@ -5986,7 +5991,7 @@ router.post(
         {
           id: me.id,
           displayName: displayName(me),
-          avatarUrl: me.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(me.avatarUrl),
         },
         validAssets,
       ),
@@ -6531,7 +6536,7 @@ router.get(
           nickname: u.nickname ?? null,
           role: u.role,
           email: u.email ?? null,
-          avatarUrl: u.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(u.avatarUrl),
           requireTagConsent: u.requireTagConsent,
           guardianEmail: u.guardianEmail ?? null,
           guardianConfirmedAt: u.guardianConfirmedAt
@@ -6577,7 +6582,7 @@ router.post(
       lastName: rest.join(" "),
       role: updated.role,
       email: updated.email ?? null,
-      avatarUrl: updated.avatarUrl ?? null,
+      avatarUrl: safeAvatarUrl(updated.avatarUrl),
       requireTagConsent: updated.requireTagConsent,
     });
   }),
@@ -6707,7 +6712,7 @@ router.get(
               ? {
                   id: r.sender.id,
                   displayName: displayName(r.sender),
-                  avatarUrl: r.sender.avatarUrl ?? null,
+                  avatarUrl: safeAvatarUrl(r.sender.avatarUrl),
                 }
               : null,
             assetsByMessage.get(r.m.id) ?? [],
@@ -6871,7 +6876,7 @@ router.get(
           id: u.id,
           entityType: "user",
           displayName: u.name,
-          avatarUrl: u.avatarUrl ?? null,
+          avatarUrl: safeAvatarUrl(u.avatarUrl),
           nickname: null,
         })),
         pagination: emptyPagination(),

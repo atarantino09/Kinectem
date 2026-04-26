@@ -8,6 +8,7 @@ import type {
   rosterInvites,
   notifications,
 } from "@workspace/db";
+import { safeAvatarUrl } from "./spec-helpers";
 
 export function toUser(u: typeof users.$inferSelect) {
   return {
@@ -20,7 +21,7 @@ export function toUser(u: typeof users.$inferSelect) {
     jerseyNumber: u.jerseyNumber ?? undefined,
     grade: u.grade ?? undefined,
     location: u.location ?? undefined,
-    avatarUrl: u.avatarUrl ?? undefined,
+    avatarUrl: safeAvatarUrl(u.avatarUrl) ?? undefined,
     bio: u.bio ?? undefined,
     dateOfBirth: u.dateOfBirth ?? undefined,
     parentId: u.parentId ?? undefined,

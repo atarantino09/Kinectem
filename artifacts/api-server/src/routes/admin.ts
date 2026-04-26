@@ -21,7 +21,13 @@ import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
-import { splitName, toPrivateUser, paginate } from "../lib/spec-helpers";
+import {
+  splitName,
+  toPrivateUser,
+  paginate,
+  safeAvatarUrl,
+  MAX_AVATAR_DATA_URL_LENGTH,
+} from "../lib/spec-helpers";
 
 const router: IRouter = Router();
 router.use(requireAdmin);
@@ -351,7 +357,7 @@ router.get(
         createdAt: u.createdAt.toISOString(),
         lastSignInAt: u.lastSignInAt ? u.lastSignInAt.toISOString() : null,
         deletedAt: u.deletedAt ? u.deletedAt.toISOString() : null,
-        avatarUrl: u.avatarUrl ?? null,
+        avatarUrl: safeAvatarUrl(u.avatarUrl),
         sport: u.sport ?? null,
         position: u.position ?? null,
         jerseyNumber: u.jerseyNumber ?? null,
@@ -456,7 +462,21 @@ router.patch(
     if (body.jerseyNumber !== undefined) updates.jerseyNumber = body.jerseyNumber;
     if (body.grade !== undefined) updates.grade = body.grade;
     if (body.location !== undefined) updates.location = body.location;
-    if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
+    if (body.avatarUrl !== undefined) {
+      // Mirror the cap enforced by PATCH /users/:userId so an admin
+      // cannot reintroduce a multi-megabyte data: URL after we've cleaned
+      // them out of the database. http(s) URLs are not length-limited
+      // here.
+      if (
+        typeof body.avatarUrl === "string" &&
+        body.avatarUrl.startsWith("data:") &&
+        body.avatarUrl.length > MAX_AVATAR_DATA_URL_LENGTH
+      ) {
+        res.status(400).json({ error: "avatarUrl is too long" });
+        return;
+      }
+      updates.avatarUrl = body.avatarUrl;
+    }
     if (body.dateOfBirth !== undefined) {
       updates.dateOfBirth = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
     }

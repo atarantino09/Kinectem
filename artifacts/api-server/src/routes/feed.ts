@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, articles, highlights, teams, organizations, users, articleTags, highlightTags } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
+import { safeAvatarUrl } from "../lib/spec-helpers";
 
 const router: IRouter = Router();
 
@@ -50,7 +51,7 @@ router.get(
     const articleTagMap = new Map<string, Array<{ id: string; name: string; role: string; avatarUrl?: string }>>();
     for (const t of articleTagRows) {
       const arr = articleTagMap.get(t.articleId) ?? [];
-      arr.push({ id: t.userId, name: t.name, role: t.role, avatarUrl: t.avatarUrl ?? undefined });
+      arr.push({ id: t.userId, name: t.name, role: t.role, avatarUrl: safeAvatarUrl(t.avatarUrl) ?? undefined });
       articleTagMap.set(t.articleId, arr);
     }
 
@@ -92,7 +93,7 @@ router.get(
     const highlightTagMap = new Map<string, Array<{ id: string; name: string; role: string; avatarUrl?: string }>>();
     for (const t of highlightTagRows) {
       const arr = highlightTagMap.get(t.highlightId) ?? [];
-      arr.push({ id: t.userId, name: t.name, role: t.role, avatarUrl: t.avatarUrl ?? undefined });
+      arr.push({ id: t.userId, name: t.name, role: t.role, avatarUrl: safeAvatarUrl(t.avatarUrl) ?? undefined });
       highlightTagMap.set(t.highlightId, arr);
     }
 

@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, assets } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
+import { MAX_AVATAR_DATA_URL_LENGTH } from "../src/lib/spec-helpers";
 
-// Mirrors the constants in src/routes/spec.ts. These are duplicated (not
-// imported) because the production constants are not exported, so if the
-// real cap is ever bumped, this copy must be updated to match.
-const ASSET_MAX_BYTES = 10 * 1024 * 1024;
-const MAX_AVATAR_URL_LENGTH = Math.ceil(ASSET_MAX_BYTES / 3) * 4 + 64;
+// PATCH /users/:userId enforces this same cap as `safeAvatarUrl()` does at
+// egress, so they stay in sync if the constant is ever changed.
+const MAX_AVATAR_URL_LENGTH = MAX_AVATAR_DATA_URL_LENGTH;
 
 const TINY_PNG = Buffer.from(
   "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082",
