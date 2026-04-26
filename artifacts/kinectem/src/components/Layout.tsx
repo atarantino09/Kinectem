@@ -7,7 +7,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users, Shield } from "lucide-react";
+import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users, Shield, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -18,11 +18,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { getInitials } from "@/lib/format";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { MasqueradeBanner } from "@/components/MasqueradeBanner";
 import { useWhoami } from "@/hooks/useWhoami";
+import { cn } from "@/lib/utils";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser, error: currentUserError } = useGetLoggedInUser({
@@ -45,6 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [currentUserError, location, setLocation]);
   const [query, setQuery] = useState("");
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const qc = useQueryClient();
 
   const handleLogout = async () => {
@@ -72,6 +81,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
   const navVariant = (active: boolean) => (active ? "secondary" : "ghost") as const;
 
+  const unreadCount = unreadMsgs?.unreadCount ?? 0;
+  const formattedUnread = unreadCount > 9 ? "9+" : String(unreadCount);
+
+  type NavItem = {
+    href: string;
+    label: string;
+    icon: typeof Home;
+    testId?: string;
+    badge?: number;
+  };
+
+  const navItems: NavItem[] = [
+    { href: "/", label: "Feed", icon: Home },
+    { href: "/organizations", label: "Orgs", icon: Building2 },
+    { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
+    ...(currentUser?.role === "parent"
+      ? [{ href: "/family", label: "Family", icon: Users, testId: "link-family" } satisfies NavItem]
+      : []),
+    ...(isAdmin
+      ? [{ href: "/admin", label: "Admin", icon: Shield, testId: "link-admin" } satisfies NavItem]
+      : []),
+  ];
+
   const displayName = currentUser
     ? `${currentUser.firstName} ${currentUser.lastName}`
     : "";
@@ -80,14 +112,79 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground">
       <MasqueradeBanner />
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-6">
+        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
+          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden shrink-0 relative"
+                aria-label="Open navigation menu"
+                data-testid="btn-mobile-nav"
+              >
+                <Menu className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">
+                    {formattedUnread}
+                  </span>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0">
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <SheetDescription className="sr-only">
+                Move between the main sections of Kinectem.
+              </SheetDescription>
+              <div className="flex items-center gap-2 px-6 h-16 border-b border-border">
+                <img
+                  src={`${import.meta.env.BASE_URL}logo-icon.png`}
+                  alt="Kinectem"
+                  className="w-8 h-8 rounded-lg object-cover"
+                />
+                <span className="font-black text-lg tracking-tight">
+                  Kinect<span className="brand-gradient-text">em</span>
+                </span>
+              </div>
+              <nav className="flex flex-col gap-1 p-3">
+                {navItems.map((item) => {
+                  const active = isNavActive(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileNavOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-md font-semibold text-sm transition-colors",
+                        active
+                          ? "bg-secondary text-secondary-foreground"
+                          : "hover:bg-muted text-foreground",
+                      )}
+                      data-active={active ? "true" : undefined}
+                      data-testid={item.testId ? `mobile-${item.testId}` : undefined}
+                    >
+                      <Icon className="w-5 h-5" />
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center">
+                          {item.badge > 9 ? "9+" : item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </SheetContent>
+          </Sheet>
+
           <Link href="/" className="flex items-center gap-2 shrink-0">
             <img
               src={`${import.meta.env.BASE_URL}logo-icon.png`}
               alt="Kinectem"
               className="w-9 h-9 rounded-lg object-cover"
             />
-            <span className="font-black text-xl tracking-tight">
+            <span className="font-black text-xl tracking-tight hidden sm:inline">
               Kinect<span className="brand-gradient-text">em</span>
             </span>
           </Link>
@@ -104,85 +201,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </form>
 
           <nav className="hidden md:flex items-center gap-1">
-            <Link
-              href="/"
-              aria-current={isNavActive("/") ? "page" : undefined}
-            >
-              <Button
-                variant={navVariant(isNavActive("/"))}
-                size="sm"
-                className="font-semibold"
-                data-active={isNavActive("/") ? "true" : undefined}
-              >
-                <Home className="w-4 h-4 mr-2" /> Feed
-              </Button>
-            </Link>
-            <Link
-              href="/organizations"
-              aria-current={isNavActive("/organizations") ? "page" : undefined}
-            >
-              <Button
-                variant={navVariant(isNavActive("/organizations"))}
-                size="sm"
-                className="font-semibold"
-                data-active={isNavActive("/organizations") ? "true" : undefined}
-              >
-                <Building2 className="w-4 h-4 mr-2" /> Orgs
-              </Button>
-            </Link>
-            <Link
-              href="/messages"
-              aria-current={isNavActive("/messages") ? "page" : undefined}
-            >
-              <Button
-                variant={navVariant(isNavActive("/messages"))}
-                size="sm"
-                className="font-semibold relative"
-                data-testid="link-messages"
-                data-active={isNavActive("/messages") ? "true" : undefined}
-              >
-                <Mail className="w-4 h-4 mr-2" /> Inbox
-                {(unreadMsgs?.unreadCount ?? 0) > 0 && (
-                  <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">
-                    {(unreadMsgs?.unreadCount ?? 0) > 9
-                      ? "9+"
-                      : unreadMsgs?.unreadCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
-            {currentUser?.role === "parent" && (
-              <Link
-                href="/family"
-                aria-current={isNavActive("/family") ? "page" : undefined}
-              >
-                <Button
-                  variant={navVariant(isNavActive("/family"))}
-                  size="sm"
-                  className="font-semibold"
-                  data-testid="link-family"
-                  data-active={isNavActive("/family") ? "true" : undefined}
+            {navItems.map((item) => {
+              const active = isNavActive(item.href);
+              const Icon = item.icon;
+              const hasBadge = item.badge !== undefined && item.badge > 0;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
                 >
-                  <Users className="w-4 h-4 mr-2" /> Family
-                </Button>
-              </Link>
-            )}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                aria-current={isNavActive("/admin") ? "page" : undefined}
-              >
-                <Button
-                  variant={navVariant(isNavActive("/admin"))}
-                  size="sm"
-                  className="font-semibold"
-                  data-testid="link-admin"
-                  data-active={isNavActive("/admin") ? "true" : undefined}
-                >
-                  <Shield className="w-4 h-4 mr-2" /> Admin
-                </Button>
-              </Link>
-            )}
+                  <Button
+                    variant={navVariant(active)}
+                    size="sm"
+                    className={cn("font-semibold", hasBadge && "relative")}
+                    data-active={active ? "true" : undefined}
+                    data-testid={item.testId}
+                  >
+                    <Icon className="w-4 h-4 mr-2" /> {item.label}
+                    {hasBadge && (
+                      <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">
+                        {item.badge! > 9 ? "9+" : item.badge}
+                      </span>
+                    )}
+                  </Button>
+                </Link>
+              );
+            })}
           </nav>
 
           <DropdownMenu>
