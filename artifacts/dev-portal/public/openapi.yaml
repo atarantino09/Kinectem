@@ -5225,6 +5225,40 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /users/me/children-notifications-summary:
+    get:
+      operationId: getChildrenNotificationsSummary
+      summary: Per-child unread counts for the parent in one round-trip
+      description: >
+        Returns the unread count for each linked child's aggregated
+        notification stream so the global notification bell can show a
+        combined badge without fanning out one request per child.
+      tags: [Family]
+      responses:
+        '200':
+          description: Per-child unread counts plus a total.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, totalUnreadCount]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [childId, unreadCount]
+                      properties:
+                        childId:
+                          type: string
+                          format: uuid
+                        unreadCount:
+                          type: integer
+                  totalUnreadCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /users/me/children/{childId}/resend-guardian-confirm:
     post:
       operationId: resendChildGuardianConfirm
