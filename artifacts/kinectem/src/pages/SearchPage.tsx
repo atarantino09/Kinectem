@@ -2,7 +2,7 @@ import { Link, useSearch } from "wouter";
 import { useCrossEntitySearch } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Trophy, User as UserIcon } from "lucide-react";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
@@ -64,12 +64,12 @@ export default function SearchPage() {
             {users.map((u) => (
               <Link key={u.id} href={`/users/${u.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
-                  <Avatar className="w-10 h-10">
-                    <AvatarImage src={u.avatarUrl ?? undefined} />
-                    <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-                      {getInitials(u.displayName)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    avatarUrl={u.avatarUrl}
+                    displayName={u.displayName}
+                    size="lg"
+                    fallbackClassName="bg-slate-900 text-primary-foreground"
+                  />
                   <div className="min-w-0">
                     <p className="font-bold text-sm truncate">
                       {u.displayName}
@@ -115,12 +115,12 @@ export default function SearchPage() {
             {teams.map((t) => (
               <Link key={t.id} href={`/teams/${t.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
-                  <Avatar className="w-10 h-10 rounded-lg">
-                    <AvatarImage src={t.avatarUrl ?? undefined} />
-                    <AvatarFallback className="rounded-lg bg-slate-100 text-slate-800 font-bold text-xs">
-                      {getInitials(t.name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <TeamAvatar
+                    avatarUrl={t.avatarUrl}
+                    displayName={t.name}
+                    size="lg"
+                    fallbackClassName="bg-slate-100 text-slate-800"
+                  />
                   <div className="min-w-0">
                     <p className="font-bold text-sm truncate">{t.name}</p>
                     <p className="text-xs text-muted-foreground truncate">

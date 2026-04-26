@@ -87,6 +87,13 @@ schemas are generated from the spec.
 
 - Brand: purple→blue gradient (`brand-gradient`, `brand-gradient-dark` utilities).
 - Typography: `font-black tracking-tight` for headings; `rounded-xl` cards. No emojis.
+- **Avatars**: always use `<UserAvatar>` / `<TeamAvatar>` from
+  `artifacts/kinectem/src/components/UserAvatar.tsx`. Don't compose Radix
+  `Avatar + AvatarImage + AvatarFallback` directly, and never gate
+  `<AvatarImage>` with `avatarUrl && ...` — the conditional pattern leaves
+  small avatars stuck on the fallback because Radix's loading state never
+  sees the image mount. The wrapper renders `<AvatarImage>` unconditionally
+  so it just works.
 
 ## Routing gotcha (api-server)
 

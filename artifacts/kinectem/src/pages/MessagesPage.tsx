@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -173,14 +173,13 @@ export default function MessagesPage() {
                 dialogTestId={`dialog-conversation-avatar-lightbox-${c.id}`}
                 imageTestId={`img-conversation-avatar-lightbox-${c.id}`}
               >
-                <Avatar
-                  className={`w-10 h-10 shrink-0 ${c.participant.avatarUrl ? "cursor-pointer" : ""}`}
-                >
-                  <AvatarImage src={c.participant.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
-                    {getInitials(c.participant.displayName)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  avatarUrl={c.participant.avatarUrl}
+                  displayName={c.participant.displayName}
+                  size="lg"
+                  className={`shrink-0 ${c.participant.avatarUrl ? "cursor-pointer" : ""}`}
+                  fallbackClassName="bg-slate-900 text-primary-foreground"
+                />
               </AvatarLightbox>
               <Link
                 href={`/messages/${c.id}`}
@@ -276,12 +275,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 className="flex items-center gap-2 min-w-0 cursor-pointer hover:underline"
                 data-testid="link-conversation-header-participant"
               >
-                <Avatar className="w-7 h-7 shrink-0">
-                  <AvatarImage src={participant.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                    {getInitials(participant.displayName)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  avatarUrl={participant.avatarUrl}
+                  displayName={participant.displayName}
+                  size="xs"
+                  className="shrink-0"
+                  fallbackClassName="bg-slate-100 text-slate-800"
+                />
                 <h3
                   className="font-black tracking-tight text-base truncate"
                   data-testid="text-conversation-header-name"
@@ -294,12 +294,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 className="flex items-center gap-2 min-w-0"
                 data-testid="conversation-header-participant"
               >
-                <Avatar className="w-7 h-7 shrink-0">
-                  <AvatarImage src={participant.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                    {getInitials(participant.displayName)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  avatarUrl={participant.avatarUrl}
+                  displayName={participant.displayName}
+                  size="xs"
+                  className="shrink-0"
+                  fallbackClassName="bg-slate-100 text-slate-800"
+                />
                 <h3
                   className="font-black tracking-tight text-base truncate"
                   data-testid="text-conversation-header-name"
@@ -375,14 +376,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                           dialogTestId={`dialog-message-avatar-lightbox-${m.id}`}
                           imageTestId={`img-message-avatar-lightbox-${m.id}`}
                         >
-                          <Avatar
-                            className={`w-7 h-7 ${m.senderAvatarUrl ? "cursor-pointer hover:opacity-80" : ""}`}
-                          >
-                            <AvatarImage src={m.senderAvatarUrl ?? undefined} />
-                            <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                              {getInitials(m.senderDisplayName)}
-                            </AvatarFallback>
-                          </Avatar>
+                          <UserAvatar
+                            avatarUrl={m.senderAvatarUrl}
+                            displayName={m.senderDisplayName}
+                            size="xs"
+                            className={
+                              m.senderAvatarUrl
+                                ? "cursor-pointer hover:opacity-80"
+                                : undefined
+                            }
+                            fallbackClassName="bg-slate-100 text-slate-800"
+                          />
                         </AvatarLightbox>
                       )}
                     </div>
@@ -668,12 +672,13 @@ function NewMessageDialog({
                       className="w-full text-left p-2 rounded-lg flex items-center gap-3 hover:bg-muted"
                       data-testid={`contact-result-${c.id}`}
                     >
-                      <Avatar className="w-9 h-9 shrink-0">
-                        <AvatarImage src={c.avatarUrl ?? undefined} />
-                        <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
-                          {getInitials(c.displayName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        avatarUrl={c.avatarUrl}
+                        displayName={c.displayName}
+                        size="md"
+                        className="shrink-0"
+                        fallbackClassName="bg-slate-900 text-primary-foreground"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm truncate">
                           {c.displayName}
@@ -700,12 +705,13 @@ function NewMessageDialog({
                 aria-label={`View ${recipient.displayName}'s profile`}
                 data-testid="link-recipient-avatar"
               >
-                <Avatar className="w-9 h-9 shrink-0 cursor-pointer hover:opacity-80">
-                  <AvatarImage src={recipient.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-bold">
-                    {getInitials(recipient.displayName)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  avatarUrl={recipient.avatarUrl}
+                  displayName={recipient.displayName}
+                  size="md"
+                  className="shrink-0 cursor-pointer hover:opacity-80"
+                  fallbackClassName="bg-slate-900 text-primary-foreground"
+                />
               </Link>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">

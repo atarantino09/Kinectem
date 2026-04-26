@@ -28,7 +28,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { Building2, MessageSquare, Tag, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
@@ -136,14 +136,13 @@ export default function UserProfilePage() {
               dialogTestId="dialog-avatar-lightbox"
               imageTestId="img-avatar-lightbox"
             >
-              <Avatar
-                className={`w-36 h-36 border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
-              >
-                <AvatarImage src={user.avatarUrl ?? undefined} />
-                <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-5xl">
-                  {getInitials(displayName)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                avatarUrl={user.avatarUrl}
+                displayName={displayName}
+                size="4xl"
+                className={`border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
+                fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+              />
             </AvatarLightbox>
             {user.isOwnProfile && "email" in user ? (
               <div className="mt-24 flex items-center gap-2">
@@ -270,12 +269,12 @@ export default function UserProfilePage() {
                       data-testid={`card-linked-${m.id}`}
                     >
                       <CardContent className="p-4 flex items-center gap-3">
-                        <Avatar className="w-10 h-10">
-                          <AvatarImage src={m.avatarUrl ?? undefined} />
-                          <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
-                            {getInitials(name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          avatarUrl={m.avatarUrl}
+                          displayName={name}
+                          size="lg"
+                          fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                        />
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-sm truncate">{name}</p>
                           <Badge
@@ -309,12 +308,13 @@ export default function UserProfilePage() {
                     data-testid={`card-team-${t.teamId}`}
                   >
                     <CardContent className="p-4 flex items-center gap-3">
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={t.teamAvatarUrl ?? undefined} />
-                        <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
-                          {getInitials(t.teamName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <TeamAvatar
+                        avatarUrl={t.teamAvatarUrl}
+                        displayName={t.teamName}
+                        size="lg"
+                        rounded="full"
+                        fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm truncate">
                           {t.teamName}

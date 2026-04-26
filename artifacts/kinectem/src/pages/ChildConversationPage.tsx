@@ -8,11 +8,11 @@ import {
   type MessageAsset,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Eye, MessageSquare } from "lucide-react";
-import { timeAgo, getInitials } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 
 interface Child {
@@ -168,12 +168,13 @@ export default function ChildConversationPage() {
                     className="flex items-center gap-2 min-w-0"
                     data-testid="conversation-header-participant"
                   >
-                    <Avatar className="w-8 h-8 shrink-0">
-                      <AvatarImage src={participant.avatarUrl ?? undefined} />
-                      <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                        {getInitials(participant.displayName)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      avatarUrl={participant.avatarUrl}
+                      displayName={participant.displayName}
+                      size="sm"
+                      className="shrink-0"
+                      fallbackClassName="bg-slate-100 text-slate-800"
+                    />
                     <div className="min-w-0">
                       <h3
                         className="font-black tracking-tight text-base truncate"
@@ -254,18 +255,17 @@ export default function ChildConversationPage() {
                                 dialogTestId={`dialog-message-avatar-lightbox-${m.id}`}
                                 imageTestId={`img-message-avatar-lightbox-${m.id}`}
                               >
-                                <Avatar
-                                  className={`w-7 h-7 ${
+                                <UserAvatar
+                                  avatarUrl={m.senderAvatarUrl}
+                                  displayName={m.senderDisplayName}
+                                  size="xs"
+                                  className={
                                     m.senderAvatarUrl
                                       ? "cursor-pointer hover:opacity-80"
-                                      : ""
-                                  }`}
-                                >
-                                  <AvatarImage src={m.senderAvatarUrl ?? undefined} />
-                                  <AvatarFallback className="bg-slate-100 text-slate-800 text-[10px] font-bold">
-                                    {getInitials(m.senderDisplayName)}
-                                  </AvatarFallback>
-                                </Avatar>
+                                      : undefined
+                                  }
+                                  fallbackClassName="bg-slate-100 text-slate-800"
+                                />
                               </AvatarLightbox>
                             )}
                           </div>

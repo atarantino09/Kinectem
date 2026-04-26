@@ -22,7 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -260,12 +260,12 @@ export default function TeamPage() {
           <TableCell>
             <Link href={`/users/${m.userId}`}>
               <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={m.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
-                    {getInitials(m.displayName)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  avatarUrl={m.avatarUrl}
+                  displayName={m.displayName}
+                  size="sm"
+                  fallbackClassName="bg-slate-900 text-primary-foreground"
+                />
                 <span className="font-semibold">{m.displayName}</span>
               </div>
             </Link>
@@ -288,12 +288,12 @@ export default function TeamPage() {
                 {parents.map((p) => (
                   <Link key={p.id} href={`/users/${p.id}`}>
                     <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
-                      <Avatar className="w-7 h-7">
-                        <AvatarImage src={p.avatarUrl ?? undefined} />
-                        <AvatarFallback className="bg-blue-100 text-blue-700 text-[10px] font-bold">
-                          {getInitials(p.displayName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        avatarUrl={p.avatarUrl}
+                        displayName={p.displayName}
+                        size="xs"
+                        fallbackClassName="bg-blue-100 text-blue-700"
+                      />
                       <span className="font-semibold">{p.displayName}</span>
                       <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none font-bold uppercase tracking-wider text-[10px]">
                         Parent
@@ -320,12 +320,12 @@ export default function TeamPage() {
         <TableCell>
           <Link href={`/users/${m.userId}`}>
             <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={m.avatarUrl ?? undefined} />
-                <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
-                  {getInitials(m.displayName)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                avatarUrl={m.avatarUrl}
+                displayName={m.displayName}
+                size="sm"
+                fallbackClassName="bg-slate-900 text-primary-foreground"
+              />
               <span className="font-semibold">{m.displayName}</span>
             </div>
           </Link>

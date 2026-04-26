@@ -11,7 +11,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Building2, ChevronRight, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
@@ -59,12 +59,13 @@ export default function FeedPage() {
             <div className="h-16 brand-gradient" />
             <CardContent className="p-4 -mt-8">
               <Link href={`/users/${me.id}`}>
-                <Avatar className="w-16 h-16 border-4 border-card cursor-pointer">
-                  <AvatarImage src={me.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-100 text-slate-800 font-bold">
-                    {getInitials(displayName)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  avatarUrl={me.avatarUrl}
+                  displayName={displayName}
+                  size="2xl"
+                  className="border-4 border-card cursor-pointer"
+                  fallbackClassName="bg-slate-100 text-slate-800"
+                />
               </Link>
               <h3 className="font-black text-base tracking-tight mt-3">
                 {displayName}

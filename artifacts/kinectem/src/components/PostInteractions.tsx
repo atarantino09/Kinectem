@@ -14,10 +14,10 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Heart, MessageSquare, Trash2, Flag } from "lucide-react";
-import { timeAgo, getInitials } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 import { ReportDialog } from "@/components/ReportDialog";
 
 export function PostInteractions({ post }: { post: PostResponse }) {
@@ -110,12 +110,13 @@ export function PostInteractions({ post }: { post: PostResponse }) {
 
       {me && (
         <form onSubmit={onSubmitComment} className="flex gap-3">
-          <Avatar className="w-9 h-9 mt-1">
-            <AvatarImage src={me.avatarUrl ?? undefined} />
-            <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-              {getInitials(`${me.firstName} ${me.lastName}`)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            avatarUrl={me.avatarUrl}
+            displayName={`${me.firstName} ${me.lastName}`}
+            size="md"
+            className="mt-1"
+            fallbackClassName="bg-slate-900 text-primary-foreground"
+          />
           <div className="flex-1 space-y-2">
             <Textarea
               placeholder="Add a comment..."
@@ -178,12 +179,12 @@ function CommentRow({
     <Card className="rounded-xl border border-border">
       <CardContent className="p-3">
         <div className="flex gap-3">
-          <Avatar className="w-8 h-8">
-            <AvatarImage src={comment.author.avatarUrl ?? undefined} />
-            <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-[10px]">
-              {getInitials(comment.author.displayName)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            avatarUrl={comment.author.avatarUrl}
+            displayName={comment.author.displayName}
+            size="sm"
+            fallbackClassName="bg-slate-100 text-slate-800"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2">
               <p className="font-bold text-sm">{comment.author.displayName}</p>

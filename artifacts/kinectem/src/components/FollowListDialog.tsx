@@ -11,10 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users } from "lucide-react";
-import { getInitials } from "@/lib/format";
 
 type Variant =
   | { kind: "user-followers"; userId: string }
@@ -73,12 +72,12 @@ export function FollowListDialog({ open, onOpenChange, title, variant }: Props) 
                       className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted cursor-pointer"
                       data-testid={`follow-item-${it.id}`}
                     >
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={it.avatarUrl ?? undefined} />
-                        <AvatarFallback className="bg-slate-900 text-primary-foreground font-black text-xs">
-                          {getInitials(it.displayName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        avatarUrl={it.avatarUrl}
+                        displayName={it.displayName}
+                        size="lg"
+                        fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm truncate">
                           {it.displayName}

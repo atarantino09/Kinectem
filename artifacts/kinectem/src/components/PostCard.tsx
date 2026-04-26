@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { TeamAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag } from "lucide-react";
 import {
@@ -13,7 +13,7 @@ import {
   type PostResponse,
   type FeedPost,
 } from "@workspace/api-client-react";
-import { timeAgo, getInitials } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,14 +106,13 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
               imageTestId={`img-post-avatar-lightbox-${post.id}`}
             >
-              <Avatar
-                className={`w-10 h-10 rounded-lg shrink-0 ${post.context.avatarUrl ? "cursor-pointer" : ""}`}
-              >
-                <AvatarImage src={post.context.avatarUrl ?? undefined} />
-                <AvatarFallback className="bg-slate-900 text-primary-foreground text-xs font-black rounded-lg">
-                  {getInitials(post.context.name ?? post.context.type)}
-                </AvatarFallback>
-              </Avatar>
+              <TeamAvatar
+                avatarUrl={post.context.avatarUrl}
+                displayName={post.context.name ?? post.context.type}
+                size="lg"
+                className={`shrink-0 ${post.context.avatarUrl ? "cursor-pointer" : ""}`}
+                fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+              />
             </AvatarLightbox>
             <div className="min-w-0">
               <Link href={getContextHref(post.context)}>

@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { Building2, Users, UserCheck } from "lucide-react";
 import { getInitials } from "@/lib/format";
 
@@ -135,12 +135,12 @@ export function SuggestionsPanel({
                   key={`u-${u.id}`}
                   href={`/users/${u.id}`}
                   avatar={
-                    <Avatar className="w-9 h-9">
-                      <AvatarImage src={u.avatarUrl ?? undefined} />
-                      <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-[10px]">
-                        {getInitials(name)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      avatarUrl={u.avatarUrl}
+                      displayName={name}
+                      size="md"
+                      fallbackClassName="bg-slate-100 text-slate-800"
+                    />
                   }
                   title={name}
                   subtitle={u.bio ?? undefined}
@@ -171,12 +171,13 @@ export function SuggestionsPanel({
                 key={`t-${t.id}`}
                 href={`/teams/${t.id}`}
                 avatar={
-                  <Avatar className="w-9 h-9">
-                    <AvatarImage src={t.avatarUrl ?? undefined} />
-                    <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-[10px]">
-                      {getInitials(t.name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <TeamAvatar
+                    avatarUrl={t.avatarUrl}
+                    displayName={t.name}
+                    size="md"
+                    rounded="full"
+                    fallbackClassName="bg-slate-100 text-slate-800"
+                  />
                 }
                 title={t.name}
                 subtitle={t.organization.name}
@@ -238,12 +239,13 @@ export function SuggestionsPanel({
                 key={team.id}
                 href={`/teams/${team.id}`}
                 avatar={
-                  <Avatar className="w-10 h-10">
-                    <AvatarImage src={team.avatarUrl ?? undefined} />
-                    <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-xs">
-                      {getInitials(team.name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <TeamAvatar
+                    avatarUrl={team.avatarUrl}
+                    displayName={team.name}
+                    size="lg"
+                    rounded="full"
+                    fallbackClassName="bg-slate-100 text-slate-800"
+                  />
                 }
                 title={team.name}
                 subtitle={team.organization.name}
@@ -267,12 +269,12 @@ export function SuggestionsPanel({
                   key={u.id}
                   href={`/users/${u.id}`}
                   avatar={
-                    <Avatar className="w-10 h-10">
-                      <AvatarImage src={u.avatarUrl ?? undefined} />
-                      <AvatarFallback className="bg-slate-100 text-slate-800 font-bold text-xs">
-                        {getInitials(name)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      avatarUrl={u.avatarUrl}
+                      displayName={name}
+                      size="lg"
+                      fallbackClassName="bg-slate-100 text-slate-800"
+                    />
                   }
                   title={name}
                   subtitle={u.bio ?? undefined}

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Shield,
@@ -825,12 +825,13 @@ export default function GuardianPage() {
                   data-testid={`row-child-${c.id}`}
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10 border border-border shrink-0">
-                      <AvatarImage src={c.avatarUrl ?? undefined} />
-                      <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
-                        {getInitials(`${c.firstName} ${c.lastName}`)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      avatarUrl={c.avatarUrl}
+                      displayName={`${c.firstName} ${c.lastName}`}
+                      size="lg"
+                      className="border border-border shrink-0"
+                      fallbackClassName="bg-slate-900 text-white"
+                    />
                     <div className="flex-1 min-w-0">
                       <Link href={`/users/${c.id}`}>
                         <p className="font-bold text-sm cursor-pointer hover:text-primary truncate">
@@ -1282,12 +1283,14 @@ export default function GuardianPage() {
                             data-testid={`row-pending-invite-${inv.entryId}`}
                             className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30 transition-shadow"
                           >
-                            <Avatar className="w-9 h-9 border border-border shrink-0">
-                              <AvatarImage src={inv.teamLogoUrl ?? undefined} />
-                              <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
-                                {getInitials(inv.teamName)}
-                              </AvatarFallback>
-                            </Avatar>
+                            <TeamAvatar
+                              avatarUrl={inv.teamLogoUrl}
+                              displayName={inv.teamName}
+                              size="md"
+                              rounded="full"
+                              className="border border-border shrink-0"
+                              fallbackClassName="bg-primary/10 text-primary"
+                            />
                             <div className="flex-1 min-w-0">
                               <p
                                 className="font-bold text-sm truncate"
@@ -1393,12 +1396,13 @@ export default function GuardianPage() {
                       key={u.id}
                       className="flex items-center gap-3 p-3 rounded-lg border border-border"
                     >
-                      <Avatar className="w-9 h-9 border border-border shrink-0">
-                        <AvatarImage src={u.avatarUrl ?? undefined} />
-                        <AvatarFallback className="bg-slate-900 text-white font-bold text-xs">
-                          {getInitials(`${u.firstName} ${u.lastName}`)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        avatarUrl={u.avatarUrl}
+                        displayName={`${u.firstName} ${u.lastName}`}
+                        size="md"
+                        className="border border-border shrink-0"
+                        fallbackClassName="bg-slate-900 text-white"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm truncate">
                           {u.firstName} {u.lastName}

@@ -16,14 +16,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Loader2, Pencil, X } from "lucide-react";
-import { getInitials } from "@/lib/format";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
@@ -200,7 +199,6 @@ export function EditProfileDialog({
     });
   };
 
-  const initials = getInitials(`${firstName} ${lastName}`.trim() || user.firstName);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -227,15 +225,14 @@ export function EditProfileDialog({
         <div className="space-y-4 py-2">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Avatar
-                className="w-20 h-20 border-2 border-border"
+              <UserAvatar
+                avatarUrl={avatarUrl}
+                displayName={`${firstName} ${lastName}`.trim() || user.firstName}
+                alt="Profile"
+                size="3xl"
+                className="border-2 border-border"
                 data-testid="avatar-edit-preview"
-              >
-                <AvatarImage src={avatarUrl ?? undefined} alt="Profile" />
-                <AvatarFallback className="text-lg font-bold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              />
               {avatarUploading && (
                 <div
                   className="absolute inset-0 rounded-full bg-background/70 flex items-center justify-center"

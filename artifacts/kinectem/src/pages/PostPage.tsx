@@ -9,9 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Play, FileText, Pencil, ArrowLeft, Eye } from "lucide-react";
-import { timeAgo, getInitials } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
@@ -156,14 +156,13 @@ export default function PostPage() {
           dialogTestId={`dialog-post-author-avatar-lightbox-${post.id}`}
           imageTestId={`img-post-author-avatar-lightbox-${post.id}`}
         >
-          <Avatar
-            className={`w-10 h-10 ${post.author.avatarUrl ? "cursor-pointer" : ""}`}
-          >
-            <AvatarImage src={post.author.avatarUrl ?? undefined} />
-            <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-              {getInitials(post.author.displayName)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            avatarUrl={post.author.avatarUrl}
+            displayName={post.author.displayName}
+            size="lg"
+            className={post.author.avatarUrl ? "cursor-pointer" : undefined}
+            fallbackClassName="bg-slate-900 text-primary-foreground"
+          />
         </AvatarLightbox>
         <div className="flex-1 min-w-0">
           <Link href={`/users/${post.author.id}`}>

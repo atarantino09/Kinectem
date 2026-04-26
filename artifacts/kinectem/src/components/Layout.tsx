@@ -4,7 +4,7 @@ import {
   useGetUnreadMessageCount,
   getGetLoggedInUserQueryKey,
 } from "@workspace/api-client-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users, Shield, Menu } from "lucide-react";
@@ -25,7 +25,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { getInitials } from "@/lib/format";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { MasqueradeBanner } from "@/components/MasqueradeBanner";
@@ -276,12 +275,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   className="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   data-testid="btn-user-menu"
                 >
-                  <Avatar className="w-9 h-9 border border-border hover:ring-2 hover:ring-primary transition-all">
-                    <AvatarImage src={currentUser.avatarUrl ?? undefined} />
-                    <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold text-xs">
-                      {getInitials(displayName)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    avatarUrl={currentUser.avatarUrl}
+                    displayName={displayName}
+                    size="md"
+                    className="border border-border hover:ring-2 hover:ring-primary transition-all"
+                    fallbackClassName="bg-slate-900 text-primary-foreground"
+                  />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
