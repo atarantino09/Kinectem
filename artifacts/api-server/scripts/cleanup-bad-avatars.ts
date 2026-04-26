@@ -119,10 +119,13 @@ export function classifyAvatar(raw: string): null | { kind: "oversize" | "unpars
     if (!isValidJpeg(bytes)) return { kind: "corrupt", reason: "JPEG SOI/EOI markers missing" };
   } else if (mime.includes("webp") || mime.includes("gif") || mime.includes("svg")) {
     if (!isValidWebpOrGif(bytes)) return { kind: "corrupt", reason: `${mime} payload too small` };
-  } else {
-    // Unknown MIME — refuse to ship it as an avatar.
-    return { kind: "unparseable", reason: `unsupported mime: ${mime}` };
   }
+  // Unknown / future MIMEs (e.g. image/avif, image/heic) are intentionally
+  // *kept*. The size-cap check above already protects the wire from giant
+  // payloads; we'd rather ship a possibly-unrecognized-but-small avatar than
+  // null out a row that the browser would actually render. Only PNG/JPEG
+  // get strict structural validation because those are the formats with the
+  // documented "valid header, undecodable body" failure mode.
   return null;
 }
 
