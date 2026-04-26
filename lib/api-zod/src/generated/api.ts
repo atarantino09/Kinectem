@@ -5926,6 +5926,47 @@ export const ListMyChildrenResponse = zod.object({
 export const CreateMyChildBody = zod.record(zod.string(), zod.unknown());
 
 /**
+ * Returns a single conversation the child participates in, rendered from the child's perspective. Lets a confirmed guardian (or a real admin) follow a message item from the family stream straight into the conversation it points at, without giving the parent the ability to send messages or otherwise act on the child's behalf.
+
+ * @summary Read-only view of a guardian-managed child's conversation
+ */
+export const GetChildConversationParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+  conversationId: zod.coerce.string().uuid(),
+});
+
+export const GetChildConversationResponse = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+/**
+ * Lists every message in the given conversation, scoped to a child the caller is the confirmed guardian of (or a real admin). The endpoint is read-only — there is no companion POST.
+
+ * @summary Read-only message list for a guardian-managed child's conversation
+ */
+export const ListChildConversationMessagesParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+  conversationId: zod.coerce.string().uuid(),
+});
+
+export const ListChildConversationMessagesResponse = zod.object({
+  data: zod.array(zod.record(zod.string(), zod.unknown())),
+});
+
+/**
+ * Returns the same shape as `GET /posts/{postId}` but evaluates draft and audience access through the child's identity, and reports viewer-specific stats (such as `hasReacted`) from the child's perspective. Only the confirmed guardian or a real admin may call this.
+
+ * @summary Read-only post view scoped to a guardian-managed child
+ */
+export const GetChildPostParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+  postId: zod.coerce.string(),
+});
+
+export const GetChildPostResponse = zod.record(zod.string(), zod.unknown());
+
+/**
  * @summary Update visibility settings for a guardian-managed child
  */
 export const UpdateChildVisibilityParams = zod.object({
@@ -5991,6 +6032,46 @@ export const MarkAllChildNotificationsReadParams = zod.object({
 
 export const MarkAllChildNotificationsReadResponse = zod.object({
   markedCount: zod.number(),
+});
+
+/**
+ * Records an `approved` decision for every still-visible item in the child's aggregated stream. Approving does not perform any destructive action — it just records the parent's verdict so the item drops out of the default feed on the next fetch.
+
+ * @summary Approve every still-undecided item in the child's stream
+ */
+export const ApproveAllChildNotificationsParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const ApproveAllChildNotificationsResponse = zod.object({
+  approvedCount: zod.number(),
+});
+
+/**
+ * Records a per-item decision for the parent. `approved` only records the verdict. `removed` *also* performs the kind-specific destructive action: declining a tag, hiding a comment for the child's view of the post, hiding a message from the child's conversation view, declining a roster invite, removing a follow or reaction, or just-dismissing for unhandled notification kinds.
+
+ * @summary Approve or remove a single child-stream item
+ */
+export const DecideChildNotificationParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const DecideChildNotificationBody = zod.object({
+  itemKey: zod
+    .string()
+    .describe(
+      "The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.\n",
+    ),
+  decision: zod
+    .enum(["approve", "remove", "approved", "removed"])
+    .describe(
+      "Action verb (`approve` \/ `remove`) or the past-tense state name (`approved` \/ `removed`). All four are accepted and normalized server-side to the state name returned in the response.\n",
+    ),
+});
+
+export const DecideChildNotificationResponse = zod.object({
+  ok: zod.boolean(),
+  decision: zod.enum(["approved", "removed"]),
 });
 
 /**

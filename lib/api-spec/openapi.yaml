@@ -5345,6 +5345,104 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /users/me/children/{childId}/notifications/approve-all:
+    post:
+      operationId: approveAllChildNotifications
+      summary: Approve every still-undecided item in the child's stream
+      description: >
+        Records an `approved` decision for every still-visible item
+        in the child's aggregated stream. Approving does not perform
+        any destructive action — it just records the parent's verdict
+        so the item drops out of the default feed on the next fetch.
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Count of newly-approved items.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approvedCount]
+                properties:
+                  approvedCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/me/children/{childId}/notifications/decision:
+    post:
+      operationId: decideChildNotification
+      summary: Approve or remove a single child-stream item
+      description: >
+        Records a per-item decision for the parent. `approved` only
+        records the verdict. `removed` *also* performs the kind-specific
+        destructive action: declining a tag, hiding a comment for the
+        child's view of the post, hiding a message from the child's
+        conversation view, declining a roster invite, removing a follow
+        or reaction, or just-dismissing for unhandled notification kinds.
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemKey, decision]
+              properties:
+                itemKey:
+                  type: string
+                  description: >
+                    The aggregated item's key in the form `<kind>:<id>`,
+                    e.g. `tag:abc-123` or `comment:def-456`.
+                decision:
+                  type: string
+                  description: >
+                    Action verb (`approve` / `remove`) or the past-tense
+                    state name (`approved` / `removed`). All four are
+                    accepted and normalized server-side to the state
+                    name returned in the response.
+                  enum: [approve, remove, approved, removed]
+      responses:
+        '200':
+          description: Decision was persisted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, decision]
+                properties:
+                  ok:
+                    type: boolean
+                  decision:
+                    type: string
+                    enum: [approved, removed]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /users/me/children-notifications-summary:
     get:
       operationId: getChildrenNotificationsSummary

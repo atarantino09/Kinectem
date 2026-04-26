@@ -360,9 +360,29 @@ export const notifications = pgTable("notifications", {
   kind: text("kind").notNull(),
   message: text("message").notNull(),
   link: text("link"),
+  // Optional actor — recorded so we can dispatch destructive actions from
+  // the family dashboard (e.g. delete the matching follow / like row when
+  // a parent removes a follow/like notification on their child's behalf).
+  // Existing notification kinds that never had an actor remain NULL here.
+  actorUserId: uuid("actor_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Per-child soft-hide for an individual message. Used when a parent
+// removes a `message:<id>` from the family dashboard: the message stays
+// in the database (and visible to the sender), but disappears from the
+// child's conversation view.
+export const messageChildHides = pgTable(
+  "message_child_hides",
+  {
+    messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }).notNull(),
+    childId: uuid("child_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    hiddenAt: timestamp("hidden_at").defaultNow().notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.messageId, t.childId] }) }),
+);
 
 // Per-parent read state for the unified "child notifications" stream on
 // /family. Items in that stream are aggregated on the fly from many tables
@@ -382,6 +402,14 @@ export const parentChildNotificationReads = pgTable(
       .notNull(),
     itemKey: text("item_key").notNull(),
     readAt: timestamp("read_at").defaultNow().notNull(),
+    // Optional Approve/Remove decision the parent made on this item.
+    // NULL means the row was created by the legacy "mark as seen" path
+    // (which still satisfies the read overlay and the unread bell count).
+    // "approved" / "removed" carry the parent's explicit verdict so we can
+    // surface the badge briefly on the family dashboard and keep the item
+    // out of the default feed on subsequent fetches.
+    decision: text("decision"),
+    decidedAt: timestamp("decided_at"),
   },
   (t) => ({
     uniq: uniqueIndex("pc_notif_reads_parent_child_key_unique").on(

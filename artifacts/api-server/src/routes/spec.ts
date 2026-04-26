@@ -29,6 +29,7 @@ import {
   passwordResets,
   contentReports,
   parentChildNotificationReads,
+  messageChildHides,
 } from "@workspace/db";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -2870,6 +2871,7 @@ router.get(
 // real (non-masquerading) parent or real admin.
 
 type ChildItemKind = "notification" | "tag" | "comment" | "message" | "roster";
+type ChildItemDecision = "approved" | "removed";
 
 interface ChildItem {
   itemKey: string;
@@ -2878,6 +2880,10 @@ interface ChildItem {
   body: string | null;
   link: string | null;
   isRead: boolean;
+  // Whether the parent has explicitly approved or removed this item, or
+  // null if it's still awaiting their decision (or was only ever marked
+  // as seen via the legacy read overlay).
+  decision: ChildItemDecision | null;
   createdAt: string;
   actor: {
     id: string;
@@ -2919,6 +2925,7 @@ async function loadChildNotificationItems(
       body: null,
       link: n.link ?? null,
       isRead: false, // overlaid below from parent's read table
+      decision: null, // overlaid below
       createdAt: n.createdAt.toISOString(),
       actor: null,
     });
@@ -2962,6 +2969,7 @@ async function loadChildNotificationItems(
       // child's guardian" banner and offer a back-link to the family stream.
       link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
       isRead: false,
+      decision: null,
       createdAt: r.t.createdAt.toISOString(),
       actor: r.tagger
         ? {
@@ -3033,6 +3041,7 @@ async function loadChildNotificationItems(
             : r.c.body,
         link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
         isRead: false,
+        decision: null,
         createdAt: r.c.createdAt.toISOString(),
         actor: r.author
           ? {
@@ -3059,6 +3068,14 @@ async function loadChildNotificationItems(
     );
   const childConvIds = childConvRows.map((r) => r.conversationId);
   if (childConvIds.length > 0) {
+    // Pull message hides for this child so a message removed by the
+    // parent stops surfacing in the family stream alongside being hidden
+    // from the child's conversation view.
+    const hideRows = await db
+      .select({ messageId: messageChildHides.messageId })
+      .from(messageChildHides)
+      .where(eq(messageChildHides.childId, childId));
+    const hiddenIds = new Set(hideRows.map((h) => h.messageId));
     const msgRows = await db
       .select({ m: messages, sender: users })
       .from(messages)
@@ -3073,7 +3090,8 @@ async function loadChildNotificationItems(
       )
       .orderBy(desc(messages.createdAt))
       .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
-    for (const r of msgRows) {
+    const visibleMsgRows = msgRows.filter((r) => !hiddenIds.has(r.m.id));
+    for (const r of visibleMsgRows) {
       const senderName = r.sender ? displayName(r.sender) : "Someone";
       const preview = r.m.body
         ? r.m.body.length > 140
@@ -3090,6 +3108,7 @@ async function loadChildNotificationItems(
         // its own would just open the parent's own inbox).
         link: `/family/${childId}/messages/${r.m.conversationId}`,
         isRead: false,
+        decision: null,
         createdAt: r.m.createdAt.toISOString(),
         actor: r.sender
           ? {
@@ -3131,6 +3150,7 @@ async function loadChildNotificationItems(
       body: r.entry.position ?? null,
       link: `/family?childId=${childId}&entryId=${r.entry.id}&teamId=${r.team.id}`,
       isRead: false,
+      decision: null,
       createdAt: r.entry.createdAt.toISOString(),
       actor: null,
     });
@@ -3151,7 +3171,10 @@ async function applyParentReadOverlay(
   if (items.length === 0) return items;
   const keys = items.map((i) => i.itemKey);
   const reads = await db
-    .select({ itemKey: parentChildNotificationReads.itemKey })
+    .select({
+      itemKey: parentChildNotificationReads.itemKey,
+      decision: parentChildNotificationReads.decision,
+    })
     .from(parentChildNotificationReads)
     .where(
       and(
@@ -3160,10 +3183,26 @@ async function applyParentReadOverlay(
         inArray(parentChildNotificationReads.itemKey, keys),
       ),
     );
-  const readSet = new Set(reads.map((r) => r.itemKey));
-  return items.map((i) =>
-    readSet.has(i.itemKey) ? { ...i, isRead: true } : i,
-  );
+  const readMap = new Map(reads.map((r) => [r.itemKey, r.decision]));
+  return items.map((i) => {
+    if (!readMap.has(i.itemKey)) return i;
+    const decision = readMap.get(i.itemKey) ?? null;
+    return {
+      ...i,
+      isRead: true,
+      decision: decision === "approved" || decision === "removed"
+        ? decision
+        : null,
+    };
+  });
+}
+
+// Items the parent has explicitly approved or removed are dropped from
+// the default feed so the family dashboard shows only items still
+// awaiting their attention. Legacy "mark as seen" rows (decision === null)
+// stay in the feed as read so behavior pre-Approve/Remove is preserved.
+function visibleAfterDecision(items: ChildItem[]): ChildItem[] {
+  return items.filter((i) => i.decision === null);
 }
 
 async function authorizeChildAccess(
@@ -3210,9 +3249,10 @@ router.get(
     const me = req.sessionUser!;
     const raw = await loadChildNotificationItems(child);
     const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
+    const visible = visibleAfterDecision(overlaid);
     res.json({
-      data: overlaid,
-      unreadCount: overlaid.filter((i) => !i.isRead).length,
+      data: visible,
+      unreadCount: visible.filter((i) => !i.isRead).length,
     });
   }),
 );
@@ -3256,7 +3296,8 @@ router.post(
     const me = req.sessionUser!;
     const raw = await loadChildNotificationItems(child);
     const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
-    const toMark = overlaid.filter((i) => !i.isRead);
+    const visible = visibleAfterDecision(overlaid);
+    const toMark = visible.filter((i) => !i.isRead);
     if (toMark.length === 0) return res.json({ markedCount: 0 });
     await db
       .insert(parentChildNotificationReads)
@@ -3271,6 +3312,257 @@ router.post(
     res.json({ markedCount: toMark.length });
   }),
 );
+
+// Bulk "Approve all" — mark every still-undecided item as approved in
+// one round trip. Approving doesn't perform any destructive action; it
+// just records the parent's verdict so the item drops out of the feed.
+router.post(
+  "/users/me/children/:childId/notifications/approve-all",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const me = req.sessionUser!;
+    const raw = await loadChildNotificationItems(child);
+    const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
+    const visible = visibleAfterDecision(overlaid);
+    if (visible.length === 0) return res.json({ approvedCount: 0 });
+    const now = new Date();
+    for (const item of visible) {
+      await db
+        .insert(parentChildNotificationReads)
+        .values({
+          parentId: me.id,
+          childId: child.id,
+          itemKey: item.itemKey,
+          decision: "approved",
+          decidedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            parentChildNotificationReads.parentId,
+            parentChildNotificationReads.childId,
+            parentChildNotificationReads.itemKey,
+          ],
+          set: { decision: "approved", decidedAt: now },
+        });
+    }
+    res.json({ approvedCount: visible.length });
+  }),
+);
+
+// Per-item Approve/Remove. Approving just records the verdict; Removing
+// also performs the kind-specific destructive action (decline tag, hide
+// comment, hide message, decline roster invite, remove follow, remove
+// reaction, or just-dismiss for unhandled notification kinds).
+//
+// Security: itemKey is validated against the child's CURRENT loaded
+// stream so a parent can never mutate an arbitrary tag/comment/message/
+// roster/notification id by guessing — only items the family dashboard
+// would actually surface for this child are accepted.
+router.post(
+  "/users/me/children/:childId/notifications/decision",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const me = req.sessionUser!;
+    const itemKey = String(req.body?.itemKey ?? "").trim();
+    // Accept both action verbs ("approve"/"remove") and the past-tense
+    // state names ("approved"/"removed") that match the DB enum so older
+    // clients and the spec-defined contract both work.
+    const rawDecision = String(req.body?.decision ?? "").trim();
+    const decision: "approved" | "removed" | null =
+      rawDecision === "approve" || rawDecision === "approved"
+        ? "approved"
+        : rawDecision === "remove" || rawDecision === "removed"
+          ? "removed"
+          : null;
+    if (!itemKey) return apiError(res, 400, "itemKey is required");
+    if (itemKey.length > 200)
+      return apiError(res, 400, "itemKey too long");
+    if (!decision) {
+      return apiError(
+        res,
+        400,
+        "decision must be one of 'approve', 'remove', 'approved', 'removed'",
+      );
+    }
+    const [kind, refId] = itemKey.split(":");
+    const allowed: ChildItemKind[] = [
+      "notification",
+      "tag",
+      "comment",
+      "message",
+      "roster",
+    ];
+    if (!allowed.includes(kind as ChildItemKind)) {
+      return apiError(res, 400, "unknown item kind");
+    }
+    if (!refId) return apiError(res, 400, "missing item reference");
+
+    // Authoritative membership check: the item must belong to this
+    // child's current notification stream (or have already been decided
+    // on previously, so the parent can flip an old verdict). Anything
+    // else returns 404 — including stale or fabricated itemKeys.
+    const raw = await loadChildNotificationItems(child);
+    const member = raw.find((i) => i.itemKey === itemKey);
+    let underlyingItem: ChildItem | null = member ?? null;
+    if (!member) {
+      const [prior] = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, me.id),
+            eq(parentChildNotificationReads.childId, child.id),
+            eq(parentChildNotificationReads.itemKey, itemKey),
+          ),
+        )
+        .limit(1);
+      if (!prior) {
+        return apiError(res, 404, "Notification item not found");
+      }
+      // A prior decision exists but the underlying source row is gone;
+      // updating the verdict is harmless and idempotent — there is just
+      // nothing left to act on destructively.
+    }
+
+    if (decision === "removed" && underlyingItem) {
+      await applyRemoveAction(underlyingItem, child.id);
+    }
+
+    const now = new Date();
+    await db
+      .insert(parentChildNotificationReads)
+      .values({
+        parentId: me.id,
+        childId: child.id,
+        itemKey,
+        decision,
+        decidedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          parentChildNotificationReads.parentId,
+          parentChildNotificationReads.childId,
+          parentChildNotificationReads.itemKey,
+        ],
+        set: { decision, decidedAt: now },
+      });
+    res.json({ ok: true, decision });
+  }),
+);
+
+// Dispatch table for the "Remove" action. Each branch is intentionally
+// narrow: it touches only the row identified by the family-stream item
+// (which the caller has already validated belongs to this child) and
+// never escalates to global moderation. For direct notifications, any
+// destructive sub-action is additionally scoped to the specific actor +
+// post / actor + child pair carried by the notification — never a
+// blanket "delete all reactions by this user".
+async function applyRemoveAction(
+  item: ChildItem,
+  childId: string,
+): Promise<void> {
+  const refId = item.itemKey.split(":").slice(1).join(":");
+  if (item.kind === "tag") {
+    await db
+      .update(articleTags)
+      .set({ status: "declined" })
+      .where(eq(articleTags.id, refId));
+    return;
+  }
+  if (item.kind === "comment") {
+    await db
+      .update(postComments)
+      .set({ hiddenAt: new Date() })
+      .where(eq(postComments.id, refId));
+    return;
+  }
+  if (item.kind === "message") {
+    await db
+      .insert(messageChildHides)
+      .values({ messageId: refId, childId })
+      .onConflictDoNothing();
+    return;
+  }
+  if (item.kind === "roster") {
+    // Remove on a roster item must mirror "decline this invite" semantics
+    // — i.e. it is only allowed to undo a not-yet-accepted membership.
+    // For an already-accepted entry (the "child joined the team" event)
+    // we just-dismiss: the parent can't quietly delete an existing
+    // membership through the notifications dashboard. The decision row
+    // is still persisted by the caller so the item disappears.
+    const [entry] = await db
+      .select({ status: rosterEntries.status })
+      .from(rosterEntries)
+      .where(eq(rosterEntries.id, refId))
+      .limit(1);
+    if (entry && entry.status === "pending") {
+      await db
+        .delete(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.id, refId),
+            eq(rosterEntries.status, "pending"),
+          ),
+        );
+    }
+    return;
+  }
+  if (item.kind === "notification") {
+    const [notif] = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, refId))
+      .limit(1);
+    if (!notif) return;
+    const link = notif.link ?? "";
+
+    // Like/reaction: revoke ONLY this actor's reaction on the specific
+    // post the notification points at. We require both an actorUserId
+    // and a parseable /posts/<postId> link; if either is missing, fall
+    // through to just-dismiss rather than risk an over-broad delete.
+    if (notif.actorUserId && /react|like/i.test(notif.message)) {
+      const postMatch = link.match(/^\/posts\/([^\/?#]+)/);
+      if (postMatch) {
+        const parsed = parsePostId(postMatch[1]);
+        if (parsed) {
+          await db
+            .delete(postReactions)
+            .where(
+              and(
+                eq(postReactions.postKind, parsed.kind),
+                eq(postReactions.postRefId, parsed.id),
+                eq(postReactions.userId, notif.actorUserId),
+              ),
+            );
+        }
+      }
+      return;
+    }
+
+    // Follow: revoke ONLY the (follower → child) edge. Prefer the
+    // structured actorUserId when available; fall back to the userId
+    // embedded in the /users/<id> link for legacy notifications.
+    if (/follow/i.test(notif.message)) {
+      const followerMatch = link.match(/^\/users\/([^\/?#]+)/);
+      const followerId = notif.actorUserId ?? followerMatch?.[1] ?? null;
+      if (followerId) {
+        await db
+          .delete(userFollowers)
+          .where(
+            and(
+              eq(userFollowers.followerUserId, followerId),
+              eq(userFollowers.followingUserId, childId),
+            ),
+          );
+      }
+      return;
+    }
+    // Unhandled kind — Remove just records the verdict (just-dismiss).
+    return;
+  }
+}
 
 // One-shot summary used by the global notification bell so it can show a
 // combined badge across the parent's own notifications and every linked
@@ -3289,7 +3581,8 @@ router.get(
     for (const child of childRows) {
       const raw = await loadChildNotificationItems(child);
       const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
-      const unread = overlaid.filter((i) => !i.isRead).length;
+      const visible = visibleAfterDecision(overlaid);
+      const unread = visible.filter((i) => !i.isRead).length;
       perChild.push({ childId: child.id, unreadCount: unread });
       totalUnreadCount += unread;
     }
@@ -5065,10 +5358,21 @@ router.get(
       .leftJoin(users, eq(messages.senderUserId, users.id))
       .where(eq(messages.conversationId, req.params.id))
       .orderBy(asc(messages.createdAt));
-    const assetsByMessage = await loadAssetsForMessages(rows.map((r) => r.m.id));
+    // Drop messages a guardian has hidden for *this* viewing user (only
+    // applies when the viewer is a child whose parent removed a message
+    // from the family stream).
+    const hides = await db
+      .select({ messageId: messageChildHides.messageId })
+      .from(messageChildHides)
+      .where(eq(messageChildHides.childId, me.id));
+    const hiddenIds = new Set(hides.map((h) => h.messageId));
+    const visibleRows = rows.filter((r) => !hiddenIds.has(r.m.id));
+    const assetsByMessage = await loadAssetsForMessages(
+      visibleRows.map((r) => r.m.id),
+    );
     res.json(
       paginate(
-        rows.map((r) =>
+        visibleRows.map((r) =>
           toMessage(
             r.m,
             r.sender
@@ -5862,10 +6166,20 @@ router.get(
       .leftJoin(users, eq(messages.senderUserId, users.id))
       .where(eq(messages.conversationId, conv.id))
       .orderBy(asc(messages.createdAt));
-    const assetsByMessage = await loadAssetsForMessages(rows.map((r) => r.m.id));
+    // Honor parent-side hides so the read-only family-stream view matches
+    // what the child themselves would now see in their own inbox.
+    const hides = await db
+      .select({ messageId: messageChildHides.messageId })
+      .from(messageChildHides)
+      .where(eq(messageChildHides.childId, child.id));
+    const hiddenIds = new Set(hides.map((h) => h.messageId));
+    const visibleRows = rows.filter((r) => !hiddenIds.has(r.m.id));
+    const assetsByMessage = await loadAssetsForMessages(
+      visibleRows.map((r) => r.m.id),
+    );
     res.json(
       paginate(
-        rows.map((r) =>
+        visibleRows.map((r) =>
           toMessage(
             r.m,
             r.sender

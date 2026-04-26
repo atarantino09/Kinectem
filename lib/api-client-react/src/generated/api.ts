@@ -90,6 +90,7 @@ import type {
   AdminCreateUserRequest,
   AdminOkResponse,
   AdminUpdateUserRequest,
+  ApproveAllChildNotifications200,
   ApproveJoinRequestBody,
   AssetResponse,
   AssetUploadRequest,
@@ -130,6 +131,8 @@ import type {
   CreateTeamSeasonRequest,
   CrossEntitySearch200,
   CrossEntitySearchParams,
+  DecideChildNotification200,
+  DecideChildNotificationBody,
   EmailPreferenceResponse,
   ErrorResponse,
   FeedResponse,
@@ -137,6 +140,8 @@ import type {
   FollowSuggestionsResponse,
   FollowUserResponse,
   ForbiddenResponse,
+  GetChildConversation200,
+  GetChildPost200,
   GetChildrenNotificationsSummary200,
   GetInviteByToken200,
   GetMyReportForContent200,
@@ -163,6 +168,7 @@ import type {
   ListAdminReportsParams,
   ListAdminUsers200,
   ListAdminUsersParams,
+  ListChildConversationMessages200,
   ListChildNotifications200,
   ListChildPendingTeamInvites200,
   ListCommentReactorsParams,
@@ -18252,6 +18258,343 @@ export const useCreateMyChild = <
 };
 
 /**
+ * Returns a single conversation the child participates in, rendered from the child's perspective. Lets a confirmed guardian (or a real admin) follow a message item from the family stream straight into the conversation it points at, without giving the parent the ability to send messages or otherwise act on the child's behalf.
+
+ * @summary Read-only view of a guardian-managed child's conversation
+ */
+export const getGetChildConversationUrl = (
+  childId: string,
+  conversationId: string,
+) => {
+  return `/api/v1/users/me/children/${childId}/conversations/${conversationId}`;
+};
+
+export const getChildConversation = async (
+  childId: string,
+  conversationId: string,
+  options?: RequestInit,
+): Promise<GetChildConversation200> => {
+  return customFetch<GetChildConversation200>(
+    getGetChildConversationUrl(childId, conversationId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetChildConversationQueryKey = (
+  childId: string,
+  conversationId: string,
+) => {
+  return [
+    `/api/v1/users/me/children/${childId}/conversations/${conversationId}`,
+  ] as const;
+};
+
+export const getGetChildConversationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChildConversation>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  conversationId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChildConversation>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetChildConversationQueryKey(childId, conversationId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getChildConversation>>
+  > = ({ signal }) =>
+    getChildConversation(childId, conversationId, {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(childId && conversationId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChildConversation>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChildConversationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChildConversation>>
+>;
+export type GetChildConversationQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Read-only view of a guardian-managed child's conversation
+ */
+
+export function useGetChildConversation<
+  TData = Awaited<ReturnType<typeof getChildConversation>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  conversationId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChildConversation>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChildConversationQueryOptions(
+    childId,
+    conversationId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Lists every message in the given conversation, scoped to a child the caller is the confirmed guardian of (or a real admin). The endpoint is read-only — there is no companion POST.
+
+ * @summary Read-only message list for a guardian-managed child's conversation
+ */
+export const getListChildConversationMessagesUrl = (
+  childId: string,
+  conversationId: string,
+) => {
+  return `/api/v1/users/me/children/${childId}/conversations/${conversationId}/messages`;
+};
+
+export const listChildConversationMessages = async (
+  childId: string,
+  conversationId: string,
+  options?: RequestInit,
+): Promise<ListChildConversationMessages200> => {
+  return customFetch<ListChildConversationMessages200>(
+    getListChildConversationMessagesUrl(childId, conversationId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListChildConversationMessagesQueryKey = (
+  childId: string,
+  conversationId: string,
+) => {
+  return [
+    `/api/v1/users/me/children/${childId}/conversations/${conversationId}/messages`,
+  ] as const;
+};
+
+export const getListChildConversationMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listChildConversationMessages>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  conversationId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChildConversationMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListChildConversationMessagesQueryKey(childId, conversationId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listChildConversationMessages>>
+  > = ({ signal }) =>
+    listChildConversationMessages(childId, conversationId, {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(childId && conversationId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listChildConversationMessages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListChildConversationMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listChildConversationMessages>>
+>;
+export type ListChildConversationMessagesQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Read-only message list for a guardian-managed child's conversation
+ */
+
+export function useListChildConversationMessages<
+  TData = Awaited<ReturnType<typeof listChildConversationMessages>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  conversationId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChildConversationMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListChildConversationMessagesQueryOptions(
+    childId,
+    conversationId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the same shape as `GET /posts/{postId}` but evaluates draft and audience access through the child's identity, and reports viewer-specific stats (such as `hasReacted`) from the child's perspective. Only the confirmed guardian or a real admin may call this.
+
+ * @summary Read-only post view scoped to a guardian-managed child
+ */
+export const getGetChildPostUrl = (childId: string, postId: string) => {
+  return `/api/v1/users/me/children/${childId}/posts/${postId}`;
+};
+
+export const getChildPost = async (
+  childId: string,
+  postId: string,
+  options?: RequestInit,
+): Promise<GetChildPost200> => {
+  return customFetch<GetChildPost200>(getGetChildPostUrl(childId, postId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetChildPostQueryKey = (childId: string, postId: string) => {
+  return [`/api/v1/users/me/children/${childId}/posts/${postId}`] as const;
+};
+
+export const getGetChildPostQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChildPost>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  postId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChildPost>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetChildPostQueryKey(childId, postId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getChildPost>>> = ({
+    signal,
+  }) => getChildPost(childId, postId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(childId && postId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChildPost>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChildPostQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChildPost>>
+>;
+export type GetChildPostQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Read-only post view scoped to a guardian-managed child
+ */
+
+export function useGetChildPost<
+  TData = Awaited<ReturnType<typeof getChildPost>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  childId: string,
+  postId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChildPost>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChildPostQueryOptions(childId, postId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Update visibility settings for a guardian-managed child
  */
 export const getUpdateChildVisibilityUrl = (childId: string) => {
@@ -18743,6 +19086,209 @@ export const useMarkAllChildNotificationsRead = <
   TContext
 > => {
   return useMutation(getMarkAllChildNotificationsReadMutationOptions(options));
+};
+
+/**
+ * Records an `approved` decision for every still-visible item in the child's aggregated stream. Approving does not perform any destructive action — it just records the parent's verdict so the item drops out of the default feed on the next fetch.
+
+ * @summary Approve every still-undecided item in the child's stream
+ */
+export const getApproveAllChildNotificationsUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/notifications/approve-all`;
+};
+
+export const approveAllChildNotifications = async (
+  childId: string,
+  options?: RequestInit,
+): Promise<ApproveAllChildNotifications200> => {
+  return customFetch<ApproveAllChildNotifications200>(
+    getApproveAllChildNotificationsUrl(childId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getApproveAllChildNotificationsMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveAllChildNotifications>>,
+    TError,
+    { childId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveAllChildNotifications>>,
+  TError,
+  { childId: string },
+  TContext
+> => {
+  const mutationKey = ["approveAllChildNotifications"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveAllChildNotifications>>,
+    { childId: string }
+  > = (props) => {
+    const { childId } = props ?? {};
+
+    return approveAllChildNotifications(childId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveAllChildNotificationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveAllChildNotifications>>
+>;
+
+export type ApproveAllChildNotificationsMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Approve every still-undecided item in the child's stream
+ */
+export const useApproveAllChildNotifications = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveAllChildNotifications>>,
+    TError,
+    { childId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveAllChildNotifications>>,
+  TError,
+  { childId: string },
+  TContext
+> => {
+  return useMutation(getApproveAllChildNotificationsMutationOptions(options));
+};
+
+/**
+ * Records a per-item decision for the parent. `approved` only records the verdict. `removed` *also* performs the kind-specific destructive action: declining a tag, hiding a comment for the child's view of the post, hiding a message from the child's conversation view, declining a roster invite, removing a follow or reaction, or just-dismissing for unhandled notification kinds.
+
+ * @summary Approve or remove a single child-stream item
+ */
+export const getDecideChildNotificationUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/notifications/decision`;
+};
+
+export const decideChildNotification = async (
+  childId: string,
+  decideChildNotificationBody: DecideChildNotificationBody,
+  options?: RequestInit,
+): Promise<DecideChildNotification200> => {
+  return customFetch<DecideChildNotification200>(
+    getDecideChildNotificationUrl(childId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(decideChildNotificationBody),
+    },
+  );
+};
+
+export const getDecideChildNotificationMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideChildNotification>>,
+    TError,
+    { childId: string; data: BodyType<DecideChildNotificationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideChildNotification>>,
+  TError,
+  { childId: string; data: BodyType<DecideChildNotificationBody> },
+  TContext
+> => {
+  const mutationKey = ["decideChildNotification"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideChildNotification>>,
+    { childId: string; data: BodyType<DecideChildNotificationBody> }
+  > = (props) => {
+    const { childId, data } = props ?? {};
+
+    return decideChildNotification(childId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideChildNotificationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideChildNotification>>
+>;
+export type DecideChildNotificationMutationBody =
+  BodyType<DecideChildNotificationBody>;
+export type DecideChildNotificationMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Approve or remove a single child-stream item
+ */
+export const useDecideChildNotification = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideChildNotification>>,
+    TError,
+    { childId: string; data: BodyType<DecideChildNotificationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideChildNotification>>,
+  TError,
+  { childId: string; data: BodyType<DecideChildNotificationBody> },
+  TContext
+> => {
+  return useMutation(getDecideChildNotificationMutationOptions(options));
 };
 
 /**

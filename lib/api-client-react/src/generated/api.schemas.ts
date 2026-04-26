@@ -3312,6 +3312,18 @@ export type CreateMyChildBody = { [key: string]: unknown };
 
 export type CreateMyChild201 = { [key: string]: unknown };
 
+export type GetChildConversation200 = { [key: string]: unknown };
+
+export type ListChildConversationMessages200DataItem = {
+  [key: string]: unknown;
+};
+
+export type ListChildConversationMessages200 = {
+  data: ListChildConversationMessages200DataItem[];
+};
+
+export type GetChildPost200 = { [key: string]: unknown };
+
 export type UpdateChildVisibilityBody = { [key: string]: unknown };
 
 export type UpdateChildVisibility200 = { [key: string]: unknown };
@@ -3337,6 +3349,46 @@ export type MarkChildNotificationReadBody = {
 
 export type MarkAllChildNotificationsRead200 = {
   markedCount: number;
+};
+
+export type ApproveAllChildNotifications200 = {
+  approvedCount: number;
+};
+
+/**
+ * Action verb (`approve` / `remove`) or the past-tense state name (`approved` / `removed`). All four are accepted and normalized server-side to the state name returned in the response.
+
+ */
+export type DecideChildNotificationBodyDecision =
+  (typeof DecideChildNotificationBodyDecision)[keyof typeof DecideChildNotificationBodyDecision];
+
+export const DecideChildNotificationBodyDecision = {
+  approve: "approve",
+  remove: "remove",
+  approved: "approved",
+  removed: "removed",
+} as const;
+
+export type DecideChildNotificationBody = {
+  /** The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
+   */
+  itemKey: string;
+  /** Action verb (`approve` / `remove`) or the past-tense state name (`approved` / `removed`). All four are accepted and normalized server-side to the state name returned in the response.
+   */
+  decision: DecideChildNotificationBodyDecision;
+};
+
+export type DecideChildNotification200Decision =
+  (typeof DecideChildNotification200Decision)[keyof typeof DecideChildNotification200Decision];
+
+export const DecideChildNotification200Decision = {
+  approved: "approved",
+  removed: "removed",
+} as const;
+
+export type DecideChildNotification200 = {
+  ok: boolean;
+  decision: DecideChildNotification200Decision;
 };
 
 export type GetChildrenNotificationsSummary200DataItem = {

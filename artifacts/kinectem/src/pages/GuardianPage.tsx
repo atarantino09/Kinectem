@@ -66,6 +66,7 @@ interface ChildNotificationItem {
   body: string | null;
   link: string | null;
   isRead: boolean;
+  decision: "approved" | "removed" | null;
   createdAt: string;
   actor: {
     id: string;
@@ -121,8 +122,14 @@ export default function GuardianPage() {
   const [notifsByChild, setNotifsByChild] = useState<
     Record<string, ChildNotificationsState>
   >({});
-  const [markingItemKey, setMarkingItemKey] = useState<string | null>(null);
-  const [markingAllForChild, setMarkingAllForChild] = useState<string | null>(
+  // Tracks which item is currently being approved/removed and which verb
+  // was clicked, so the row can flip the right button into a busy state
+  // without spinners on the other action.
+  const [decidingItem, setDecidingItem] = useState<{
+    itemKey: string;
+    decision: "approved" | "removed";
+  } | null>(null);
+  const [approveAllForChild, setApproveAllForChild] = useState<string | null>(
     null,
   );
   const childRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -199,67 +206,79 @@ export default function GuardianPage() {
     }
   };
 
-  const markChildItemRead = async (
+  // Per-item Approve / Remove. Approve just records the verdict; Remove
+  // additionally fires the kind-specific destructive action server-side
+  // (decline tag, hide comment, etc.). The row stays in the list with a
+  // brief Approved/Removed badge so the parent sees the outcome of their
+  // click before it disappears on the next refresh.
+  const DECIDED_BADGE_MS = 1500;
+  const decideChildItem = async (
     childId: string,
     item: ChildNotificationItem,
+    decision: "approved" | "removed",
   ) => {
-    if (item.isRead) return;
-    setMarkingItemKey(item.itemKey);
-    // Optimistically flip the flag so the UI feels instant.
+    if (item.decision) return; // already decided — guard against double-click
+    setDecidingItem({ itemKey: item.itemKey, decision });
+    // Optimistically stamp the decision on the local item so the
+    // Approved/Removed badge renders immediately and the unread count
+    // drops by one — but keep the row on screen for a moment so the
+    // parent can register what happened.
     setNotifsByChild((prev) => {
       const cur = prev[childId];
       if (!cur) return prev;
-      const items = cur.items.map((i) =>
-        i.itemKey === item.itemKey ? { ...i, isRead: true } : i,
-      );
       return {
         ...prev,
         [childId]: {
           ...cur,
-          items,
-          unreadCount: Math.max(0, cur.unreadCount - 1),
+          items: cur.items.map((i) =>
+            i.itemKey === item.itemKey ? { ...i, decision } : i,
+          ),
+          unreadCount: item.isRead
+            ? cur.unreadCount
+            : Math.max(0, cur.unreadCount - 1),
         },
       };
     });
     try {
       await customFetch(
-        `/api/v1/users/me/children/${childId}/notifications/read`,
+        `/api/v1/users/me/children/${childId}/notifications/decision`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ itemKey: item.itemKey }),
+          body: JSON.stringify({ itemKey: item.itemKey, decision }),
         },
       );
+      // The bell across the app cares about this child's unread count;
+      // refetch so it stays honest. Wait for the badge to be visible
+      // long enough to register, THEN refetch (which will exclude the
+      // decided item server-side).
+      window.setTimeout(() => {
+        qc.invalidateQueries({
+          predicate: (q) => {
+            const k = q.queryKey;
+            if (!Array.isArray(k)) return false;
+            const url = typeof k[0] === "string" ? k[0] : "";
+            return (
+              url.includes("/notifications") || url.includes("/children")
+            );
+          },
+        });
+        // Also clear the locally-marked item so the section collapses
+        // even if the server-side refetch has not landed yet.
+        setNotifsByChild((prev) => {
+          const cur = prev[childId];
+          if (!cur) return prev;
+          return {
+            ...prev,
+            [childId]: {
+              ...cur,
+              items: cur.items.filter((i) => i.itemKey !== item.itemKey),
+            },
+          };
+        });
+      }, DECIDED_BADGE_MS);
     } catch {
-      // Roll back on failure so the user can try again.
-      setNotifsByChild((prev) => {
-        const cur = prev[childId];
-        if (!cur) return prev;
-        const items = cur.items.map((i) =>
-          i.itemKey === item.itemKey ? { ...i, isRead: false } : i,
-        );
-        return {
-          ...prev,
-          [childId]: { ...cur, items, unreadCount: cur.unreadCount + 1 },
-        };
-      });
-      toast({
-        title: "Couldn't mark as seen",
-        description: "Try again in a moment.",
-        variant: "destructive",
-      });
-    } finally {
-      setMarkingItemKey(null);
-    }
-  };
-
-  const markAllChildItemsRead = async (childId: string) => {
-    setMarkingAllForChild(childId);
-    try {
-      await customFetch(
-        `/api/v1/users/me/children/${childId}/notifications/read-all`,
-        { method: "POST" },
-      );
+      // Roll back the optimistic decision on failure.
       setNotifsByChild((prev) => {
         const cur = prev[childId];
         if (!cur) return prev;
@@ -267,19 +286,91 @@ export default function GuardianPage() {
           ...prev,
           [childId]: {
             ...cur,
-            items: cur.items.map((i) => ({ ...i, isRead: true })),
-            unreadCount: 0,
+            items: cur.items.map((i) =>
+              i.itemKey === item.itemKey ? { ...i, decision: null } : i,
+            ),
+            unreadCount: item.isRead ? cur.unreadCount : cur.unreadCount + 1,
           },
         };
       });
-    } catch {
       toast({
-        title: "Couldn't mark all as seen",
+        title:
+          decision === "approved"
+            ? "Couldn't approve"
+            : "Couldn't remove",
         description: "Try again in a moment.",
         variant: "destructive",
       });
     } finally {
-      setMarkingAllForChild(null);
+      setDecidingItem(null);
+    }
+  };
+
+  // The aria-label / tooltip for the per-item Remove button — varies by
+  // kind so screen readers and hover hints make the destructive effect
+  // explicit instead of a generic "Remove".
+  const removeAriaLabel = (item: ChildNotificationItem): string => {
+    switch (item.kind) {
+      case "tag":
+        return "Remove and decline this tag";
+      case "comment":
+        return "Remove and hide this comment";
+      case "message":
+        return "Remove and hide this message from your child's view";
+      case "roster":
+        return "Remove and decline this roster invite";
+      case "notification":
+      default:
+        return "Hide from your dashboard";
+    }
+  };
+
+  const approveAllChildItems = async (childId: string) => {
+    setApproveAllForChild(childId);
+    // Snapshot current items in case we need to roll back.
+    const prevItems = notifsByChild[childId]?.items ?? [];
+    setNotifsByChild((prev) => {
+      const cur = prev[childId];
+      if (!cur) return prev;
+      return {
+        ...prev,
+        [childId]: { ...cur, items: [], unreadCount: 0 },
+      };
+    });
+    try {
+      await customFetch(
+        `/api/v1/users/me/children/${childId}/notifications/approve-all`,
+        { method: "POST" },
+      );
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k)) return false;
+          const url = typeof k[0] === "string" ? k[0] : "";
+          return url.includes("/notifications") || url.includes("/children");
+        },
+      });
+    } catch {
+      // Restore on failure so the parent can retry.
+      setNotifsByChild((prev) => {
+        const cur = prev[childId];
+        if (!cur) return prev;
+        return {
+          ...prev,
+          [childId]: {
+            ...cur,
+            items: prevItems,
+            unreadCount: prevItems.filter((i) => !i.isRead).length,
+          },
+        };
+      });
+      toast({
+        title: "Couldn't approve all",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setApproveAllForChild(null);
     }
   };
 
@@ -687,6 +778,14 @@ export default function GuardianPage() {
                             ? "Coaches must ask first"
                             : "Anyone may tag"}
                         </p>
+                        <p
+                          className="text-[10px] text-muted-foreground mt-0.5"
+                          data-testid={`text-consent-helper-${c.id}`}
+                        >
+                          {c.requireTagConsent
+                            ? "New tags will arrive as Pending and require your Approve to be visible."
+                            : "New tags appear automatically. You can still Remove anything you don't want."}
+                        </p>
                       </div>
                       <Switch
                         checked={c.requireTagConsent}
@@ -804,21 +903,33 @@ export default function GuardianPage() {
                               {unread} new
                             </Badge>
                           )}
-                          {unread > 0 && (
+                          {items.length > 0 && (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="ml-auto h-6 px-2 text-xs font-bold"
-                              disabled={markingAllForChild === c.id}
-                              onClick={() => void markAllChildItemsRead(c.id)}
-                              data-testid={`btn-mark-all-read-${c.id}`}
+                              disabled={approveAllForChild === c.id}
+                              onClick={() => void approveAllChildItems(c.id)}
+                              data-testid={`btn-approve-all-${c.id}`}
                             >
-                              {markingAllForChild === c.id
-                                ? "Marking…"
-                                : "Mark all seen"}
+                              {approveAllForChild === c.id
+                                ? "Approving…"
+                                : "Approve all"}
                             </Button>
                           )}
                         </div>
+                        <p
+                          className="text-[11px] text-muted-foreground leading-snug"
+                          data-testid={`text-notif-section-helper-${c.id}`}
+                        >
+                          <span className="font-semibold">Approve</span>{" "}
+                          keeps the item visible on{" "}
+                          {c.firstName}&apos;s account.{" "}
+                          <span className="font-semibold">Remove</span>{" "}
+                          dismisses it from your dashboard and undoes the
+                          underlying action where possible (decline tag,
+                          hide comment or message, decline roster invite).
+                        </p>
                         <div className="space-y-1.5">
                           {items.slice(0, 8).map((item) => {
                             const Icon =
@@ -831,13 +942,23 @@ export default function GuardianPage() {
                                     : item.kind === "roster"
                                       ? ClipboardList
                                       : Bell;
-                            const isMarking = markingItemKey === item.itemKey;
+                            const isApproving =
+                              decidingItem?.itemKey === item.itemKey &&
+                              decidingItem.decision === "approved";
+                            const isRemoving =
+                              decidingItem?.itemKey === item.itemKey &&
+                              decidingItem.decision === "removed";
+                            const decisionInFlight = isApproving || isRemoving;
+                            const decided = item.decision;
                             return (
                               <div
                                 key={item.itemKey}
                                 data-testid={`row-child-notif-${item.itemKey}`}
                                 data-read={item.isRead ? "true" : "false"}
-                                className={`flex items-start gap-2 p-2 rounded-md border ${
+                                data-decision={decided ?? "pending"}
+                                className={`flex items-start gap-2 p-2 rounded-md border transition-opacity ${
+                                  decided ? "opacity-60" : ""
+                                } ${
                                   item.isRead
                                     ? "border-border bg-background"
                                     : "border-primary/30 bg-primary/5"
@@ -871,20 +992,64 @@ export default function GuardianPage() {
                                     {timeAgo(item.createdAt)}
                                   </p>
                                 </div>
-                                {!item.isRead && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 px-2 text-[11px] font-bold shrink-0"
-                                    disabled={isMarking}
-                                    onClick={() =>
-                                      void markChildItemRead(c.id, item)
-                                    }
-                                    data-testid={`btn-mark-read-${item.itemKey}`}
-                                  >
-                                    {isMarking ? "…" : "Mark seen"}
-                                  </Button>
-                                )}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {decided === "approved" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="h-6 px-2 text-[11px] font-bold border-primary text-primary"
+                                      data-testid={`badge-decided-${item.itemKey}`}
+                                    >
+                                      Approved
+                                    </Badge>
+                                  ) : decided === "removed" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive"
+                                      data-testid={`badge-decided-${item.itemKey}`}
+                                    >
+                                      Removed
+                                    </Badge>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        className="h-6 px-2 text-[11px] font-bold"
+                                        disabled={decisionInFlight}
+                                        onClick={() =>
+                                          void decideChildItem(
+                                            c.id,
+                                            item,
+                                            "approved",
+                                          )
+                                        }
+                                        aria-label={`Approve: keep this item visible on ${c.firstName}'s account`}
+                                        title={`Approve: keep this item visible on ${c.firstName}'s account`}
+                                        data-testid={`btn-approve-${item.itemKey}`}
+                                      >
+                                        {isApproving ? "…" : "Approve"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive hover:bg-destructive/10"
+                                        disabled={decisionInFlight}
+                                        onClick={() =>
+                                          void decideChildItem(
+                                            c.id,
+                                            item,
+                                            "removed",
+                                          )
+                                        }
+                                        aria-label={removeAriaLabel(item)}
+                                        title={removeAriaLabel(item)}
+                                        data-testid={`btn-remove-${item.itemKey}`}
+                                      >
+                                        {isRemoving ? "…" : "Remove"}
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
