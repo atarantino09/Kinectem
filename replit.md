@@ -113,4 +113,18 @@ and everything else → `"pending"` via `toTeamMember` in
 `/teams/:teamId/members*` and `/users/:userId/teams` responses, not
 `"accepted"`.
 
+## Article re-shares (task #162)
+
+Game-recap articles (and only articles — not highlights or org posts) can
+be re-shared by any logged-in viewer. Schema lives in `lib/db/src/schema`
+as the `postShares` table (`articleId`, `sharerUserId`, `createdAt`,
+unique `(articleId, sharerUserId)`). The `PostResponse` / `FeedPost`
+schemas carry `shareCount`, `hasShared`, `sharedBy`, `sharedAt`. Endpoints:
+`POST /posts/:postId/share` and `DELETE /posts/:postId/share` (both
+idempotent, 204; non-article kinds → 400; article-not-visible → 404).
+Shared recaps surface on the sharer's profile Posts tab and home feed
+(plus the home feed of users who follow them) with a "Shared by …"
+header. Authored or tag-surfaced rows win over share rows in the merge,
+so sharing your own recap is a visual no-op on your own profile.
+
 See the `pnpm-workspace` skill for workspace structure and TypeScript project references.

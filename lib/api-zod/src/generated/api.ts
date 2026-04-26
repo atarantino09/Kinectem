@@ -1245,6 +1245,8 @@ export const getPostResponseReactionCountMin = 0;
 
 export const getPostResponseCommentCountMin = 0;
 
+export const getPostResponseShareCountMin = 0;
+
 export const GetPostResponse = zod.object({
   id: zod.string().uuid(),
   postType: zod.enum(["short", "long"]),
@@ -1291,6 +1293,35 @@ export const GetPostResponse = zod.object({
     .nullish()
     .describe(
       'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
+  shareCount: zod
+    .number()
+    .min(getPostResponseShareCountMin)
+    .optional()
+    .describe(
+      "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+    ),
+  hasShared: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+    ),
+  sharedBy: zod
+    .object({
+      id: zod.string().uuid(),
+      displayName: zod.string(),
+      avatarUrl: zod.string().url().nullish(),
+    })
+    .nullish()
+    .describe(
+      "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+    ),
+  sharedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
     ),
   gameDate: zod.coerce
     .date()
@@ -1349,6 +1380,8 @@ export const updatePostResponseReactionCountMin = 0;
 
 export const updatePostResponseCommentCountMin = 0;
 
+export const updatePostResponseShareCountMin = 0;
+
 export const UpdatePostResponse = zod.object({
   id: zod.string().uuid(),
   postType: zod.enum(["short", "long"]),
@@ -1395,6 +1428,35 @@ export const UpdatePostResponse = zod.object({
     .nullish()
     .describe(
       'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+    ),
+  shareCount: zod
+    .number()
+    .min(updatePostResponseShareCountMin)
+    .optional()
+    .describe(
+      "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+    ),
+  hasShared: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+    ),
+  sharedBy: zod
+    .object({
+      id: zod.string().uuid(),
+      displayName: zod.string(),
+      avatarUrl: zod.string().url().nullish(),
+    })
+    .nullish()
+    .describe(
+      "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+    ),
+  sharedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
     ),
   gameDate: zod.coerce
     .date()
@@ -1475,6 +1537,8 @@ export const listOrgPostsResponseDataItemReactionCountMin = 0;
 
 export const listOrgPostsResponseDataItemCommentCountMin = 0;
 
+export const listOrgPostsResponseDataItemShareCountMin = 0;
+
 export const ListOrgPostsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -1531,6 +1595,35 @@ export const ListOrgPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      shareCount: zod
+        .number()
+        .min(listOrgPostsResponseDataItemShareCountMin)
+        .optional()
+        .describe(
+          "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+        ),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullish(),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
         ),
       gameDate: zod.coerce
         .date()
@@ -1821,6 +1914,8 @@ export const listUserPostsResponseDataItemReactionCountMin = 0;
 
 export const listUserPostsResponseDataItemCommentCountMin = 0;
 
+export const listUserPostsResponseDataItemShareCountMin = 0;
+
 export const ListUserPostsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -1877,6 +1972,35 @@ export const ListUserPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      shareCount: zod
+        .number()
+        .min(listUserPostsResponseDataItemShareCountMin)
+        .optional()
+        .describe(
+          "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+        ),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullish(),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
         ),
       gameDate: zod.coerce
         .date()
@@ -3318,6 +3442,8 @@ export const listFeedResponseDataItemReactionCountMin = 0;
 
 export const listFeedResponseDataItemCommentCountMin = 0;
 
+export const listFeedResponseDataItemShareCountMin = 0;
+
 export const ListFeedResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -3365,6 +3491,39 @@ export const ListFeedResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor, for \"X and N others reacted\" UI.',
+        ),
+      shareCount: zod
+        .number()
+        .min(listFeedResponseDataItemShareCountMin)
+        .optional()
+        .describe(
+          "Re-share count for game-recap articles; always 0 for other kinds.",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe("True when the requesting user has re-shared this post."),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().nullable(),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share visible to the\nviewer (the share comes from the viewer or someone they\nfollow). The card's `author` and `context` describe the\noriginal recap.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created; only set when `sharedBy` is set.",
+        ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "For long-form game-recap article cards, the date of the\ngame the recap covers. Null on non-recap article cards\nand on highlight \/ org-post cards. Used by the client to\ngate the Share button to recap-only kinds.\n",
         ),
     }),
   ),
@@ -3566,6 +3725,33 @@ export const ListPostReactorsResponse = zod.object({
     hasMore: zod.boolean(),
     totalCount: zod.number().nullish(),
   }),
+});
+
+/**
+ * Re-shares the article so it appears on the requesting user's
+profile Posts tab and home feed (and the home feed of users
+who follow them) with a "Shared by …" annotation. Idempotent
+— calling twice is a no-op (the second call returns 204
+without creating a duplicate share row). Only game-recap
+articles can be shared; calling on a highlight or org post
+returns 400. The article must be visible to the requester
+(published and not hidden) — otherwise 404.
+
+ * @summary Re-share a game-recap article post
+ */
+export const SharePostParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+/**
+ * Idempotent — calling when no share exists is a no-op and
+still returns 204. Same article-only constraint as
+`sharePost`.
+
+ * @summary Remove the requesting user's re-share of a post
+ */
+export const UnsharePostParams = zod.object({
+  postId: zod.coerce.string().uuid(),
 });
 
 /**
@@ -3897,6 +4083,8 @@ export const listTeamPostsResponseDataItemReactionCountMin = 0;
 
 export const listTeamPostsResponseDataItemCommentCountMin = 0;
 
+export const listTeamPostsResponseDataItemShareCountMin = 0;
+
 export const ListTeamPostsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -3953,6 +4141,35 @@ export const ListTeamPostsResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      shareCount: zod
+        .number()
+        .min(listTeamPostsResponseDataItemShareCountMin)
+        .optional()
+        .describe(
+          "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+        ),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullish(),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
         ),
       gameDate: zod.coerce
         .date()
@@ -4319,6 +4536,8 @@ export const listOrgPostApprovalsResponseDataItemPostReactionCountMin = 0;
 
 export const listOrgPostApprovalsResponseDataItemPostCommentCountMin = 0;
 
+export const listOrgPostApprovalsResponseDataItemPostShareCountMin = 0;
+
 export const ListOrgPostApprovalsResponse = zod.object({
   data: zod
     .array(
@@ -4386,6 +4605,35 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
               ),
+            shareCount: zod
+              .number()
+              .min(listOrgPostApprovalsResponseDataItemPostShareCountMin)
+              .optional()
+              .describe(
+                "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+              ),
+            hasShared: zod
+              .boolean()
+              .optional()
+              .describe(
+                "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+              ),
+            sharedBy: zod
+              .object({
+                id: zod.string().uuid(),
+                displayName: zod.string(),
+                avatarUrl: zod.string().url().nullish(),
+              })
+              .nullish()
+              .describe(
+                "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+              ),
+            sharedAt: zod.coerce
+              .date()
+              .nullish()
+              .describe(
+                "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
+              ),
             gameDate: zod.coerce
               .date()
               .nullish()
@@ -4433,6 +4681,8 @@ export const ApproveOrgPostApprovalParams = zod.object({
 export const approveOrgPostApprovalResponsePostReactionCountMin = 0;
 
 export const approveOrgPostApprovalResponsePostCommentCountMin = 0;
+
+export const approveOrgPostApprovalResponsePostShareCountMin = 0;
 
 export const ApproveOrgPostApprovalResponse = zod.object({
   id: zod.string().uuid(),
@@ -4498,6 +4748,35 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
         ),
+      shareCount: zod
+        .number()
+        .min(approveOrgPostApprovalResponsePostShareCountMin)
+        .optional()
+        .describe(
+          "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+        ),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullish(),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
+        ),
       gameDate: zod.coerce
         .date()
         .nullish()
@@ -4535,6 +4814,8 @@ export const DeclineOrgPostApprovalParams = zod.object({
 export const declineOrgPostApprovalResponsePostReactionCountMin = 0;
 
 export const declineOrgPostApprovalResponsePostCommentCountMin = 0;
+
+export const declineOrgPostApprovalResponsePostShareCountMin = 0;
 
 export const DeclineOrgPostApprovalResponse = zod.object({
   id: zod.string().uuid(),
@@ -4599,6 +4880,35 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .nullish()
         .describe(
           'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      shareCount: zod
+        .number()
+        .min(declineOrgPostApprovalResponsePostShareCountMin)
+        .optional()
+        .describe(
+          "Number of times this post has been re-shared. Always 0\nfor non-shareable kinds (highlights, org posts) — only\ngame-recap articles can be shared per task #162.\n",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user has re-shared this post.\nAlways false for non-shareable kinds.\n",
+        ),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullish(),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap. The original `author` and `context` fields still\ndescribe the original recap.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old recap rises to the\ntop of the sharer's profile feed.\n",
         ),
       gameDate: zod.coerce
         .date()

@@ -97,4 +97,31 @@ export interface FeedPost {
    * @nullable
    */
   recentReactorName?: string | null;
+  /**
+   * Re-share count for game-recap articles; always 0 for other kinds.
+   * @minimum 0
+   */
+  shareCount?: number;
+  /** True when the requesting user has re-shared this post. */
+  hasShared?: boolean;
+  /** Set when this card represents a re-share visible to the
+viewer (the share comes from the viewer or someone they
+follow). The card's `author` and `context` describe the
+original recap.
+ */
+  sharedBy?: FeedAuthor | null;
+  /**
+   * ISO datetime the share was created; only set when `sharedBy` is set.
+   * @nullable
+   */
+  sharedAt?: Date | null;
+  /**
+   * For long-form game-recap article cards, the date of the
+game the recap covers. Null on non-recap article cards
+and on highlight / org-post cards. Used by the client to
+gate the Share button to recap-only kinds.
+
+   * @nullable
+   */
+  gameDate?: Date | null;
 }

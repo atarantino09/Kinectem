@@ -11260,6 +11260,217 @@ export function useListPostReactors<
 }
 
 /**
+ * Re-shares the article so it appears on the requesting user's
+profile Posts tab and home feed (and the home feed of users
+who follow them) with a "Shared by …" annotation. Idempotent
+— calling twice is a no-op (the second call returns 204
+without creating a duplicate share row). Only game-recap
+articles can be shared; calling on a highlight or org post
+returns 400. The article must be visible to the requester
+(published and not hidden) — otherwise 404.
+
+ * @summary Re-share a game-recap article post
+ */
+export const getSharePostUrl = (postId: string) => {
+  return `/api/v1/posts/${postId}/share`;
+};
+
+export const sharePost = async (
+  postId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getSharePostUrl(postId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSharePostMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sharePost>>,
+    TError,
+    { postId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sharePost>>,
+  TError,
+  { postId: string },
+  TContext
+> => {
+  const mutationKey = ["sharePost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sharePost>>,
+    { postId: string }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return sharePost(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SharePostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sharePost>>
+>;
+
+export type SharePostMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Re-share a game-recap article post
+ */
+export const useSharePost = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sharePost>>,
+    TError,
+    { postId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sharePost>>,
+  TError,
+  { postId: string },
+  TContext
+> => {
+  return useMutation(getSharePostMutationOptions(options));
+};
+
+/**
+ * Idempotent — calling when no share exists is a no-op and
+still returns 204. Same article-only constraint as
+`sharePost`.
+
+ * @summary Remove the requesting user's re-share of a post
+ */
+export const getUnsharePostUrl = (postId: string) => {
+  return `/api/v1/posts/${postId}/share`;
+};
+
+export const unsharePost = async (
+  postId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getUnsharePostUrl(postId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getUnsharePostMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsharePost>>,
+    TError,
+    { postId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unsharePost>>,
+  TError,
+  { postId: string },
+  TContext
+> => {
+  const mutationKey = ["unsharePost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unsharePost>>,
+    { postId: string }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return unsharePost(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnsharePostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unsharePost>>
+>;
+
+export type UnsharePostMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Remove the requesting user's re-share of a post
+ */
+export const useUnsharePost = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsharePost>>,
+    TError,
+    { postId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unsharePost>>,
+  TError,
+  { postId: string },
+  TContext
+> => {
+  return useMutation(getUnsharePostMutationOptions(options));
+};
+
+/**
  * Requires adult or consented-minor user.
  * @summary Create a comment on a post
  */

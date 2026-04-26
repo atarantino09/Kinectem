@@ -654,6 +654,34 @@ export interface PostResponse {
    */
   recentReactorName?: string | null;
   /**
+   * Number of times this post has been re-shared. Always 0
+for non-shareable kinds (highlights, org posts) — only
+game-recap articles can be shared per task #162.
+
+   * @minimum 0
+   */
+  shareCount?: number;
+  /** True when the requesting user has re-shared this post.
+Always false for non-shareable kinds.
+ */
+  hasShared?: boolean;
+  /** Set when this card represents a re-share (e.g. on the
+sharer's profile Posts tab or in the home feed of someone
+following the sharer). Identifies who re-published the
+recap. The original `author` and `context` fields still
+describe the original recap.
+ */
+  sharedBy?: PostAuthor | null;
+  /**
+   * ISO datetime the share was created. Only set when
+`sharedBy` is set; clients sort shared cards by this
+timestamp so a recently-shared old recap rises to the
+top of the sharer's profile feed.
+
+   * @nullable
+   */
+  sharedAt?: string | null;
+  /**
    * For long-form posts only. ISO datetime when the recap's
 game was played, or `null` for a regular long-form post.
 Clients use this both as the "is this a recap?" signal
@@ -1713,6 +1741,33 @@ export interface FeedPost {
    * @nullable
    */
   recentReactorName?: string | null;
+  /**
+   * Re-share count for game-recap articles; always 0 for other kinds.
+   * @minimum 0
+   */
+  shareCount?: number;
+  /** True when the requesting user has re-shared this post. */
+  hasShared?: boolean;
+  /** Set when this card represents a re-share visible to the
+viewer (the share comes from the viewer or someone they
+follow). The card's `author` and `context` describe the
+original recap.
+ */
+  sharedBy?: FeedAuthor | null;
+  /**
+   * ISO datetime the share was created; only set when `sharedBy` is set.
+   * @nullable
+   */
+  sharedAt?: string | null;
+  /**
+   * For long-form game-recap article cards, the date of the
+game the recap covers. Null on non-recap article cards
+and on highlight / org-post cards. Used by the client to
+gate the Share button to recap-only kinds.
+
+   * @nullable
+   */
+  gameDate?: string | null;
 }
 
 export interface FeedResponse {

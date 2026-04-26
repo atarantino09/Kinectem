@@ -414,6 +414,10 @@ interface PostExtras {
   // Set by GET /posts/:postId only — list endpoints leave this off
   // since the Edit affordance only matters on the post detail page.
   canEdit?: boolean;
+  shareCount?: number;
+  hasShared?: boolean;
+  sharedBy?: { id: string; displayName: string; avatarUrl: string | null } | null;
+  sharedAt?: string | null;
 }
 
 export function articleToPost(a: ArticleRow, extras: PostExtras) {
@@ -577,6 +581,10 @@ function basePost(p: {
     // List endpoints omit it (always false) — the Edit button is
     // only rendered on the detail page.
     canEdit: p.extras.canEdit ?? false,
+    shareCount: p.extras.shareCount ?? 0,
+    hasShared: p.extras.hasShared ?? false,
+    sharedBy: p.extras.sharedBy ?? null,
+    sharedAt: p.extras.sharedAt ?? null,
   };
 }
 

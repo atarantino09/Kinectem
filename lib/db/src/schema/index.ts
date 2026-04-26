@@ -256,6 +256,19 @@ export const highlightTags = pgTable("highlight_tags", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Re-shares of game-recap articles to the sharer's own profile/feed.
+// Article-only by design — highlights and org posts are not shareable
+// per task #162. (articleId, sharerUserId) is unique so toggling acts
+// idempotently and a user can only share each recap once.
+export const postShares = pgTable("post_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  sharerUserId: uuid("sharer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  uniqArticleSharer: uniqueIndex("post_shares_article_sharer_uniq").on(t.articleId, t.sharerUserId),
+}));
+
 export const postReactions = pgTable("post_reactions", {
   postKind: postKindEnum("post_kind").notNull(),
   postRefId: uuid("post_ref_id").notNull(),

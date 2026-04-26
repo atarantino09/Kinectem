@@ -5,11 +5,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag, Share2, Repeat2 } from "lucide-react";
 import {
   useAddPostReaction,
   useRemovePostReaction,
+  useSharePost,
+  useUnsharePost,
   getListFeedQueryKey,
+  getListUserPostsQueryKey,
+  getGetPostQueryKey,
   type PostResponse,
   type FeedPost,
 } from "@workspace/api-client-react";
@@ -22,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
+import { useToast } from "@/hooks/use-toast";
 
 function getContextHref(context: {
   type: "team" | "organization" | "user";
@@ -54,7 +60,9 @@ function parseSyntheticPostId(
 
 export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [reportOpen, setReportOpen] = useState(false);
+  const [confirmShareOpen, setConfirmShareOpen] = useState(false);
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
@@ -82,6 +90,78 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const removeReaction = useRemovePostReaction({
     mutation: { onSuccess: invalidate },
   });
+  const invalidateShareSurfaces = () => {
+    invalidate();
+    qc.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        typeof q.queryKey[0] === "string" &&
+        q.queryKey[0].startsWith("/api/v1/users/") &&
+        q.queryKey[0].endsWith("/posts"),
+    });
+    qc.invalidateQueries({ queryKey: getGetPostQueryKey(post.id) });
+  };
+  type ListSnapshot = { key: readonly unknown[]; data: unknown }[];
+  const optimisticShareToggleInLists = (next: boolean): ListSnapshot => {
+    const snapshot: ListSnapshot = [];
+    qc
+      .getQueryCache()
+      .findAll({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k) || typeof k[0] !== "string") return false;
+          if (k[0] === "/api/v1/feed") return true;
+          return k[0].startsWith("/api/v1/users/") && k[0].endsWith("/posts");
+        },
+      })
+      .forEach((q) => {
+        const data = q.state.data as
+          | { data?: Array<{ id: string; hasShared?: boolean; shareCount?: number }> }
+          | undefined;
+        if (!data?.data) return;
+        snapshot.push({ key: q.queryKey, data: q.state.data });
+        qc.setQueryData(q.queryKey, {
+          ...data,
+          data: data.data.map((p) =>
+            p.id === post.id
+              ? {
+                  ...p,
+                  hasShared: next,
+                  shareCount: Math.max(
+                    0,
+                    (p.shareCount ?? 0) + (next ? 1 : -1),
+                  ),
+                }
+              : p,
+          ),
+        });
+      });
+    return snapshot;
+  };
+  const onShareError = (snapshot: ListSnapshot, action: string) => {
+    snapshot.forEach((s) => qc.setQueryData(s.key, s.data));
+    toast({
+      title: `Couldn't ${action} this recap`,
+      description: "Please try again in a moment.",
+      variant: "destructive",
+    });
+  };
+  const sharePost = useSharePost({
+    mutation: {
+      onMutate: () => ({ snapshot: optimisticShareToggleInLists(true) }),
+      onError: (_e, _v, ctx) =>
+        onShareError((ctx?.snapshot as ListSnapshot) ?? [], "share"),
+      onSuccess: invalidateShareSurfaces,
+    },
+  });
+  const unsharePost = useUnsharePost({
+    mutation: {
+      onMutate: () => ({ snapshot: optimisticShareToggleInLists(false) }),
+      onError: (_e, _v, ctx) =>
+        onShareError((ctx?.snapshot as ListSnapshot) ?? [], "unshare"),
+      onSuccess: invalidateShareSurfaces,
+    },
+  });
 
   const onToggleReaction = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -93,9 +173,40 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
     }
   };
 
+  // Recap-only: article post with gameDate (matches server gating).
+  const isShareable =
+    post.id.startsWith("article-") &&
+    post.postType === "long" &&
+    !!post.gameDate;
+  const onToggleShare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (post.hasShared) {
+      unsharePost.mutate({ postId: post.id });
+    } else {
+      setConfirmShareOpen(true);
+    }
+  };
+  const onConfirmShare = () => {
+    setConfirmShareOpen(false);
+    sharePost.mutate({ postId: post.id });
+  };
+
+  const sharedBy = "sharedBy" in post ? post.sharedBy : null;
+
   return (
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
       <CardContent className="p-0">
+        {sharedBy && (
+          <Link
+            href={`/users/${sharedBy.id}`}
+            className="block px-5 pt-3 pb-1 text-[11px] font-bold text-muted-foreground uppercase tracking-wider hover:text-primary"
+            data-testid={`label-shared-by-${post.id}`}
+          >
+            <Repeat2 className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            Shared by {sharedBy.displayName}
+          </Link>
+        )}
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
           <div className="flex items-center gap-3 min-w-0">
             <AvatarLightbox
@@ -169,6 +280,14 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           contentType={reportTarget.contentType}
           contentId={reportTarget.contentId}
         />
+        {isShareable && (
+          <ShareConfirmDialog
+            open={confirmShareOpen}
+            onOpenChange={setConfirmShareOpen}
+            onConfirm={onConfirmShare}
+            recapTitle={post.title}
+          />
+        )}
 
         <div>
           {isShort && firstImage?.url && (
@@ -249,6 +368,23 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               {post.commentCount}
             </Button>
           </Link>
+          {isShareable && (
+            <Button
+              variant={post.hasShared ? "default" : "outline"}
+              size="sm"
+              onClick={onToggleShare}
+              disabled={sharePost.isPending || unsharePost.isPending}
+              className="font-bold gap-1.5 h-8"
+              data-testid={`button-share-${post.id}`}
+              aria-pressed={post.hasShared}
+              aria-label={post.hasShared ? "Unshare recap" : "Share recap"}
+            >
+              <Share2
+                className={`w-3.5 h-3.5 ${post.hasShared ? "fill-current" : ""}`}
+              />
+              {post.shareCount ?? 0}
+            </Button>
+          )}
           {post.recentReactorName && post.reactionCount > 0 && (
             <span className="text-xs text-muted-foreground ml-1 truncate">
               {post.recentReactorName}

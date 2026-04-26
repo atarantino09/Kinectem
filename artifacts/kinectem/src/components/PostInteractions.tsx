@@ -6,9 +6,12 @@ import {
   useListPostComments,
   useCreatePostComment,
   useDeletePostComment,
+  useSharePost,
+  useUnsharePost,
   useGetLoggedInUser,
   getGetPostQueryKey,
   getListPostCommentsQueryKey,
+  getListFeedQueryKey,
   type PostResponse,
   type CommentResponse,
 } from "@workspace/api-client-react";
@@ -16,14 +19,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Heart, MessageSquare, Trash2, Flag } from "lucide-react";
+import { Heart, MessageSquare, Trash2, Flag, Share2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { ReportDialog } from "@/components/ReportDialog";
+import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
+import { useToast } from "@/hooks/use-toast";
 
 export function PostInteractions({ post }: { post: PostResponse }) {
   const qc = useQueryClient();
   const { data: me } = useGetLoggedInUser();
   const [body, setBody] = useState("");
+  const [confirmShareOpen, setConfirmShareOpen] = useState(false);
+  const { toast } = useToast();
 
   const invalidatePost = () =>
     qc.invalidateQueries({ queryKey: getGetPostQueryKey(post.id) });
@@ -53,6 +60,53 @@ export function PostInteractions({ post }: { post: PostResponse }) {
       },
     },
   });
+  const invalidateShareSurfaces = () => {
+    invalidatePost();
+    qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+    qc.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        typeof q.queryKey[0] === "string" &&
+        q.queryKey[0].startsWith("/api/v1/users/") &&
+        q.queryKey[0].endsWith("/posts"),
+    });
+  };
+  const optimisticShareToggle = (next: boolean) => {
+    const key = getGetPostQueryKey(post.id);
+    const prev = qc.getQueryData<PostResponse>(key);
+    if (prev) {
+      qc.setQueryData<PostResponse>(key, {
+        ...prev,
+        hasShared: next,
+        shareCount: Math.max(0, (prev.shareCount ?? 0) + (next ? 1 : -1)),
+      });
+    }
+    return prev;
+  };
+  const onShareError = (prev: PostResponse | undefined, action: string) => {
+    if (prev) qc.setQueryData(getGetPostQueryKey(post.id), prev);
+    toast({
+      title: `Couldn't ${action} this recap`,
+      description: "Please try again in a moment.",
+      variant: "destructive",
+    });
+  };
+  const sharePost = useSharePost({
+    mutation: {
+      onMutate: () => ({ prev: optimisticShareToggle(true) }),
+      onError: (_e, _v, ctx) =>
+        onShareError(ctx?.prev as PostResponse | undefined, "share"),
+      onSuccess: invalidateShareSurfaces,
+    },
+  });
+  const unsharePost = useUnsharePost({
+    mutation: {
+      onMutate: () => ({ prev: optimisticShareToggle(false) }),
+      onError: (_e, _v, ctx) =>
+        onShareError(ctx?.prev as PostResponse | undefined, "unshare"),
+      onSuccess: invalidateShareSurfaces,
+    },
+  });
 
   const { data: comments, isLoading: commentsLoading } = useListPostComments(
     post.id,
@@ -64,6 +118,23 @@ export function PostInteractions({ post }: { post: PostResponse }) {
     } else {
       addReaction.mutate({ postId: post.id, data: { reactionType: "like" } });
     }
+  };
+
+  // Recap-only: article post with gameDate (matches server gating).
+  const isShareable =
+    post.id.startsWith("article-") &&
+    post.postType === "long" &&
+    !!post.gameDate;
+  const onToggleShare = () => {
+    if (post.hasShared) {
+      unsharePost.mutate({ postId: post.id });
+    } else {
+      setConfirmShareOpen(true);
+    }
+  };
+  const onConfirmShare = () => {
+    setConfirmShareOpen(false);
+    sharePost.mutate({ postId: post.id });
   };
 
   const onSubmitComment = (e: React.FormEvent) => {
@@ -98,6 +169,23 @@ export function PostInteractions({ post }: { post: PostResponse }) {
           <MessageSquare className="w-4 h-4" />
           {post.commentCount}
         </Button>
+        {isShareable && (
+          <Button
+            variant={post.hasShared ? "default" : "outline"}
+            size="sm"
+            onClick={onToggleShare}
+            disabled={sharePost.isPending || unsharePost.isPending}
+            className="font-bold gap-2"
+            data-testid="button-share"
+            aria-pressed={post.hasShared}
+            aria-label={post.hasShared ? "Unshare recap" : "Share recap"}
+          >
+            <Share2
+              className={`w-4 h-4 ${post.hasShared ? "fill-current" : ""}`}
+            />
+            {post.shareCount ?? 0}
+          </Button>
+        )}
         {post.recentReactorName && (
           <span className="text-xs text-muted-foreground ml-2">
             {post.recentReactorName}
@@ -161,6 +249,12 @@ export function PostInteractions({ post }: { post: PostResponse }) {
           ))
         )}
       </div>
+      <ShareConfirmDialog
+        open={confirmShareOpen}
+        onOpenChange={setConfirmShareOpen}
+        onConfirm={onConfirmShare}
+        recapTitle={post.title}
+      />
     </div>
   );
 }

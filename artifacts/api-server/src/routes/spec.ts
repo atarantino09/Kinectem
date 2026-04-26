@@ -20,6 +20,7 @@ import {
   notifications,
   postReactions,
   postComments,
+  postShares,
   conversations,
   conversationParticipants,
   messages,
@@ -95,6 +96,8 @@ interface PostStats {
   hasReacted: boolean;
   commentCount: number;
   recentReactorName: string | null;
+  shareCount: number;
+  hasShared: boolean;
 }
 
 type StatsKind = "article" | "highlight" | "org_post";
@@ -115,6 +118,8 @@ async function loadPostStats(
       hasReacted: false,
       commentCount: 0,
       recentReactorName: null,
+      shareCount: 0,
+      hasShared: false,
     });
   }
   const articleIds = items.filter((i) => i.kind === "article").map((i) => i.refId);
@@ -323,6 +328,39 @@ async function loadPostStats(
       })(),
     );
   }
+  if (articleIds.length > 0) {
+    tasks.push(
+      (async () => {
+        const counts = await db
+          .select({
+            articleId: postShares.articleId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postShares)
+          .where(inArray(postShares.articleId, articleIds))
+          .groupBy(postShares.articleId);
+        for (const r of counts) {
+          const s = map.get(statsKey("article", r.articleId));
+          if (s) s.shareCount = Number(r.count);
+        }
+        if (meId) {
+          const mine = await db
+            .select({ articleId: postShares.articleId })
+            .from(postShares)
+            .where(
+              and(
+                eq(postShares.sharerUserId, meId),
+                inArray(postShares.articleId, articleIds),
+              ),
+            );
+          for (const r of mine) {
+            const s = map.get(statsKey("article", r.articleId));
+            if (s) s.hasShared = true;
+          }
+        }
+      })(),
+    );
+  }
   await Promise.all(tasks);
   return map;
 }
@@ -338,6 +376,8 @@ function statsFor(
       hasReacted: false,
       commentCount: 0,
       recentReactorName: null,
+      shareCount: 0,
+      hasShared: false,
     }
   );
 }
@@ -1338,14 +1378,34 @@ router.get(
       .leftJoin(users, eq(articles.authorId, users.id))
       .where(and(and(...tagConds), ...baseConds));
 
-    // Merge by article id (authored wins so the tag annotation drops).
+    // 3) Articles the user has re-shared.
+    const shared = await db
+      .select({
+        a: articles,
+        team: teams,
+        org: organizations,
+        author: users,
+        sharedAt: postShares.createdAt,
+      })
+      .from(postShares)
+      .innerJoin(articles, eq(postShares.articleId, articles.id))
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(eq(postShares.sharerUserId, u.id), ...baseConds));
+
+    // Merge by article id. Authored wins (no "Shared by yourself" on
+    // your own work). Tagged rows overlay sharedAt when also shared.
     type MergedRow = {
       a: typeof articles.$inferSelect;
       team: typeof teams.$inferSelect;
       org: typeof organizations.$inferSelect;
       author: typeof users.$inferSelect | null;
       tagStatus?: "approved" | "pending";
+      sharedAt?: Date;
     };
+    const sharedAtById = new Map<string, Date>();
+    for (const row of shared) sharedAtById.set(row.a.id, row.sharedAt);
     const seen = new Map<string, MergedRow>();
     for (const row of authored) {
       seen.set(row.a.id, row);
@@ -1358,22 +1418,49 @@ router.get(
         org: row.org,
         author: row.author,
         tagStatus: row.tagStatus as "approved" | "pending",
+        sharedAt: sharedAtById.get(row.a.id),
       });
     }
-    // Order: gameDate desc nulls last, then createdAt desc.
-    const ordered = Array.from(seen.values()).sort((x, y) => {
-      const xd = x.a.gameDate ? x.a.gameDate.getTime() : -Infinity;
-      const yd = y.a.gameDate ? y.a.gameDate.getTime() : -Infinity;
-      if (xd !== yd) return yd - xd;
-      return y.a.createdAt.getTime() - x.a.createdAt.getTime();
-    });
+    for (const row of shared) {
+      if (seen.has(row.a.id)) continue;
+      seen.set(row.a.id, {
+        a: row.a,
+        team: row.team,
+        org: row.org,
+        author: row.author,
+        sharedAt: row.sharedAt,
+      });
+    }
+    // Order: shares by sharedAt; otherwise gameDate, then createdAt.
+    function sortKey(row: MergedRow): number {
+      if (row.sharedAt) return row.sharedAt.getTime();
+      if (row.a.gameDate) return row.a.gameDate.getTime();
+      return row.a.createdAt.getTime();
+    }
+    const ordered = Array.from(seen.values()).sort(
+      (x, y) => sortKey(y) - sortKey(x),
+    );
     const limited = ordered.slice(0, 20);
 
+    const stats = await loadPostStats(
+      me?.id ?? null,
+      limited.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+    );
+    const sharerEmbed = {
+      id: u.id,
+      displayName: displayName(u),
+      avatarUrl: u.avatarUrl ?? null,
+    };
+
     const posts = limited.map((row) => {
+      const isShare = !!row.sharedAt;
       const post = articleToPost(row.a, {
         team: row.team,
         org: row.org,
         author: row.author,
+        ...statsFor(stats, "article", row.a.id),
+        sharedBy: isShare ? sharerEmbed : null,
+        sharedAt: isShare ? row.sharedAt!.toISOString() : null,
       });
       // Only annotate when the article was surfaced via the user's
       // pending tag — clients render the badge for these.
@@ -4364,12 +4451,21 @@ router.get(
     const followedTeamIds = followedTeamRows.map((r) => r.id);
     const followedUserIds = followedUserRows.map((r) => r.id);
 
+    // Re-shares the viewer should see in their feed. Includes shares
+    // by the viewer themselves (so a recently-shared old recap shows
+    // up on their own home feed per task #162) and shares by users
+    // they follow (so a follow relationship surfaces share activity
+    // the same way it surfaces author activity).
+    const shareSourceUserIds = Array.from(
+      new Set<string>([me.id, ...followedUserIds]),
+    );
+
     if (
       followedOrgIds.length === 0 &&
       followedTeamIds.length === 0 &&
       followedUserIds.length === 0
     ) {
-      // User follows nothing: only show their own posts.
+      // No follows: show own posts plus own shares.
       const ownArts = await db
         .select({ a: articles, team: teams, org: organizations, author: users })
         .from(articles)
@@ -4394,17 +4490,52 @@ router.get(
         .where(and(eq(highlights.uploaderId, me.id), isNull(highlights.hiddenAt)))
         .orderBy(desc(highlights.createdAt))
         .limit(10);
+      const ownShares = await loadFeedShares(shareSourceUserIds);
+      const ownShareByArticle = new Map(
+        ownShares.map((s) => [s.a.id, s] as const),
+      );
+      const ownArtIds = new Set(ownArts.map((r) => r.a.id));
+      const sharesNotAuthored = ownShares.filter(
+        (s) => !ownArtIds.has(s.a.id),
+      );
       const stats = await loadPostStats(me.id, [
         ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+        ...sharesNotAuthored.map((r) => ({
+          kind: "article" as const,
+          refId: r.a.id,
+        })),
         ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
       ]);
       const items = [
-        ...ownArts.map((r) =>
+        ...ownArts.map((r) => {
+          const share = ownShareByArticle.get(r.a.id);
+          return articleToPost(r.a, {
+            team: r.team,
+            org: r.org,
+            author: r.author,
+            ...statsFor(stats, "article", r.a.id),
+            sharedBy: share
+              ? {
+                  id: share.sharer.id,
+                  displayName: displayName(share.sharer),
+                  avatarUrl: share.sharer.avatarUrl ?? null,
+                }
+              : undefined,
+            sharedAt: share ? share.sharedAt.toISOString() : undefined,
+          });
+        }),
+        ...sharesNotAuthored.map((r) =>
           articleToPost(r.a, {
             team: r.team,
             org: r.org,
             author: r.author,
             ...statsFor(stats, "article", r.a.id),
+            sharedBy: {
+              id: r.sharer.id,
+              displayName: displayName(r.sharer),
+              avatarUrl: r.sharer.avatarUrl ?? null,
+            },
+            sharedAt: r.sharedAt.toISOString(),
           }),
         ),
         ...ownHls.map((r) =>
@@ -4415,7 +4546,11 @@ router.get(
             ...statsFor(stats, "highlight", r.h.id),
           }),
         ),
-      ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      ].sort((a, b) => {
+        const ax = a.sharedAt ?? a.createdAt;
+        const bx = b.sharedAt ?? b.createdAt;
+        return ax < bx ? 1 : -1;
+      });
       return res.json(paginate(items));
     }
 
@@ -4501,18 +4636,50 @@ router.get(
           .limit(20)
       : [];
 
+    // Re-shares from me + the users I follow.
+    const feedShares = await loadFeedShares(shareSourceUserIds);
+    const feedShareByArticle = new Map(
+      feedShares.map((s) => [s.a.id, s] as const),
+    );
+    const orgArtIds = new Set(arts.map((r) => r.a.id));
+    const sharesNew = feedShares.filter((s) => !orgArtIds.has(s.a.id));
+
     const stats = await loadPostStats(me?.id ?? null, [
       ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...sharesNew.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
       ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
     ]);
     const items = [
-      ...arts.map((r) =>
+      ...arts.map((r) => {
+        const share = feedShareByArticle.get(r.a.id);
+        return articleToPost(r.a, {
+          team: r.team,
+          org: r.org,
+          author: r.author,
+          ...statsFor(stats, "article", r.a.id),
+          sharedBy: share
+            ? {
+                id: share.sharer.id,
+                displayName: displayName(share.sharer),
+                avatarUrl: share.sharer.avatarUrl ?? null,
+              }
+            : undefined,
+          sharedAt: share ? share.sharedAt.toISOString() : undefined,
+        });
+      }),
+      ...sharesNew.map((r) =>
         articleToPost(r.a, {
           team: r.team,
           org: r.org,
           author: r.author,
           ...statsFor(stats, "article", r.a.id),
+          sharedBy: {
+            id: r.sharer.id,
+            displayName: displayName(r.sharer),
+            avatarUrl: r.sharer.avatarUrl ?? null,
+          },
+          sharedAt: r.sharedAt.toISOString(),
         }),
       ),
       ...hls.map((r) =>
@@ -4530,10 +4697,96 @@ router.get(
           ...statsFor(stats, "org_post", r.p.id),
         }),
       ),
-    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    ].sort((a, b) => {
+      const ax = a.sharedAt ?? a.createdAt;
+      const bx = b.sharedAt ?? b.createdAt;
+      return ax < bx ? 1 : -1;
+    });
     res.json(paginate(items));
   }),
 );
+
+// Most-recent share per article shared by any user in `userIds`.
+// Skips unpublished / hidden articles.
+async function loadFeedShares(userIds: string[]): Promise<
+  Array<{
+    a: typeof articles.$inferSelect;
+    team: typeof teams.$inferSelect;
+    org: typeof organizations.$inferSelect;
+    author: typeof users.$inferSelect | null;
+    sharer: typeof users.$inferSelect;
+    sharedAt: Date;
+  }>
+> {
+  if (userIds.length === 0) return [];
+  const shareRows = await db
+    .select({
+      articleId: postShares.articleId,
+      sharerUserId: postShares.sharerUserId,
+      sharedAt: postShares.createdAt,
+    })
+    .from(postShares)
+    .where(inArray(postShares.sharerUserId, userIds))
+    .orderBy(desc(postShares.createdAt))
+    .limit(100);
+  if (shareRows.length === 0) return [];
+  const latestByArticle = new Map<
+    string,
+    { sharerUserId: string; sharedAt: Date }
+  >();
+  for (const r of shareRows) {
+    if (!latestByArticle.has(r.articleId)) {
+      latestByArticle.set(r.articleId, {
+        sharerUserId: r.sharerUserId,
+        sharedAt: r.sharedAt,
+      });
+    }
+  }
+  const articleIds = Array.from(latestByArticle.keys());
+  const sharerIds = Array.from(
+    new Set(Array.from(latestByArticle.values()).map((v) => v.sharerUserId)),
+  );
+  const [articleRows, sharerRows] = await Promise.all([
+    db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(
+        and(
+          inArray(articles.id, articleIds),
+          eq(articles.status, "published"),
+          isNull(articles.hiddenAt),
+        ),
+      ),
+    db.select().from(users).where(inArray(users.id, sharerIds)),
+  ]);
+  const sharerById = new Map(sharerRows.map((u) => [u.id, u]));
+  const out: Array<{
+    a: typeof articles.$inferSelect;
+    team: typeof teams.$inferSelect;
+    org: typeof organizations.$inferSelect;
+    author: typeof users.$inferSelect | null;
+    sharer: typeof users.$inferSelect;
+    sharedAt: Date;
+  }> = [];
+  for (const row of articleRows) {
+    const meta = latestByArticle.get(row.a.id);
+    if (!meta) continue;
+    const sharer = sharerById.get(meta.sharerUserId);
+    if (!sharer) continue;
+    out.push({
+      a: row.a,
+      team: row.team,
+      org: row.org,
+      author: row.author,
+      sharer,
+      sharedAt: meta.sharedAt,
+    });
+  }
+  return out;
+}
 
 router.get(
   "/follow-suggestions",
@@ -4886,6 +5139,73 @@ router.delete(
           eq(postReactions.postKind, parsed.kind),
           eq(postReactions.postRefId, parsed.id),
           eq(postReactions.userId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+// Re-shares (game recap articles only).
+// Client toggles via POST/DELETE; both endpoints are idempotent (204).
+async function loadShareableArticleForViewer(
+  articleId: string,
+): Promise<typeof articles.$inferSelect | null> {
+  const [a] = await db
+    .select()
+    .from(articles)
+    .where(eq(articles.id, articleId))
+    .limit(1);
+  if (!a) return null;
+  if (a.status !== "published") return null;
+  if (a.hiddenAt) return null;
+  if (!a.gameDate) return null;
+  return a;
+}
+
+router.post(
+  "/posts/:postId/share",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind !== "article") {
+      return apiError(res, 400, "Only game recap articles can be shared", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
+    }
+    const a = await loadShareableArticleForViewer(parsed.id);
+    if (!a) {
+      return apiError(res, 404, "This recap is not available to share", {
+        code: ErrorCodes.NOT_FOUND,
+      });
+    }
+    await db
+      .insert(postShares)
+      .values({ articleId: a.id, sharerUserId: me.id })
+      .onConflictDoNothing();
+    res.status(204).end();
+  }),
+);
+
+router.delete(
+  "/posts/:postId/share",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind !== "article") {
+      return apiError(res, 400, "Only game recap articles can be shared", {
+        code: ErrorCodes.VALIDATION_ERROR,
+      });
+    }
+    await db
+      .delete(postShares)
+      .where(
+        and(
+          eq(postShares.articleId, parsed.id),
+          eq(postShares.sharerUserId, me.id),
         ),
       );
     res.status(204).end();
