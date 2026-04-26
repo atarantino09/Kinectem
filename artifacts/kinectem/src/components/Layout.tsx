@@ -125,6 +125,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 )}
               </Button>
             </Link>
+            {currentUser?.role === "parent" && (
+              <Link href="/family">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-semibold"
+                  data-testid="link-family"
+                >
+                  <Users className="w-4 h-4 mr-2" /> Family
+                </Button>
+              </Link>
+            )}
             {isAdmin && (
               <Link href="/admin">
                 <Button
@@ -172,14 +184,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 <FileText className="w-4 h-4 mr-2" /> My Drafts
               </DropdownMenuItem>
-              {currentUser?.role === "parent" && (
-                <DropdownMenuItem
-                  onSelect={() => setLocation("/family")}
-                  data-testid="menu-family"
-                >
-                  <Users className="w-4 h-4 mr-2" /> Family
-                </DropdownMenuItem>
-              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <CreateOrgDialog open={createOrgOpen} onOpenChange={setCreateOrgOpen} />
