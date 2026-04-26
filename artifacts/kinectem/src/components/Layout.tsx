@@ -66,6 +66,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (query.trim()) setLocation(`/search?q=${encodeURIComponent(query.trim())}`);
   };
 
+  const isNavActive = (path: string) => {
+    if (path === "/") return location === "/";
+    return location === path || location.startsWith(`${path}/`);
+  };
+  const navVariant = (active: boolean) => (active ? "secondary" : "ghost") as const;
+
   const displayName = currentUser
     ? `${currentUser.firstName} ${currentUser.lastName}`
     : "";
@@ -98,22 +104,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </form>
 
           <nav className="hidden md:flex items-center gap-1">
-            <Link href="/">
-              <Button variant="ghost" size="sm" className="font-semibold">
+            <Link
+              href="/"
+              aria-current={isNavActive("/") ? "page" : undefined}
+            >
+              <Button
+                variant={navVariant(isNavActive("/"))}
+                size="sm"
+                className="font-semibold"
+                data-active={isNavActive("/") ? "true" : undefined}
+              >
                 <Home className="w-4 h-4 mr-2" /> Feed
               </Button>
             </Link>
-            <Link href="/organizations">
-              <Button variant="ghost" size="sm" className="font-semibold">
+            <Link
+              href="/organizations"
+              aria-current={isNavActive("/organizations") ? "page" : undefined}
+            >
+              <Button
+                variant={navVariant(isNavActive("/organizations"))}
+                size="sm"
+                className="font-semibold"
+                data-active={isNavActive("/organizations") ? "true" : undefined}
+              >
                 <Building2 className="w-4 h-4 mr-2" /> Orgs
               </Button>
             </Link>
-            <Link href="/messages">
+            <Link
+              href="/messages"
+              aria-current={isNavActive("/messages") ? "page" : undefined}
+            >
               <Button
-                variant="ghost"
+                variant={navVariant(isNavActive("/messages"))}
                 size="sm"
                 className="font-semibold relative"
                 data-testid="link-messages"
+                data-active={isNavActive("/messages") ? "true" : undefined}
               >
                 <Mail className="w-4 h-4 mr-2" /> Inbox
                 {(unreadMsgs?.unreadCount ?? 0) > 0 && (
@@ -126,24 +152,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </Link>
             {currentUser?.role === "parent" && (
-              <Link href="/family">
+              <Link
+                href="/family"
+                aria-current={isNavActive("/family") ? "page" : undefined}
+              >
                 <Button
-                  variant="ghost"
+                  variant={navVariant(isNavActive("/family"))}
                   size="sm"
                   className="font-semibold"
                   data-testid="link-family"
+                  data-active={isNavActive("/family") ? "true" : undefined}
                 >
                   <Users className="w-4 h-4 mr-2" /> Family
                 </Button>
               </Link>
             )}
             {isAdmin && (
-              <Link href="/admin">
+              <Link
+                href="/admin"
+                aria-current={isNavActive("/admin") ? "page" : undefined}
+              >
                 <Button
-                  variant="ghost"
+                  variant={navVariant(isNavActive("/admin"))}
                   size="sm"
                   className="font-semibold"
                   data-testid="link-admin"
+                  data-active={isNavActive("/admin") ? "true" : undefined}
                 >
                   <Shield className="w-4 h-4 mr-2" /> Admin
                 </Button>
