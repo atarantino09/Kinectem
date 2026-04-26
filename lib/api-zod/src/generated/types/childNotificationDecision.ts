@@ -66,6 +66,14 @@ are marked `deprecated: true` in this spec.
  * OpenAPI spec version: 0.1.0
  */
 
-export type MarkAllChildNotificationsRead200 = {
-  markedCount: number;
-};
+/**
+ * Parent's verdict on the item. `approved` records that the parent has reviewed and is fine with the activity; `removed` additionally performs the kind-specific destructive action (decline tag, hide comment/message, decline roster, etc.).
+
+ */
+export type ChildNotificationDecision =
+  (typeof ChildNotificationDecision)[keyof typeof ChildNotificationDecision];
+
+export const ChildNotificationDecision = {
+  approved: "approved",
+  removed: "removed",
+} as const;

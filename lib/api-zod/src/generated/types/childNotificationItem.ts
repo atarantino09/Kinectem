@@ -65,5 +65,30 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ChildNotificationActor } from "./childNotificationActor";
+import type { ChildNotificationDecision } from "./childNotificationDecision";
+import type { ChildNotificationKind } from "./childNotificationKind";
 
-export type ListChildNotifications200DataItem = { [key: string]: unknown };
+export interface ChildNotificationItem {
+  /** Stable key in the form `<kind>:<id>` (e.g. `tag:abc-123`). Used as the identifier when marking the item read.
+   */
+  itemKey: string;
+  kind: ChildNotificationKind;
+  title: string;
+  /** @nullable */
+  body: string | null;
+  /**
+   * App-relative path the parent should land on when activating the item, or `null` when there is no useful destination.
+
+   * @nullable
+   */
+  link: string | null;
+  /** Whether the parent has already marked this item as seen for this child. Tracked separately from the child's own read state.
+   */
+  isRead: boolean;
+  /** The parent's recorded decision for this item, or `null` if no decision has been made yet. Items with a non-null decision drop out of the default feed on the next fetch.
+   */
+  decision: ChildNotificationDecision | null;
+  createdAt: Date;
+  actor: ChildNotificationActor | null;
+}

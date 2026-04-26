@@ -108,6 +108,7 @@ import type {
   AuthSignupBody,
   BadRequestResponse,
   BlockResponse,
+  ChildNotificationStreamResponse,
   CommentResponse,
   ConflictResponse,
   ConsentRequestResponse,
@@ -169,7 +170,6 @@ import type {
   ListAdminUsers200,
   ListAdminUsersParams,
   ListChildConversationMessages200,
-  ListChildNotifications200,
   ListChildPendingTeamInvites200,
   ListCommentReactorsParams,
   ListConversationsParams,
@@ -207,9 +207,9 @@ import type {
   ListUserOrganizationsParams,
   ListUserPostsParams,
   ListUserTeamsParams,
-  MarkAllChildNotificationsRead200,
+  MarkAllChildNotificationsReadResponse,
   MarkAllReadResponse,
-  MarkChildNotificationReadBody,
+  MarkChildNotificationReadRequest,
   MemberResponse,
   MessageResponse,
   NotFoundResponse,
@@ -18804,8 +18804,8 @@ export const getListChildNotificationsUrl = (childId: string) => {
 export const listChildNotifications = async (
   childId: string,
   options?: RequestInit,
-): Promise<ListChildNotifications200> => {
-  return customFetch<ListChildNotifications200>(
+): Promise<ChildNotificationStreamResponse> => {
+  return customFetch<ChildNotificationStreamResponse>(
     getListChildNotificationsUrl(childId),
     {
       ...options,
@@ -18901,14 +18901,14 @@ export const getMarkChildNotificationReadUrl = (childId: string) => {
 
 export const markChildNotificationRead = async (
   childId: string,
-  markChildNotificationReadBody: MarkChildNotificationReadBody,
+  markChildNotificationReadRequest: MarkChildNotificationReadRequest,
   options?: RequestInit,
 ): Promise<void> => {
   return customFetch<void>(getMarkChildNotificationReadUrl(childId), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(markChildNotificationReadBody),
+    body: JSON.stringify(markChildNotificationReadRequest),
   });
 };
 
@@ -18924,14 +18924,14 @@ export const getMarkChildNotificationReadMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof markChildNotificationRead>>,
     TError,
-    { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+    { childId: string; data: BodyType<MarkChildNotificationReadRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof markChildNotificationRead>>,
   TError,
-  { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+  { childId: string; data: BodyType<MarkChildNotificationReadRequest> },
   TContext
 > => {
   const mutationKey = ["markChildNotificationRead"];
@@ -18945,7 +18945,7 @@ export const getMarkChildNotificationReadMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof markChildNotificationRead>>,
-    { childId: string; data: BodyType<MarkChildNotificationReadBody> }
+    { childId: string; data: BodyType<MarkChildNotificationReadRequest> }
   > = (props) => {
     const { childId, data } = props ?? {};
 
@@ -18959,7 +18959,7 @@ export type MarkChildNotificationReadMutationResult = NonNullable<
   Awaited<ReturnType<typeof markChildNotificationRead>>
 >;
 export type MarkChildNotificationReadMutationBody =
-  BodyType<MarkChildNotificationReadBody>;
+  BodyType<MarkChildNotificationReadRequest>;
 export type MarkChildNotificationReadMutationError = ErrorType<
   | BadRequestResponse
   | UnauthorizedResponse
@@ -18982,14 +18982,14 @@ export const useMarkChildNotificationRead = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof markChildNotificationRead>>,
     TError,
-    { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+    { childId: string; data: BodyType<MarkChildNotificationReadRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof markChildNotificationRead>>,
   TError,
-  { childId: string; data: BodyType<MarkChildNotificationReadBody> },
+  { childId: string; data: BodyType<MarkChildNotificationReadRequest> },
   TContext
 > => {
   return useMutation(getMarkChildNotificationReadMutationOptions(options));
@@ -19005,8 +19005,8 @@ export const getMarkAllChildNotificationsReadUrl = (childId: string) => {
 export const markAllChildNotificationsRead = async (
   childId: string,
   options?: RequestInit,
-): Promise<MarkAllChildNotificationsRead200> => {
-  return customFetch<MarkAllChildNotificationsRead200>(
+): Promise<MarkAllChildNotificationsReadResponse> => {
+  return customFetch<MarkAllChildNotificationsReadResponse>(
     getMarkAllChildNotificationsReadUrl(childId),
     {
       ...options,

@@ -66,8 +66,7 @@ are marked `deprecated: true` in this spec.
  * OpenAPI spec version: 0.1.0
  */
 
-export type MarkChildNotificationReadBody = {
-  /** The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
-   */
-  itemKey: string;
-};
+export interface MarkAllChildNotificationsReadResponse {
+  /** Number of items newly marked as read by this call. */
+  markedCount: number;
+}

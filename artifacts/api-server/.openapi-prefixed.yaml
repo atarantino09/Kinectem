@@ -3927,7 +3927,7 @@ paths:
                         format: uuid
                       reason:
                         type: string
-                        example: Spam or off-topic
+                        example: Inappropriate language
                       note:
                         type: string
                         nullable: true
@@ -4608,11 +4608,11 @@ paths:
                 firstName:
                   type: string
                   minLength: 1
-                  example: Riley
+                  example: Jordan
                 lastName:
                   type: string
                   minLength: 1
-                  example: Foster
+                  example: Chen
                 email:
                   type: string
                   format: email
@@ -4867,10 +4867,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Daniela
+                      example: Aaron
                     lastName:
                       type: string
-                      example: Patel
+                      example: Walker
                     role:
                       type: string
                       enum:
@@ -4885,15 +4885,15 @@ paths:
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Football
+                      example: Track & Field
                     position:
                       type: string
                       nullable: true
-                      example: Quarterback
+                      example: Sprinter
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -5183,17 +5183,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - data
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: true
-                  unreadCount:
-                    type: integer
+                $ref: "#/components/schemas/ChildNotificationStreamResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -5218,14 +5208,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - itemKey
-              properties:
-                itemKey:
-                  type: string
-                  description: |
-                    The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
+              $ref: "#/components/schemas/MarkChildNotificationReadRequest"
       responses:
         "204":
           description: Item marked as read.
@@ -5256,12 +5239,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - markedCount
-                properties:
-                  markedCount:
-                    type: integer
+                $ref: "#/components/schemas/MarkAllChildNotificationsReadResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -8739,8 +8717,10 @@ components:
         createdAt:
           type: string
           format: date-time
-    ConversationContactResult:
+    ChildNotificationActor:
       type: object
+      description: |
+        The user who triggered the underlying event (tagger, commenter, message sender). `null` for items that are not attributable to a single user (e.g. a generic notification or a roster status change).
       required:
         - id
         - displayName
@@ -8754,8 +8734,107 @@ components:
           example: Maya Brooks
         avatarUrl:
           type: string
+          format: uri
           nullable: true
           example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+    ChildNotificationKind:
+      type: string
+      description: |
+        Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id.
+      enum:
+        - notification
+        - tag
+        - comment
+        - message
+        - roster
+    ChildNotificationItem:
+      type: object
+      required:
+        - itemKey
+        - kind
+        - title
+        - body
+        - link
+        - isRead
+        - createdAt
+        - actor
+      properties:
+        itemKey:
+          type: string
+          description: |
+            Stable key in the form `<kind>:<id>` (e.g. `tag:abc-123`). Used as the identifier when marking the item read.
+        kind:
+          $ref: "#/components/schemas/ChildNotificationKind"
+        title:
+          type: string
+          example: "Senior night recap: a perfect ending"
+        body:
+          type: string
+          nullable: true
+          example: Big shoutout to the seniors for leading by example.
+        link:
+          type: string
+          nullable: true
+          description: |
+            App-relative path the parent should land on when activating the item, or `null` when there is no useful destination.
+        isRead:
+          type: boolean
+          description: |
+            Whether the parent has already marked this item as seen for this child. Tracked separately from the child's own read state.
+        createdAt:
+          type: string
+          format: date-time
+        actor:
+          $ref: "#/components/schemas/ChildNotificationActor"
+          nullable: true
+    ChildNotificationStreamResponse:
+      type: object
+      required:
+        - data
+        - unreadCount
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChildNotificationItem"
+        unreadCount:
+          type: integer
+          description: Number of items in `data` the parent has not yet marked read.
+    MarkChildNotificationReadRequest:
+      type: object
+      required:
+        - itemKey
+      properties:
+        itemKey:
+          type: string
+          maxLength: 200
+          description: |
+            The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
+    MarkAllChildNotificationsReadResponse:
+      type: object
+      required:
+        - markedCount
+      properties:
+        markedCount:
+          type: integer
+          description: Number of items newly marked as read by this call.
+    ConversationContactResult:
+      type: object
+      required:
+        - id
+        - displayName
+        - avatarUrl
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          example: Coach Davis
+        avatarUrl:
+          type: string
+          nullable: true
+          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
         relationship:
           type: string
           description: Optional hint about why this contact is eligible (e.g., teammate, follower).
@@ -8791,7 +8870,7 @@ components:
           format: uuid
         name:
           type: string
-          example: North Valley Athletic Association
+          example: Riverside Soccer Club
         email:
           type: string
           nullable: true
@@ -8820,13 +8899,13 @@ components:
           format: uuid
         firstName:
           type: string
-          example: Daniela
+          example: Aaron
         lastName:
           type: string
-          example: Bennett
+          example: Nguyen
         displayName:
           type: string
-          example: Chris Nguyen
+          example: Tyler Chen
         email:
           type: string
           nullable: true
@@ -8852,26 +8931,26 @@ components:
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
         sport:
           type: string
           nullable: true
-          example: Basketball
+          example: Volleyball
         position:
           type: string
           nullable: true
-          example: Point Guard
+          example: Outside Hitter
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Class of 2025
+          example: Junior
         location:
           type: string
           nullable: true
-          example: Riverside, CA
+          example: Westfield, NJ
         bio:
           type: string
           nullable: true
@@ -8907,12 +8986,12 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Avery
+          example: Daniela
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Foster
+          example: Chen
         email:
           type: string
           format: email
@@ -8935,12 +9014,12 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Tyler
+          example: Samira
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Bennett
+          example: Nguyen
         email:
           type: string
           format: email
@@ -8955,22 +9034,22 @@ components:
         sport:
           type: string
           nullable: true
-          example: Volleyball
+          example: Soccer
         position:
           type: string
           nullable: true
-          example: Outside Hitter
+          example: Midfielder
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Class of 2026
+          example: Class of 2025
         location:
           type: string
           nullable: true
-          example: Lincoln, NE
+          example: Riverside, CA
         bio:
           type: string
           maxLength: 5000
@@ -8979,7 +9058,7 @@ components:
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
         dateOfBirth:
           type: string
           nullable: true
@@ -9021,11 +9100,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Saturday's win secures playoff spot
+          example: Coach's notes from the championship
         body:
           type: string
           nullable: true
-          example: Practice was a grind today. The work is paying off.
+          example: Great game tonight, team! Proud of how everyone showed up.
         authorId:
           type: string
           format: uuid
@@ -9062,7 +9141,7 @@ components:
           type: string
           minLength: 1
           maxLength: 120
-          example: Misleading content
+          example: Spam or off-topic
         note:
           type: string
           maxLength: 2000
@@ -9102,11 +9181,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Spring tryouts open next week
+          example: "Player profile: rising star at WR"
         body:
           type: string
           nullable: true
-          example: Thanks to all the families who came out to support us.
+          example: Highlight reel from Friday's matchup is up — go check it out.
         hiddenAt:
           type: string
           format: date-time
@@ -9143,7 +9222,7 @@ components:
           format: uuid
         reason:
           type: string
-          example: Misleading content
+          example: Spam or off-topic
         note:
           type: string
           nullable: true
@@ -9298,7 +9377,7 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: North Valley Athletic Association
+                    example: Riverside Soccer Club
                   count:
                     type: integer
             followedUsers:
@@ -9316,7 +9395,7 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Lincoln High Football
+                    example: Eastside Eagles
                   email:
                     type: string
                     nullable: true
@@ -9338,7 +9417,7 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Westfield Warriors
+                    example: Lincoln High Football
                   email:
                     type: string
                     nullable: true

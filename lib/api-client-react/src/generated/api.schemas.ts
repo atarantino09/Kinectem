@@ -2097,6 +2097,88 @@ export interface ChildLinkResponse {
   createdAt: string;
 }
 
+/**
+ * The user who triggered the underlying event (tagger, commenter, message sender). `null` for items that are not attributable to a single user (e.g. a generic notification or a roster status change).
+
+ */
+export interface ChildNotificationActor {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl: string | null;
+}
+
+/**
+ * Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id.
+
+ */
+export type ChildNotificationKind =
+  (typeof ChildNotificationKind)[keyof typeof ChildNotificationKind];
+
+export const ChildNotificationKind = {
+  notification: "notification",
+  tag: "tag",
+  comment: "comment",
+  message: "message",
+  roster: "roster",
+} as const;
+
+/**
+ * Parent's verdict on the item. `approved` records that the parent has reviewed and is fine with the activity; `removed` additionally performs the kind-specific destructive action (decline tag, hide comment/message, decline roster, etc.).
+
+ */
+export type ChildNotificationDecision =
+  (typeof ChildNotificationDecision)[keyof typeof ChildNotificationDecision];
+
+export const ChildNotificationDecision = {
+  approved: "approved",
+  removed: "removed",
+} as const;
+
+export interface ChildNotificationItem {
+  /** Stable key in the form `<kind>:<id>` (e.g. `tag:abc-123`). Used as the identifier when marking the item read.
+   */
+  itemKey: string;
+  kind: ChildNotificationKind;
+  title: string;
+  /** @nullable */
+  body: string | null;
+  /**
+   * App-relative path the parent should land on when activating the item, or `null` when there is no useful destination.
+
+   * @nullable
+   */
+  link: string | null;
+  /** Whether the parent has already marked this item as seen for this child. Tracked separately from the child's own read state.
+   */
+  isRead: boolean;
+  /** The parent's recorded decision for this item, or `null` if no decision has been made yet. Items with a non-null decision drop out of the default feed on the next fetch.
+   */
+  decision: ChildNotificationDecision | null;
+  createdAt: string;
+  actor: ChildNotificationActor | null;
+}
+
+export interface ChildNotificationStreamResponse {
+  data: ChildNotificationItem[];
+  /** Number of items in `data` the parent has not yet marked read. */
+  unreadCount: number;
+}
+
+export interface MarkChildNotificationReadRequest {
+  /**
+   * The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
+
+   * @maxLength 200
+   */
+  itemKey: string;
+}
+
+export interface MarkAllChildNotificationsReadResponse {
+  /** Number of items newly marked as read by this call. */
+  markedCount: number;
+}
+
 export interface ConversationContactResult {
   id: string;
   displayName: string;
@@ -3332,23 +3414,6 @@ export type ListChildPendingTeamInvites200DataItem = { [key: string]: unknown };
 
 export type ListChildPendingTeamInvites200 = {
   data: ListChildPendingTeamInvites200DataItem[];
-};
-
-export type ListChildNotifications200DataItem = { [key: string]: unknown };
-
-export type ListChildNotifications200 = {
-  data: ListChildNotifications200DataItem[];
-  unreadCount?: number;
-};
-
-export type MarkChildNotificationReadBody = {
-  /** The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.
-   */
-  itemKey: string;
-};
-
-export type MarkAllChildNotificationsRead200 = {
-  markedCount: number;
 };
 
 export type ApproveAllChildNotifications200 = {

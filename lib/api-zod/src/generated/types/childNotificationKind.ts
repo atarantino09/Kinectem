@@ -65,9 +65,18 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { ListChildNotifications200DataItem } from "./listChildNotifications200DataItem";
 
-export type ListChildNotifications200 = {
-  data: ListChildNotifications200DataItem[];
-  unreadCount?: number;
-};
+/**
+ * Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id.
+
+ */
+export type ChildNotificationKind =
+  (typeof ChildNotificationKind)[keyof typeof ChildNotificationKind];
+
+export const ChildNotificationKind = {
+  notification: "notification",
+  tag: "tag",
+  comment: "comment",
+  message: "message",
+  roster: "roster",
+} as const;

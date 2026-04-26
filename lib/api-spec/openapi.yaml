@@ -5261,16 +5261,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: true
-                  unreadCount:
-                    type: integer
+                $ref: '#/components/schemas/ChildNotificationStreamResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -5295,14 +5286,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [itemKey]
-              properties:
-                itemKey:
-                  type: string
-                  description: >
-                    The aggregated item's key in the form `<kind>:<id>`,
-                    e.g. `tag:abc-123` or `comment:def-456`.
+              $ref: '#/components/schemas/MarkChildNotificationReadRequest'
       responses:
         '204':
           description: Item marked as read.
@@ -5333,11 +5317,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [markedCount]
-                properties:
-                  markedCount:
-                    type: integer
+                $ref: '#/components/schemas/MarkAllChildNotificationsReadResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -8674,6 +8654,138 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    # ------------------------------------------------------------------
+    # Parent inbox: unified per-child notification stream
+    # ------------------------------------------------------------------
+
+    ChildNotificationActor:
+      type: object
+      additionalProperties: false
+      description: >
+        The user who triggered the underlying event (tagger, commenter,
+        message sender). `null` for items that are not attributable to a
+        single user (e.g. a generic notification or a roster status change).
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    ChildNotificationKind:
+      type: string
+      description: >
+        Source of the aggregated item. The `itemKey` always begins with
+        this kind followed by a colon and the underlying row's id.
+      enum:
+        - notification
+        - tag
+        - comment
+        - message
+        - roster
+
+    ChildNotificationDecision:
+      type: string
+      description: >
+        Parent's verdict on the item. `approved` records that the
+        parent has reviewed and is fine with the activity; `removed`
+        additionally performs the kind-specific destructive action
+        (decline tag, hide comment/message, decline roster, etc.).
+      enum:
+        - approved
+        - removed
+
+    ChildNotificationItem:
+      type: object
+      additionalProperties: false
+      required:
+        - itemKey
+        - kind
+        - title
+        - body
+        - link
+        - isRead
+        - decision
+        - createdAt
+        - actor
+      properties:
+        itemKey:
+          type: string
+          description: >
+            Stable key in the form `<kind>:<id>` (e.g. `tag:abc-123`).
+            Used as the identifier when marking the item read.
+        kind:
+          $ref: '#/components/schemas/ChildNotificationKind'
+        title:
+          type: string
+        body:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+          description: >
+            App-relative path the parent should land on when activating
+            the item, or `null` when there is no useful destination.
+        isRead:
+          type: boolean
+          description: >
+            Whether the parent has already marked this item as seen for
+            this child. Tracked separately from the child's own read
+            state.
+        decision:
+          $ref: '#/components/schemas/ChildNotificationDecision'
+          nullable: true
+          description: >
+            The parent's recorded decision for this item, or `null` if
+            no decision has been made yet. Items with a non-null
+            decision drop out of the default feed on the next fetch.
+        createdAt:
+          type: string
+          format: date-time
+        actor:
+          $ref: '#/components/schemas/ChildNotificationActor'
+          nullable: true
+
+    ChildNotificationStreamResponse:
+      type: object
+      additionalProperties: false
+      required: [data, unreadCount]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChildNotificationItem'
+        unreadCount:
+          type: integer
+          description: Number of items in `data` the parent has not yet marked read.
+
+    MarkChildNotificationReadRequest:
+      type: object
+      additionalProperties: false
+      required: [itemKey]
+      properties:
+        itemKey:
+          type: string
+          maxLength: 200
+          description: >
+            The aggregated item's key in the form `<kind>:<id>`,
+            e.g. `tag:abc-123` or `comment:def-456`.
+
+    MarkAllChildNotificationsReadResponse:
+      type: object
+      additionalProperties: false
+      required: [markedCount]
+      properties:
+        markedCount:
+          type: integer
+          description: Number of items newly marked as read by this call.
 
     # ------------------------------------------------------------------
     # Messaging contact search

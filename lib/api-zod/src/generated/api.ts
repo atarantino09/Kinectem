@@ -6004,8 +6004,53 @@ export const ListChildNotificationsParams = zod.object({
 });
 
 export const ListChildNotificationsResponse = zod.object({
-  data: zod.array(zod.record(zod.string(), zod.unknown())),
-  unreadCount: zod.number().optional(),
+  data: zod.array(
+    zod.object({
+      itemKey: zod
+        .string()
+        .describe(
+          "Stable key in the form `<kind>:<id>` (e.g. `tag:abc-123`). Used as the identifier when marking the item read.\n",
+        ),
+      kind: zod
+        .enum(["notification", "tag", "comment", "message", "roster"])
+        .describe(
+          "Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id.\n",
+        ),
+      title: zod.string(),
+      body: zod.string().nullable(),
+      link: zod
+        .string()
+        .nullable()
+        .describe(
+          "App-relative path the parent should land on when activating the item, or `null` when there is no useful destination.\n",
+        ),
+      isRead: zod
+        .boolean()
+        .describe(
+          "Whether the parent has already marked this item as seen for this child. Tracked separately from the child's own read state.\n",
+        ),
+      decision: zod
+        .enum(["approved", "removed"])
+        .nullable()
+        .describe(
+          "The parent's recorded decision for this item, or `null` if no decision has been made yet. Items with a non-null decision drop out of the default feed on the next fetch.\n",
+        ),
+      createdAt: zod.coerce.date(),
+      actor: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullable(),
+        })
+        .nullable()
+        .describe(
+          "The user who triggered the underlying event (tagger, commenter, message sender). `null` for items that are not attributable to a single user (e.g. a generic notification or a roster status change).\n",
+        ),
+    }),
+  ),
+  unreadCount: zod
+    .number()
+    .describe("Number of items in `data` the parent has not yet marked read."),
 });
 
 /**
@@ -6015,9 +6060,12 @@ export const MarkChildNotificationReadParams = zod.object({
   childId: zod.coerce.string().uuid(),
 });
 
+export const markChildNotificationReadBodyItemKeyMax = 200;
+
 export const MarkChildNotificationReadBody = zod.object({
   itemKey: zod
     .string()
+    .max(markChildNotificationReadBodyItemKeyMax)
     .describe(
       "The aggregated item's key in the form `<kind>:<id>`, e.g. `tag:abc-123` or `comment:def-456`.\n",
     ),
@@ -6031,7 +6079,9 @@ export const MarkAllChildNotificationsReadParams = zod.object({
 });
 
 export const MarkAllChildNotificationsReadResponse = zod.object({
-  markedCount: zod.number(),
+  markedCount: zod
+    .number()
+    .describe("Number of items newly marked as read by this call."),
 });
 
 /**

@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useGetLoggedInUser,
+  type ChildNotificationItem,
+  type ChildNotificationStreamResponse,
   type PrivateUserResponse,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -57,22 +59,6 @@ interface SearchUser {
   role: string;
   email: string | null;
   avatarUrl: string | null;
-}
-
-interface ChildNotificationItem {
-  itemKey: string;
-  kind: "notification" | "tag" | "comment" | "message" | "roster";
-  title: string;
-  body: string | null;
-  link: string | null;
-  isRead: boolean;
-  decision: "approved" | "removed" | null;
-  createdAt: string;
-  actor: {
-    id: string;
-    displayName: string;
-    avatarUrl: string | null;
-  } | null;
 }
 
 interface ChildNotificationsState {
@@ -182,10 +168,9 @@ export default function GuardianPage() {
       },
     }));
     try {
-      const r = await customFetch<{
-        data: ChildNotificationItem[];
-        unreadCount?: number;
-      }>(`/api/v1/users/me/children/${childId}/notifications`);
+      const r = await customFetch<ChildNotificationStreamResponse>(
+        `/api/v1/users/me/children/${childId}/notifications`,
+      );
       const items = r.data ?? [];
       setNotifsByChild((prev) => ({
         ...prev,
