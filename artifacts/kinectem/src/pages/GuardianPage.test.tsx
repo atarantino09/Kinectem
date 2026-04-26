@@ -235,6 +235,144 @@ describe("GuardianPage — parent invite deep-link", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the row and re-enables Accept when the API call fails", async () => {
+    setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
+
+    // Override the accept handler for this test so it rejects, mimicking a
+    // server-side failure. Every other endpoint keeps its happy-path mock.
+    const acceptUrl = `/api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/accept`;
+    customFetchMock.mockImplementation(
+      async (url: string, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (url === "/api/v1/users/me/children" && method === "GET") {
+          return { data: structuredClone(childrenFixture) };
+        }
+        if (
+          url ===
+            `/api/v1/users/me/children/${CHILD_ID}/pending-team-invites` &&
+          method === "GET"
+        ) {
+          return structuredClone(pendingFixture);
+        }
+        if (
+          url === "/api/v1/notifications/email-preference" &&
+          method === "GET"
+        ) {
+          return { emailOptOut: false };
+        }
+        if (url === acceptUrl && method === "POST") {
+          throw new Error("server exploded");
+        }
+        throw new Error(`Unexpected fetch in test: ${method} ${url}`);
+      },
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const acceptBtn = await screen.findByTestId(
+      `btn-accept-pending-${ENTRY_ID}`,
+    );
+    await user.click(acceptBtn);
+
+    // The accept call should have been dispatched even though it will reject.
+    await waitFor(() => {
+      expect(customFetchMock).toHaveBeenCalledWith(
+        acceptUrl,
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    // After the rejection settles, the optimistic removal must NOT have
+    // happened — the row is still in the DOM and the button is interactive
+    // again (i.e. actingOnEntryId was cleared in the finally block).
+    await waitFor(() => {
+      const stillThereBtn = screen.getByTestId(
+        `btn-accept-pending-${ENTRY_ID}`,
+      );
+      expect(stillThereBtn).toBeEnabled();
+      expect(stillThereBtn).toHaveTextContent(/^Accept$/);
+    });
+    expect(
+      screen.getByTestId(`row-pending-invite-${ENTRY_ID}`),
+    ).toBeInTheDocument();
+    // The other row also remains untouched.
+    expect(
+      screen.getByTestId(`row-pending-invite-${OTHER_ENTRY_ID}`),
+    ).toBeInTheDocument();
+  });
+
+  it("waits for a slow Accept call before removing the row", async () => {
+    setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
+
+    // Hold the accept POST open until we explicitly resolve it. This proves
+    // the test infrastructure waits for the eventual state change instead of
+    // racing the mock and that the button stays disabled while in flight.
+    const acceptUrl = `/api/v1/teams/${TEAM_ID}/members/${ENTRY_ID}/accept`;
+    let resolveAccept: (value: unknown) => void = () => {};
+    const acceptPromise = new Promise((resolve) => {
+      resolveAccept = resolve;
+    });
+    customFetchMock.mockImplementation(
+      async (url: string, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (url === "/api/v1/users/me/children" && method === "GET") {
+          return { data: structuredClone(childrenFixture) };
+        }
+        if (
+          url ===
+            `/api/v1/users/me/children/${CHILD_ID}/pending-team-invites` &&
+          method === "GET"
+        ) {
+          return structuredClone(pendingFixture);
+        }
+        if (
+          url === "/api/v1/notifications/email-preference" &&
+          method === "GET"
+        ) {
+          return { emailOptOut: false };
+        }
+        if (url === acceptUrl && method === "POST") {
+          await acceptPromise;
+          return { ok: true };
+        }
+        throw new Error(`Unexpected fetch in test: ${method} ${url}`);
+      },
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const acceptBtn = await screen.findByTestId(
+      `btn-accept-pending-${ENTRY_ID}`,
+    );
+    await user.click(acceptBtn);
+
+    // While the mock is still pending, the button should be disabled and
+    // show the in-flight label, and the row must still be visible.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`btn-accept-pending-${ENTRY_ID}`),
+      ).toBeDisabled();
+    });
+    expect(
+      screen.getByTestId(`btn-accept-pending-${ENTRY_ID}`),
+    ).toHaveTextContent(/Working/);
+    expect(
+      screen.getByTestId(`row-pending-invite-${ENTRY_ID}`),
+    ).toBeInTheDocument();
+
+    // Now let the API call complete; the row should drop out without the
+    // test having to fight a timing race.
+    resolveAccept({ ok: true });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId(`row-pending-invite-${ENTRY_ID}`),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("removes the pending-invite row after Decline is clicked", async () => {
     setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
 
