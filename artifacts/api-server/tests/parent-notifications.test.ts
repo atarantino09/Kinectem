@@ -252,6 +252,75 @@ describe("parent inbox: per-child unified notifications", () => {
     expect(res.status).toBe(400);
   });
 
+  it("summarizes per-child unread counts in one round-trip for the bell", async () => {
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+
+    // Plant one fresh direct notification for Samira so she has at
+    // least one unread item from the parent's perspective.
+    const [notifRow] = await db
+      .insert(notifications)
+      .values({
+        userId: samiraId,
+        kind: "mention",
+        message: "Summary endpoint test ping",
+        link: "/posts/whatever",
+      })
+      .returning();
+
+    const { agent: lisa } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const res = await lisa.get(
+      "/api/v1/users/me/children-notifications-summary",
+    );
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    const samiraEntry = (
+      res.body.data as Array<{ childId: string; unreadCount: number }>
+    ).find((d) => d.childId === samiraId);
+    expect(samiraEntry).toBeDefined();
+    expect(samiraEntry!.unreadCount).toBeGreaterThanOrEqual(1);
+    expect(typeof res.body.totalUnreadCount).toBe("number");
+    expect(res.body.totalUnreadCount).toBeGreaterThanOrEqual(1);
+
+    // Marking the item as read drops the count back down on the
+    // next call so the bell badge can shrink.
+    const markRes = await lisa
+      .post(`/api/v1/users/me/children/${samiraId}/notifications/read`)
+      .send({ itemKey: `notification:${notifRow.id}` });
+    expect(markRes.status).toBe(204);
+
+    const res2 = await lisa.get(
+      "/api/v1/users/me/children-notifications-summary",
+    );
+    expect(res2.status).toBe(200);
+    const samiraEntry2 = (
+      res2.body.data as Array<{ childId: string; unreadCount: number }>
+    ).find((d) => d.childId === samiraId);
+    expect(samiraEntry2).toBeDefined();
+    expect(samiraEntry2!.unreadCount).toBe(
+      Math.max(0, samiraEntry!.unreadCount - 1),
+    );
+
+    // Anonymous callers must be rejected.
+    const anon = await request(app).get(
+      "/api/v1/users/me/children-notifications-summary",
+    );
+    expect(anon.status).toBe(401);
+
+    // Avoid bleeding state into other tests in this suite.
+    await db
+      .delete(parentChildNotificationReads)
+      .where(
+        and(
+          eq(parentChildNotificationReads.parentId, lisaId),
+          eq(parentChildNotificationReads.childId, samiraId),
+        ),
+      );
+    await db.delete(notifications).where(eq(notifications.id, notifRow.id));
+  });
+
   it("does not surface comments authored by the child themselves", async () => {
     const samiraId = await findUserId("samira@kinectem.demo");
     const teamId = await getAnyTeamId();

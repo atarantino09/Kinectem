@@ -5994,6 +5994,21 @@ export const MarkAllChildNotificationsReadResponse = zod.object({
 });
 
 /**
+ * Returns the unread count for each linked child's aggregated notification stream so the global notification bell can show a combined badge without fanning out one request per child.
+
+ * @summary Per-child unread counts for the parent in one round-trip
+ */
+export const GetChildrenNotificationsSummaryResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      childId: zod.string().uuid(),
+      unreadCount: zod.number(),
+    }),
+  ),
+  totalUnreadCount: zod.number(),
+});
+
+/**
  * @summary Resend the guardian-confirmation email for a child account
  */
 export const ResendChildGuardianConfirmParams = zod.object({

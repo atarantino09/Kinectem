@@ -188,6 +188,8 @@ export * from "./followOrgResponse";
 export * from "./followSuggestionsResponse";
 export * from "./followUserResponse";
 export * from "./forbiddenResponse";
+export * from "./getChildrenNotificationsSummary200";
+export * from "./getChildrenNotificationsSummary200DataItem";
 export * from "./getInviteByToken200";
 export * from "./getMyReportForContent200";
 export * from "./getMyReportForContent200Report";

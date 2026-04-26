@@ -3259,6 +3259,31 @@ router.post(
   }),
 );
 
+// One-shot summary used by the global notification bell so it can show a
+// combined badge across the parent's own notifications and every linked
+// child's stream without N client round-trips.
+router.get(
+  "/users/me/children-notifications-summary",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const childRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.parentId, me.id));
+    const perChild: Array<{ childId: string; unreadCount: number }> = [];
+    let totalUnreadCount = 0;
+    for (const child of childRows) {
+      const raw = await loadChildNotificationItems(child);
+      const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
+      const unread = overlaid.filter((i) => !i.isRead).length;
+      perChild.push({ childId: child.id, unreadCount: unread });
+      totalUnreadCount += unread;
+    }
+    res.json({ data: perChild, totalUnreadCount });
+  }),
+);
+
 // Token-based invite lookup + acceptance for the email-link flow.
 router.get(
   "/invites/:token",

@@ -3339,6 +3339,16 @@ export type MarkAllChildNotificationsRead200 = {
   markedCount: number;
 };
 
+export type GetChildrenNotificationsSummary200DataItem = {
+  childId: string;
+  unreadCount: number;
+};
+
+export type GetChildrenNotificationsSummary200 = {
+  data: GetChildrenNotificationsSummary200DataItem[];
+  totalUnreadCount: number;
+};
+
 export type ResendChildGuardianConfirm200 = {
   ok?: boolean;
 };

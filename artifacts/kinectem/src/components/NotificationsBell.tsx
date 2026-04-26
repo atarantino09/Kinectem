@@ -4,9 +4,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useGetUnreadNotificationCount,
+  useGetChildrenNotificationsSummary,
   useListNotifications,
   useMarkAllNotificationsAsRead,
   getGetUnreadNotificationCountQueryKey,
+  getGetChildrenNotificationsSummaryQueryKey,
   getListNotificationsQueryKey,
   type NotificationResponse,
 } from "@workspace/api-client-react";
@@ -58,12 +60,16 @@ export function NotificationsBell() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { data: countData } = useGetUnreadNotificationCount();
+  const { data: childrenSummary } = useGetChildrenNotificationsSummary();
   const { data: notifs, isLoading } = useListNotifications();
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetUnreadNotificationCountQueryKey() });
+    qc.invalidateQueries({
+      queryKey: getGetChildrenNotificationsSummaryQueryKey(),
+    });
     qc.invalidateQueries({ queryKey: getListNotificationsQueryKey() });
   };
 
@@ -80,7 +86,9 @@ export function NotificationsBell() {
     mutation: { onSuccess: invalidate },
   });
 
-  const unread = countData?.unreadCount ?? 0;
+  const ownUnread = countData?.unreadCount ?? 0;
+  const childrenUnread = childrenSummary?.totalUnreadCount ?? 0;
+  const unread = ownUnread + childrenUnread;
   const items = notifs?.data ?? [];
 
   const handleRowClick = (n: NotificationResponse) => {
@@ -215,7 +223,7 @@ export function NotificationsBell() {
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h4 className="font-black tracking-tight text-sm">Notifications</h4>
-          {unread > 0 && (
+          {ownUnread > 0 && (
             <button
               onClick={() => markAll.mutate()}
               className="text-xs font-bold text-primary hover:underline"
@@ -225,6 +233,21 @@ export function NotificationsBell() {
             </button>
           )}
         </div>
+        {childrenUnread > 0 && (
+          <button
+            onClick={() => navigate("/family")}
+            className="flex items-center justify-between gap-2 px-4 py-2 border-b border-border bg-primary/5 hover:bg-primary/10 text-left"
+            data-testid="button-family-unread-hint"
+          >
+            <span className="flex items-center gap-2 text-xs font-bold text-primary">
+              <Users className="w-3.5 h-3.5" />
+              {childrenUnread} new in your family
+            </span>
+            <span className="text-[11px] font-bold text-primary/80">
+              View →
+            </span>
+          </button>
+        )}
         <div className="overflow-y-auto flex-1">
           {isLoading ? (
             <p className="text-sm text-muted-foreground p-4">Loading…</p>

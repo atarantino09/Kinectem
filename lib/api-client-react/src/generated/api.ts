@@ -137,6 +137,7 @@ import type {
   FollowSuggestionsResponse,
   FollowUserResponse,
   ForbiddenResponse,
+  GetChildrenNotificationsSummary200,
   GetInviteByToken200,
   GetMyReportForContent200,
   GetMyReportForContentParams,
@@ -18743,6 +18744,89 @@ export const useMarkAllChildNotificationsRead = <
 > => {
   return useMutation(getMarkAllChildNotificationsReadMutationOptions(options));
 };
+
+/**
+ * Returns the unread count for each linked child's aggregated notification stream so the global notification bell can show a combined badge without fanning out one request per child.
+
+ * @summary Per-child unread counts for the parent in one round-trip
+ */
+export const getGetChildrenNotificationsSummaryUrl = () => {
+  return `/api/v1/users/me/children-notifications-summary`;
+};
+
+export const getChildrenNotificationsSummary = async (
+  options?: RequestInit,
+): Promise<GetChildrenNotificationsSummary200> => {
+  return customFetch<GetChildrenNotificationsSummary200>(
+    getGetChildrenNotificationsSummaryUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetChildrenNotificationsSummaryQueryKey = () => {
+  return [`/api/v1/users/me/children-notifications-summary`] as const;
+};
+
+export const getGetChildrenNotificationsSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChildrenNotificationsSummary>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getChildrenNotificationsSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetChildrenNotificationsSummaryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getChildrenNotificationsSummary>>
+  > = ({ signal }) =>
+    getChildrenNotificationsSummary({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChildrenNotificationsSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChildrenNotificationsSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChildrenNotificationsSummary>>
+>;
+export type GetChildrenNotificationsSummaryQueryError =
+  ErrorType<UnauthorizedResponse>;
+
+/**
+ * @summary Per-child unread counts for the parent in one round-trip
+ */
+
+export function useGetChildrenNotificationsSummary<
+  TData = Awaited<ReturnType<typeof getChildrenNotificationsSummary>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getChildrenNotificationsSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChildrenNotificationsSummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Resend the guardian-confirmation email for a child account
