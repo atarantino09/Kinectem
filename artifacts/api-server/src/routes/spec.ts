@@ -353,7 +353,7 @@ async function applyArticleTagFanout(args: {
   taggerUserId: string;
   explicitUserIds: string[];
   gameDate: Date | null;
-}): Promise<void> {
+}): Promise<string[]> {
   // Track status AND source per user. Source defaults to "auto" for
   // fan-out roster picks; explicit `taggedUserIds` override to
   // "manual" so a later "untag the roster" sweep (PATCH gameDate ->
@@ -410,7 +410,7 @@ async function applyArticleTagFanout(args: {
       }
     }
   }
-  if (tagMap.size === 0) return;
+  if (tagMap.size === 0) return [];
   // Per-user dedupe: article_tags has no unique index on
   // (article_id, user_id) so onConflictDoNothing alone wouldn't
   // prevent duplicates. Drop any user that already has a tag row
@@ -421,8 +421,8 @@ async function applyArticleTagFanout(args: {
     .from(articleTags)
     .where(eq(articleTags.articleId, args.articleId));
   for (const row of existing) tagMap.delete(row.userId);
-  if (tagMap.size === 0) return;
-  await db
+  if (tagMap.size === 0) return [];
+  const inserted = await db
     .insert(articleTags)
     .values(
       Array.from(tagMap.entries()).map(([userId, entry]) => ({
@@ -433,7 +433,56 @@ async function applyArticleTagFanout(args: {
         source: entry.source,
       })),
     )
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ userId: articleTags.userId });
+  return inserted.map((r) => r.userId);
+}
+
+// Throttle window for "you were tagged in <recap>" notifications. If a
+// coach toggles the auto-tag checkbox repeatedly on the Edit Recap
+// screen, the same player would otherwise get a fresh bell ping each
+// time tagging flips back on. Skipping when an identical notification
+// already exists within this window keeps the bell sane without
+// dropping legitimate notifications for distinct edit sessions.
+const TAG_NOTIF_THROTTLE_MS = 10 * 60 * 1000;
+
+// Insert a "You were tagged in <title>" notification for each user
+// whose tag row was just created by the post-publish PATCH fan-out.
+// Mirrors the bell row a player would get if they had been tagged at
+// publish time (the project doesn't ship one today, but the task
+// reuses this in-app notifications system for the post-publish edit
+// path so removed/added players actually find out).
+async function notifyNewlyTaggedInRecap(args: {
+  userIds: string[];
+  articleId: string;
+  articleTitle: string | null;
+}): Promise<void> {
+  if (args.userIds.length === 0) return;
+  const link = `/posts/${args.articleId}`;
+  const since = new Date(Date.now() - TAG_NOTIF_THROTTLE_MS);
+  const recent = await db
+    .select({ userId: notifications.userId })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.kind, "post_tag"),
+        eq(notifications.link, link),
+        inArray(notifications.userId, args.userIds),
+        gt(notifications.createdAt, since),
+      ),
+    );
+  const skip = new Set(recent.map((r) => r.userId));
+  const target = args.userIds.filter((u) => !skip.has(u));
+  if (target.length === 0) return;
+  const title = args.articleTitle?.trim() ? args.articleTitle.trim() : "Untitled";
+  await db.insert(notifications).values(
+    target.map((userId) => ({
+      userId,
+      kind: "post_tag",
+      message: `You were tagged in "${title}"`,
+      link,
+    })),
+  );
 }
 
 const router: IRouter = Router();
@@ -4261,18 +4310,39 @@ router.patch(
         // Coach turned tagging ON for a published recap. Insert any
         // missing roster tags as `source = "auto"`. Existing rows
         // (manual or auto, any status) are preserved untouched.
-        await applyArticleTagFanout({
+        const inserted = await applyArticleTagFanout({
           articleId: updated.id,
           teamId: updated.teamId,
           taggerUserId: updated.authorId ?? me.id,
           explicitUserIds: [],
           gameDate: nextGameDate,
         });
+        // Bell-notify each newly-tagged player. Throttling inside the
+        // helper prevents a coach who toggles the checkbox repeatedly
+        // from spamming the same player's notifications.
+        await notifyNewlyTaggedInRecap({
+          userIds: inserted,
+          articleId: updated.id,
+          articleTitle: updated.title,
+        });
       } else if (wasRecap && !isRecap) {
         // Coach turned tagging OFF for a published recap. Remove only
         // the rows the fan-out created (`source = "auto"`). Manual
         // tags — explicit @-mentions, or rows somebody approved/declined
         // through the consent flow — are preserved.
+        // Capture which users are about to lose their auto-tag so we
+        // can clear their stale "you were tagged" bell rows. Players
+        // who still have a manual tag on this article keep their
+        // notification (they're still tagged).
+        const removedAutoUsers = await db
+          .select({ userId: articleTags.userId })
+          .from(articleTags)
+          .where(
+            and(
+              eq(articleTags.articleId, updated.id),
+              eq(articleTags.source, "auto"),
+            ),
+          );
         await db
           .delete(articleTags)
           .where(
@@ -4281,6 +4351,30 @@ router.patch(
               eq(articleTags.source, "auto"),
             ),
           );
+        // Per-task: we do NOT re-notify the removed players (avoid
+        // noise), but their bell badge needs to clear since the
+        // article no longer references them. We MARK READ rather
+        // than DELETE so the row stays around as the throttle signal
+        // for the next ON toggle — otherwise a coach who quickly
+        // flips OFF then back ON would re-notify everyone. Marking
+        // read drops the unread count to zero (badge clears) and
+        // preserves the recent-notification record.
+        if (removedAutoUsers.length > 0) {
+          await db
+            .update(notifications)
+            .set({ read: true })
+            .where(
+              and(
+                eq(notifications.kind, "post_tag"),
+                eq(notifications.link, `/posts/${updated.id}`),
+                eq(notifications.read, false),
+                inArray(
+                  notifications.userId,
+                  removedAutoUsers.map((r) => r.userId),
+                ),
+              ),
+            );
+        }
       }
     }
     const [org] = await db

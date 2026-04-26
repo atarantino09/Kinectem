@@ -4,6 +4,7 @@ import {
   db,
   articles,
   articleTags,
+  notifications,
   organizationAdmins,
   organizations,
   rosterEntries,
@@ -783,6 +784,226 @@ describe("auto-tag rostered players on game-recap articles", () => {
     for (const t of tagRows) {
       expect(t.source).toBe("auto");
     }
+  });
+
+  it("PATCH null->date on a published recap notifies each newly-tagged player", async () => {
+    // Task #145: when the auto-tag fan-out kicks in via the post-
+    // publish edit path, every player who just got an article_tags
+    // row should also get a "you were tagged" bell row pointing at
+    // the post.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Late-season recap",
+      body: "Will become a recap on edit.",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    const link = `/posts/${articleId}`;
+
+    // Pre-condition: nobody has a post_tag notification for this
+    // article yet (since the fan-out hasn't run).
+    const baseline = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(baseline).toHaveLength(0);
+
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-12-12T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    // Every accepted player (other than the coach themselves) should
+    // have a bell row pointing at the post.
+    const acceptedPlayers = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(acceptedPlayers.length).toBeGreaterThan(0);
+
+    const notifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(notifs.length).toBe(acceptedPlayers.length);
+    const notifiedUserIds = new Set(notifs.map((n) => n.userId));
+    for (const p of acceptedPlayers) {
+      expect(notifiedUserIds.has(p.userId)).toBe(true);
+    }
+    // Message and unread-by-default sanity checks.
+    for (const n of notifs) {
+      expect(n.read).toBe(false);
+      expect(n.message).toContain("Late-season recap");
+      expect(n.message).toMatch(/^You were tagged in /);
+    }
+  });
+
+  it("PATCH date->null on a published recap marks removed-auto players' post_tag bell rows read (no delete, no re-notify)", async () => {
+    // Task #145: the inverse toggle removes the player's tag, so the
+    // bell badge must clear (unread count drops to 0) — but we do NOT
+    // delete the notification, because that row is also our throttle
+    // signal for the next toggle-on. Marking it read clears the badge
+    // and keeps the dedupe record intact.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const jordanId = await findUserId("jordan@kinectem.demo");
+
+    // Publish a recap with a manual @-mention for Jordan so we can
+    // also confirm Jordan's tag survives untouched.
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Recap to be untoggled",
+      body: "Will toggle off.",
+      taggedUserIds: [jordanId],
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    const link = `/posts/${articleId}`;
+
+    // Toggle ON via PATCH so the post-publish notification helper
+    // inserts unread bell rows for every newly auto-tagged player.
+    const toggleOn = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-12-19T19:00:00Z").toISOString(),
+    });
+    expect(toggleOn.status).toBe(200);
+
+    const autoUserIds = (
+      await db
+        .select({ userId: articleTags.userId })
+        .from(articleTags)
+        .where(
+          and(
+            eq(articleTags.articleId, articleId),
+            eq(articleTags.source, "auto"),
+          ),
+        )
+    ).map((r) => r.userId);
+    expect(autoUserIds.length).toBeGreaterThan(0);
+
+    const beforeToggleOff = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // Every newly-tagged player got a bell row, all unread.
+    const autoBeforeRows = beforeToggleOff.filter((n) =>
+      autoUserIds.includes(n.userId),
+    );
+    expect(autoBeforeRows.length).toBe(autoUserIds.length);
+    for (const n of autoBeforeRows) {
+      expect(n.read).toBe(false);
+    }
+
+    // Toggle OFF: PATCH clears gameDate, auto article_tags rows are
+    // deleted, matching unread post_tag bell rows are MARKED READ.
+    const toggleOff = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: null,
+    });
+    expect(toggleOff.status).toBe(200);
+
+    const afterToggleOff = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // Same number of rows — none were deleted.
+    expect(afterToggleOff.length).toBe(beforeToggleOff.length);
+    // Every removed-auto player's bell row is now read (badge clears).
+    for (const uid of autoUserIds) {
+      const row = afterToggleOff.find((n) => n.userId === uid);
+      expect(row).toBeTruthy();
+      expect(row?.read).toBe(true);
+    }
+    // No "you were untagged" rows were inserted (volume only goes
+    // down, never up, on the toggle-off transition).
+    expect(afterToggleOff.length).toBeLessThanOrEqual(beforeToggleOff.length);
+    // Sanity: teamId is exercised by the seed query above.
+    expect(teamId).toBeTruthy();
+  });
+
+  it("throttles repeated post_tag notifications when a coach toggles tagging on/off/on quickly", async () => {
+    // Task #145: a coach who flips the checkbox twice in a row should
+    // not double-notify the same player. Throttling is keyed on the
+    // (user, post) pair AND survives the toggle-off — the OFF
+    // transition marks the bell row read instead of deleting it,
+    // so the row is still there to dedupe against on the next ON.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Toggle-spam recap",
+      body: "Coach can't make up their mind.",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    const link = `/posts/${articleId}`;
+
+    // Toggle ON #1: every accepted player gets one unread bell row.
+    let on = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-12-26T19:00:00Z").toISOString(),
+    });
+    expect(on.status).toBe(200);
+    const firstWave = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(firstWave.length).toBeGreaterThan(0);
+    const firstWaveIds = new Set(firstWave.map((n) => n.id));
+    const firstWaveCount = firstWave.length;
+
+    // Toggle OFF: bell rows are marked read but NOT deleted, so the
+    // throttle has something to detect on the next ON.
+    const off = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: null,
+    });
+    expect(off.status).toBe(200);
+    const afterOff = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // Same set of rows — none deleted, none added.
+    expect(afterOff.length).toBe(firstWaveCount);
+    expect(new Set(afterOff.map((n) => n.id))).toEqual(firstWaveIds);
+
+    // Toggle ON #2 — within the throttle window. The fan-out re-runs
+    // and re-creates the article_tags rows, but the notification
+    // helper sees the recent post_tag rows and skips every user.
+    on = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-12-26T19:00:00Z").toISOString(),
+    });
+    expect(on.status).toBe(200);
+
+    const secondWave = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // Row count must NOT have grown — throttle suppressed every
+    // newly-inserted article_tags row from re-notifying.
+    expect(secondWave.length).toBe(firstWaveCount);
+    // The same row ids are still here — throttling dedup didn't
+    // erase or replace the originals.
+    expect(new Set(secondWave.map((n) => n.id))).toEqual(firstWaveIds);
+    expect(teamId).toBeTruthy();
   });
 
   it("non-admin, non-author cannot PATCH a published recap", async () => {
