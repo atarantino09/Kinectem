@@ -17,6 +17,7 @@ import PendingTagsPage from "@/pages/PendingTagsPage";
 import DraftsPage from "@/pages/DraftsPage";
 import MyTagsPage from "@/pages/MyTagsPage";
 import GuardianPage from "@/pages/GuardianPage";
+import ChildConversationPage from "@/pages/ChildConversationPage";
 import InviteAcceptPage from "@/pages/InviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
@@ -56,6 +57,10 @@ function Router() {
             <Route path="/tags/pending" component={PendingTagsPage} />
             <Route path="/drafts" component={DraftsPage} />
             <Route path="/me/tags" component={MyTagsPage} />
+            <Route
+              path="/family/:childId/messages/:conversationId"
+              component={ChildConversationPage}
+            />
             <Route path="/family" component={GuardianPage} />
             <Route path="/guardian" component={GuardianPage} />
             <Route path="/organizations" component={OrganizationsListPage} />

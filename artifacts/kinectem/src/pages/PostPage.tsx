@@ -1,11 +1,16 @@
-import { useParams, Link } from "wouter";
-import { useGetPost } from "@workspace/api-client-react";
+import { useParams, Link, useSearch } from "wouter";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  customFetch,
+  type PostResponse,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Play, FileText, Pencil } from "lucide-react";
+import { Play, FileText, Pencil, ArrowLeft, Eye } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
@@ -14,14 +19,70 @@ import { AvatarLightbox } from "@/components/AvatarLightbox";
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
   const postId = params.postId;
-  const { data: post, isLoading } = useGetPost(postId);
+  // When the parent jumps in here from the family stream the link carries
+  // `?asChild=<id>`. Surface that context so the parent knows why they
+  // landed here, and fetch the post through the child-scoped endpoint so
+  // viewer-specific stats (their own reactions, draft access) reflect the
+  // child rather than the parent.
+  const search = useSearch();
+  const asChildId = useMemo(() => {
+    const sp = new URLSearchParams(search ?? "");
+    const v = sp.get("asChild");
+    return v && v.length > 0 ? v : null;
+  }, [search]);
 
-  if (isLoading || !post) {
+  const postQuery = useQuery<PostResponse>({
+    queryKey: asChildId
+      ? ["child-post", asChildId, postId]
+      : ["post", postId],
+    queryFn: () =>
+      customFetch<PostResponse>(
+        asChildId
+          ? `/api/v1/users/me/children/${asChildId}/posts/${postId}`
+          : `/api/v1/posts/${postId}`,
+      ),
+    enabled: !!postId,
+  });
+  const post = postQuery.data;
+  const isLoading = postQuery.isLoading;
+  const error = postQuery.error;
+
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-12 w-2/3 rounded" />
         <Skeleton className="h-72 rounded-xl" />
         <Skeleton className="h-40 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error || !post) {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message: unknown }).message)
+        : "We couldn't load this post.";
+    return (
+      <div
+        className="max-w-3xl mx-auto space-y-4 text-center py-12"
+        data-testid="post-error-state"
+      >
+        <h1 className="text-2xl font-black">
+          {asChildId ? "Can't preview this post" : "Post not available"}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {asChildId
+            ? "We couldn't load this post in guardian preview mode. It may have been removed, hidden, or your child no longer has access."
+            : message}
+        </p>
+        <Link
+          href={asChildId ? "/family" : "/"}
+          className="inline-flex items-center gap-1 text-sm font-bold hover:underline"
+          data-testid="link-post-error-back"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          {asChildId ? "Back to family" : "Back to feed"}
+        </Link>
       </div>
     );
   }
@@ -33,6 +94,28 @@ export default function PostPage() {
 
   return (
     <article className="max-w-3xl mx-auto space-y-6">
+      {asChildId && (
+        <div
+          className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"
+          data-testid="banner-guardian-view"
+        >
+          <Eye className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="text-xs flex-1">
+            <p className="font-bold">Following your child's stream</p>
+            <p className="text-muted-foreground">
+              You opened this from your family inbox.{" "}
+              <Link
+                href="/family"
+                className="font-bold text-foreground hover:underline inline-flex items-center gap-1"
+                data-testid="link-back-to-family-from-post"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                Back to family
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <Badge className="bg-slate-900 text-primary-foreground font-bold uppercase text-[10px] tracking-widest">
           <Icon className="w-3 h-3 mr-1 inline" />
@@ -147,7 +230,16 @@ export default function PostPage() {
         </div>
       )}
 
-      <PostInteractions post={post} />
+      {asChildId ? (
+        <div
+          className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+          data-testid="banner-interactions-disabled"
+        >
+          Reactions and comments are hidden in guardian preview mode.
+        </div>
+      ) : (
+        <PostInteractions post={post} />
+      )}
 
       {!isShort && <GamePhotoAlbum postId={postId} />}
     </article>

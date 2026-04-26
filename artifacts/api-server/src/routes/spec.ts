@@ -2958,7 +2958,9 @@ async function loadChildNotificationItems(
         r.t.status === "pending"
           ? "Pending consent — review the tag for your child."
           : null,
-      link: `/posts/${articlePostId(r.a.id)}`,
+      // Carry the childId so the post page can render a "viewing as your
+      // child's guardian" banner and offer a back-link to the family stream.
+      link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
       isRead: false,
       createdAt: r.t.createdAt.toISOString(),
       actor: r.tagger
@@ -3029,7 +3031,7 @@ async function loadChildNotificationItems(
           r.c.body.length > 140
             ? `${r.c.body.slice(0, 140)}…`
             : r.c.body,
-        link: `/posts/${articlePostId(r.a.id)}`,
+        link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
         isRead: false,
         createdAt: r.c.createdAt.toISOString(),
         actor: r.author
@@ -3083,7 +3085,10 @@ async function loadChildNotificationItems(
         kind: "message",
         title: `${senderName} messaged ${childFirst}`,
         body: preview,
-        link: `/messages`,
+        // Land the parent on a read-only view of the child's actual
+        // conversation (the parent isn't a participant, so /messages on
+        // its own would just open the parent's own inbox).
+        link: `/family/${childId}/messages/${r.m.conversationId}`,
         isRead: false,
         createdAt: r.m.createdAt.toISOString(),
         actor: r.sender
@@ -3181,8 +3186,16 @@ async function authorizeChildAccess(
     return null;
   }
   const isRealAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
-  const isGuardian = child.parentId === me.id && !req.isMasquerading;
-  if (!isGuardian && !isRealAdmin) {
+  const isLinkedParent = child.parentId === me.id && !req.isMasquerading;
+  // If the child requires a confirmed guardian (i.e. signed up with a
+  // guardianEmail), do not expose any of their private context — DMs,
+  // notifications, posts, etc. — to a linked parent until the guardian
+  // confirmation flow has been completed. Real admins can still access
+  // for moderation.
+  const guardianRequired = !!child.guardianEmail;
+  const isConfirmedGuardian =
+    isLinkedParent && (!guardianRequired || !!child.guardianConfirmedAt);
+  if (!isConfirmedGuardian && !isRealAdmin) {
     apiError(res, 403, "Forbidden");
     return null;
   }
@@ -5780,6 +5793,190 @@ router.post(
       guardianEmail: child.guardianEmail,
       guardianConfirmUrl: `/guardian-confirm/${newToken}`,
     });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Read-only "as your child" conversation views
+// ---------------------------------------------------------------------------
+// The per-child notification stream surfaces messages addressed to the
+// child, but a confirmed guardian isn't a participant in the child's
+// conversations and so can't open them through the normal /conversations
+// endpoints. These endpoints let the guardian (or a real admin) read —
+// and only read — the conversation that a stream item points at, scoped
+// to a single child they're authorized for.
+
+async function loadChildConversation(
+  childId: string,
+  conversationId: string,
+): Promise<typeof conversations.$inferSelect | null> {
+  const [conv] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+  if (!conv) return null;
+  // Confirm the child is a current participant in this conversation.
+  // Without this check a parent could probe arbitrary conversation IDs.
+  const [childPart] = await db
+    .select()
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversationId, conversationId),
+        eq(conversationParticipants.participantType, "user"),
+        eq(conversationParticipants.participantId, childId),
+        isNull(conversationParticipants.leftAt),
+      ),
+    )
+    .limit(1);
+  if (!childPart) return null;
+  return conv;
+}
+
+router.get(
+  "/users/me/children/:childId/conversations/:conversationId",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const conv = await loadChildConversation(child.id, req.params.conversationId);
+    if (!conv) return notFound(res);
+    // Render the conversation through the child's eyes so the "other
+    // participant" is the person the child is talking to (not the parent).
+    const view = await loadConversationView(conv, child.id);
+    if (!view) return notFound(res);
+    res.json(view);
+  }),
+);
+
+router.get(
+  "/users/me/children/:childId/conversations/:conversationId/messages",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const conv = await loadChildConversation(child.id, req.params.conversationId);
+    if (!conv) return notFound(res);
+    const rows = await db
+      .select({ m: messages, sender: users })
+      .from(messages)
+      .leftJoin(users, eq(messages.senderUserId, users.id))
+      .where(eq(messages.conversationId, conv.id))
+      .orderBy(asc(messages.createdAt));
+    const assetsByMessage = await loadAssetsForMessages(rows.map((r) => r.m.id));
+    res.json(
+      paginate(
+        rows.map((r) =>
+          toMessage(
+            r.m,
+            r.sender
+              ? {
+                  id: r.sender.id,
+                  displayName: displayName(r.sender),
+                  avatarUrl: r.sender.avatarUrl ?? null,
+                }
+              : null,
+            assetsByMessage.get(r.m.id) ?? [],
+          ),
+        ),
+      ),
+    );
+  }),
+);
+
+// Read-only "as your child" view of a single post. Returns the same payload
+// shape as GET /posts/:postId but evaluates draft/hidden access and
+// "hasReacted" through the child's identity, so the parent sees exactly what
+// the child would see (including their own reactions). All published posts
+// are universally viewable today, but routing through this endpoint future-
+// proofs the experience if per-post audience restrictions are ever added.
+router.get(
+  "/users/me/children/:childId/posts/:postId",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    // Mirror /posts/:postId: real admins (acting as themselves) can still
+    // see admin-hidden posts, so moderation flows continue to work even
+    // when fetched through the child-scoped path.
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "article") {
+      const [row] = await db
+        .select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(eq(articles.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      if (row.a.hiddenAt && !isAdmin) return notFound(res);
+      if (row.a.status !== "published") {
+        const childIsAuthor = row.a.authorId === child.id;
+        const childIsOrgAdmin = await canManageOrganization(child.id, row.org.id);
+        if (!childIsAuthor && !childIsOrgAdmin && !isAdmin) return notFound(res);
+      }
+      const stats = await loadPostStats(child.id, [
+        { kind: "article", refId: row.a.id },
+      ]);
+      res.json(
+        articleToPost(row.a, {
+          team: row.team,
+          org: row.org,
+          author: row.author,
+          ...statsFor(stats, "article", row.a.id),
+        }),
+      );
+      return;
+    }
+    if (parsed.kind === "org_post") {
+      const [row] = await db
+        .select({ p: orgPosts, org: organizations, author: users })
+        .from(orgPosts)
+        .innerJoin(organizations, eq(orgPosts.organizationId, organizations.id))
+        .leftJoin(users, eq(orgPosts.authorId, users.id))
+        .where(eq(orgPosts.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      if (row.p.hiddenAt && !isAdmin) return notFound(res);
+      if (row.p.status !== "published") {
+        const childIsAuthor = row.p.authorId === child.id;
+        const childIsOrgAdmin = await canManageOrganization(child.id, row.org.id);
+        if (!childIsAuthor && !childIsOrgAdmin && !isAdmin) return notFound(res);
+      }
+      const stats = await loadPostStats(child.id, [
+        { kind: "org_post", refId: row.p.id },
+      ]);
+      res.json(
+        orgPostToPost(row.p, {
+          org: row.org,
+          author: row.author,
+          ...statsFor(stats, "org_post", row.p.id),
+        }),
+      );
+      return;
+    }
+    const [row] = await db
+      .select({ h: highlights, team: teams, org: organizations, uploader: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(eq(highlights.id, parsed.id))
+      .limit(1);
+    if (!row) return notFound(res);
+    if (row.h.hiddenAt && !isAdmin) return notFound(res);
+    const stats = await loadPostStats(child.id, [
+      { kind: "highlight", refId: row.h.id },
+    ]);
+    res.json(
+      highlightToPost(row.h, {
+        team: row.team,
+        org: row.org,
+        author: row.uploader,
+        ...statsFor(stats, "highlight", row.h.id),
+      }),
+    );
   }),
 );
 

@@ -4983,6 +4983,117 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/users/me/children/{childId}/conversations/{conversationId}:
+    get:
+      operationId: getChildConversation
+      summary: Read-only view of a guardian-managed child's conversation
+      description: |
+        Returns a single conversation the child participates in, rendered from the child's perspective. Lets a confirmed guardian (or a real admin) follow a message item from the family stream straight into the conversation it points at, without giving the parent the ability to send messages or otherwise act on the child's behalf.
+      tags:
+        - Family
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Conversation view (read-only) for the child.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/users/me/children/{childId}/conversations/{conversationId}/messages:
+    get:
+      operationId: listChildConversationMessages
+      summary: Read-only message list for a guardian-managed child's conversation
+      description: |
+        Lists every message in the given conversation, scoped to a child the caller is the confirmed guardian of (or a real admin). The endpoint is read-only — there is no companion POST.
+      tags:
+        - Family
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Messages in the child's conversation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/users/me/children/{childId}/posts/{postId}:
+    get:
+      operationId: getChildPost
+      summary: Read-only post view scoped to a guardian-managed child
+      description: |
+        Returns the same shape as `GET /posts/{postId}` but evaluates draft and audience access through the child's identity, and reports viewer-specific stats (such as `hasReacted`) from the child's perspective. Only the confirmed guardian or a real admin may call this.
+      tags:
+        - Family
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Post the child can see, with the child's stats applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/users/me/children/{childId}/visibility:
     patch:
       operationId: updateChildVisibility
