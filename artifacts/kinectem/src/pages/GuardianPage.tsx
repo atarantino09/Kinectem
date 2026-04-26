@@ -65,6 +65,11 @@ interface ChildNotificationsState {
   loading: boolean;
   items: ChildNotificationItem[];
   unreadCount: number;
+  // When true, the next fetch (and refresh) for this child requests
+  // `?includeDecided=true` so the "Recently decided" history strip is
+  // populated alongside the still-undecided items. Defaults to false so
+  // the dashboard stays focused on what still needs attention.
+  showDecided?: boolean;
 }
 
 interface PendingTeamInvite {
@@ -158,19 +163,29 @@ export default function GuardianPage() {
     }
   };
 
-  const fetchNotificationsForChild = async (childId: string) => {
+  const fetchNotificationsForChild = async (
+    childId: string,
+    opts: { includeDecided?: boolean } = {},
+  ) => {
+    // Fall back to the per-child saved preference when the caller doesn't
+    // override — so a refresh after the parent flipped the toggle keeps
+    // the decided history strip populated.
+    const includeDecided =
+      opts.includeDecided ?? notifsByChild[childId]?.showDecided ?? false;
     setNotifsByChild((prev) => ({
       ...prev,
       [childId]: {
         loading: true,
         items: prev[childId]?.items ?? [],
         unreadCount: prev[childId]?.unreadCount ?? 0,
+        showDecided: includeDecided,
       },
     }));
     try {
-      const r = await customFetch<ChildNotificationStreamResponse>(
-        `/api/v1/users/me/children/${childId}/notifications`,
-      );
+      const url = includeDecided
+        ? `/api/v1/users/me/children/${childId}/notifications?includeDecided=true`
+        : `/api/v1/users/me/children/${childId}/notifications`;
+      const r = await customFetch<ChildNotificationStreamResponse>(url);
       const items = r.data ?? [];
       setNotifsByChild((prev) => ({
         ...prev,
@@ -180,14 +195,104 @@ export default function GuardianPage() {
           unreadCount:
             typeof r.unreadCount === "number"
               ? r.unreadCount
-              : items.filter((i) => !i.isRead).length,
+              : items.filter((i) => !i.isRead && !i.decision).length,
+          showDecided: includeDecided,
         },
       }));
     } catch {
       setNotifsByChild((prev) => ({
         ...prev,
-        [childId]: { loading: false, items: [], unreadCount: 0 },
+        [childId]: {
+          loading: false,
+          items: [],
+          unreadCount: 0,
+          showDecided: includeDecided,
+        },
       }));
+    }
+  };
+
+  const toggleShowDecided = async (childId: string) => {
+    const next = !(notifsByChild[childId]?.showDecided ?? false);
+    await fetchNotificationsForChild(childId, { includeDecided: next });
+  };
+
+  // Revert a previous Approve/Remove decision back to "needs review".
+  // Optimistically clear the decision locally so the row jumps back into
+  // the still-undecided list, then refetch with the same includeDecided
+  // setting so the badge / undo button updates from the server's truth.
+  const [revertingItemKey, setRevertingItemKey] = useState<string | null>(
+    null,
+  );
+  const revertChildDecision = async (
+    childId: string,
+    item: ChildNotificationItem,
+  ) => {
+    if (!item.decision) return;
+    setRevertingItemKey(item.itemKey);
+    const previousDecision = item.decision;
+    setNotifsByChild((prev) => {
+      const cur = prev[childId];
+      if (!cur) return prev;
+      return {
+        ...prev,
+        [childId]: {
+          ...cur,
+          items: cur.items.map((i) =>
+            i.itemKey === item.itemKey
+              ? { ...i, decision: null, isRead: false }
+              : i,
+          ),
+          unreadCount: cur.unreadCount + 1,
+        },
+      };
+    });
+    try {
+      await customFetch(
+        `/api/v1/users/me/children/${childId}/notifications/unset-decision`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemKey: item.itemKey }),
+        },
+      );
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k)) return false;
+          const url = typeof k[0] === "string" ? k[0] : "";
+          return url.includes("/notifications") || url.includes("/children");
+        },
+      });
+      // Re-fetch with the parent's currently-selected toggle so the
+      // strip reflects the server's view (the underlying source row may
+      // have been restored by the unset action).
+      await fetchNotificationsForChild(childId);
+    } catch {
+      // Roll back on failure so the badge/buttons return to the prior state.
+      setNotifsByChild((prev) => {
+        const cur = prev[childId];
+        if (!cur) return prev;
+        return {
+          ...prev,
+          [childId]: {
+            ...cur,
+            items: cur.items.map((i) =>
+              i.itemKey === item.itemKey
+                ? { ...i, decision: previousDecision }
+                : i,
+            ),
+            unreadCount: Math.max(0, cur.unreadCount - 1),
+          },
+        };
+      });
+      toast({
+        title: "Couldn't undo decision",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setRevertingItemKey(null);
     }
   };
 
@@ -867,14 +972,182 @@ export default function GuardianPage() {
                         </div>
                       );
                     }
-                    if (items.length === 0) return null;
+                    const showDecided = notifState?.showDecided ?? false;
+                    // Split items into "still needs review" and "already
+                    // decided" so we can render the optional history strip
+                    // below the actionable list. Pending items are always
+                    // visible; decided items only render when the parent
+                    // has flipped the toggle on for this child.
+                    const pendingItems = items.filter((i) => !i.decision);
+                    const decidedItems = items.filter((i) => !!i.decision);
+                    // Once the notifs state has loaded for this child we
+                    // always render the section so the "Show decided"
+                    // toggle stays discoverable — even when there is
+                    // nothing currently waiting on the parent. The empty
+                    // state explains what the section is for.
                     const unread = notifState?.unreadCount ?? 0;
+                    const renderRow = (item: ChildNotificationItem) => {
+                      const Icon =
+                        item.kind === "tag"
+                          ? TagIcon
+                          : item.kind === "comment"
+                            ? MessageCircle
+                            : item.kind === "message"
+                              ? MessageSquare
+                              : item.kind === "roster"
+                                ? ClipboardList
+                                : Bell;
+                      const isApproving =
+                        decidingItem?.itemKey === item.itemKey &&
+                        decidingItem.decision === "approved";
+                      const isRemoving =
+                        decidingItem?.itemKey === item.itemKey &&
+                        decidingItem.decision === "removed";
+                      const decisionInFlight = isApproving || isRemoving;
+                      const decided = item.decision;
+                      const isReverting =
+                        revertingItemKey === item.itemKey;
+                      return (
+                        <div
+                          key={item.itemKey}
+                          data-testid={`row-child-notif-${item.itemKey}`}
+                          data-read={item.isRead ? "true" : "false"}
+                          data-decision={decided ?? "pending"}
+                          className={`flex items-start gap-2 p-2 rounded-md border transition-opacity ${
+                            decided ? "opacity-60" : ""
+                          } ${
+                            item.isRead
+                              ? "border-border bg-background"
+                              : "border-primary/30 bg-primary/5"
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            {item.link ? (
+                              <Link href={item.link}>
+                                <p
+                                  className="text-xs font-bold leading-tight cursor-pointer hover:text-primary truncate"
+                                  data-testid={`text-child-notif-title-${item.itemKey}`}
+                                >
+                                  {item.title}
+                                </p>
+                              </Link>
+                            ) : (
+                              <p
+                                className="text-xs font-bold leading-tight truncate"
+                                data-testid={`text-child-notif-title-${item.itemKey}`}
+                              >
+                                {item.title}
+                              </p>
+                            )}
+                            {item.body && (
+                              <p className="text-[11px] text-muted-foreground line-clamp-2">
+                                {item.body}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {timeAgo(item.createdAt)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {decided === "approved" ? (
+                              <>
+                                <Badge
+                                  variant="outline"
+                                  className="h-6 px-2 text-[11px] font-bold border-primary text-primary"
+                                  data-testid={`badge-decided-${item.itemKey}`}
+                                >
+                                  Approved
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[11px] font-bold"
+                                  disabled={isReverting}
+                                  onClick={() =>
+                                    void revertChildDecision(c.id, item)
+                                  }
+                                  aria-label="Revert this decision back to needs review"
+                                  title="Revert this decision back to needs review"
+                                  data-testid={`btn-undo-decision-${item.itemKey}`}
+                                >
+                                  {isReverting ? "…" : "Undo"}
+                                </Button>
+                              </>
+                            ) : decided === "removed" ? (
+                              <>
+                                <Badge
+                                  variant="outline"
+                                  className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive"
+                                  data-testid={`badge-decided-${item.itemKey}`}
+                                >
+                                  Removed
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[11px] font-bold"
+                                  disabled={isReverting}
+                                  onClick={() =>
+                                    void revertChildDecision(c.id, item)
+                                  }
+                                  aria-label="Revert this decision back to needs review"
+                                  title="Revert this decision back to needs review"
+                                  data-testid={`btn-undo-decision-${item.itemKey}`}
+                                >
+                                  {isReverting ? "…" : "Undo"}
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="h-6 px-2 text-[11px] font-bold"
+                                  disabled={decisionInFlight}
+                                  onClick={() =>
+                                    void decideChildItem(
+                                      c.id,
+                                      item,
+                                      "approved",
+                                    )
+                                  }
+                                  aria-label={`Approve: keep this item visible on ${c.firstName}'s account`}
+                                  title={`Approve: keep this item visible on ${c.firstName}'s account`}
+                                  data-testid={`btn-approve-${item.itemKey}`}
+                                >
+                                  {isApproving ? "…" : "Approve"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive hover:bg-destructive/10"
+                                  disabled={decisionInFlight}
+                                  onClick={() =>
+                                    void decideChildItem(
+                                      c.id,
+                                      item,
+                                      "removed",
+                                    )
+                                  }
+                                  aria-label={removeAriaLabel(item)}
+                                  title={removeAriaLabel(item)}
+                                  data-testid={`btn-remove-${item.itemKey}`}
+                                >
+                                  {isRemoving ? "…" : "Remove"}
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    };
                     return (
                       <div
                         className="pt-2 border-t border-border space-y-2"
                         data-testid={`section-child-notifs-${c.id}`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <Bell className="w-3.5 h-3.5 text-primary" />
                           <p className="text-xs font-black uppercase tracking-wider text-primary">
                             {c.firstName}'s notifications
@@ -888,20 +1161,36 @@ export default function GuardianPage() {
                               {unread} new
                             </Badge>
                           )}
-                          {items.length > 0 && (
+                          <div className="ml-auto flex items-center gap-1">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="ml-auto h-6 px-2 text-xs font-bold"
-                              disabled={approveAllForChild === c.id}
-                              onClick={() => void approveAllChildItems(c.id)}
-                              data-testid={`btn-approve-all-${c.id}`}
+                              className="h-6 px-2 text-xs font-bold"
+                              onClick={() => void toggleShowDecided(c.id)}
+                              aria-pressed={showDecided}
+                              data-testid={`btn-toggle-decided-${c.id}`}
                             >
-                              {approveAllForChild === c.id
-                                ? "Approving…"
-                                : "Approve all"}
+                              {showDecided
+                                ? "Hide decided"
+                                : "Show decided"}
                             </Button>
-                          )}
+                            {pendingItems.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs font-bold"
+                                disabled={approveAllForChild === c.id}
+                                onClick={() =>
+                                  void approveAllChildItems(c.id)
+                                }
+                                data-testid={`btn-approve-all-${c.id}`}
+                              >
+                                {approveAllForChild === c.id
+                                  ? "Approving…"
+                                  : "Approve all"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <p
                           className="text-[11px] text-muted-foreground leading-snug"
@@ -915,130 +1204,53 @@ export default function GuardianPage() {
                           underlying action where possible (decline tag,
                           hide comment or message, decline roster invite).
                         </p>
-                        <div className="space-y-1.5">
-                          {items.slice(0, 8).map((item) => {
-                            const Icon =
-                              item.kind === "tag"
-                                ? TagIcon
-                                : item.kind === "comment"
-                                  ? MessageCircle
-                                  : item.kind === "message"
-                                    ? MessageSquare
-                                    : item.kind === "roster"
-                                      ? ClipboardList
-                                      : Bell;
-                            const isApproving =
-                              decidingItem?.itemKey === item.itemKey &&
-                              decidingItem.decision === "approved";
-                            const isRemoving =
-                              decidingItem?.itemKey === item.itemKey &&
-                              decidingItem.decision === "removed";
-                            const decisionInFlight = isApproving || isRemoving;
-                            const decided = item.decision;
-                            return (
-                              <div
-                                key={item.itemKey}
-                                data-testid={`row-child-notif-${item.itemKey}`}
-                                data-read={item.isRead ? "true" : "false"}
-                                data-decision={decided ?? "pending"}
-                                className={`flex items-start gap-2 p-2 rounded-md border transition-opacity ${
-                                  decided ? "opacity-60" : ""
-                                } ${
-                                  item.isRead
-                                    ? "border-border bg-background"
-                                    : "border-primary/30 bg-primary/5"
-                                }`}
+                        {pendingItems.length === 0 ? (
+                          <p
+                            className="text-[11px] text-muted-foreground italic"
+                            data-testid={`text-no-pending-${c.id}`}
+                          >
+                            Nothing waiting on you right now.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {pendingItems.slice(0, 8).map(renderRow)}
+                          </div>
+                        )}
+                        {showDecided && (
+                          <div
+                            className="pt-2 mt-1 border-t border-dashed border-border space-y-1.5"
+                            data-testid={`section-decided-${c.id}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <p
+                                className="text-[11px] font-black uppercase tracking-wider text-muted-foreground"
+                                data-testid={`text-decided-heading-${c.id}`}
                               >
-                                <Icon className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  {item.link ? (
-                                    <Link href={item.link}>
-                                      <p
-                                        className="text-xs font-bold leading-tight cursor-pointer hover:text-primary truncate"
-                                        data-testid={`text-child-notif-title-${item.itemKey}`}
-                                      >
-                                        {item.title}
-                                      </p>
-                                    </Link>
-                                  ) : (
-                                    <p
-                                      className="text-xs font-bold leading-tight truncate"
-                                      data-testid={`text-child-notif-title-${item.itemKey}`}
-                                    >
-                                      {item.title}
-                                    </p>
-                                  )}
-                                  {item.body && (
-                                    <p className="text-[11px] text-muted-foreground line-clamp-2">
-                                      {item.body}
-                                    </p>
-                                  )}
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    {timeAgo(item.createdAt)}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {decided === "approved" ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="h-6 px-2 text-[11px] font-bold border-primary text-primary"
-                                      data-testid={`badge-decided-${item.itemKey}`}
-                                    >
-                                      Approved
-                                    </Badge>
-                                  ) : decided === "removed" ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive"
-                                      data-testid={`badge-decided-${item.itemKey}`}
-                                    >
-                                      Removed
-                                    </Badge>
-                                  ) : (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="default"
-                                        className="h-6 px-2 text-[11px] font-bold"
-                                        disabled={decisionInFlight}
-                                        onClick={() =>
-                                          void decideChildItem(
-                                            c.id,
-                                            item,
-                                            "approved",
-                                          )
-                                        }
-                                        aria-label={`Approve: keep this item visible on ${c.firstName}'s account`}
-                                        title={`Approve: keep this item visible on ${c.firstName}'s account`}
-                                        data-testid={`btn-approve-${item.itemKey}`}
-                                      >
-                                        {isApproving ? "…" : "Approve"}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive hover:bg-destructive/10"
-                                        disabled={decisionInFlight}
-                                        onClick={() =>
-                                          void decideChildItem(
-                                            c.id,
-                                            item,
-                                            "removed",
-                                          )
-                                        }
-                                        aria-label={removeAriaLabel(item)}
-                                        title={removeAriaLabel(item)}
-                                        data-testid={`btn-remove-${item.itemKey}`}
-                                      >
-                                        {isRemoving ? "…" : "Remove"}
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                                Recently decided
+                              </p>
+                              {decidedItems.length > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="font-bold text-[10px] h-5 px-1.5"
+                                  data-testid={`badge-decided-count-${c.id}`}
+                                >
+                                  {decidedItems.length}
+                                </Badge>
+                              )}
+                            </div>
+                            {decidedItems.length === 0 ? (
+                              <p
+                                className="text-[11px] text-muted-foreground italic"
+                                data-testid={`text-no-decided-${c.id}`}
+                              >
+                                No decisions to review yet. Use Approve or
+                                Remove on an item to start your history.
+                              </p>
+                            ) : (
+                              decidedItems.slice(0, 12).map(renderRow)
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}

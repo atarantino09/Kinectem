@@ -170,6 +170,7 @@ import type {
   ListAdminUsers200,
   ListAdminUsersParams,
   ListChildConversationMessages200,
+  ListChildNotificationsParams,
   ListChildPendingTeamInvites200,
   ListCommentReactorsParams,
   ListConversationsParams,
@@ -263,6 +264,8 @@ import type {
   UnauthorizedResponse,
   UnprocessableEntityResponse,
   UnreadCountResponse,
+  UnsetChildNotificationDecision200,
+  UnsetChildNotificationDecisionBody,
   UpdateAddressRequest,
   UpdateChildVisibility200,
   UpdateChildVisibilityBody,
@@ -18793,20 +18796,36 @@ export function useListChildPendingTeamInvites<
 }
 
 /**
- * Aggregates events addressed to the child — direct notifications, tags in posts, comments on posts the child is involved with, messages in conversations the child participates in, and roster events — into a single stream for the parent. The parent's per-item read state is tracked separately from the child's, so marking items here does not change what the child sees.
+ * Aggregates events addressed to the child — direct notifications, tags in posts, comments on posts the child is involved with, messages in conversations the child participates in, and roster events — into a single stream for the parent. The parent's per-item read state is tracked separately from the child's, so marking items here does not change what the child sees. Pass `includeDecided=true` to also surface items the parent has already approved or removed (so they can be reviewed and undone from the "Decided" history strip).
 
  * @summary List the unified notification stream for a guardian-managed child
  */
-export const getListChildNotificationsUrl = (childId: string) => {
-  return `/api/v1/users/me/children/${childId}/notifications`;
+export const getListChildNotificationsUrl = (
+  childId: string,
+  params?: ListChildNotificationsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/users/me/children/${childId}/notifications?${stringifiedParams}`
+    : `/api/v1/users/me/children/${childId}/notifications`;
 };
 
 export const listChildNotifications = async (
   childId: string,
+  params?: ListChildNotificationsParams,
   options?: RequestInit,
 ): Promise<ChildNotificationStreamResponse> => {
   return customFetch<ChildNotificationStreamResponse>(
-    getListChildNotificationsUrl(childId),
+    getListChildNotificationsUrl(childId, params),
     {
       ...options,
       method: "GET",
@@ -18814,8 +18833,14 @@ export const listChildNotifications = async (
   );
 };
 
-export const getListChildNotificationsQueryKey = (childId: string) => {
-  return [`/api/v1/users/me/children/${childId}/notifications`] as const;
+export const getListChildNotificationsQueryKey = (
+  childId: string,
+  params?: ListChildNotificationsParams,
+) => {
+  return [
+    `/api/v1/users/me/children/${childId}/notifications`,
+    ...(params ? [params] : []),
+  ] as const;
 };
 
 export const getListChildNotificationsQueryOptions = <
@@ -18825,6 +18850,7 @@ export const getListChildNotificationsQueryOptions = <
   >,
 >(
   childId: string,
+  params?: ListChildNotificationsParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listChildNotifications>>,
@@ -18837,12 +18863,13 @@ export const getListChildNotificationsQueryOptions = <
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ?? getListChildNotificationsQueryKey(childId);
+    queryOptions?.queryKey ??
+    getListChildNotificationsQueryKey(childId, params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listChildNotifications>>
   > = ({ signal }) =>
-    listChildNotifications(childId, { signal, ...requestOptions });
+    listChildNotifications(childId, params, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -18874,6 +18901,7 @@ export function useListChildNotifications<
   >,
 >(
   childId: string,
+  params?: ListChildNotificationsParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listChildNotifications>>,
@@ -18883,7 +18911,11 @@ export function useListChildNotifications<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListChildNotificationsQueryOptions(childId, options);
+  const queryOptions = getListChildNotificationsQueryOptions(
+    childId,
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -19289,6 +19321,114 @@ export const useDecideChildNotification = <
   TContext
 > => {
   return useMutation(getDecideChildNotificationMutationOptions(options));
+};
+
+/**
+ * Clears the parent's persisted decision for a single item so it resurfaces in the default feed as fresh and unread. For previously-removed items, the reversible kind-specific side effects are also undone (un-decline a tag, clear a comment hide, clear a message hide). Side effects that cannot be safely restored (a hard-deleted pending roster invite, a removed follow / reaction) are best-effort no-ops.
+
+ * @summary Revert a previous Approve/Remove decision back to "needs review"
+ */
+export const getUnsetChildNotificationDecisionUrl = (childId: string) => {
+  return `/api/v1/users/me/children/${childId}/notifications/unset-decision`;
+};
+
+export const unsetChildNotificationDecision = async (
+  childId: string,
+  unsetChildNotificationDecisionBody: UnsetChildNotificationDecisionBody,
+  options?: RequestInit,
+): Promise<UnsetChildNotificationDecision200> => {
+  return customFetch<UnsetChildNotificationDecision200>(
+    getUnsetChildNotificationDecisionUrl(childId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(unsetChildNotificationDecisionBody),
+    },
+  );
+};
+
+export const getUnsetChildNotificationDecisionMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsetChildNotificationDecision>>,
+    TError,
+    { childId: string; data: BodyType<UnsetChildNotificationDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unsetChildNotificationDecision>>,
+  TError,
+  { childId: string; data: BodyType<UnsetChildNotificationDecisionBody> },
+  TContext
+> => {
+  const mutationKey = ["unsetChildNotificationDecision"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unsetChildNotificationDecision>>,
+    { childId: string; data: BodyType<UnsetChildNotificationDecisionBody> }
+  > = (props) => {
+    const { childId, data } = props ?? {};
+
+    return unsetChildNotificationDecision(childId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnsetChildNotificationDecisionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unsetChildNotificationDecision>>
+>;
+export type UnsetChildNotificationDecisionMutationBody =
+  BodyType<UnsetChildNotificationDecisionBody>;
+export type UnsetChildNotificationDecisionMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Revert a previous Approve/Remove decision back to "needs review"
+ */
+export const useUnsetChildNotificationDecision = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsetChildNotificationDecision>>,
+    TError,
+    { childId: string; data: BodyType<UnsetChildNotificationDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unsetChildNotificationDecision>>,
+  TError,
+  { childId: string; data: BodyType<UnsetChildNotificationDecisionBody> },
+  TContext
+> => {
+  return useMutation(getUnsetChildNotificationDecisionMutationOptions(options));
 };
 
 /**

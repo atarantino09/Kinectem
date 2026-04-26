@@ -1151,6 +1151,290 @@ describe("parent inbox: per-child unified notifications", () => {
     });
   });
 
+  describe("Recently decided history & undo", () => {
+    it("default GET hides decided items, but includeDecided=true brings them back", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          kind: "mention",
+          message: "History fixture",
+          link: "/posts/history-1",
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      // Approve so it leaves the live feed.
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "approved" });
+      expect(decideRes.status).toBe(200);
+
+      const defaultRes = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      expect(defaultRes.status).toBe(200);
+      const defaultKeys = (
+        defaultRes.body.data as Array<{ itemKey: string }>
+      ).map((d) => d.itemKey);
+      expect(defaultKeys).not.toContain(itemKey);
+
+      const decidedRes = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications?includeDecided=true`,
+      );
+      expect(decidedRes.status).toBe(200);
+      const decidedRows = decidedRes.body.data as Array<{
+        itemKey: string;
+        decision: string | null;
+      }>;
+      const decidedRow = decidedRows.find((d) => d.itemKey === itemKey);
+      expect(decidedRow).toBeTruthy();
+      expect(decidedRow?.decision).toBe("approved");
+      // unreadCount must reflect the live (non-decided) feed only.
+      expect(decidedRes.body.unreadCount).toBe(defaultRes.body.unreadCount);
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("includeDecided still surfaces decided items even after the source row is gone (placeholder)", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          kind: "mention",
+          message: "About to vanish",
+          link: "/posts/vanish",
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(decideRes.status).toBe(200);
+
+      // Source notification gets purged (e.g. retention cleanup).
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+
+      const decidedRes = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications?includeDecided=true`,
+      );
+      expect(decidedRes.status).toBe(200);
+      const row = (
+        decidedRes.body.data as Array<{
+          itemKey: string;
+          decision: string | null;
+        }>
+      ).find((d) => d.itemKey === itemKey);
+      // Placeholder still shown so the parent can revert the decision.
+      expect(row).toBeTruthy();
+      expect(row?.decision).toBe("removed");
+    });
+
+    it("unset-decision deletes the parent read row and brings the item back to the live feed", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          kind: "mention",
+          message: "Undo me",
+          link: "/posts/undo-1",
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const approve = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "approved" });
+      expect(approve.status).toBe(200);
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+
+      const reads = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, lisaId),
+            eq(parentChildNotificationReads.childId, samiraId),
+            eq(parentChildNotificationReads.itemKey, itemKey),
+          ),
+        );
+      expect(reads.length).toBe(0);
+
+      const after = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const keys = (after.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(keys).toContain(itemKey);
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("unset-decision on a removed tag flips it back from declined to pending", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Undo tag fixture",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "approved",
+        })
+        .returning();
+      const itemKey = `tag:${tag.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [declined] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(declined?.status).toBe("declined");
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+
+      const [restored] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      // Reverting a remove on a declined tag should put it back into the
+      // parent's pending review queue.
+      expect(restored?.status).toBe("pending");
+    });
+
+    it("unset-decision on a removed comment clears hiddenAt", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Undo comment fixture",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      await db.insert(articleTags).values({
+        articleId: article.id,
+        userId: samiraId,
+        taggerUserId: coachId,
+        status: "approved",
+      });
+      const [comment] = await db
+        .insert(postComments)
+        .values({
+          postKind: "article",
+          postRefId: article.id,
+          authorId: coachId,
+          body: "Will be hidden then unhidden",
+        })
+        .returning();
+      const itemKey = `comment:${comment.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [hidden] = await db
+        .select()
+        .from(postComments)
+        .where(eq(postComments.id, comment.id));
+      expect(hidden?.hiddenAt).toBeTruthy();
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+
+      const [restored] = await db
+        .select()
+        .from(postComments)
+        .where(eq(postComments.id, comment.id));
+      expect(restored?.hiddenAt).toBeNull();
+    });
+
+    it("unset-decision on an unknown item key returns 404", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey: `notification:00000000-0000-0000-0000-000000000999` });
+      expect(res.status).toBe(404);
+    });
+
+    it("unset-decision rejects non-guardian callers with 403", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const res = await coach
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey: "notification:abc" });
+      expect(res.status).toBe(403);
+    });
+
+    it("unset-decision requires authentication", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const res = await request(app)
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey: "notification:abc" });
+      expect(res.status).toBe(401);
+    });
+  });
+
   it("does not surface comments authored by the child themselves", async () => {
     const samiraId = await findUserId("samira@kinectem.demo");
     const teamId = await getAnyTeamId();

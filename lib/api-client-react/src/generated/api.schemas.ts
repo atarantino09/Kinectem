@@ -3416,6 +3416,14 @@ export type ListChildPendingTeamInvites200 = {
   data: ListChildPendingTeamInvites200DataItem[];
 };
 
+export type ListChildNotificationsParams = {
+  /**
+ * When `true`, the response includes items the parent has previously approved or removed alongside the still-undecided items. The `unreadCount` always reflects the default feed and is not inflated by decided items.
+
+ */
+  includeDecided?: boolean;
+};
+
 export type ApproveAllChildNotifications200 = {
   approvedCount: number;
 };
@@ -3454,6 +3462,25 @@ export const DecideChildNotification200Decision = {
 export type DecideChildNotification200 = {
   ok: boolean;
   decision: DecideChildNotification200Decision;
+};
+
+export type UnsetChildNotificationDecisionBody = {
+  /** The aggregated item's key in the form `<kind>:<id>`. Must correspond to a prior decision row owned by this parent + child, otherwise a 404 is returned.
+   */
+  itemKey: string;
+};
+
+export type UnsetChildNotificationDecision200Reverted =
+  (typeof UnsetChildNotificationDecision200Reverted)[keyof typeof UnsetChildNotificationDecision200Reverted];
+
+export const UnsetChildNotificationDecision200Reverted = {
+  approved: "approved",
+  removed: "removed",
+} as const;
+
+export type UnsetChildNotificationDecision200 = {
+  ok: boolean;
+  reverted: UnsetChildNotificationDecision200Reverted;
 };
 
 export type GetChildrenNotificationsSummary200DataItem = {

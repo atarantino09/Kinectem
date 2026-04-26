@@ -5247,6 +5247,9 @@ paths:
         events — into a single stream for the parent. The parent's
         per-item read state is tracked separately from the child's, so
         marking items here does not change what the child sees.
+        Pass `includeDecided=true` to also surface items the parent has
+        already approved or removed (so they can be reviewed and undone
+        from the "Decided" history strip).
       tags: [Family]
       parameters:
         - name: childId
@@ -5255,6 +5258,17 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: includeDecided
+          in: query
+          required: false
+          description: >
+            When `true`, the response includes items the parent has
+            previously approved or removed alongside the still-undecided
+            items. The `unreadCount` always reflects the default feed
+            and is not inflated by decided items.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Aggregated notification stream for the child.
@@ -5412,6 +5426,63 @@ paths:
                   ok:
                     type: boolean
                   decision:
+                    type: string
+                    enum: [approved, removed]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/me/children/{childId}/notifications/unset-decision:
+    post:
+      operationId: unsetChildNotificationDecision
+      summary: Revert a previous Approve/Remove decision back to "needs review"
+      description: >
+        Clears the parent's persisted decision for a single item so it
+        resurfaces in the default feed as fresh and unread. For
+        previously-removed items, the reversible kind-specific side
+        effects are also undone (un-decline a tag, clear a comment hide,
+        clear a message hide). Side effects that cannot be safely
+        restored (a hard-deleted pending roster invite, a removed
+        follow / reaction) are best-effort no-ops.
+      tags: [Family]
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemKey]
+              properties:
+                itemKey:
+                  type: string
+                  description: >
+                    The aggregated item's key in the form `<kind>:<id>`.
+                    Must correspond to a prior decision row owned by this
+                    parent + child, otherwise a 404 is returned.
+      responses:
+        '200':
+          description: Decision cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, reverted]
+                properties:
+                  ok:
+                    type: boolean
+                  reverted:
                     type: string
                     enum: [approved, removed]
         '400':

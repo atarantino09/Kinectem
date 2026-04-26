@@ -5995,12 +5995,23 @@ export const ListChildPendingTeamInvitesResponse = zod.object({
 });
 
 /**
- * Aggregates events addressed to the child — direct notifications, tags in posts, comments on posts the child is involved with, messages in conversations the child participates in, and roster events — into a single stream for the parent. The parent's per-item read state is tracked separately from the child's, so marking items here does not change what the child sees.
+ * Aggregates events addressed to the child — direct notifications, tags in posts, comments on posts the child is involved with, messages in conversations the child participates in, and roster events — into a single stream for the parent. The parent's per-item read state is tracked separately from the child's, so marking items here does not change what the child sees. Pass `includeDecided=true` to also surface items the parent has already approved or removed (so they can be reviewed and undone from the "Decided" history strip).
 
  * @summary List the unified notification stream for a guardian-managed child
  */
 export const ListChildNotificationsParams = zod.object({
   childId: zod.coerce.string().uuid(),
+});
+
+export const listChildNotificationsQueryIncludeDecidedDefault = false;
+
+export const ListChildNotificationsQueryParams = zod.object({
+  includeDecided: zod.coerce
+    .boolean()
+    .default(listChildNotificationsQueryIncludeDecidedDefault)
+    .describe(
+      "When `true`, the response includes items the parent has previously approved or removed alongside the still-undecided items. The `unreadCount` always reflects the default feed and is not inflated by decided items.\n",
+    ),
 });
 
 export const ListChildNotificationsResponse = zod.object({
@@ -6122,6 +6133,28 @@ export const DecideChildNotificationBody = zod.object({
 export const DecideChildNotificationResponse = zod.object({
   ok: zod.boolean(),
   decision: zod.enum(["approved", "removed"]),
+});
+
+/**
+ * Clears the parent's persisted decision for a single item so it resurfaces in the default feed as fresh and unread. For previously-removed items, the reversible kind-specific side effects are also undone (un-decline a tag, clear a comment hide, clear a message hide). Side effects that cannot be safely restored (a hard-deleted pending roster invite, a removed follow / reaction) are best-effort no-ops.
+
+ * @summary Revert a previous Approve/Remove decision back to "needs review"
+ */
+export const UnsetChildNotificationDecisionParams = zod.object({
+  childId: zod.coerce.string().uuid(),
+});
+
+export const UnsetChildNotificationDecisionBody = zod.object({
+  itemKey: zod
+    .string()
+    .describe(
+      "The aggregated item's key in the form `<kind>:<id>`. Must correspond to a prior decision row owned by this parent + child, otherwise a 404 is returned.\n",
+    ),
+});
+
+export const UnsetChildNotificationDecisionResponse = zod.object({
+  ok: zod.boolean(),
+  reverted: zod.enum(["approved", "removed"]),
 });
 
 /**

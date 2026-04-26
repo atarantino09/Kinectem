@@ -31,7 +31,7 @@ import {
   parentChildNotificationReads,
   messageChildHides,
 } from "@workspace/db";
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { z } from "zod";
@@ -3261,6 +3261,229 @@ function visibleAfterDecision(items: ChildItem[]): ChildItem[] {
   return items.filter((i) => i.decision === null);
 }
 
+// Reconstruct ChildItem records for the parent's previously-decided
+// items that are no longer surfaced by `loadChildNotificationItems`
+// (e.g. a tag the parent declined leaves articleTags.status='declined',
+// which the live stream filters out). Used only when the caller asks
+// for `includeDecided=true` on the family notification feed so the
+// parent can see and undo past decisions.
+const DECIDED_EXTRAS_LIMIT = 30;
+const ALLOWED_DECIDED_KINDS: ReadonlySet<ChildItemKind> = new Set([
+  "notification",
+  "tag",
+  "comment",
+  "message",
+  "roster",
+]);
+
+async function loadDecidedExtraItems(
+  parentId: string,
+  childId: string,
+  child: typeof users.$inferSelect,
+  liveKeys: ReadonlySet<string>,
+): Promise<ChildItem[]> {
+  const decidedRows = await db
+    .select()
+    .from(parentChildNotificationReads)
+    .where(
+      and(
+        eq(parentChildNotificationReads.parentId, parentId),
+        eq(parentChildNotificationReads.childId, childId),
+        isNotNull(parentChildNotificationReads.decision),
+      ),
+    )
+    .orderBy(desc(parentChildNotificationReads.decidedAt));
+
+  const childFirst = (child.name?.trim().split(/\s+/)[0] ?? "").length > 0
+    ? child.name!.trim().split(/\s+/)[0]
+    : "your child";
+
+  const extras: ChildItem[] = [];
+  for (const row of decidedRows) {
+    if (extras.length >= DECIDED_EXTRAS_LIMIT) break;
+    if (liveKeys.has(row.itemKey)) continue;
+    const [kind, ...rest] = row.itemKey.split(":");
+    const refId = rest.join(":");
+    if (!refId) continue;
+    if (!ALLOWED_DECIDED_KINDS.has(kind as ChildItemKind)) continue;
+    const decision: ChildItemDecision | null =
+      row.decision === "approved" || row.decision === "removed"
+        ? row.decision
+        : null;
+    if (!decision) continue;
+    const fallbackCreatedAt = (row.decidedAt ?? row.readAt).toISOString();
+
+    let item: ChildItem | null = null;
+    if (kind === "tag") {
+      const [r] = await db
+        .select({ t: articleTags, a: articles, tagger: users })
+        .from(articleTags)
+        .innerJoin(articles, eq(articleTags.articleId, articles.id))
+        .leftJoin(users, eq(articleTags.taggerUserId, users.id))
+        .where(eq(articleTags.id, refId))
+        .limit(1);
+      if (r) {
+        const taggerName = r.tagger ? displayName(r.tagger) : "Someone";
+        const articleTitle = r.a.title ?? "Untitled";
+        item = {
+          itemKey: row.itemKey,
+          kind: "tag",
+          title: `${taggerName} tagged ${childFirst} in "${articleTitle}"`,
+          body:
+            r.t.status === "declined"
+              ? "Tag was declined."
+              : r.t.status === "pending"
+                ? "Pending consent — review the tag for your child."
+                : null,
+          link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
+          isRead: true,
+          decision,
+          createdAt: r.t.createdAt.toISOString(),
+          actor: r.tagger
+            ? {
+                id: r.tagger.id,
+                displayName: displayName(r.tagger),
+                avatarUrl: r.tagger.avatarUrl ?? null,
+              }
+            : null,
+        };
+      }
+    } else if (kind === "comment") {
+      const [r] = await db
+        .select({ c: postComments, a: articles, author: users })
+        .from(postComments)
+        .innerJoin(
+          articles,
+          and(
+            eq(articles.id, postComments.postRefId),
+            eq(postComments.postKind, "article"),
+          ),
+        )
+        .leftJoin(users, eq(postComments.authorId, users.id))
+        .where(eq(postComments.id, refId))
+        .limit(1);
+      if (r) {
+        const authorName = r.author ? displayName(r.author) : "Someone";
+        const articleTitle = r.a.title ?? "Untitled";
+        item = {
+          itemKey: row.itemKey,
+          kind: "comment",
+          title: `${authorName} commented on "${articleTitle}"`,
+          body:
+            r.c.body.length > 140 ? `${r.c.body.slice(0, 140)}…` : r.c.body,
+          link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
+          isRead: true,
+          decision,
+          createdAt: r.c.createdAt.toISOString(),
+          actor: r.author
+            ? {
+                id: r.author.id,
+                displayName: displayName(r.author),
+                avatarUrl: r.author.avatarUrl ?? null,
+              }
+            : null,
+        };
+      }
+    } else if (kind === "message") {
+      const [r] = await db
+        .select({ m: messages, sender: users })
+        .from(messages)
+        .leftJoin(users, eq(messages.senderUserId, users.id))
+        .where(eq(messages.id, refId))
+        .limit(1);
+      if (r) {
+        const senderName = r.sender ? displayName(r.sender) : "Someone";
+        const preview = r.m.body
+          ? r.m.body.length > 140
+            ? `${r.m.body.slice(0, 140)}…`
+            : r.m.body
+          : "Sent an attachment";
+        item = {
+          itemKey: row.itemKey,
+          kind: "message",
+          title: `${senderName} messaged ${childFirst}`,
+          body: preview,
+          link: `/family/${childId}/messages/${r.m.conversationId}`,
+          isRead: true,
+          decision,
+          createdAt: r.m.createdAt.toISOString(),
+          actor: r.sender
+            ? {
+                id: r.sender.id,
+                displayName: displayName(r.sender),
+                avatarUrl: r.sender.avatarUrl ?? null,
+              }
+            : null,
+        };
+      }
+    } else if (kind === "roster") {
+      const [r] = await db
+        .select({ entry: rosterEntries, team: teams })
+        .from(rosterEntries)
+        .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+        .where(eq(rosterEntries.id, refId))
+        .limit(1);
+      if (r) {
+        const verb =
+          r.entry.status === "accepted"
+            ? `joined ${r.team.name}`
+            : r.entry.status === "pending"
+              ? `was invited to ${r.team.name}`
+              : `${r.entry.status} ${r.team.name}`;
+        item = {
+          itemKey: row.itemKey,
+          kind: "roster",
+          title: `${childFirst} ${verb}`,
+          body: r.entry.position ?? null,
+          link: `/family?childId=${childId}&entryId=${r.entry.id}&teamId=${r.team.id}`,
+          isRead: true,
+          decision,
+          createdAt: r.entry.createdAt.toISOString(),
+          actor: null,
+        };
+      }
+    } else if (kind === "notification") {
+      const [n] = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.id, refId))
+        .limit(1);
+      if (n) {
+        item = {
+          itemKey: row.itemKey,
+          kind: "notification",
+          title: n.message,
+          body: null,
+          link: n.link ?? null,
+          isRead: true,
+          decision,
+          createdAt: n.createdAt.toISOString(),
+          actor: null,
+        };
+      }
+    }
+
+    if (!item) {
+      // The underlying source row is gone (e.g. a pending roster invite
+      // that the parent declined got hard-deleted). Surface a minimal
+      // placeholder so the parent can still see and undo the decision.
+      item = {
+        itemKey: row.itemKey,
+        kind: kind as ChildItemKind,
+        title: "Item is no longer available",
+        body: null,
+        link: null,
+        isRead: true,
+        decision,
+        createdAt: fallbackCreatedAt,
+        actor: null,
+      };
+    }
+    extras.push(item);
+  }
+  return extras;
+}
+
 async function authorizeChildAccess(
   req: Request,
   res: Response,
@@ -3303,13 +3526,35 @@ router.get(
     const child = await authorizeChildAccess(req, res);
     if (!child) return;
     const me = req.sessionUser!;
+    const includeDecided =
+      String(req.query.includeDecided ?? "").toLowerCase() === "true";
     const raw = await loadChildNotificationItems(child);
     const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
     const visible = visibleAfterDecision(overlaid);
-    res.json({
-      data: visible,
-      unreadCount: visible.filter((i) => !i.isRead).length,
-    });
+    // Default behavior is unchanged: only items still awaiting the
+    // parent's attention. The unread count always reflects the default
+    // feed so the bell badge is not inflated by historical decisions.
+    const unreadCount = visible.filter((i) => !i.isRead).length;
+    if (!includeDecided) {
+      res.json({ data: visible, unreadCount });
+      return;
+    }
+    // includeDecided=true: also surface items the parent has already
+    // approved or removed so they can review and undo. Decided items
+    // whose underlying source row is gone (e.g. a tag the parent
+    // declined) are reconstructed from the source table where possible.
+    const liveKeys = new Set(overlaid.map((i) => i.itemKey));
+    const decidedExtras = await loadDecidedExtraItems(
+      me.id,
+      child.id,
+      child,
+      liveKeys,
+    );
+    const merged = [...overlaid, ...decidedExtras];
+    merged.sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+    );
+    res.json({ data: merged, unreadCount });
   }),
 );
 
@@ -3507,6 +3752,111 @@ router.post(
     res.json({ ok: true, decision });
   }),
 );
+
+// Revert a previous Approve/Remove decision back to "needs review".
+// The parent's read row is hard-deleted so the item resurfaces in the
+// default feed as fresh and unread. For "removed" decisions, the
+// reversible kind-specific side effects are also undone (un-decline a
+// tag, un-hide a comment, un-hide a message). Hard-deleted side effects
+// (e.g. a pending roster invite that Remove deleted) cannot be brought
+// back; in that case the row is still cleared so the parent at least
+// stops seeing the stale "Removed" badge.
+//
+// Security: itemKey is validated via the same membership rule used by
+// the decision endpoint — it must either still appear in the child's
+// live stream or already have a prior decision row owned by this
+// parent + child. Otherwise 404.
+router.post(
+  "/users/me/children/:childId/notifications/unset-decision",
+  asyncHandler(async (req, res) => {
+    const child = await authorizeChildAccess(req, res);
+    if (!child) return;
+    const me = req.sessionUser!;
+    const itemKey = String(req.body?.itemKey ?? "").trim();
+    if (!itemKey) return apiError(res, 400, "itemKey is required");
+    if (itemKey.length > 200) return apiError(res, 400, "itemKey too long");
+    const [kind, ...rest] = itemKey.split(":");
+    const refId = rest.join(":");
+    if (!ALLOWED_DECIDED_KINDS.has(kind as ChildItemKind)) {
+      return apiError(res, 400, "unknown item kind");
+    }
+    if (!refId) return apiError(res, 400, "missing item reference");
+
+    const [prior] = await db
+      .select()
+      .from(parentChildNotificationReads)
+      .where(
+        and(
+          eq(parentChildNotificationReads.parentId, me.id),
+          eq(parentChildNotificationReads.childId, child.id),
+          eq(parentChildNotificationReads.itemKey, itemKey),
+        ),
+      )
+      .limit(1);
+    if (!prior || !prior.decision) {
+      return apiError(res, 404, "No decision to revert");
+    }
+    if (prior.decision === "removed") {
+      await applyUnsetAction(kind as ChildItemKind, refId, child.id);
+    }
+    await db
+      .delete(parentChildNotificationReads)
+      .where(
+        and(
+          eq(parentChildNotificationReads.parentId, me.id),
+          eq(parentChildNotificationReads.childId, child.id),
+          eq(parentChildNotificationReads.itemKey, itemKey),
+        ),
+      );
+    res.json({ ok: true, reverted: prior.decision });
+  }),
+);
+
+// Reverse the destructive side effects of a prior "Remove" so the item
+// can re-enter the live stream as a fresh review. Best-effort: only
+// safely-reversible kinds are restored (tag → pending, comment / message
+// hide cleared). Roster invites that were hard-deleted and notification
+// follow / reaction reversions cannot be reliably restored, so those
+// branches no-op and we just clear the parent's decision row.
+async function applyUnsetAction(
+  kind: ChildItemKind,
+  refId: string,
+  childId: string,
+): Promise<void> {
+  if (kind === "tag") {
+    await db
+      .update(articleTags)
+      .set({ status: "pending" })
+      .where(
+        and(
+          eq(articleTags.id, refId),
+          eq(articleTags.status, "declined"),
+        ),
+      );
+    return;
+  }
+  if (kind === "comment") {
+    await db
+      .update(postComments)
+      .set({ hiddenAt: null })
+      .where(eq(postComments.id, refId));
+    return;
+  }
+  if (kind === "message") {
+    await db
+      .delete(messageChildHides)
+      .where(
+        and(
+          eq(messageChildHides.messageId, refId),
+          eq(messageChildHides.childId, childId),
+        ),
+      );
+    return;
+  }
+  // roster + notification: reversal is not reliably possible, so the
+  // caller will simply clear the decision row and the item will come
+  // back only if it still surfaces in the live stream.
+}
 
 // Dispatch table for the "Remove" action. Each branch is intentionally
 // narrow: it touches only the row identified by the family-stream item
