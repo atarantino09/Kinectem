@@ -342,6 +342,7 @@ const POSITION_MAP: Record<string, string> = {
   athlete: "player",
 };
 function rosterPositionToSpec(role: string, position: string | null): string {
+  if (position?.toLowerCase() === "admin") return "admin";
   if (role === "coach") {
     if (position?.toLowerCase().includes("assistant")) return "assistant_coach";
     if (position?.toLowerCase().includes("manager")) return "manager";
@@ -366,6 +367,7 @@ export function toTeamMember(r: RosterRow, u: UserRow) {
       | "player"
       | "coach"
       | "assistant_coach"
+      | "admin"
       | "manager"
       | "parent",
     status: (r.status === "accepted" ? "active" : "pending") as "active" | "pending",
@@ -383,6 +385,7 @@ export function toInvite(i: InviteRow, invitedBy: UserRow | null) {
       | "player"
       | "coach"
       | "assistant_coach"
+      | "admin"
       | "manager"
       | "parent"
       | null,

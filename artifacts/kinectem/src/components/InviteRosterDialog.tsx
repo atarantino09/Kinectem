@@ -33,6 +33,7 @@ import { getInitials } from "@/lib/format";
 
 const POSITIONS = [
   { value: "player", label: "Player" },
+  { value: "admin", label: "Admin" },
   { value: "coach", label: "Head Coach" },
   { value: "assistant_coach", label: "Assistant Coach" },
   { value: "manager", label: "Team Manager" },

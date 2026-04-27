@@ -39,6 +39,88 @@ describe("teams", () => {
     expect(res.body.name).toBe("Test Team");
   });
 
+  it("auto-adds the team creator to the roster as an active Admin", async () => {
+    // Sam is an org admin who can create teams. We verify that creating
+    // the team also lands Sam on the roster as an accepted coach with
+    // position "admin", and that Sam can immediately manage the team
+    // (e.g. invite another roster member) — proving the existing
+    // canManageTeam check picks up the new entry.
+    const { agent, user } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    const { org } = await getOrgAndTeams();
+    const create = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Creator Admin Team", sport: "Track" });
+    expect(create.status).toBe(201);
+    const newTeamId = create.body.id as string;
+
+    const members = await agent.get(`/api/v1/teams/${newTeamId}/members`);
+    expect(members.status).toBe(200);
+    const roster = members.body.data as Array<{
+      userId: string;
+      position: string;
+      status: string;
+      role: string;
+    }>;
+    const mine = roster.find((m) => m.userId === user.id);
+    expect(mine).toBeDefined();
+    expect(mine!.position).toBe("admin");
+    expect(mine!.status).toBe("active");
+    expect(mine!.role).toBe("admin");
+
+    // Prove the creator passes the existing "can manage team" check by
+    // exercising a coach-only action — adding another roster member.
+    const targets = await request(app).get("/api/v1/users?q=Daniela");
+    const targetUserId = targets.body.data?.[0]?.id;
+    expect(targetUserId).toBeDefined();
+    const add = await agent
+      .post(`/api/v1/teams/${newTeamId}/members`)
+      .send({ userId: targetUserId, position: "player" });
+    expect(add.status).toBe(201);
+  });
+
+  it("does not notify the creator about their own newly created team", async () => {
+    const { agent, user } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    const { org } = await getOrgAndTeams();
+    const before = await agent.get("/api/v1/notifications");
+    const beforeIds = new Set(
+      ((before.body?.data ?? []) as Array<{ id: string }>).map((n) => n.id),
+    );
+    const create = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "No-Notif Team", sport: "Swim" });
+    expect(create.status).toBe(201);
+    const after = await agent.get("/api/v1/notifications");
+    const newOnes = ((after.body?.data ?? []) as Array<{
+      id: string;
+      kind?: string;
+      userId?: string;
+    }>).filter((n) => !beforeIds.has(n.id));
+    const selfRosterInvites = newOnes.filter(
+      (n) => n.kind === "roster_invite" && n.userId === user.id,
+    );
+    expect(selfRosterInvites).toEqual([]);
+  });
+
+  it("treats 'admin' as a coach-level position when added to an existing team", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { teams } = await getOrgAndTeams();
+    const target = teams.find((t) => t.name === "JV Football");
+    expect(target).toBeDefined();
+    const usersList = await request(app).get("/api/v1/users?q=Marcus");
+    const userId = usersList.body.data?.[0]?.id ?? usersList.body[0]?.id;
+    expect(userId).toBeDefined();
+    const res = await agent
+      .post(`/api/v1/teams/${target!.id}/members`)
+      .send({ userId, position: "admin" });
+    expect(res.status).toBe(201);
+    expect(res.body.position).toBe("admin");
+    expect(res.body.role).toBe("admin");
+  });
+
   it("forbids non-admins from editing a team", async () => {
     const { agent } = await loginAs((u) => u.email === "marcus@kinectem.demo");
     const { teams } = await getOrgAndTeams();

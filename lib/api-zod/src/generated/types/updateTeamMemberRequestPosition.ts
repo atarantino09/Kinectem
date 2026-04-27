@@ -73,6 +73,7 @@ export const UpdateTeamMemberRequestPosition = {
   player: "player",
   coach: "coach",
   assistant_coach: "assistant_coach",
+  admin: "admin",
   manager: "manager",
   parent: "parent",
   author: "author",

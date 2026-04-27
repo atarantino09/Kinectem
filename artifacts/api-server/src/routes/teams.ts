@@ -58,6 +58,8 @@ const router: IRouter = Router();
 router.post(
   "/organizations/:orgId/teams",
   asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
     const [org] = await db
       .select()
       .from(organizations)
@@ -66,17 +68,33 @@ router.post(
     if (!org) return notFound(res);
     const name = String(req.body?.name ?? "").trim();
     if (!name) return apiError(res, 400, "name required");
-    const [team] = await db
-      .insert(teams)
-      .values({
-        organizationId: org.id,
-        name,
-        sport: req.body?.sport ?? undefined,
-        level: req.body?.level ?? undefined,
-        season: req.body?.season?.name ?? undefined,
-      })
-      .returning();
-    res.status(201).json(toTeam(team, org, { memberCount: 0 }));
+    // Wrap the team insert and the creator's auto-staff entry in a single
+    // transaction so a team is never persisted without its creator on the
+    // roster as Admin. We deliberately skip the "you were invited to a
+    // team" notification here — the creator just made the team and would
+    // find a self-invite confusing.
+    const team = await db.transaction(async (tx) => {
+      const [t] = await tx
+        .insert(teams)
+        .values({
+          organizationId: org.id,
+          name,
+          sport: req.body?.sport ?? undefined,
+          level: req.body?.level ?? undefined,
+          season: req.body?.season?.name ?? undefined,
+        })
+        .returning();
+      await tx.insert(rosterEntries).values({
+        teamId: t.id,
+        userId: me.id,
+        role: "coach",
+        status: "accepted",
+        position: "admin",
+        invitedById: me.id,
+      });
+      return t;
+    });
+    res.status(201).json(toTeam(team, org, { memberCount: 1 }));
   }),
 );
 
@@ -250,7 +268,11 @@ router.post(
     if (!u) return notFound(res);
     const positionRaw = String(req.body?.position ?? "player");
     const dbRole: "player" | "coach" =
-      positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
+      positionRaw === "coach" ||
+      positionRaw === "assistant_coach" ||
+      positionRaw === "admin"
+        ? "coach"
+        : "player";
     const [existing] = await db
       .select()
       .from(rosterEntries)
@@ -409,7 +431,11 @@ router.post(
     if (!email) return apiError(res, 400, "email required");
     const positionRaw = String(req.body?.position ?? "player");
     const dbRole: "player" | "coach" =
-      positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
+      positionRaw === "coach" ||
+      positionRaw === "assistant_coach" ||
+      positionRaw === "admin"
+        ? "coach"
+        : "player";
     const token = `inv-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
     const [invite] = await db
       .insert(rosterInvites)
