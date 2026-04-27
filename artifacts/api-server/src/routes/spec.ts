@@ -3079,8 +3079,13 @@ async function loadChildNotificationItems(
     });
   }
 
-  // 2. Tags for the child (only approved/pending — declined tags should
-  //    never resurface).
+  // 2. Tags for the child (only `pending` — once the child themselves
+  //    or someone else flips the tag to approved/declined, the inbox
+  //    row should drop immediately so the parent doesn't keep seeing
+  //    a stale "Pending — please review" entry for a tag that is no
+  //    longer awaiting consent. Parent-side approve/remove actions
+  //    also flip the underlying status, so this filter naturally hides
+  //    them from the live stream once they've been decided.
   const tagRows = await db
     .select({
       t: articleTags,
@@ -3093,7 +3098,7 @@ async function loadChildNotificationItems(
     .where(
       and(
         eq(articleTags.userId, childId),
-        inArray(articleTags.status, ["approved", "pending"] as const),
+        eq(articleTags.status, "pending"),
         gt(articleTags.createdAt, since),
       ),
     )
@@ -3129,9 +3134,11 @@ async function loadChildNotificationItems(
     });
   }
 
-  // 2b. Highlight-clip tags for the child (only approved/pending — same
-  //     filter as article tags). Surfaced in the family inbox so a parent
-  //     can approve/decline highlight tags on behalf of their child.
+  // 2b. Highlight-clip tags for the child (only `pending` — same filter
+  //     as article tags so a child- or parent-side decision drops the
+  //     row from the live stream immediately). Surfaced in the family
+  //     inbox so a parent can approve/decline highlight tags on behalf
+  //     of their child.
   const highlightTagRows = await db
     .select({
       t: highlightTags,
@@ -3144,7 +3151,7 @@ async function loadChildNotificationItems(
     .where(
       and(
         eq(highlightTags.userId, childId),
-        inArray(highlightTags.status, ["approved", "pending"] as const),
+        eq(highlightTags.status, "pending"),
         gt(highlightTags.createdAt, since),
       ),
     )

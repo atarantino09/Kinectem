@@ -115,7 +115,7 @@ describe("parent inbox: per-child unified notifications", () => {
         articleId: article.id,
         userId: samiraId,
         taggerUserId: coachId,
-        status: "approved",
+        status: "pending",
       })
       .returning();
 
@@ -398,7 +398,7 @@ describe("parent inbox: per-child unified notifications", () => {
       await db.delete(notifications).where(eq(notifications.id, notifRow.id));
     });
 
-    it("approve does NOT change the underlying tag/comment/message rows", async () => {
+    it("approve on a tag flips it to approved (never declined or pending)", async () => {
       const samiraId = await findUserId("samira@kinectem.demo");
       const coachId = await findUserId("coach@kinectem.demo");
       const teamId = await getAnyTeamId();
@@ -419,7 +419,7 @@ describe("parent inbox: per-child unified notifications", () => {
           articleId: article.id,
           userId: samiraId,
           taggerUserId: coachId,
-          status: "approved",
+          status: "pending",
         })
         .returning();
 
@@ -435,7 +435,8 @@ describe("parent inbox: per-child unified notifications", () => {
         .select()
         .from(articleTags)
         .where(eq(articleTags.id, tag.id));
-      // Approve must not flip a tag to declined or pending.
+      // Approve must land the tag at `approved` — never declined and
+      // never left at pending.
       expect(tagAfter?.status).toBe("approved");
     });
 
@@ -460,7 +461,7 @@ describe("parent inbox: per-child unified notifications", () => {
           articleId: article.id,
           userId: samiraId,
           taggerUserId: coachId,
-          status: "approved",
+          status: "pending",
         })
         .returning();
 
@@ -768,7 +769,7 @@ describe("parent inbox: per-child unified notifications", () => {
           articleId: article.id,
           userId: samiraId,
           taggerUserId: coachId,
-          status: "approved",
+          status: "pending",
         })
         .returning();
 
@@ -1258,6 +1259,182 @@ describe("parent inbox: per-child unified notifications", () => {
       expect(afterKeys).not.toContain(itemKey);
     });
 
+    it("child-side decision after inbox load drops the article tag row from the parent inbox and unread count", async () => {
+      // Regression: the parent inbox previously kept showing a "Pending
+      // — please review" row for an article tag even after the child
+      // themselves had already approved/declined it via their own
+      // pending-tags endpoint, because the row only disappeared when
+      // the parent explicitly recorded a decision. The loader now
+      // filters tag items to status='pending', so a child-side decision
+      // drops the row from the next fetch immediately.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Child-decides-after-inbox-load (article)",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      const itemKey = `tag:${tag.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+
+      // Step 1: parent loads the inbox while the tag is still pending.
+      // It surfaces and is counted as unread.
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      expect(before.status).toBe(200);
+      const beforeKeys = (before.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(beforeKeys).toContain(itemKey);
+      const beforeUnread = before.body.unreadCount as number;
+      expect(beforeUnread).toBeGreaterThanOrEqual(1);
+
+      // Bell summary should also count the tag.
+      const summaryBefore = await lisa.get(
+        "/api/v1/users/me/children-notifications-summary",
+      );
+      const samiraBefore = (
+        summaryBefore.body.data as Array<{
+          childId: string;
+          unreadCount: number;
+        }>
+      ).find((d) => d.childId === samiraId);
+      expect(samiraBefore?.unreadCount).toBe(beforeUnread);
+
+      // Step 2: the CHILD herself approves the tag through her own
+      // /tags/:tagId/approve endpoint. The parent never recorded a
+      // per-item decision in parent_child_notification_reads.
+      const { agent: samira } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const childApprove = await samira.post(`/api/v1/tags/${tag.id}/approve`);
+      expect(childApprove.status).toBe(200);
+      // Sanity: the underlying tag is now `approved`.
+      const [tagAfterChild] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(tagAfterChild?.status).toBe("approved");
+      // And no parent decision row exists for this item.
+      const reads = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, lisaId),
+            eq(parentChildNotificationReads.childId, samiraId),
+            eq(parentChildNotificationReads.itemKey, itemKey),
+          ),
+        );
+      expect(reads.length).toBe(0);
+
+      // Step 3: the parent's next fetch must NOT include the row, and
+      // the unread count drops by exactly one.
+      const after = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      expect(after.status).toBe(200);
+      const afterKeys = (after.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(afterKeys).not.toContain(itemKey);
+      expect(after.body.unreadCount).toBe(Math.max(0, beforeUnread - 1));
+
+      // Bell summary stays consistent with the visible feed.
+      const summaryAfter = await lisa.get(
+        "/api/v1/users/me/children-notifications-summary",
+      );
+      const samiraAfter = (
+        summaryAfter.body.data as Array<{
+          childId: string;
+          unreadCount: number;
+        }>
+      ).find((d) => d.childId === samiraId);
+      expect(samiraAfter?.unreadCount).toBe(after.body.unreadCount);
+    });
+
+    it("child-side decision after inbox load drops the highlight tag row from the parent inbox", async () => {
+      // Same regression as the article-tag case, but for the highlight-
+      // tag branch of loadChildNotificationItems. A child decline via
+      // /tags/:tagId/decline should immediately drop the row.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Child-decides-after-inbox-load (highlight)",
+          videoUrl: "https://example.com/clip.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+
+      const itemKey = `tag:${tag.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const beforeKeys = (before.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(beforeKeys).toContain(itemKey);
+
+      // The child declines the tag herself.
+      const { agent: samira } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const childDecline = await samira.post(`/api/v1/tags/${tag.id}/decline`);
+      expect(childDecline.status).toBe(200);
+      const [tagAfter] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(tagAfter?.status).toBe("declined");
+
+      // The parent's inbox no longer surfaces the row.
+      const after = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const afterKeys = (after.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(afterKeys).not.toContain(itemKey);
+    });
+
     it("approve does NOT revive a tag that was already declined", async () => {
       const samiraId = await findUserId("samira@kinectem.demo");
       const coachId = await findUserId("coach@kinectem.demo");
@@ -1655,7 +1832,7 @@ describe("parent inbox: per-child unified notifications", () => {
           articleId: article.id,
           userId: samiraId,
           taggerUserId: coachId,
-          status: "approved",
+          status: "pending",
         })
         .returning();
       const itemKey = `tag:${tag.id}`;
