@@ -1,5 +1,6 @@
 import { db, articleTags, articles, notifications, rosterEntries, users } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
+import { articlePostId } from "./spec-helpers";
 
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
@@ -95,7 +96,9 @@ export async function notifyNewlyTaggedInRecap(args: {
   actorUserId: string | null;
 }): Promise<void> {
   if (args.userIds.length === 0) return;
-  const link = `/posts/${args.articleId}`;
+  // Notification links must use the prefixed post id so /posts/:postId
+  // resolves them — the bare uuid form 404s on the post page.
+  const link = `/posts/${articlePostId(args.articleId)}`;
   const since = new Date(Date.now() - TAG_NOTIF_THROTTLE_MS);
   const recent = await db
     .select({ userId: notifications.userId })

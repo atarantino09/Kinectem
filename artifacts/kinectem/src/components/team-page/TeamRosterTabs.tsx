@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -66,6 +66,7 @@ interface TeamRosterTabsProps {
   players: RosterMember[];
   staff: RosterMember[];
   invites: RosterInvite[];
+  highlightEntryId?: string | null;
   onOpenInvite: () => void;
 }
 
@@ -76,6 +77,7 @@ export function TeamRosterTabs({
   players,
   staff,
   invites,
+  highlightEntryId,
   onOpenInvite,
 }: TeamRosterTabsProps) {
   const qc = useQueryClient();
@@ -138,6 +140,58 @@ export function TeamRosterTabs({
     });
   };
 
+  // Pick the right tab to land on when the team page was opened from a
+  // notification deep link. Defaults to "roster" when we don't know yet
+  // (e.g. the highlight target is a stale id) so the user still sees the
+  // Roster panel they expected, not the Posts panel.
+  const targetTab = useMemo<"roster" | "staff" | "invites">(() => {
+    if (!highlightEntryId) return "roster";
+    if (players.some((p) => p.id === highlightEntryId)) return "roster";
+    if (staff.some((s) => s.id === highlightEntryId)) return "staff";
+    if (invites.some((i) => i.id === highlightEntryId)) return "invites";
+    return "roster";
+  }, [highlightEntryId, players, staff, invites]);
+
+  const [tab, setTab] = useState<string>(targetTab);
+  // Resync once the data loads. The first render before the API
+  // resolves picks "roster" by default; this effect promotes the tab
+  // to the correct one as soon as we can identify which list the
+  // highlighted entry actually lives in.
+  useEffect(() => {
+    setTab(targetTab);
+  }, [targetTab]);
+
+  // Scroll the highlighted row into view and apply the same brief ring
+  // treatment used on /family so the user immediately sees their Accept /
+  // Decline buttons. We re-run on every render where the highlight target
+  // changes so subsequent notification clicks (without a remount) still
+  // animate.
+  const lastHighlightedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightEntryId) return;
+    if (lastHighlightedRef.current === highlightEntryId) return;
+    // Wait one tick so the just-switched tab has mounted its rows.
+    const t = window.setTimeout(() => {
+      const row = document.querySelector(
+        `[data-roster-entry-id="${highlightEntryId}"]`,
+      );
+      if (!row) return;
+      lastHighlightedRef.current = highlightEntryId;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      const ringClasses = [
+        "ring-2",
+        "ring-primary",
+        "ring-offset-2",
+        "ring-offset-background",
+      ];
+      row.classList.add(...ringClasses);
+      window.setTimeout(() => {
+        row.classList.remove(...ringClasses);
+      }, 2400);
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [highlightEntryId, tab, players, staff, invites]);
+
   const renderStatusBadge = (isPending: boolean) =>
     isPending ? (
       <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none font-bold uppercase tracking-wider text-[10px]">
@@ -196,7 +250,10 @@ export function TeamRosterTabs({
     const hasParents = parents.length > 0;
     return (
       <Fragment key={m.id}>
-        <TableRow data-testid={`row-player-${m.id}`}>
+        <TableRow
+          data-testid={`row-player-${m.id}`}
+          data-roster-entry-id={m.id}
+        >
           <TableCell className="w-8 pr-0">
             {hasParents ? (
               <button
@@ -275,7 +332,11 @@ export function TeamRosterTabs({
   };
 
   const renderStaffRow = (m: RosterMember) => (
-    <TableRow key={m.id} data-testid={`row-staff-${m.id}`}>
+    <TableRow
+      key={m.id}
+      data-testid={`row-staff-${m.id}`}
+      data-roster-entry-id={m.id}
+    >
       <TableCell>
         <Link href={`/users/${m.userId}`}>
           <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
@@ -301,7 +362,7 @@ export function TeamRosterTabs({
   );
 
   return (
-    <Tabs defaultValue="roster">
+    <Tabs value={tab} onValueChange={setTab}>
       <TabsList>
         <TabsTrigger value="roster" className="font-bold">
           Roster
@@ -417,7 +478,7 @@ export function TeamRosterTabs({
                 </TableHeader>
                 <TableBody>
                   {invites.map((i) => (
-                    <TableRow key={i.id}>
+                    <TableRow key={i.id} data-roster-entry-id={i.id}>
                       <TableCell>
                         <div className="flex items-center gap-2 font-semibold">
                           <Mail className="w-4 h-4 text-muted-foreground" />

@@ -91,6 +91,16 @@ export function NotificationsBell() {
   const unread = ownUnread + childrenUnread;
   const items = notifs?.data ?? [];
 
+  // Notifications are clickable only when we know where to send the
+  // user. The two parent flows (`guardian_expired`, `roster_invite_for_child`)
+  // always route to /family, even with no `link`, so they're treated as
+  // clickable. Everything else is clickable iff it carries a `link`.
+  const isClickable = (n: NotificationResponse): boolean => {
+    if (n.type === "guardian_expired") return true;
+    if (n.type === "roster_invite_for_child") return true;
+    return getNotificationLink(n) !== null;
+  };
+
   const handleRowClick = (n: NotificationResponse) => {
     if (!n.isRead) void markRead(n.id);
     const link = getNotificationLink(n);
@@ -266,6 +276,14 @@ export function NotificationsBell() {
                 ? getEntryIdFromLink(getNotificationLink(n))
                 : null;
               const acting = entryId !== null && actingOnEntryId === entryId;
+              const clickable = isClickable(n);
+              // Render as a real <button> only when there's somewhere to
+              // go. Unlinked notifications stay readable in the dropdown
+              // but don't pretend they're interactive (no pointer cursor,
+              // no hover state, no silent click).
+              const innerClass = clickable
+                ? "w-full text-left px-4 pt-3 pb-2 hover:bg-muted/60 cursor-pointer"
+                : "w-full text-left px-4 pt-3 pb-2 cursor-default";
               return (
                 <div
                   key={n.id}
@@ -280,59 +298,73 @@ export function NotificationsBell() {
                   }`}
                   data-testid={`notification-${n.id}`}
                 >
-                  <button
-                    onClick={() => handleRowClick(n)}
-                    className="w-full text-left px-4 pt-3 pb-2 hover:bg-muted/60 cursor-pointer"
-                  >
-                    <div className="flex items-start gap-2">
-                      {isExpired ? (
-                        <span
-                          className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center"
-                          aria-hidden="true"
-                        >
-                          <ShieldAlert className="w-4 h-4" />
-                        </span>
-                      ) : isChildInvite ? (
-                        <span
-                          className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center"
-                          aria-hidden="true"
-                        >
-                          <Users className="w-4 h-4" />
-                        </span>
-                      ) : (
-                        !n.isRead && (
-                          <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                        )
-                      )}
-                      <div className="flex-1 min-w-0">
-                        {isExpired && (
-                          <p className="text-[10px] uppercase tracking-wider font-black text-amber-700 dark:text-amber-300 mb-0.5">
-                            Guardian link expired
-                          </p>
+                  {(() => {
+                    const body = (
+                      <div className="flex items-start gap-2">
+                        {isExpired ? (
+                          <span
+                            className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center"
+                            aria-hidden="true"
+                          >
+                            <ShieldAlert className="w-4 h-4" />
+                          </span>
+                        ) : isChildInvite ? (
+                          <span
+                            className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center"
+                            aria-hidden="true"
+                          >
+                            <Users className="w-4 h-4" />
+                          </span>
+                        ) : (
+                          !n.isRead && (
+                            <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                          )
                         )}
-                        {isChildInvite && (
-                          <p className="text-[10px] uppercase tracking-wider font-black text-primary mb-0.5">
-                            Team invite for your child
+                        <div className="flex-1 min-w-0">
+                          {isExpired && (
+                            <p className="text-[10px] uppercase tracking-wider font-black text-amber-700 dark:text-amber-300 mb-0.5">
+                              Guardian link expired
+                            </p>
+                          )}
+                          {isChildInvite && (
+                            <p className="text-[10px] uppercase tracking-wider font-black text-primary mb-0.5">
+                              Team invite for your child
+                            </p>
+                          )}
+                          <p
+                            className={`font-bold text-sm leading-tight ${
+                              isExpired ? "text-amber-900 dark:text-amber-100" : ""
+                            }`}
+                          >
+                            {n.title}
                           </p>
-                        )}
-                        <p
-                          className={`font-bold text-sm leading-tight ${
-                            isExpired ? "text-amber-900 dark:text-amber-100" : ""
-                          }`}
-                        >
-                          {n.title}
-                        </p>
-                        {n.body && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {n.body}
+                          {n.body && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                              {n.body}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-muted-foreground mt-1 font-medium">
+                            {timeAgo(n.createdAt)}
                           </p>
-                        )}
-                        <p className="text-[11px] text-muted-foreground mt-1 font-medium">
-                          {timeAgo(n.createdAt)}
-                        </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    );
+                    return clickable ? (
+                      <button
+                        onClick={() => handleRowClick(n)}
+                        className={innerClass}
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <div
+                        className={innerClass}
+                        data-testid={`notification-static-${n.id}`}
+                      >
+                        {body}
+                      </div>
+                    );
+                  })()}
                   {isExpired && (
                     <div className="px-4 pb-3 -mt-1 flex justify-end">
                       <Button

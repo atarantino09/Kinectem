@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetTeamById,
@@ -38,10 +38,32 @@ export default function TeamPage() {
   const teamId = params.teamId;
   const qc = useQueryClient();
   const { toast } = useToast();
+  const search = useSearch();
+  // The notifications bell appends `?roster=1[&entryId=…]` to team-invite
+  // links so a click on the bell lands on the Roster panel (instead of
+  // Posts) with the invitee's pending row scrolled into view. A bare
+  // `/teams/:id` URL keeps the historical "open Posts" default.
+  const { showRoster, highlightEntryId } = useMemo(() => {
+    const sp = new URLSearchParams(search ?? "");
+    const entryId = sp.get("entryId");
+    return {
+      showRoster: sp.get("roster") === "1" || !!entryId,
+      highlightEntryId: entryId,
+    };
+  }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [expanded, setExpanded] = useState<TeamPanel>("posts");
+  const [expanded, setExpanded] = useState<TeamPanel>(
+    showRoster ? "roster" : "posts",
+  );
   const [followersOpen, setFollowersOpen] = useState(false);
+
+  // Re-evaluate when navigating between team URLs without remounting
+  // the page (e.g. clicking another team-invite notification while
+  // already on a team page).
+  useEffect(() => {
+    if (showRoster) setExpanded("roster");
+  }, [showRoster, teamId]);
 
   const { data: team, isLoading } = useGetTeamById(teamId);
   const followTeam = useFollowTeam();
@@ -134,6 +156,7 @@ export default function TeamPage() {
           players={players}
           staff={staff}
           invites={invites}
+          highlightEntryId={highlightEntryId}
           onOpenInvite={() => setInviteOpen(true)}
         />
       )}

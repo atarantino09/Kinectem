@@ -24,6 +24,7 @@ import {
 } from "../lib/auth";
 import {
   articleToPost,
+  articlePostId,
   paginate,
   parsePostId,
   apiError,
@@ -222,7 +223,13 @@ router.patch(
             .where(
               and(
                 eq(notifications.kind, "post_tag"),
-                eq(notifications.link, `/posts/${updated.id}`),
+                // Notifications created today use the article-prefixed
+                // post id; older rows (pre-fix) used the bare uuid.
+                // Match either so the badge always clears.
+                inArray(notifications.link, [
+                  `/posts/${articlePostId(updated.id)}`,
+                  `/posts/${updated.id}`,
+                ]),
                 eq(notifications.read, false),
                 inArray(
                   notifications.userId,
@@ -362,7 +369,9 @@ router.post(
       userId,
       kind: "mention",
       message: `${me.firstName} ${me.lastName} added you as a co-author on "${a.title ?? "Untitled"}"`,
-      link: `/posts/${a.id}`,
+      // Notification links must use the prefixed post id so /posts/:postId
+      // can resolve them — the bare uuid form 404s on the post page.
+      link: `/posts/${articlePostId(a.id)}`,
       actorUserId: me.id,
     });
     res.status(201).json({ ok: true });

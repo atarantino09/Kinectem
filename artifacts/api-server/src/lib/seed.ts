@@ -239,17 +239,25 @@ export async function seedIfEmpty(): Promise<void> {
     ])
     .returning();
 
-  await db.insert(rosterEntries).values([
-    { teamId: varsityFootball.id, userId: marcus.id, role: "player", status: "accepted", position: "WR", jerseyNumber: 12 },
-    { teamId: varsityFootball.id, userId: jordan.id, role: "player", status: "accepted", position: "QB", jerseyNumber: 7 },
-    { teamId: varsityFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
-    { teamId: varsityFootball.id, userId: chris.id, role: "player", status: "accepted", position: "LB", jerseyNumber: 55 },
-    { teamId: varsityFootball.id, userId: coachDavis.id, role: "coach", status: "accepted", position: "Head Coach" },
-    { teamId: jvFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
-    { teamId: varsityBasketball.id, userId: daniela.id, role: "player", status: "accepted", position: "PG", jerseyNumber: 3 },
-    // A pending invitation already accepted by player
-    { teamId: varsityBasketball.id, userId: samiraPlaceholder(childSamira.id), role: "player", status: "pending", position: "SG", jerseyNumber: 22 },
-  ]);
+  const insertedRosterEntries = await db
+    .insert(rosterEntries)
+    .values([
+      { teamId: varsityFootball.id, userId: marcus.id, role: "player", status: "accepted", position: "WR", jerseyNumber: 12 },
+      { teamId: varsityFootball.id, userId: jordan.id, role: "player", status: "accepted", position: "QB", jerseyNumber: 7 },
+      { teamId: varsityFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
+      { teamId: varsityFootball.id, userId: chris.id, role: "player", status: "accepted", position: "LB", jerseyNumber: 55 },
+      { teamId: varsityFootball.id, userId: coachDavis.id, role: "coach", status: "accepted", position: "Head Coach" },
+      { teamId: jvFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
+      { teamId: varsityBasketball.id, userId: daniela.id, role: "player", status: "accepted", position: "PG", jerseyNumber: 3 },
+      // A pending invitation already accepted by player
+      { teamId: varsityBasketball.id, userId: samiraPlaceholder(childSamira.id), role: "player", status: "pending", position: "SG", jerseyNumber: 22 },
+    ])
+    .returning();
+  // The bell notification below deep-links to Samira's pending row, so we
+  // need that row's id to put in the `entryId` query param.
+  const samiraPendingEntry = insertedRosterEntries.find(
+    (e) => e.teamId === varsityBasketball.id && e.userId === childSamira.id,
+  );
 
   // Pending email invite (no user yet)
   await db.insert(rosterInvites).values([
@@ -372,7 +380,11 @@ export async function seedIfEmpty(): Promise<void> {
       userId: childSamira.id,
       kind: "roster_invite",
       message: "Coach Mike Davis added you to Varsity Boys Basketball — accept your roster spot.",
-      link: `/u/${childSamira.id}`,
+      // Land on the team page with the Roster panel pre-opened and Samira's
+      // pending row scrolled into view + briefly highlighted.
+      link: samiraPendingEntry
+        ? `/teams/${varsityBasketball.id}?roster=1&entryId=${samiraPendingEntry.id}`
+        : `/teams/${varsityBasketball.id}?roster=1`,
     },
   ]);
 

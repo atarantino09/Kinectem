@@ -274,7 +274,9 @@ router.post(
         userId,
         kind: "roster_invite",
         message: `${displayName(me)} added you to ${t.name}. Tap to accept or decline.`,
-        link: `/teams/${teamId}`,
+        // Carry the roster entry id so the team page can open straight to
+        // the Roster panel and scroll/highlight the invitee's pending row.
+        link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
         actorUserId: me.id,
       });
       // Fan out to the linked guardian, if any. A parent managing an
@@ -461,7 +463,9 @@ router.post(
           userId: existingUser.id,
           kind: "roster_invite",
           message: `${displayName(me)} invited you to ${t.name}. Tap to accept or decline.`,
-          link: `/teams/${teamId}`,
+          // Carry the roster entry id so the team page can open straight
+          // to the Roster panel and scroll/highlight the invitee's row.
+          link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
           actorUserId: me.id,
         });
         if (existingUser.parentId) {
