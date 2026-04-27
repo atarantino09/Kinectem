@@ -391,31 +391,78 @@ router.patch(
     if (!entry) return notFound(res);
 
     const positionRaw = req.body?.position;
-    if (typeof positionRaw !== "string" || !ALLOWED_POSITIONS.has(positionRaw)) {
-      return apiError(res, 400, "valid position required");
+    const positionProvided = positionRaw !== undefined;
+    if (positionProvided) {
+      if (typeof positionRaw !== "string" || !ALLOWED_POSITIONS.has(positionRaw)) {
+        return apiError(res, 400, "valid position required");
+      }
     }
-    const { role: dbRole, position: newPosition } =
-      positionToRosterFields(positionRaw);
+
+    // jerseyNumber is optional. Accept an integer in [0, 999] to set, or
+    // explicit `null` to clear. Anything else is rejected up front so the
+    // dialog can show a clear inline error rather than a silent no-op.
+    const jerseyRaw = req.body?.jerseyNumber;
+    const jerseyProvided = jerseyRaw !== undefined;
+    let jerseyValue: number | null = null;
+    if (jerseyProvided) {
+      if (jerseyRaw === null) {
+        jerseyValue = null;
+      } else if (
+        typeof jerseyRaw === "number" &&
+        Number.isInteger(jerseyRaw) &&
+        jerseyRaw >= 0 &&
+        jerseyRaw <= 999
+      ) {
+        jerseyValue = jerseyRaw;
+      } else {
+        return apiError(
+          res,
+          400,
+          "jerseyNumber must be an integer between 0 and 999",
+        );
+      }
+    }
+
+    if (!positionProvided && !jerseyProvided) {
+      return apiError(res, 400, "no fields to update");
+    }
+
+    const updates: Partial<typeof rosterEntries.$inferInsert> = {};
+    let newPosition: string | null = entry.position;
+    if (positionProvided) {
+      const { role: dbRole, position: nextPosition } =
+        positionToRosterFields(positionRaw as string);
+      newPosition = nextPosition;
+      updates.position = nextPosition;
+      updates.role = dbRole;
+    }
+    if (jerseyProvided) {
+      updates.jerseyNumber = jerseyValue;
+    }
 
     // Refuse to demote the very last accepted Admin away from "admin": a
     // team must always have someone who can manage it. The UI surfaces
-    // this message inline in the Edit dialog.
-    const wasAdmin = entry.position === "admin" && entry.status === "accepted";
-    const willBeAdmin = newPosition === "admin";
-    if (wasAdmin && !willBeAdmin) {
-      const adminCount = await countAcceptedAdmins(teamId);
-      if (adminCount <= 1) {
-        return apiError(
-          res,
-          422,
-          "A team must have at least one Admin. Promote another member to Admin first.",
-        );
+    // this message inline in the Edit dialog. Only relevant when the
+    // caller is actually changing position.
+    if (positionProvided) {
+      const wasAdmin =
+        entry.position === "admin" && entry.status === "accepted";
+      const willBeAdmin = newPosition === "admin";
+      if (wasAdmin && !willBeAdmin) {
+        const adminCount = await countAcceptedAdmins(teamId);
+        if (adminCount <= 1) {
+          return apiError(
+            res,
+            422,
+            "A team must have at least one Admin. Promote another member to Admin first.",
+          );
+        }
       }
     }
 
     const [updated] = await db
       .update(rosterEntries)
-      .set({ position: newPosition, role: dbRole })
+      .set(updates)
       .where(eq(rosterEntries.id, entry.id))
       .returning();
     const [u] = await db

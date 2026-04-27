@@ -46,6 +46,7 @@ export type RosterMember = {
   displayName: string;
   avatarUrl?: string | null;
   position?: string | null;
+  jerseyNumber?: number | null;
   status?: string | null;
   joinedAt?: string | null;
   parents?: ParentRef[];
@@ -313,6 +314,16 @@ export function TeamRosterTabs({
               </div>
             </Link>
           </TableCell>
+          <TableCell
+            className="text-center font-bold tabular-nums"
+            data-testid={`text-jersey-${m.id}`}
+          >
+            {m.jerseyNumber == null ? (
+              <span className="text-muted-foreground font-normal">—</span>
+            ) : (
+              `#${m.jerseyNumber}`
+            )}
+          </TableCell>
           <TableCell className="text-xs text-muted-foreground">
             {hasParents
               ? `${parents.length} parent${parents.length > 1 ? "s" : ""}`
@@ -328,7 +339,7 @@ export function TeamRosterTabs({
             data-testid={`row-parents-${m.id}`}
           >
             <TableCell />
-            <TableCell colSpan={4} className="py-2">
+            <TableCell colSpan={5} className="py-2">
               <div className="space-y-1.5">
                 {parents.map((p) => (
                   <Link key={p.id} href={`/users/${p.id}`}>
@@ -433,6 +444,7 @@ export function TeamRosterTabs({
                   <TableRow>
                     <TableHead className="w-8" />
                     <TableHead>Player</TableHead>
+                    <TableHead className="w-16 text-center">#</TableHead>
                     <TableHead>Parents</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>

@@ -1410,6 +1410,12 @@ export interface TeamMemberResponse {
   seasonId: string;
   role: TeamMemberResponseRole;
   position: TeamMemberResponsePosition;
+  /**
+   * @minimum 0
+   * @maximum 999
+   * @nullable
+   */
+  jerseyNumber?: number | null;
   status: TeamMemberResponseStatus;
   joinedAt: string;
 }
@@ -1467,6 +1473,12 @@ export const UpdateTeamMemberRequestPosition = {
 export interface UpdateTeamMemberRequest {
   role?: UpdateTeamMemberRequestRole;
   position?: UpdateTeamMemberRequestPosition;
+  /**
+   * @minimum 0
+   * @maximum 999
+   * @nullable
+   */
+  jerseyNumber?: number | null;
 }
 
 export interface PaginatedTeamMembers {

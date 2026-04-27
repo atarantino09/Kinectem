@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -85,8 +86,13 @@ export function EditRosterMemberDialog({
   const { toast } = useToast();
 
   const initialPosition = (member?.position as UpdateTeamMemberRequestPosition) ?? "player";
+  // Jersey numbers are persisted as integers but the input is a string so a
+  // user can clear the field (which we send as `null` to wipe the number).
+  const initialJersey =
+    member?.jerseyNumber == null ? "" : String(member.jerseyNumber);
   const [position, setPosition] =
     useState<UpdateTeamMemberRequestPosition>(initialPosition);
+  const [jerseyNumber, setJerseyNumber] = useState<string>(initialJersey);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -96,6 +102,9 @@ export function EditRosterMemberDialog({
   useEffect(() => {
     if (open && member) {
       setPosition((member.position as UpdateTeamMemberRequestPosition) ?? "player");
+      setJerseyNumber(
+        member.jerseyNumber == null ? "" : String(member.jerseyNumber),
+      );
       setConfirmingRemove(false);
       setErrorMessage(null);
     }
@@ -115,8 +124,21 @@ export function EditRosterMemberDialog({
 
   const isAdminBeingDemoted = isLastAdmin && position !== "admin";
   const positionChanged = position !== initialPosition;
+  const trimmedJersey = jerseyNumber.trim();
+  const jerseyChanged = trimmedJersey !== initialJersey;
+  // Validate the jersey input locally so an invalid value can't slip into a
+  // server round-trip. Empty means "clear the number" (sent as null).
+  const jerseyParsed: number | null = trimmedJersey === ""
+    ? null
+    : Number(trimmedJersey);
+  const jerseyInvalid =
+    trimmedJersey !== "" &&
+    (!Number.isInteger(jerseyParsed) ||
+      (jerseyParsed as number) < 0 ||
+      (jerseyParsed as number) > 999);
   const saveDisabled =
-    !positionChanged ||
+    (!positionChanged && !jerseyChanged) ||
+    jerseyInvalid ||
     updateMember.isPending ||
     removeMember.isPending ||
     isAdminBeingDemoted;
@@ -124,10 +146,17 @@ export function EditRosterMemberDialog({
   const onSave = async () => {
     setErrorMessage(null);
     try {
+      const data: {
+        position: UpdateTeamMemberRequestPosition;
+        jerseyNumber?: number | null;
+      } = { position };
+      // Only send jerseyNumber when it actually changed so a no-op edit on
+      // jersey doesn't overwrite the column with itself in the database.
+      if (jerseyChanged) data.jerseyNumber = jerseyParsed;
       await updateMember.mutateAsync({
         teamId,
         memberId: member.id,
-        data: { position },
+        data,
       });
       await invalidate();
       toast({ title: `Updated ${member.displayName}` });
@@ -201,6 +230,34 @@ export function EditRosterMemberDialog({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-jersey-number" className="font-bold">
+            Jersey Number
+          </Label>
+          <Input
+            id="edit-jersey-number"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={999}
+            step={1}
+            placeholder="e.g. 23"
+            value={jerseyNumber}
+            onChange={(e) => setJerseyNumber(e.target.value)}
+            disabled={updateMember.isPending || removeMember.isPending}
+            data-testid="input-edit-jersey"
+          />
+          <p
+            className={`text-xs ${
+              jerseyInvalid ? "text-destructive" : "text-muted-foreground"
+            }`}
+          >
+            {jerseyInvalid
+              ? "Enter a whole number between 0 and 999, or leave blank."
+              : "Leave blank to clear. Whole numbers 0–999."}
+          </p>
         </div>
 
         {errorMessage && (

@@ -3101,6 +3101,9 @@ export const ListTeamMembersQueryParams = zod.object({
     .default(listTeamMembersQueryIncludeTotalDefault),
 });
 
+export const listTeamMembersResponseDataItemJerseyNumberMin = 0;
+export const listTeamMembersResponseDataItemJerseyNumberMax = 999;
+
 export const ListTeamMembersResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -3120,6 +3123,11 @@ export const ListTeamMembersResponse = zod.object({
         "parent",
         "author",
       ]),
+      jerseyNumber: zod
+        .number()
+        .min(listTeamMembersResponseDataItemJerseyNumberMin)
+        .max(listTeamMembersResponseDataItemJerseyNumberMax)
+        .nullish(),
       status: zod.enum(["pending", "active"]),
       joinedAt: zod.coerce.date(),
     }),
@@ -3165,6 +3173,9 @@ export const GetTeamMemberParams = zod.object({
   memberId: zod.coerce.string().uuid(),
 });
 
+export const getTeamMemberResponseJerseyNumberMin = 0;
+export const getTeamMemberResponseJerseyNumberMax = 999;
+
 export const GetTeamMemberResponse = zod.object({
   id: zod.string().uuid(),
   userId: zod.string().uuid(),
@@ -3182,6 +3193,11 @@ export const GetTeamMemberResponse = zod.object({
     "parent",
     "author",
   ]),
+  jerseyNumber: zod
+    .number()
+    .min(getTeamMemberResponseJerseyNumberMin)
+    .max(getTeamMemberResponseJerseyNumberMax)
+    .nullish(),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
 });
@@ -3193,6 +3209,9 @@ export const UpdateTeamMemberParams = zod.object({
   teamId: zod.coerce.string().uuid(),
   memberId: zod.coerce.string().uuid(),
 });
+
+export const updateTeamMemberBodyJerseyNumberMin = 0;
+export const updateTeamMemberBodyJerseyNumberMax = 999;
 
 export const UpdateTeamMemberBody = zod.object({
   role: zod.enum(["admin", "member"]).optional(),
@@ -3207,7 +3226,15 @@ export const UpdateTeamMemberBody = zod.object({
       "author",
     ])
     .optional(),
+  jerseyNumber: zod
+    .number()
+    .min(updateTeamMemberBodyJerseyNumberMin)
+    .max(updateTeamMemberBodyJerseyNumberMax)
+    .nullish(),
 });
+
+export const updateTeamMemberResponseJerseyNumberMin = 0;
+export const updateTeamMemberResponseJerseyNumberMax = 999;
 
 export const UpdateTeamMemberResponse = zod.object({
   id: zod.string().uuid(),
@@ -3226,6 +3253,11 @@ export const UpdateTeamMemberResponse = zod.object({
     "parent",
     "author",
   ]),
+  jerseyNumber: zod
+    .number()
+    .min(updateTeamMemberResponseJerseyNumberMin)
+    .max(updateTeamMemberResponseJerseyNumberMax)
+    .nullish(),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
 });
@@ -3256,6 +3288,9 @@ export const AcceptTeamInviteParams = zod.object({
   memberId: zod.coerce.string().uuid(),
 });
 
+export const acceptTeamInviteResponseJerseyNumberMin = 0;
+export const acceptTeamInviteResponseJerseyNumberMax = 999;
+
 export const AcceptTeamInviteResponse = zod.object({
   id: zod.string().uuid(),
   userId: zod.string().uuid(),
@@ -3273,6 +3308,11 @@ export const AcceptTeamInviteResponse = zod.object({
     "parent",
     "author",
   ]),
+  jerseyNumber: zod
+    .number()
+    .min(acceptTeamInviteResponseJerseyNumberMin)
+    .max(acceptTeamInviteResponseJerseyNumberMax)
+    .nullish(),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
 });
@@ -4306,6 +4346,9 @@ export const AcceptTeamJoinLinkParams = zod.object({
   token: zod.coerce.string(),
 });
 
+export const acceptTeamJoinLinkResponseJerseyNumberMin = 0;
+export const acceptTeamJoinLinkResponseJerseyNumberMax = 999;
+
 export const AcceptTeamJoinLinkResponse = zod.object({
   id: zod.string().uuid(),
   userId: zod.string().uuid(),
@@ -4323,6 +4366,11 @@ export const AcceptTeamJoinLinkResponse = zod.object({
     "parent",
     "author",
   ]),
+  jerseyNumber: zod
+    .number()
+    .min(acceptTeamJoinLinkResponseJerseyNumberMin)
+    .max(acceptTeamJoinLinkResponseJerseyNumberMax)
+    .nullish(),
   status: zod.enum(["pending", "active"]),
   joinedAt: zod.coerce.date(),
 });

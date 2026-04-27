@@ -370,6 +370,7 @@ export function toTeamMember(r: RosterRow, u: UserRow) {
       | "admin"
       | "manager"
       | "parent",
+    jerseyNumber: r.jerseyNumber ?? null,
     status: (r.status === "accepted" ? "active" : "pending") as "active" | "pending",
     joinedAt: r.createdAt.toISOString(),
   };

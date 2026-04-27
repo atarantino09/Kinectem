@@ -71,4 +71,10 @@ import type { UpdateTeamMemberRequestRole } from "./updateTeamMemberRequestRole"
 export interface UpdateTeamMemberRequest {
   role?: UpdateTeamMemberRequestRole;
   position?: UpdateTeamMemberRequestPosition;
+  /**
+   * @minimum 0
+   * @maximum 999
+   * @nullable
+   */
+  jerseyNumber?: number | null;
 }

@@ -192,6 +192,70 @@ describe("teams", () => {
     expect(res.body.role).toBe("admin");
   });
 
+  it("lets a team manager set, change, and clear a player's jerseyNumber", async () => {
+    // The Edit Roster Member dialog now sends jerseyNumber alongside
+    // position; this guards the contract end-to-end so the column is
+    // persisted, surfaced in the response, and clearable via null.
+    const { agent, teamId } = await freshTeam("Edit Jersey Team");
+    const usersList = await request(app).get("/api/v1/users?q=Daniela");
+    const userId = usersList.body.data?.[0]?.id;
+    expect(userId).toBeDefined();
+    const add = await agent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId, position: "player" });
+    expect(add.status).toBe(201);
+    const memberId = add.body.id as string;
+    // New rosters start without a jersey number set.
+    expect(add.body.jerseyNumber).toBeNull();
+
+    // Set a number — accepts the value, returns it on the row, and the
+    // subsequent GET also reflects it so the roster list will refresh.
+    const setRes = await agent
+      .patch(`/api/v1/teams/${teamId}/members/${memberId}`)
+      .send({ position: "player", jerseyNumber: 23 });
+    expect(setRes.status).toBe(200);
+    expect(setRes.body.jerseyNumber).toBe(23);
+    const list = await request(app).get(`/api/v1/teams/${teamId}/members`);
+    const stored = (list.body.data as Array<{ id: string; jerseyNumber: number | null }>)
+      .find((m) => m.id === memberId);
+    expect(stored?.jerseyNumber).toBe(23);
+
+    // Send only jerseyNumber (no position) — the handler must accept this
+    // and only update the jersey column.
+    const changeRes = await agent
+      .patch(`/api/v1/teams/${teamId}/members/${memberId}`)
+      .send({ jerseyNumber: 7 });
+    expect(changeRes.status).toBe(200);
+    expect(changeRes.body.jerseyNumber).toBe(7);
+    expect(changeRes.body.position).toBe("player");
+
+    // Explicit null clears the number back out.
+    const clearRes = await agent
+      .patch(`/api/v1/teams/${teamId}/members/${memberId}`)
+      .send({ jerseyNumber: null });
+    expect(clearRes.status).toBe(200);
+    expect(clearRes.body.jerseyNumber).toBeNull();
+  });
+
+  it("rejects out-of-range or non-integer jerseyNumber values", async () => {
+    const { agent, teamId } = await freshTeam("Bad Jersey Team");
+    const usersList = await request(app).get("/api/v1/users?q=Marcus");
+    const userId = usersList.body.data?.[0]?.id;
+    expect(userId).toBeDefined();
+    const add = await agent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId, position: "player" });
+    expect(add.status).toBe(201);
+    const memberId = add.body.id as string;
+
+    for (const bad of [-1, 1000, 1.5, "12", true]) {
+      const res = await agent
+        .patch(`/api/v1/teams/${teamId}/members/${memberId}`)
+        .send({ jerseyNumber: bad });
+      expect(res.status).toBe(400);
+    }
+  });
+
   it("lets an accepted team coach (no org-admin role) manage members", async () => {
     // Reproduces the bug surfaced by code review: the backend lets
     // accepted team coaches manage their roster, so this path must work

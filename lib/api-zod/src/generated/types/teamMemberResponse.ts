@@ -79,6 +79,12 @@ export interface TeamMemberResponse {
   seasonId: string;
   role: TeamMemberResponseRole;
   position: TeamMemberResponsePosition;
+  /**
+   * @minimum 0
+   * @maximum 999
+   * @nullable
+   */
+  jerseyNumber?: number | null;
   status: TeamMemberResponseStatus;
   joinedAt: Date;
 }

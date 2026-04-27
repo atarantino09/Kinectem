@@ -7927,6 +7927,11 @@ components:
         position:
           type: string
           enum: [player, coach, assistant_coach, admin, manager, parent, author]
+        jerseyNumber:
+          type: integer
+          minimum: 0
+          maximum: 999
+          nullable: true
         status:
           type: string
           enum: [pending, active]
@@ -7966,6 +7971,11 @@ components:
         position:
           type: string
           enum: [player, coach, assistant_coach, admin, manager, parent, author]
+        jerseyNumber:
+          type: integer
+          minimum: 0
+          maximum: 999
+          nullable: true
 
     PaginatedTeamMembers:
       type: object

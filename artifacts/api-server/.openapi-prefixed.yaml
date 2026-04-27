@@ -7851,6 +7851,11 @@ components:
             - manager
             - parent
             - author
+        jerseyNumber:
+          type: integer
+          minimum: 0
+          maximum: 999
+          nullable: true
         status:
           type: string
           enum:
@@ -7909,6 +7914,11 @@ components:
             - manager
             - parent
             - author
+        jerseyNumber:
+          type: integer
+          minimum: 0
+          maximum: 999
+          nullable: true
     PaginatedTeamMembers:
       type: object
       required:
