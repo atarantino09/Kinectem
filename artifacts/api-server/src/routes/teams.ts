@@ -66,6 +66,15 @@ router.post(
       .where(eq(organizations.id, req.params.orgId))
       .limit(1);
     if (!org) return notFound(res);
+    // Lock down team creation to org owners and admins. The "Add team"
+    // button on the Organization page is already gated on the same role
+    // check; this guards the API path so a plain member, follower, or
+    // unrelated signed-in user can't create a team by hitting the
+    // endpoint directly. canManageOrganization returns true only for
+    // role in ('owner','admin') (see permissions.ts MANAGE_ROLES).
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Only organization admins can create teams");
+    }
     const name = String(req.body?.name ?? "").trim();
     if (!name) return apiError(res, 400, "name required");
     // Wrap the team insert and the creator's auto-staff entry in a single

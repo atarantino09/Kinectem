@@ -476,4 +476,126 @@ describe("teams", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("active");
   });
+
+  // ---------------------------------------------------------------------
+  // Task #218: only org owners/admins can create teams
+  // ---------------------------------------------------------------------
+  describe("POST /organizations/:orgId/teams permissions", () => {
+    // Spin up a fresh org owned by Sam, then approve `joiner` into it
+    // with the requested role. Returns the new orgId.
+    async function freshOrgWithJoiner(
+      joinerEmail: string,
+      role: "admin" | "member",
+    ): Promise<{ orgId: string }> {
+      const { agent: ownerAgent } = await loginAs(
+        (u) => u.email === "sam@kinectem.demo",
+      );
+      const created = await ownerAgent
+        .post("/api/v1/organizations")
+        .send({
+          name: `T218 Org ${Math.random().toString(36).slice(2, 8)}`,
+        });
+      expect(created.status).toBe(201);
+      const orgId: string = created.body.id;
+      const { agent: joinerAgent } = await loginAs(
+        (u) => u.email === joinerEmail,
+      );
+      const jr = await joinerAgent
+        .post(`/api/v1/organizations/${orgId}/join-requests`)
+        .send({});
+      expect(jr.status).toBe(201);
+      const approve = await ownerAgent
+        .post(
+          `/api/v1/organizations/${orgId}/join-requests/${jr.body.id}/approve`,
+        )
+        .send({ role });
+      expect(approve.status).toBe(200);
+      return { orgId };
+    }
+
+    it("lets an org admin (not owner) create a team", async () => {
+      const { orgId } = await freshOrgWithJoiner(
+        "marcus@kinectem.demo",
+        "admin",
+      );
+      const { agent: marcusAgent, user: marcus } = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const res = await marcusAgent
+        .post(`/api/v1/organizations/${orgId}/teams`)
+        .send({ name: "Admin-Created Team", sport: "Track" });
+      expect(res.status).toBe(201);
+      // The admin who created the team should be on the roster as Admin.
+      const members = await marcusAgent.get(
+        `/api/v1/teams/${res.body.id}/members`,
+      );
+      const mine = (members.body.data as Array<{
+        userId: string;
+        position: string;
+        status: string;
+      }>).find((m) => m.userId === marcus.id);
+      expect(mine?.position).toBe("admin");
+    });
+
+    it("forbids a plain org member from creating a team", async () => {
+      const { orgId } = await freshOrgWithJoiner(
+        "marcus@kinectem.demo",
+        "member",
+      );
+      const { agent: marcusAgent } = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const before = await request(app).get(
+        `/api/v1/organizations/${orgId}/teams`,
+      );
+      const beforeCount = (before.body.data as unknown[]).length;
+      const res = await marcusAgent
+        .post(`/api/v1/organizations/${orgId}/teams`)
+        .send({ name: "Should Not Exist" });
+      expect(res.status).toBe(403);
+      // No team was inserted by the failed call.
+      const after = await request(app).get(
+        `/api/v1/organizations/${orgId}/teams`,
+      );
+      expect((after.body.data as unknown[]).length).toBe(beforeCount);
+    });
+
+    it("forbids a user with no relationship to the org from creating a team", async () => {
+      // Marcus has no admin/owner role on the seeded Westfield org.
+      const orgsRes = await request(app).get("/api/v1/organizations");
+      const westfield = (orgsRes.body.data as Array<{
+        id: string;
+        name: string;
+      }>).find((o) => o.name.includes("Westfield"));
+      expect(westfield).toBeDefined();
+      const { agent } = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const res = await agent
+        .post(`/api/v1/organizations/${westfield!.id}/teams`)
+        .send({ name: "Stranger Team" });
+      expect(res.status).toBe(403);
+    });
+
+    it("requires authentication", async () => {
+      const orgsRes = await request(app).get("/api/v1/organizations");
+      const orgId = orgsRes.body.data[0].id;
+      const res = await request(app)
+        .post(`/api/v1/organizations/${orgId}/teams`)
+        .send({ name: "Anon Team" });
+      expect(res.status).toBe(401);
+    });
+
+    it("404s on an unknown organization (still gated)", async () => {
+      const { agent } = await loginAs(
+        (u) => u.email === "sam@kinectem.demo",
+      );
+      const res = await agent
+        .post(
+          "/api/v1/organizations/00000000-0000-0000-0000-000000000000/teams",
+        )
+        .send({ name: "Ghost Team" });
+      expect(res.status).toBe(404);
+    });
+  });
 });
