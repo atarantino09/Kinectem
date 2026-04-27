@@ -19,7 +19,7 @@ import {
   postComments,
   postShares,
 } from "@workspace/db";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { hashPassword } from "./passwords";
 
@@ -96,6 +96,14 @@ export async function seedIfEmpty(): Promise<void> {
       await backfillDemoActivityIfMissing();
     } catch (err) {
       logger.warn({ err }, "Demo activity backfill failed (non-fatal)");
+    }
+    // Idempotently ensure the bell-notification fixtures used by the
+    // roster deep-link e2e test exist on long-lived DBs that were seeded
+    // before they were added.
+    try {
+      await ensureSamiraDemoNotifications();
+    } catch (err) {
+      logger.warn({ err }, "Samira demo notifications backfill failed (non-fatal)");
     }
     logger.info({ userCount: count }, "Database already seeded");
     return;
@@ -239,7 +247,7 @@ export async function seedIfEmpty(): Promise<void> {
     ])
     .returning();
 
-  const insertedRosterEntries = await db
+  await db
     .insert(rosterEntries)
     .values([
       { teamId: varsityFootball.id, userId: marcus.id, role: "player", status: "accepted", position: "WR", jerseyNumber: 12 },
@@ -250,14 +258,9 @@ export async function seedIfEmpty(): Promise<void> {
       { teamId: jvFootball.id, userId: tyler.id, role: "player", status: "accepted", position: "RB", jerseyNumber: 24 },
       { teamId: varsityBasketball.id, userId: daniela.id, role: "player", status: "accepted", position: "PG", jerseyNumber: 3 },
       // A pending invitation already accepted by player
-      { teamId: varsityBasketball.id, userId: samiraPlaceholder(childSamira.id), role: "player", status: "pending", position: "SG", jerseyNumber: 22 },
+      { teamId: varsityBasketball.id, userId: childSamira.id, role: "player", status: "pending", position: "SG", jerseyNumber: 22 },
     ])
     .returning();
-  // The bell notification below deep-links to Samira's pending row, so we
-  // need that row's id to put in the `entryId` query param.
-  const samiraPendingEntry = insertedRosterEntries.find(
-    (e) => e.teamId === varsityBasketball.id && e.userId === childSamira.id,
-  );
 
   // Pending email invite (no user yet)
   await db.insert(rosterInvites).values([
@@ -375,18 +378,11 @@ export async function seedIfEmpty(): Promise<void> {
     { highlightId: hl3.id, userId: chris.id },
   ]);
 
-  await db.insert(notifications).values([
-    {
-      userId: childSamira.id,
-      kind: "roster_invite",
-      message: "Coach Mike Davis added you to Varsity Boys Basketball — accept your roster spot.",
-      // Land on the team page with the Roster panel pre-opened and Samira's
-      // pending row scrolled into view + briefly highlighted.
-      link: samiraPendingEntry
-        ? `/teams/${varsityBasketball.id}?roster=1&entryId=${samiraPendingEntry.id}`
-        : `/teams/${varsityBasketball.id}?roster=1`,
-    },
-  ]);
+  // Samira's bell notifications (the deep-link roster invite + a static,
+  // unlinked one used by the e2e tests) are inserted via the same idempotent
+  // helper the existing-DB branch uses, so both branches converge on the
+  // same notification fixtures.
+  await ensureSamiraDemoNotifications();
 
   // Use the same backfill helper that runs on subsequent boots so the
   // empty-seed branch and the already-seeded branch converge on identical
@@ -398,7 +394,110 @@ export async function seedIfEmpty(): Promise<void> {
   logger.info("Database seeded successfully");
 }
 
-function samiraPlaceholder(id: string) { return id; }
+// Idempotently ensures the two demo notifications used by the e2e roster
+// deep-link test exist for Samira (the under-13 athlete fixture):
+//   1. A `roster_invite` notification whose `link` deep-links to her pending
+//      basketball roster row, used by the test that asserts clicking the
+//      bell lands on the Roster panel and briefly highlights her row.
+//   2. A static notification with no `link`, used by the test that asserts
+//      unlinked notifications render as `notification-static-…` and don't
+//      navigate when clicked.
+// Called from both seed branches so a fresh seed and a long-lived,
+// already-seeded DB converge on the same fixtures.
+async function ensureSamiraDemoNotifications(): Promise<void> {
+  const [samira] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, "samira@kinectem.demo"))
+    .limit(1);
+  if (!samira) return;
+
+  // 1) Roster-invite deep-link notification, pointed at Samira's pending
+  //    basketball roster row. Find that specific entry by joining on her
+  //    sole basketball team (the seed gives Samira exactly one player
+  //    entry — Varsity Boys Basketball). Long-lived demo DBs may have
+  //    flipped that row to `accepted` during a previous interactive
+  //    session, so we reset only THAT entry to `pending` (rather than
+  //    every roster row Samira owns) to avoid clobbering unrelated
+  //    demo state.
+  const [basketballEntry] = await db
+    .select({ id: rosterEntries.id, teamId: rosterEntries.teamId })
+    .from(rosterEntries)
+    .innerJoin(teams, eq(teams.id, rosterEntries.teamId))
+    .where(
+      and(
+        eq(rosterEntries.userId, samira.id),
+        eq(rosterEntries.role, "player"),
+        eq(teams.sport, "Basketball"),
+      ),
+    )
+    .limit(1);
+
+  if (basketballEntry) {
+    await db
+      .update(rosterEntries)
+      .set({ status: "pending" })
+      .where(eq(rosterEntries.id, basketballEntry.id));
+  }
+
+  const pending = basketballEntry;
+
+  if (pending) {
+    const link = `/teams/${pending.teamId}?roster=1&entryId=${pending.id}`;
+    const [existingLinked] = await db
+      .select({ id: notifications.id, link: notifications.link })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, samira.id),
+          eq(notifications.kind, "roster_invite"),
+        ),
+      )
+      .limit(1);
+    if (!existingLinked) {
+      await db.insert(notifications).values({
+        userId: samira.id,
+        kind: "roster_invite",
+        message:
+          "Coach Mike Davis added you to Varsity Boys Basketball — accept your roster spot.",
+        link,
+      });
+    } else if (existingLinked.link !== link) {
+      // Older DBs may carry a stale link from a previous deep-link
+      // format (e.g. `/u/<userId>`). Repoint it at the current
+      // `/teams/{teamId}?roster=1&entryId={entryId}` URL so the bell
+      // click lands on the Roster tab as the e2e test expects.
+      await db
+        .update(notifications)
+        .set({ link })
+        .where(eq(notifications.id, existingLinked.id));
+    }
+  }
+
+  // 2) Static (unlinked) notification — its `kind` is intentionally NOT
+  //    `guardian_expired` or `roster_invite_for_child`, since the bell
+  //    treats those two kinds as clickable even without a link.
+  const STATIC_MESSAGE =
+    "Welcome to Kinectem — say hi to your team in the Family tab.";
+  const [existingStatic] = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, samira.id),
+        eq(notifications.message, STATIC_MESSAGE),
+      ),
+    )
+    .limit(1);
+  if (!existingStatic) {
+    await db.insert(notifications).values({
+      userId: samira.id,
+      kind: "system_message",
+      message: STATIC_MESSAGE,
+      link: null,
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Demo activity seeding
