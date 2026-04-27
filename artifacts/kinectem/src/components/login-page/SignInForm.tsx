@@ -5,7 +5,7 @@ import { rateLimitMessage } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Mail, Lock, ArrowRight, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 
 export interface GuardianPendingInfo {
   email: string;
@@ -49,6 +49,7 @@ export function SignInForm({
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [demoBusy, setDemoBusy] = useState<string | null>(null);
+  const [demoOpen, setDemoOpen] = useState(true);
 
   const performLogin = async (
     submitEmail: string,
@@ -202,42 +203,61 @@ export function SignInForm({
         className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3"
         data-testid="panel-demo-accounts"
       >
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">
-            Try a demo account
-          </h3>
+        <button
+          type="button"
+          onClick={() => setDemoOpen((v) => !v)}
+          aria-expanded={demoOpen}
+          aria-controls="demo-accounts-list"
+          data-testid="btn-toggle-demo-panel"
+          className="flex w-full items-baseline justify-between gap-2 text-left"
+        >
+          <span className="flex items-center gap-1.5">
+            {demoOpen ? (
+              <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+            )}
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-700">
+              Try a demo account
+            </span>
+          </span>
           <span className="text-[11px] text-slate-500">
             Password:{" "}
             <code className="font-mono text-slate-700">demo1234</code>
           </span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {DEMO_ACCOUNTS.map((acc) => {
-            const busy = demoBusy === acc.email;
-            return (
-              <button
-                key={acc.email}
-                type="button"
-                disabled={!!demoBusy || submitting}
-                onClick={() => signInAsDemo(acc.email)}
-                data-testid={`btn-demo-signin-${acc.testid}`}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left hover:border-violet-300 hover:bg-violet-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-2">
-                  {busy && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
-                  )}
-                  <div className="font-bold text-sm text-slate-900">
-                    {acc.label}
+        </button>
+        {demoOpen && (
+          <div
+            id="demo-accounts-list"
+            className="flex flex-col sm:flex-row sm:flex-wrap gap-2"
+          >
+            {DEMO_ACCOUNTS.map((acc) => {
+              const busy = demoBusy === acc.email;
+              return (
+                <button
+                  key={acc.email}
+                  type="button"
+                  disabled={!!demoBusy || submitting}
+                  onClick={() => signInAsDemo(acc.email)}
+                  data-testid={`btn-demo-signin-${acc.testid}`}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left hover:border-violet-300 hover:bg-violet-50 transition disabled:opacity-50 disabled:cursor-not-allowed sm:flex-1 sm:min-w-[160px]"
+                >
+                  <div className="flex items-center gap-2">
+                    {busy && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                    )}
+                    <div className="font-bold text-sm text-slate-900">
+                      {acc.label}
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs text-slate-500 truncate">
-                  {acc.sublabel}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {acc.sublabel}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </form>
   );

@@ -541,14 +541,22 @@ async function seedDemoActivity(input: DemoActivityInputs): Promise<void> {
     .onConflictDoNothing();
 }
 
-// Looks up the canonical demo users by email and runs seedDemoActivity if
-// the canonical entities are present. seedDemoActivity is fully idempotent
-// (onConflictDoNothing + comment dedupe), so running it on every server
-// boot is safe and lets future expansions of the seed automatically apply
-// to existing dev DBs without a destructive reseed. Bails out gracefully
-// when any required user/team/article is missing — better to leave the DB
-// alone than write half-formed activity.
+// Looks up the canonical demo users by email and runs seedDemoActivity
+// when the activity tables are still empty. Gated on user_followers being
+// empty (cheap COUNT), as called out in the task plan, so this skips the
+// per-boot work once a DB has been backfilled. Internally seedDemoActivity
+// is fully idempotent (onConflictDoNothing + comment dedupe), so the
+// empty-seed branch reuses this helper for the same email-based user
+// lookup (which picks up REQUIRED_DEMO_USERS like Morgan that aren't
+// bound to a local var). Bails out gracefully when any required
+// user/team/article is missing — better to leave the DB alone than to
+// write half-formed activity.
 async function backfillDemoActivityIfMissing(): Promise<void> {
+  const [{ count: followCount }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(userFollowers);
+  if (followCount > 0) return;
+
   const REQUIRED_EMAILS = [
     "marcus@kinectem.demo",
     "jordan@kinectem.demo",
