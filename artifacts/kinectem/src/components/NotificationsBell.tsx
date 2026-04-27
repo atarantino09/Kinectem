@@ -22,6 +22,50 @@ import { Bell, ShieldAlert, Users } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 
+// ---------------------------------------------------------------------------
+// Notification deep-link policy
+// ---------------------------------------------------------------------------
+// Every server-side `db.insert(notifications)` call should either set a
+// `link` that resolves to a real page, or accept that the notification
+// will be rendered as plain (non-clickable) text in this dropdown.
+//
+// Today's kinds and where they go (audited against every insert site):
+//
+//   like                     -> `/posts/<prefixed postId>`  (post page)
+//                               source: routes/posts.ts (POST /posts/:postId/reactions)
+//   mention (co-author)      -> `/posts/<articlePostId>`    (article page)
+//                               source: routes/drafts.ts (POST /posts/:postId/co-authors)
+//   post_tag                 -> `/posts/<articlePostId>`    (article page)
+//                               source: lib/article-tagging.ts (notifyNewlyTaggedInRecap)
+//   follow                   -> `/users/<actorUserId>`      (new follower's profile)
+//                               source: routes/organizations.ts (POST /users/:userId/follow)
+//   roster_invite            -> `/teams/<teamId>?roster=1&entryId=<entryId>`
+//                               source: routes/teams.ts (member add + invite redeem)
+//   roster_invite_for_child  -> `/family?childId=...&entryId=...&teamId=...`
+//                               source: routes/teams.ts; also handled inline below
+//                               (Accept / Decline buttons on the row).
+//   guardian_expired         -> `/family?childId=<childId>` (NOT the
+//                               inserted `/guardian?childId=...` link).
+//                               The bell intentionally rewrites this to
+//                               /family by `n.type` in handleRowClick so
+//                               the parent lands next to the affected
+//                               child with the Resend button visible.
+//                               The childId is parsed off the inserted
+//                               link, so it must remain populated.
+//                               source: lib/guardian-confirmations.ts.
+//
+// Rules of thumb when adding a new kind:
+//   * If you can name a single page that answers "what should I look at?",
+//     set `link` to that page. URL params (childId, entryId, teamId,
+//     etc.) are fine — the helpers below pick them out.
+//   * Prefer the prefixed post id (`article-<uuid>`, `highlight-<uuid>`,
+//     `orgpost-<uuid>`) in `/posts/<id>` links. Bare uuids 404.
+//   * If the destination genuinely depends on user state (parent flows
+//     are the canonical example), add a branch to `handleRowClick` /
+//     `isClickable` instead of inventing a fake link.
+//   * If there is honestly nowhere useful to send the user, leave `link`
+//     null. The row renders as static text — readable, but it won't
+//     pretend to be a button.
 function getNotificationLink(n: NotificationResponse): string | null {
   const data = n.data;
   if (data && typeof data === "object" && "link" in data) {
