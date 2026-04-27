@@ -81,7 +81,6 @@ export function EditProfileDialog({
   const open = isControlled ? controlledOpen : internalOpen;
   const [firstName, setFirstName] = useState(user.firstName);
   const [lastName, setLastName] = useState(user.lastName);
-  const [nickname, setNickname] = useState(user.nickname ?? "");
   const [bio, setBio] = useState(user.bio ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -97,7 +96,6 @@ export function EditProfileDialog({
     if (open) {
       setFirstName(user.firstName);
       setLastName(user.lastName);
-      setNickname(user.nickname ?? "");
       setBio(user.bio ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
@@ -134,7 +132,6 @@ export function EditProfileDialog({
       setAvatarUploading(false);
       setFirstName(user.firstName);
       setLastName(user.lastName);
-      setNickname(user.nickname ?? "");
       setBio(user.bio ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
@@ -192,7 +189,6 @@ export function EditProfileDialog({
       data: {
         firstName,
         lastName,
-        nickname: nickname.trim() ? nickname : null,
         bio: bio.trim() ? bio : null,
         avatarUrl,
       },
@@ -310,18 +306,6 @@ export function EditProfileDialog({
                 data-testid="input-last-name"
               />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="nickname" className="text-xs font-bold">
-              Nickname
-            </Label>
-            <Input
-              id="nickname"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Optional"
-              data-testid="input-nickname"
-            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="bio" className="text-xs font-bold">

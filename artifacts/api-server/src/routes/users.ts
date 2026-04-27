@@ -98,7 +98,6 @@ router.get(
           role: u.role,
           email: u.email ?? null,
           avatarUrl: safeAvatarUrl(u.avatarUrl),
-          nickname: null,
         };
       }),
       pagination: emptyPagination(),
@@ -275,23 +274,6 @@ router.patch(
       updates.name = `${body.firstName ?? cur.firstName} ${body.lastName ?? cur.lastName}`.trim();
     }
     if (body.bio !== undefined) updates.bio = body.bio;
-    if (body.nickname !== undefined) {
-      // Mirror what the Edit Profile dialog does: trim whitespace, treat
-      // an empty string as "clear it". Cap length to match the OpenAPI
-      // schema (PublicUserResponse.nickname.maxLength: 100) so the DB
-      // can never end up with a value the spec says shouldn't exist.
-      if (body.nickname === null) {
-        updates.nickname = null;
-      } else if (typeof body.nickname !== "string") {
-        return apiError(res, 400, "nickname must be a string or null");
-      } else {
-        const trimmed = body.nickname.trim();
-        if (trimmed.length > 100) {
-          return apiError(res, 400, "nickname is too long (max 100 chars)");
-        }
-        updates.nickname = trimmed === "" ? null : trimmed;
-      }
-    }
     if (body.avatarUrl !== undefined) {
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {
         return apiError(res, 400, "avatarUrl must be a string or null");

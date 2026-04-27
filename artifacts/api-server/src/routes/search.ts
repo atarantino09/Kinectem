@@ -56,7 +56,6 @@ router.get(
           entityType: "user",
           displayName: u.name,
           avatarUrl: safeAvatarUrl(u.avatarUrl),
-          nickname: null,
         })),
         pagination: emptyPagination(),
       },

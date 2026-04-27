@@ -68,7 +68,6 @@ const ACTION_PHOTOS = [
 const POOLS = {
   firstName: ["Marcus", "Jordan", "Tyler", "Daniela", "Chris", "Lisa", "Samira", "Aaron", "Maya", "Devon", "Kai", "Riley", "Quinn", "Avery"],
   lastName: ["Rivera", "Bennett", "Chen", "Davis", "Patel", "Nguyen", "Brooks", "Silva", "Walker", "Hayes", "Reed", "Foster", "Carter"],
-  nickname: ["Speedster", "Cannon", "Showtime", "Iceberg", "Lightning", "Hammer", "Phantom", "Wizard"],
   bio: [
     "Speed, hands, and vision. Dedicated to outworking the competition.",
     "Three-sport athlete with a love for the game and the grind.",

@@ -204,7 +204,6 @@ export function toPublicUser(
     id: u.id,
     firstName,
     lastName,
-    nickname: u.nickname ?? null,
     bio: u.bio ?? null,
     avatarUrl: safeAvatarUrl(u.avatarUrl),
     coverPhotoUrl: null as string | null,

@@ -104,15 +104,11 @@ export const GetUserByIdParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const getUserByIdResponseOneOneNicknameMax = 100;
-
 export const getUserByIdResponseOneOneBioMax = 1000;
 
 export const getUserByIdResponseOneOneFollowerCountMin = 0;
 
 export const getUserByIdResponseOneOneFollowingCountMin = 0;
-
-export const getUserByIdResponseTwoNicknameMax = 100;
 
 export const getUserByIdResponseTwoBioMax = 1000;
 
@@ -126,10 +122,6 @@ export const GetUserByIdResponse = zod.union([
       id: zod.string().uuid(),
       firstName: zod.string(),
       lastName: zod.string(),
-      nickname: zod
-        .string()
-        .max(getUserByIdResponseOneOneNicknameMax)
-        .nullish(),
       bio: zod.string().max(getUserByIdResponseOneOneBioMax).nullish(),
       avatarUrl: zod.string().url().nullish(),
       coverPhotoUrl: zod
@@ -175,7 +167,6 @@ export const GetUserByIdResponse = zod.union([
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod.string().max(getUserByIdResponseTwoNicknameMax).nullish(),
     bio: zod.string().max(getUserByIdResponseTwoBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -202,7 +193,7 @@ export const GetUserByIdResponse = zod.union([
 ]);
 
 /**
- * Updates editable profile fields (name, nickname, bio, avatar, etc.). The caller must be one of: the user themselves; a real (non-masquerading) admin; or a real (non-masquerading) parent whose `users.parentId` matches the target user. Anyone else gets 403. The `avatarUrl` field, when provided, must reference a confirmed asset uploaded by the caller (not the target user) so a parent uploading on behalf of their child works correctly.
+ * Updates editable profile fields (name, bio, avatar, etc.). The caller must be one of: the user themselves; a real (non-masquerading) admin; or a real (non-masquerading) parent whose `users.parentId` matches the target user. Anyone else gets 403. The `avatarUrl` field, when provided, must reference a confirmed asset uploaded by the caller (not the target user) so a parent uploading on behalf of their child works correctly.
 
  * @summary Update user profile
  */
@@ -216,8 +207,6 @@ export const updateUserBodyLastNameMax = 100;
 
 export const updateUserBodyBioMax = 1000;
 
-export const updateUserBodyNicknameMax = 100;
-
 export const updateUserBodyLevelMax = 50;
 
 export const UpdateUserBody = zod.object({
@@ -228,7 +217,6 @@ export const UpdateUserBody = zod.object({
     .optional()
     .describe("ISO 8601 date (YYYY-MM-DD)."),
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
-  nickname: zod.string().max(updateUserBodyNicknameMax).nullish(),
   level: zod.string().max(updateUserBodyLevelMax).nullish(),
   avatarUrl: zod
     .string()
@@ -237,8 +225,6 @@ export const UpdateUserBody = zod.object({
       "URL of the user's profile picture. Must reference a confirmed\nasset previously uploaded by the caller via the upload + confirm\nflow, or null to remove the current avatar. The server enforces\nownership and confirmation, so arbitrary external URLs are\nrejected with 400. No fixed maxLength is set because uploaded\nassets are stored as base64 `data:` URLs that can be many MB\nlong; the server caps the length to match the asset upload\nsize limit.\n",
     ),
 });
-
-export const updateUserResponseOneNicknameMax = 100;
 
 export const updateUserResponseOneBioMax = 1000;
 
@@ -251,7 +237,6 @@ export const UpdateUserResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod.string().max(updateUserResponseOneNicknameMax).nullish(),
     bio: zod.string().max(updateUserResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -309,8 +294,6 @@ export const SetUserCoverPhotoBody = zod.object({
     .describe("UUID of a confirmed asset owned by the caller."),
 });
 
-export const setUserCoverPhotoResponseOneNicknameMax = 100;
-
 export const setUserCoverPhotoResponseOneBioMax = 1000;
 
 export const setUserCoverPhotoResponseOneFollowerCountMin = 0;
@@ -322,10 +305,6 @@ export const SetUserCoverPhotoResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod
-      .string()
-      .max(setUserCoverPhotoResponseOneNicknameMax)
-      .nullish(),
     bio: zod.string().max(setUserCoverPhotoResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -376,8 +355,6 @@ export const DeleteUserCoverPhotoParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const deleteUserCoverPhotoResponseOneNicknameMax = 100;
-
 export const deleteUserCoverPhotoResponseOneBioMax = 1000;
 
 export const deleteUserCoverPhotoResponseOneFollowerCountMin = 0;
@@ -389,10 +366,6 @@ export const DeleteUserCoverPhotoResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod
-      .string()
-      .max(deleteUserCoverPhotoResponseOneNicknameMax)
-      .nullish(),
     bio: zod.string().max(deleteUserCoverPhotoResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -450,8 +423,6 @@ export const SetUserAvatarBody = zod.object({
     .describe("UUID of a confirmed asset owned by the caller."),
 });
 
-export const setUserAvatarResponseOneNicknameMax = 100;
-
 export const setUserAvatarResponseOneBioMax = 1000;
 
 export const setUserAvatarResponseOneFollowerCountMin = 0;
@@ -463,7 +434,6 @@ export const SetUserAvatarResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod.string().max(setUserAvatarResponseOneNicknameMax).nullish(),
     bio: zod.string().max(setUserAvatarResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -514,8 +484,6 @@ export const DeleteUserAvatarParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const deleteUserAvatarResponseOneNicknameMax = 100;
-
 export const deleteUserAvatarResponseOneBioMax = 1000;
 
 export const deleteUserAvatarResponseOneFollowerCountMin = 0;
@@ -527,10 +495,6 @@ export const DeleteUserAvatarResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod
-      .string()
-      .max(deleteUserAvatarResponseOneNicknameMax)
-      .nullish(),
     bio: zod.string().max(deleteUserAvatarResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -668,8 +632,6 @@ export const ListUserTeamsResponse = zod.object({
 /**
  * @summary Get the authenticated user's full profile
  */
-export const getLoggedInUserResponseOneNicknameMax = 100;
-
 export const getLoggedInUserResponseOneBioMax = 1000;
 
 export const getLoggedInUserResponseOneFollowerCountMin = 0;
@@ -681,7 +643,6 @@ export const GetLoggedInUserResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod.string().max(getLoggedInUserResponseOneNicknameMax).nullish(),
     bio: zod.string().max(getLoggedInUserResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -3593,8 +3554,6 @@ export const listFollowSuggestionsResponseOrganizationsItemFollowerCountMin = 0;
 
 export const listFollowSuggestionsResponseTeamsItemFollowerCountMin = 0;
 
-export const listFollowSuggestionsResponseUsersItemNicknameMax = 100;
-
 export const listFollowSuggestionsResponseUsersItemBioMax = 1000;
 
 export const listFollowSuggestionsResponseUsersItemFollowerCountMin = 0;
@@ -3659,10 +3618,6 @@ export const ListFollowSuggestionsResponse = zod.object({
       id: zod.string().uuid(),
       firstName: zod.string(),
       lastName: zod.string(),
-      nickname: zod
-        .string()
-        .max(listFollowSuggestionsResponseUsersItemNicknameMax)
-        .nullish(),
       bio: zod
         .string()
         .max(listFollowSuggestionsResponseUsersItemBioMax)
@@ -5625,8 +5580,6 @@ export const UpdateAdminUserBody = zod.object({
   clearGuardianConfirmation: zod.boolean().optional(),
 });
 
-export const updateAdminUserResponseOneNicknameMax = 100;
-
 export const updateAdminUserResponseOneBioMax = 1000;
 
 export const updateAdminUserResponseOneFollowerCountMin = 0;
@@ -5638,7 +5591,6 @@ export const UpdateAdminUserResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod.string().max(updateAdminUserResponseOneNicknameMax).nullish(),
     bio: zod.string().max(updateAdminUserResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -5688,8 +5640,6 @@ export const SoftDeleteAdminUserParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const softDeleteAdminUserResponseOneNicknameMax = 100;
-
 export const softDeleteAdminUserResponseOneBioMax = 1000;
 
 export const softDeleteAdminUserResponseOneFollowerCountMin = 0;
@@ -5701,10 +5651,6 @@ export const SoftDeleteAdminUserResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod
-      .string()
-      .max(softDeleteAdminUserResponseOneNicknameMax)
-      .nullish(),
     bio: zod.string().max(softDeleteAdminUserResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -5754,8 +5700,6 @@ export const RestoreAdminUserParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const restoreAdminUserResponseOneNicknameMax = 100;
-
 export const restoreAdminUserResponseOneBioMax = 1000;
 
 export const restoreAdminUserResponseOneFollowerCountMin = 0;
@@ -5767,10 +5711,6 @@ export const RestoreAdminUserResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod
-      .string()
-      .max(restoreAdminUserResponseOneNicknameMax)
-      .nullish(),
     bio: zod.string().max(restoreAdminUserResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -6110,8 +6050,6 @@ export const AuthLoginBody = zod.object({
   password: zod.string().min(1),
 });
 
-export const authLoginResponseOneNicknameMax = 100;
-
 export const authLoginResponseOneBioMax = 1000;
 
 export const authLoginResponseOneFollowerCountMin = 0;
@@ -6123,7 +6061,6 @@ export const AuthLoginResponse = zod
     id: zod.string().uuid(),
     firstName: zod.string(),
     lastName: zod.string(),
-    nickname: zod.string().max(authLoginResponseOneNicknameMax).nullish(),
     bio: zod.string().max(authLoginResponseOneBioMax).nullish(),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod

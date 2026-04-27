@@ -75,7 +75,6 @@ router.get(
           id: u.id,
           firstName: first ?? u.name,
           lastName: rest.join(" "),
-          nickname: u.nickname ?? null,
           role: u.role,
           email: u.email ?? null,
           avatarUrl: safeAvatarUrl(u.avatarUrl),

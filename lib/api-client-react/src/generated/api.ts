@@ -507,7 +507,7 @@ export function useGetUserById<
 }
 
 /**
- * Updates editable profile fields (name, nickname, bio, avatar, etc.). The caller must be one of: the user themselves; a real (non-masquerading) admin; or a real (non-masquerading) parent whose `users.parentId` matches the target user. Anyone else gets 403. The `avatarUrl` field, when provided, must reference a confirmed asset uploaded by the caller (not the target user) so a parent uploading on behalf of their child works correctly.
+ * Updates editable profile fields (name, bio, avatar, etc.). The caller must be one of: the user themselves; a real (non-masquerading) admin; or a real (non-masquerading) parent whose `users.parentId` matches the target user. Anyone else gets 403. The `avatarUrl` field, when provided, must reference a confirmed asset uploaded by the caller (not the target user) so a parent uploading on behalf of their child works correctly.
 
  * @summary Update user profile
  */

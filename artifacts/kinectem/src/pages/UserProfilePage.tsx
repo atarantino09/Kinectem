@@ -192,11 +192,6 @@ export default function UserProfilePage() {
             <h1 className="text-4xl font-black tracking-tight leading-[1.05]">
               {displayName}
             </h1>
-            {user.nickname && (
-              <p className="text-sm font-bold text-primary uppercase tracking-wider mt-1">
-                @{user.nickname}
-              </p>
-            )}
             <div className="flex items-center gap-5 mt-2">
               <button
                 type="button"

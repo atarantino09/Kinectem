@@ -151,7 +151,7 @@ paths:
       operationId: updateUser
       summary: Update user profile
       description: >
-        Updates editable profile fields (name, nickname, bio, avatar, etc.).
+        Updates editable profile fields (name, bio, avatar, etc.).
         The caller must be one of: the user themselves; a real
         (non-masquerading) admin; or a real (non-masquerading) parent
         whose `users.parentId` matches the target user. Anyone else gets
@@ -5976,10 +5976,6 @@ components:
           type: string
         lastName:
           type: string
-        nickname:
-          type: string
-          nullable: true
-          maxLength: 100
         bio:
           type: string
           nullable: true
@@ -6059,10 +6055,6 @@ components:
           type: string
           nullable: true
           maxLength: 1000
-        nickname:
-          type: string
-          nullable: true
-          maxLength: 100
         level:
           type: string
           nullable: true

@@ -79,11 +79,6 @@ export interface UpdateUserRequest {
    */
   bio?: string | null;
   /**
-   * @maxLength 100
-   * @nullable
-   */
-  nickname?: string | null;
-  /**
    * @maxLength 50
    * @nullable
    */

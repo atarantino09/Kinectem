@@ -85,11 +85,6 @@ export interface PublicUserResponse {
   firstName: string;
   lastName: string;
   /**
-   * @maxLength 100
-   * @nullable
-   */
-  nickname?: string | null;
-  /**
    * @maxLength 1000
    * @nullable
    */
@@ -151,11 +146,6 @@ export interface UpdateUserRequest {
    * @nullable
    */
   bio?: string | null;
-  /**
-   * @maxLength 100
-   * @nullable
-   */
-  nickname?: string | null;
   /**
    * @maxLength 50
    * @nullable

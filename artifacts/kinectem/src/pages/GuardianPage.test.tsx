@@ -54,7 +54,6 @@ const childrenFixture = [
     id: CHILD_ID,
     firstName: "Samira",
     lastName: "Khan",
-    nickname: null,
     role: "athlete",
     email: "samira@example.com",
     avatarUrl: null,

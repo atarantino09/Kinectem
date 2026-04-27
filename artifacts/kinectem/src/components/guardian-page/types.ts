@@ -4,7 +4,6 @@ export interface Child {
   id: string;
   firstName: string;
   lastName: string;
-  nickname: string | null;
   role: string;
   email: string | null;
   avatarUrl: string | null;
