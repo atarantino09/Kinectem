@@ -4573,7 +4573,76 @@ router.get(
         const bx = b.sharedAt ?? b.createdAt;
         return ax < bx ? 1 : -1;
       });
-      return res.json(paginate(items));
+      if (items.length > 0) {
+        return res.json(paginate(items));
+      }
+
+      // Discover fallback: viewer follows nobody AND has no own posts/shares
+      // to surface, so the home feed would otherwise be empty (e.g. a brand-
+      // new account or an admin who hasn't authored anything). Show recent
+      // published recap articles and highlights from across all orgs so the
+      // page has something to render. We deliberately leave `sharedBy`/
+      // `sharedAt` undefined here — these are not re-shares, just a
+      // discover surface — so the frontend renders them as ordinary posts.
+      const [discoverArts, discoverHls] = await Promise.all([
+        db
+          .select({ a: articles, team: teams, org: organizations, author: users })
+          .from(articles)
+          .innerJoin(teams, eq(articles.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .where(
+            and(
+              eq(articles.status, "published"),
+              isNull(articles.hiddenAt),
+            ),
+          )
+          .orderBy(desc(articles.createdAt))
+          .limit(10),
+        db
+          .select({
+            h: highlights,
+            team: teams,
+            org: organizations,
+            uploader: users,
+          })
+          .from(highlights)
+          .innerJoin(teams, eq(highlights.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(highlights.uploaderId, users.id))
+          .where(isNull(highlights.hiddenAt))
+          .orderBy(desc(highlights.createdAt))
+          .limit(10),
+      ]);
+      const discoverStats = await loadPostStats(me.id, [
+        ...discoverArts.map((r) => ({
+          kind: "article" as const,
+          refId: r.a.id,
+        })),
+        ...discoverHls.map((r) => ({
+          kind: "highlight" as const,
+          refId: r.h.id,
+        })),
+      ]);
+      const discoverItems = [
+        ...discoverArts.map((r) =>
+          articleToPost(r.a, {
+            team: r.team,
+            org: r.org,
+            author: r.author,
+            ...statsFor(discoverStats, "article", r.a.id),
+          }),
+        ),
+        ...discoverHls.map((r) =>
+          highlightToPost(r.h, {
+            team: r.team,
+            org: r.org,
+            author: r.uploader,
+            ...statsFor(discoverStats, "highlight", r.h.id),
+          }),
+        ),
+      ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return res.json(paginate(discoverItems));
     }
 
     // Articles whose tagged users include any followed user.
