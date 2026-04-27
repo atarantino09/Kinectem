@@ -38,6 +38,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { data: unreadMsgs } = useGetUnreadMessageCount();
   const { data: whoami } = useWhoami();
   const isAdmin = whoami?.realUser?.role === "admin";
+  // Hide the "Game Recap" Create-menu item from people who can't author a
+  // recap on any team (typical parents). When the value is missing — e.g.
+  // whoami is still loading or the field hasn't shipped to the backend
+  // yet — we err on the side of hiding so we never render a dead-end.
+  const canAuthorRecap = whoami?.canAuthorRecap === true;
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
@@ -237,9 +242,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onSelect={() => setLocation("/posts/new?type=long")}>
-                <Trophy className="w-4 h-4 mr-2" /> Game Recap
-              </DropdownMenuItem>
+              {canAuthorRecap && (
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/posts/new?type=long")}
+                  data-testid="menu-create-recap"
+                >
+                  <Trophy className="w-4 h-4 mr-2" /> Game Recap
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => setLocation("/posts/new?type=short")}>
                 <Plus className="w-4 h-4 mr-2" /> Highlight Clip
               </DropdownMenuItem>

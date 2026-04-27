@@ -5302,6 +5302,12 @@ export const GetWhoamiResponse = zod.object({
       role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
     })
     .nullish(),
+  canAuthorRecap: zod
+    .boolean()
+    .optional()
+    .describe(
+      'True when the (effective) session user can author a Game Recap on at least one team — i.e. they are an org admin of any organization, OR have an accepted roster entry as a coach, OR have an accepted roster entry with the explicit \"author\" position.',
+    ),
 });
 
 /**

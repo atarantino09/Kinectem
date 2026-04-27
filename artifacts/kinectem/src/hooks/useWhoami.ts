@@ -13,6 +13,7 @@ export type WhoamiResponse = {
   isMasquerading?: boolean;
   realUser?: WhoamiUser;
   viewingAs?: WhoamiUser | null;
+  canAuthorRecap?: boolean;
 };
 
 export function useWhoami() {

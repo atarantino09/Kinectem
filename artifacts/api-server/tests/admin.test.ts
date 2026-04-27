@@ -41,6 +41,35 @@ describe("admin", () => {
       expect(res.status).toBe(200);
       expect(res.body.authenticated).toBe(false);
     });
+
+    it("sets canAuthorRecap=true for an org admin / coach", async () => {
+      // Coach Mike Davis is both an org admin of Westfield and a roster
+      // coach on Varsity Football, so the Create-menu recap option must
+      // remain visible for them.
+      const { agent } = await loginAs("coach@kinectem.demo");
+      const res = await agent.get("/api/v1/auth/whoami");
+      expect(res.status).toBe(200);
+      expect(res.body.canAuthorRecap).toBe(true);
+    });
+
+    it("sets canAuthorRecap=false for a parent with no authoring teams", async () => {
+      // Lisa Carter is a seeded parent with no roster entries and no org-admin
+      // rows; the Create menu should hide "Game Recap" for her.
+      const { agent } = await loginAs("lisa@kinectem.demo");
+      const res = await agent.get("/api/v1/auth/whoami");
+      expect(res.status).toBe(200);
+      expect(res.body.canAuthorRecap).toBe(false);
+    });
+
+    it("sets canAuthorRecap=false for an athlete whose only roster role is player", async () => {
+      // Marcus Rivera is a seeded player on Varsity Football. Players are
+      // not allowed to author recaps unless explicitly given the "author"
+      // position, so the menu item should be hidden.
+      const { agent } = await loginAs("marcus@kinectem.demo");
+      const res = await agent.get("/api/v1/auth/whoami");
+      expect(res.status).toBe(200);
+      expect(res.body.canAuthorRecap).toBe(false);
+    });
   });
 
   describe("user CRUD + soft-delete", () => {

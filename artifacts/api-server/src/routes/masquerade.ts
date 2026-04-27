@@ -50,7 +50,7 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
+import { canAuthorRecapAnywhere, canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -106,13 +106,20 @@ const router: IRouter = Router();
 
 router.get(
   "/auth/whoami",
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const session = req.sessionUser;
     const real = req.realUser;
     if (!real) {
       res.json({ authenticated: false });
       return;
     }
+    // Effective user is whoever the session is acting as right now
+    // (the masqueraded user when admins are impersonating, otherwise
+    // the real signed-in user). The Create menu in the web app keys
+    // off this so a parent who can't author on any team doesn't see
+    // a dead-end "Game Recap" item.
+    const effectiveUserId = session?.id ?? real.id;
+    const canAuthorRecap = await canAuthorRecapAnywhere(effectiveUserId);
     res.json({
       authenticated: true,
       isMasquerading: !!req.isMasquerading,
@@ -131,6 +138,7 @@ router.get(
               role: session.role,
             }
           : null,
+      canAuthorRecap,
     });
   }),
 );

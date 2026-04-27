@@ -1,5 +1,5 @@
 import { db, organizationAdmins, rosterEntries, teams, type teams as TeamsT } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 
 type Team = typeof TeamsT.$inferSelect;
 
@@ -80,6 +80,37 @@ export async function canCreateRecap(
     )
     .limit(1);
   return Boolean(authorEntry);
+}
+
+// Cheap "is this user allowed to author a recap on at least one team
+// anywhere?" check. Mirrors the per-team `canCreateRecap` rules without
+// requiring a target team — used by the web client (via /auth/whoami) to
+// decide whether to show the "Game Recap" Create-menu item at all.
+export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
+  // Org admins can always author recaps for any team in their org.
+  const [orgAdminRow] = await db
+    .select({ userId: organizationAdmins.userId })
+    .from(organizationAdmins)
+    .where(eq(organizationAdmins.userId, userId))
+    .limit(1);
+  if (orgAdminRow) return true;
+  // Otherwise: any accepted roster entry where the user is either a coach
+  // or holds the explicit "author" position is enough.
+  const [rosterRow] = await db
+    .select({ id: rosterEntries.id })
+    .from(rosterEntries)
+    .where(
+      and(
+        eq(rosterEntries.userId, userId),
+        eq(rosterEntries.status, "accepted"),
+        or(
+          eq(rosterEntries.role, "coach"),
+          eq(rosterEntries.position, "author"),
+        ),
+      ),
+    )
+    .limit(1);
+  return Boolean(rosterRow);
 }
 
 export async function isOrgMember(userId: string, organizationId: string): Promise<boolean> {
