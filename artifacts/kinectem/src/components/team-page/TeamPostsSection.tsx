@@ -27,7 +27,7 @@ export function TeamPostsSection({
           <Link href={`/posts/new?type=long&teamId=${teamId}`}>
             <Button
               size="sm"
-              className="font-bold rounded-full"
+              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
               data-testid="btn-create-recap"
             >
               <FileText className="w-3.5 h-3.5 mr-1.5" />

@@ -219,7 +219,7 @@ export function PostInteractions({ post }: { post: PostResponse }) {
                 type="submit"
                 size="sm"
                 disabled={!body.trim() || createComment.isPending}
-                className="font-bold"
+                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
                 data-testid="button-submit-comment"
               >
                 Post Comment

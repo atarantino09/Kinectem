@@ -453,7 +453,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           <Button
             type="submit"
             disabled={!body.trim() || send.isPending}
-            className="font-bold gap-2 self-end"
+            className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5 gap-2 self-end"
             data-testid="button-send-message"
           >
             <Send className="w-4 h-4" />
@@ -818,7 +818,7 @@ function NewMessageDialog({
                     create.isPending ||
                     isUploading
                   }
-                  className="font-bold gap-2 brand-gradient text-primary-foreground hover:opacity-95"
+                  className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6 gap-2"
                   data-testid="button-send-new-message"
                 >
                   <Send className="w-4 h-4" />

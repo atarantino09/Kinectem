@@ -214,7 +214,7 @@ export default function OrganizationPage() {
               <Button
                 size="sm"
                 onClick={() => setCreateTeamOpen(true)}
-                className="font-bold rounded-full"
+                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
                 data-testid="btn-add-team"
               >
                 <Plus className="w-4 h-4 mr-1" /> Add team

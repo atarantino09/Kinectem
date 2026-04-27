@@ -368,7 +368,7 @@ export function NotificationsBell() {
                       <Button
                         size="sm"
                         variant="default"
-                        className="h-7 px-3 rounded-full text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground"
+                        className="brand-gradient hover:opacity-90 text-white h-7 px-3 rounded-full text-xs font-bold"
                         disabled={acting}
                         onClick={(e) => {
                           e.stopPropagation();

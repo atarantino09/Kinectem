@@ -90,7 +90,7 @@ export function ChildPendingInvites({
               </Button>
               <Button
                 size="sm"
-                className="font-bold rounded-full h-7 px-3 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
+                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full h-7 px-3 text-xs"
                 disabled={acting}
                 onClick={() => onAction(child, inv, "accept")}
                 data-testid={`btn-accept-pending-${inv.entryId}`}

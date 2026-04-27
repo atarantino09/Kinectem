@@ -301,7 +301,7 @@ export function EditOrgDialog({
             <Button
               type="submit"
               disabled={saving || uploading}
-              className="font-bold"
+              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
               data-testid="btn-save-edit-org"
             >
               {saving ? "Saving..." : "Save changes"}

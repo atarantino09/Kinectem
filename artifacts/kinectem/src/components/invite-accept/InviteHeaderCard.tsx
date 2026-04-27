@@ -68,7 +68,7 @@ export function InviteHeaderCard({
             >
               <Button
                 size="lg"
-                className="w-full font-bold rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
+                className="w-full font-bold rounded-full brand-gradient hover:opacity-90 text-white"
                 data-testid="btn-create-guardian"
               >
                 {isPlayerInvite
@@ -92,7 +92,7 @@ export function InviteHeaderCard({
             size="lg"
             onClick={onAccept}
             disabled={accepting}
-            className="w-full font-bold rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
+            className="w-full font-bold rounded-full brand-gradient hover:opacity-90 text-white"
             data-testid="btn-accept-invite"
           >
             {accepting

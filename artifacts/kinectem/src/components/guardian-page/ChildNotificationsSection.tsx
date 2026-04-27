@@ -163,7 +163,7 @@ function ChildNotificationRow({
             <Button
               size="sm"
               variant="default"
-              className="h-6 px-2 text-[11px] font-bold"
+              className="brand-gradient hover:opacity-90 text-white h-6 px-3 rounded-full text-[11px] font-bold"
               disabled={decisionInFlight}
               onClick={() => onDecide(child.id, item, "approved")}
               aria-label={`Approve: keep this item visible on ${child.firstName}'s account`}

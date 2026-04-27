@@ -127,7 +127,7 @@ export default function GuardianConfirmPage() {
               <Button
                 type="submit"
                 disabled={state.kind === "submitting"}
-                className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
                 data-testid="btn-guardian-confirm"
               >
                 {state.kind === "submitting" && (
@@ -147,7 +147,7 @@ export default function GuardianConfirmPage() {
               </p>
               <Button
                 onClick={() => setLocation("/login")}
-                className="w-full h-11 rounded-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
               >
                 Go to sign in
               </Button>

@@ -58,7 +58,7 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
             </h3>
             <Button
               size="sm"
-              className="font-bold"
+              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
               onClick={() => generateLink.mutate({ teamId })}
               disabled={generateLink.isPending}
               data-testid="button-generate-join-link"

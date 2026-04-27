@@ -100,7 +100,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                     </Button>
                     <Button
                       size="sm"
-                      className="font-bold h-8 gap-1"
+                      className="brand-gradient hover:opacity-90 text-white font-bold rounded-full h-8 px-3 gap-1"
                       onClick={() =>
                         approveJR.mutate({ orgId, requestId: r.id, data: {} })
                       }
@@ -162,7 +162,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                     </Button>
                     <Button
                       size="sm"
-                      className="font-bold h-8 gap-1"
+                      className="brand-gradient hover:opacity-90 text-white font-bold rounded-full h-8 px-3 gap-1"
                       onClick={() =>
                         approvePA.mutate({ orgId, approvalId: a.id })
                       }
