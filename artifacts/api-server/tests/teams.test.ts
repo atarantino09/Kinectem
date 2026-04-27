@@ -542,7 +542,7 @@ describe("teams", () => {
         "marcus@kinectem.demo",
         "member",
       );
-      const { agent: marcusAgent } = await loginAs(
+      const { agent: marcusAgent, user: marcus } = await loginAs(
         (u) => u.email === "marcus@kinectem.demo",
       );
       const before = await request(app).get(
@@ -553,11 +553,26 @@ describe("teams", () => {
         .post(`/api/v1/organizations/${orgId}/teams`)
         .send({ name: "Should Not Exist" });
       expect(res.status).toBe(403);
+      expect(res.body?.error).toBe(
+        "Only organization admins can create teams",
+      );
       // No team was inserted by the failed call.
       const after = await request(app).get(
         `/api/v1/organizations/${orgId}/teams`,
       );
       expect((after.body.data as unknown[]).length).toBe(beforeCount);
+      // And no auto-staff roster row was inserted for Marcus on any
+      // team in this org — proves the transaction never opened.
+      const teamsAfter = after.body.data as Array<{ id: string }>;
+      for (const t of teamsAfter) {
+        const members = await request(app).get(
+          `/api/v1/teams/${t.id}/members`,
+        );
+        const mine = (members.body.data as Array<{ userId: string }>).find(
+          (m) => m.userId === marcus.id,
+        );
+        expect(mine).toBeUndefined();
+      }
     });
 
     it("forbids a user with no relationship to the org from creating a team", async () => {
