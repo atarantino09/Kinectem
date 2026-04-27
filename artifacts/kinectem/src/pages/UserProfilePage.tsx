@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -28,8 +28,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
-import { Building2, MessageSquare, Tag, Users } from "lucide-react";
+import {
+  Building2,
+  ChevronDown,
+  MessageSquare,
+  Shield,
+  Tag,
+  Users,
+} from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
@@ -239,140 +251,162 @@ export default function UserProfilePage() {
         )}
       </div>
 
-      {/* Linked accounts (parent ↔ child) */}
+      {/* Affiliations: Organizations / Teams / Family */}
       {(() => {
         const linked = (user as { linkedAccounts?: { parents?: Array<{ id: string; firstName: string; lastName: string; role: string; avatarUrl: string | null }>; children?: Array<{ id: string; firstName: string; lastName: string; role: string; avatarUrl: string | null }> } }).linkedAccounts;
         const parents = linked?.parents ?? [];
         const children = linked?.children ?? [];
-        if (parents.length === 0 && children.length === 0) return null;
-        const all = [
+        const family = [
           ...parents.map((p) => ({ ...p, relation: "Parent / Guardian" as const })),
           ...children.map((c) => ({ ...c, relation: "Child" as const })),
         ];
+
+        const orgsVisible = orgs.length > 0;
+        const teamsVisible = teams.length > 0;
+        const familyVisible = family.length > 0;
+        if (!orgsVisible && !teamsVisible && !familyVisible) return null;
+
         return (
-          <section>
-            <h2 className="text-xl font-black tracking-tight mb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" /> Family
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {all.map((m) => {
-                const name = `${m.firstName} ${m.lastName}`.trim();
-                return (
-                  <Link key={`${m.relation}-${m.id}`} href={`/users/${m.id}`}>
-                    <Card
-                      className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
-                      data-testid={`card-linked-${m.id}`}
-                    >
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <UserAvatar
-                          avatarUrl={m.avatarUrl}
-                          displayName={name}
-                          size="lg"
-                          fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-sm truncate">{name}</p>
-                          <Badge
-                            variant="outline"
-                            className="mt-1 text-[10px] uppercase tracking-wider font-bold"
-                          >
-                            {m.relation}
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+            {orgsVisible && (
+              <AffiliationColumn
+                title="Organizations"
+                icon={<Building2 className="w-5 h-5 text-primary" />}
+                count={orgs.length}
+                testId="orgs"
+              >
+                <div className="flex flex-col gap-3">
+                  {orgs.map((org) => (
+                    <Link key={org.id} href={`/organizations/${org.id}`}>
+                      <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
+                        <CardContent className="p-4 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
+                            {getInitials(org.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-sm truncate">
+                              {org.name}
+                            </p>
+                            {org.role && (
+                              <Badge
+                                variant="outline"
+                                className="mt-1 text-[10px] uppercase tracking-wider font-bold"
+                              >
+                                {org.role}
+                              </Badge>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+              </AffiliationColumn>
+            )}
+
+            {teamsVisible && (
+              <AffiliationColumn
+                title="Teams"
+                icon={<Shield className="w-5 h-5 text-primary" />}
+                count={teams.length}
+                testId="teams"
+              >
+                <div className="flex flex-col gap-3">
+                  {teams.map((t) => {
+                    const isPending = t.status === "pending";
+                    return (
+                      <Link key={t.id} href={`/teams/${t.teamId}`}>
+                        <Card
+                          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+                          data-testid={`card-team-${t.teamId}`}
+                        >
+                          <CardContent className="p-4 flex items-center gap-3">
+                            <TeamAvatar
+                              avatarUrl={t.teamAvatarUrl}
+                              displayName={t.teamName}
+                              size="lg"
+                              rounded="full"
+                              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm truncate">
+                                {t.teamName}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] uppercase tracking-wider font-bold"
+                                >
+                                  {t.organization.name}
+                                </Badge>
+                                {isPending && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
+                                    data-testid={`badge-team-pending-${t.teamId}`}
+                                  >
+                                    Pending
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </AffiliationColumn>
+            )}
+
+            {familyVisible && (
+              <AffiliationColumn
+                title="Family"
+                icon={<Users className="w-5 h-5 text-primary" />}
+                count={family.length}
+                testId="family"
+              >
+                <div className="flex flex-col gap-3">
+                  {family.map((m) => {
+                    const name = `${m.firstName} ${m.lastName}`.trim();
+                    return (
+                      <Link
+                        key={`${m.relation}-${m.id}`}
+                        href={`/users/${m.id}`}
+                      >
+                        <Card
+                          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+                          data-testid={`card-linked-${m.id}`}
+                        >
+                          <CardContent className="p-4 flex items-center gap-3">
+                            <UserAvatar
+                              avatarUrl={m.avatarUrl}
+                              displayName={name}
+                              size="lg"
+                              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm truncate">
+                                {name}
+                              </p>
+                              <Badge
+                                variant="outline"
+                                className="mt-1 text-[10px] uppercase tracking-wider font-bold"
+                              >
+                                {m.relation}
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </AffiliationColumn>
+            )}
+          </div>
         );
       })()}
-
-      {/* Teams */}
-      {teams.length > 0 && (
-        <section>
-          <h2 className="text-xl font-black tracking-tight mb-4">Teams</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {teams.map((t) => {
-              const isPending = t.status === "pending";
-              return (
-                <Link key={t.id} href={`/teams/${t.teamId}`}>
-                  <Card
-                    className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
-                    data-testid={`card-team-${t.teamId}`}
-                  >
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <TeamAvatar
-                        avatarUrl={t.teamAvatarUrl}
-                        displayName={t.teamName}
-                        size="lg"
-                        rounded="full"
-                        fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm truncate">
-                          {t.teamName}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] uppercase tracking-wider font-bold"
-                          >
-                            {t.organization.name}
-                          </Badge>
-                          {isPending && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
-                              data-testid={`badge-team-pending-${t.teamId}`}
-                            >
-                              Pending
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Organizations */}
-      {orgs.length > 0 && (
-        <section>
-          <h2 className="text-xl font-black tracking-tight mb-4">
-            Organizations
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {orgs.map((org) => (
-              <Link key={org.id} href={`/organizations/${org.id}`}>
-                <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs">
-                      {getInitials(org.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-sm truncate">{org.name}</p>
-                      {org.role && (
-                        <Badge
-                          variant="outline"
-                          className="mt-1 text-[10px] uppercase tracking-wider font-bold"
-                        >
-                          {org.role}
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Posts (authored + tagged) */}
       <section>
@@ -413,5 +447,61 @@ export default function UserProfilePage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function AffiliationColumn({
+  title,
+  icon,
+  count,
+  testId,
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  count: number;
+  testId: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(count <= 5);
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="rounded-xl border border-border bg-card shadow-sm"
+      data-testid={`affiliation-column-${testId}`}
+    >
+      <CollapsibleTrigger
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/40 rounded-xl transition-colors"
+        data-testid={`affiliation-toggle-${testId}`}
+        aria-label={`Toggle ${title}`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {icon}
+          <h2 className="text-base font-black tracking-tight truncate">
+            {title}
+          </h2>
+          <Badge
+            variant="outline"
+            className="text-[10px] uppercase tracking-wider font-bold"
+            data-testid={`affiliation-count-${testId}`}
+          >
+            {count}
+          </Badge>
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${
+            open ? "rotate-180" : ""
+          }`}
+          aria-hidden
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        className="px-3 pb-3"
+        data-testid={`affiliation-content-${testId}`}
+      >
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
