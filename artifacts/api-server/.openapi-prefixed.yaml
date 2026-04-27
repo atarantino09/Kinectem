@@ -861,9 +861,12 @@ paths:
         member in a single transaction. The target must already be a
         member of the organization. The previous owner is demoted to
         `admin` so they retain management permissions. Only the current
-        owner may call this endpoint. Returns `409` when the request
-        loses a race against a concurrent transfer (the caller is no
-        longer the current owner — clients should refetch and retry).
+        owner may call this endpoint. Under concurrent transfers the
+        loser may receive either `403` (the pre-check observed that the
+        caller is no longer the owner) or `409` (the conditional update
+        inside the transaction matched zero rows because another
+        request finished first). In both cases the client should
+        refetch and retry if needed.
       tags:
         - Members
       parameters:
@@ -3504,6 +3507,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JoinRequestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
