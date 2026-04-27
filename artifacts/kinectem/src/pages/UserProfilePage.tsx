@@ -463,7 +463,7 @@ function AffiliationColumn({
   testId: string;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(count <= 5);
+  const [open, setOpen] = useState(false);
   return (
     <Collapsible
       open={open}
