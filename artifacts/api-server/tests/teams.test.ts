@@ -157,6 +157,237 @@ describe("teams", () => {
     expect(res.status).toBe(403);
   });
 
+  // Helper: create a fresh team owned by Sam (so the auto-added creator
+  // is the only Admin) so each edit/remove test has its own isolated
+  // roster and doesn't drift the seeded data shared by other tests.
+  async function freshTeam(name: string) {
+    const { agent, user } = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeams();
+    const create = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name, sport: "Soccer" });
+    expect(create.status).toBe(201);
+    return { agent, user, teamId: create.body.id as string };
+  }
+
+  it("lets a team manager change a member's position via PATCH /members/:id", async () => {
+    const { agent, teamId } = await freshTeam("Edit Position Team");
+    // Add a fresh player we can safely promote without disturbing seeded rows.
+    const usersList = await request(app).get("/api/v1/users?q=Marcus");
+    const userId = usersList.body.data?.[0]?.id;
+    expect(userId).toBeDefined();
+    const add = await agent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId, position: "player" });
+    expect(add.status).toBe(201);
+    const memberId = add.body.id as string;
+    const res = await agent
+      .patch(`/api/v1/teams/${teamId}/members/${memberId}`)
+      .send({ position: "assistant_coach" });
+    expect(res.status).toBe(200);
+    expect(res.body.position).toBe("assistant_coach");
+    // The spec maps the db `role: "coach"` (which assistant_coach,
+    // coach and admin positions all imply) to `"admin"` in the API
+    // response, which is how the row gets sorted into the Staff tab.
+    expect(res.body.role).toBe("admin");
+  });
+
+  it("lets an accepted team coach (no org-admin role) manage members", async () => {
+    // Reproduces the bug surfaced by code review: the backend lets
+    // accepted team coaches manage their roster, so this path must work
+    // end-to-end too — the UI now mirrors this with `canManage`.
+    const { agent: samAgent, teamId } = await freshTeam("Coach Manage Team");
+
+    // Promote Marcus (an athlete with no org-admin role) into the
+    // team's coaching staff and have him accept the invite himself.
+    const usersList = await request(app).get("/api/v1/users?q=Marcus");
+    const marcusId = usersList.body.data?.[0]?.id;
+    expect(marcusId).toBeDefined();
+    const addCoach = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: marcusId, position: "coach" });
+    expect(addCoach.status).toBe(201);
+    const coachMemberId = addCoach.body.id as string;
+    const { agent: marcusAgent } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const accept = await marcusAgent.post(
+      `/api/v1/teams/${teamId}/members/${coachMemberId}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    // Add a fresh player Marcus can edit + remove without disturbing
+    // the seeded roster.
+    const danielaList = await request(app).get("/api/v1/users?q=Daniela");
+    const danielaId = danielaList.body.data?.[0]?.id;
+    expect(danielaId).toBeDefined();
+    const addPlayer = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: danielaId, position: "player" });
+    expect(addPlayer.status).toBe(201);
+    const playerMemberId = addPlayer.body.id as string;
+
+    const patch = await marcusAgent
+      .patch(`/api/v1/teams/${teamId}/members/${playerMemberId}`)
+      .send({ position: "assistant_coach" });
+    expect(patch.status).toBe(200);
+    expect(patch.body.position).toBe("assistant_coach");
+
+    const del = await marcusAgent.delete(
+      `/api/v1/teams/${teamId}/members/${playerMemberId}`,
+    );
+    expect(del.status).toBe(204);
+  });
+
+  it("forbids accepted non-coach staff (e.g. team manager) from PATCH/DELETE", async () => {
+    // The Staff tab in the UI groups every non-player position
+    // together (manager, parent, author, coach, assistant_coach,
+    // admin), but the server only treats role==="coach" entries as
+    // managers via canManageTeam. This test pins down that distinction
+    // so a future refactor can't silently grant manager rights to
+    // "manager"/"parent"/"author" positions.
+    const { agent: samAgent, teamId } = await freshTeam("Non-coach Staff Team");
+    const usersList = await request(app).get("/api/v1/users?q=Marcus");
+    const marcusId = usersList.body.data?.[0]?.id;
+    expect(marcusId).toBeDefined();
+    const addManager = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: marcusId, position: "manager" });
+    expect(addManager.status).toBe(201);
+    const managerMemberId = addManager.body.id as string;
+    const { agent: marcusAgent } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const accept = await marcusAgent.post(
+      `/api/v1/teams/${teamId}/members/${managerMemberId}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    // Marcus is now an accepted "manager" — he shows up on Staff but
+    // canManageTeam is still false, so PATCH/DELETE on any other member
+    // must be 403.
+    const danielaList = await request(app).get("/api/v1/users?q=Daniela");
+    const danielaId = danielaList.body.data?.[0]?.id;
+    expect(danielaId).toBeDefined();
+    const addPlayer = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: danielaId, position: "player" });
+    expect(addPlayer.status).toBe(201);
+    const playerMemberId = addPlayer.body.id as string;
+
+    const patch = await marcusAgent
+      .patch(`/api/v1/teams/${teamId}/members/${playerMemberId}`)
+      .send({ position: "assistant_coach" });
+    expect(patch.status).toBe(403);
+    const del = await marcusAgent.delete(
+      `/api/v1/teams/${teamId}/members/${playerMemberId}`,
+    );
+    expect(del.status).toBe(403);
+  });
+
+  it("lets a team manager remove a member via DELETE /members/:id", async () => {
+    const { agent, teamId } = await freshTeam("Remove Member Team");
+    const usersList = await request(app).get("/api/v1/users?q=Daniela");
+    const userId = usersList.body.data?.[0]?.id;
+    expect(userId).toBeDefined();
+    const add = await agent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId, position: "player" });
+    expect(add.status).toBe(201);
+    const memberId = add.body.id as string;
+    const del = await agent.delete(
+      `/api/v1/teams/${teamId}/members/${memberId}`,
+    );
+    expect(del.status).toBe(204);
+    const after = await agent.get(`/api/v1/teams/${teamId}/members`);
+    const stillThere = (after.body.data as Array<{ id: string }>).some(
+      (m) => m.id === memberId,
+    );
+    expect(stillThere).toBe(false);
+  });
+
+  it("forbids non-managers from editing or removing a member", async () => {
+    const { agent: samAgent, teamId } = await freshTeam("Forbidden Edit Team");
+    // Add Marcus so we have a known target row, then switch to his
+    // session — he has no team-management rights so both PATCH and
+    // DELETE must be rejected with 403.
+    const usersList = await request(app).get("/api/v1/users?q=Marcus");
+    const userId = usersList.body.data?.[0]?.id;
+    expect(userId).toBeDefined();
+    const add = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId, position: "player" });
+    expect(add.status).toBe(201);
+    const memberId = add.body.id as string;
+
+    const { agent: marcusAgent } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const patch = await marcusAgent
+      .patch(`/api/v1/teams/${teamId}/members/${memberId}`)
+      .send({ position: "assistant_coach" });
+    expect(patch.status).toBe(403);
+    const del = await marcusAgent.delete(
+      `/api/v1/teams/${teamId}/members/${memberId}`,
+    );
+    expect(del.status).toBe(403);
+  });
+
+  it("blocks demoting or removing the last accepted Admin on a team", async () => {
+    // The team-creation flow auto-adds the creator as the only accepted
+    // Admin, which is exactly the "last Admin" scenario we want to test.
+    const { agent: samAgent, user: sam, teamId } = await freshTeam(
+      "Last Admin Team",
+    );
+    const members = await samAgent.get(`/api/v1/teams/${teamId}/members`);
+    const samEntry = (members.body.data as Array<{
+      id: string;
+      userId: string;
+      position: string;
+    }>).find((m) => m.userId === sam.id);
+    expect(samEntry).toBeDefined();
+    expect(samEntry!.position).toBe("admin");
+
+    // Demoting the last Admin must be refused.
+    const demote = await samAgent
+      .patch(`/api/v1/teams/${teamId}/members/${samEntry!.id}`)
+      .send({ position: "coach" });
+    expect(demote.status).toBe(422);
+    expect(String(demote.body?.error ?? "")).toMatch(/at least one Admin/i);
+
+    // Removing the last Admin must be refused too.
+    const del = await samAgent.delete(
+      `/api/v1/teams/${teamId}/members/${samEntry!.id}`,
+    );
+    expect(del.status).toBe(422);
+    expect(String(del.body?.error ?? "")).toMatch(/at least one Admin/i);
+
+    // Once a second accepted Admin is in place, the original Admin can
+    // be removed — this proves the rule unblocks itself once the
+    // invariant is satisfied. The invited Admin must accept their spot
+    // first because pending entries don't count toward the Admin total.
+    const others = await request(app).get("/api/v1/users?q=Daniela");
+    const otherId = others.body.data?.[0]?.id;
+    expect(otherId).toBeDefined();
+    const add = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: otherId, position: "admin" });
+    expect(add.status).toBe(201);
+    const newAdminId = add.body.id as string;
+    const { agent: otherAgent } = await loginAs(
+      (u) => u.email === "daniela@kinectem.demo",
+    );
+    const acceptByInvitee = await otherAgent.post(
+      `/api/v1/teams/${teamId}/members/${newAdminId}/accept`,
+    );
+    expect(acceptByInvitee.status).toBe(200);
+
+    const removeOriginal = await samAgent.delete(
+      `/api/v1/teams/${teamId}/members/${samEntry!.id}`,
+    );
+    expect(removeOriginal.status).toBe(204);
+  });
+
   it("lets the invited player accept their own roster entry", async () => {
     // Samira (child) has a pending entry on Varsity Boys Basketball.
     const { agent, user } = await loginAs(

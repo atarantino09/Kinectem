@@ -2,7 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useRemoveTeamMember,
   useAcceptTeamInvite,
   useDeclineTeamInvite,
   getListTeamMembersQueryKey,
@@ -26,12 +25,13 @@ import { formatDate } from "@/lib/format";
 import {
   Shield,
   UserPlus,
-  X,
+  Pencil,
   Check,
   Mail,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
 
 export type ParentRef = {
   id: string;
@@ -85,6 +85,7 @@ export function TeamRosterTabs({
   const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(
     () => new Set<string>(),
   );
+  const [editingMember, setEditingMember] = useState<RosterMember | null>(null);
 
   const invalidate = async () => {
     await Promise.all([
@@ -93,9 +94,6 @@ export function TeamRosterTabs({
     ]);
   };
 
-  const removeMember = useRemoveTeamMember({
-    mutation: { onSuccess: () => invalidate() },
-  });
   const acceptInvite = useAcceptTeamInvite({
     mutation: { onSuccess: () => invalidate() },
   });
@@ -103,15 +101,44 @@ export function TeamRosterTabs({
     mutation: { onSuccess: () => invalidate() },
   });
 
-  const onRemove = async (memberId: string, name: string) => {
-    if (!confirm(`Remove ${name} from the roster?`)) return;
-    try {
-      await removeMember.mutateAsync({ teamId, memberId });
-      toast({ title: `Removed ${name}` });
-    } catch {
-      toast({ title: "Failed to remove member", variant: "destructive" });
+  // Determine the only-Admin scenario from the rosters we already have:
+  // an "Admin" is a roster entry with position === "admin" and an active
+  // (accepted) status. The dialog uses this flag to pre-disable demote/
+  // remove with a clear explanation rather than waiting for a 422 from
+  // the server.
+  const acceptedAdminIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const m of [...players, ...staff]) {
+      if (m.position === "admin" && m.status !== "pending") {
+        ids.push(m.id);
+      }
     }
-  };
+    return ids;
+  }, [players, staff]);
+  const isLastAdmin =
+    !!editingMember &&
+    acceptedAdminIds.length === 1 &&
+    acceptedAdminIds[0] === editingMember.id;
+
+  // Mirrors `canManageTeam` on the server exactly: org admins/owners
+  // can manage (passed in via `isAdmin`), and so can anyone whose
+  // accepted roster entry has a coach-level position — i.e. db role
+  // "coach", which the spec encodes as positions "coach",
+  // "assistant_coach", or "admin". Crucially this excludes other
+  // non-player staff positions ("manager", "parent", "author") that
+  // also live in the Staff tab but are NOT authorized by the server,
+  // so the Edit affordance must stay hidden for them.
+  const COACH_LEVEL_POSITIONS = new Set(["coach", "assistant_coach", "admin"]);
+  const canManage = useMemo(() => {
+    if (isAdmin) return true;
+    if (!meId) return false;
+    return staff.some(
+      (m) =>
+        m.userId === meId &&
+        m.status !== "pending" &&
+        COACH_LEVEL_POSITIONS.has((m.position ?? "").toLowerCase()),
+    );
+  }, [isAdmin, meId, staff]);
 
   const onAccept = async (memberId: string) => {
     try {
@@ -229,15 +256,16 @@ export function TeamRosterTabs({
             </Button>
           </>
         )}
-        {isAdmin && !isMe && (
+        {canManage && (
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            onClick={() => onRemove(m.id, m.displayName)}
-            data-testid={`btn-remove-${m.id}`}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setEditingMember(m)}
+            data-testid={`btn-edit-${m.id}`}
+            aria-label={`Edit ${m.displayName}`}
           >
-            <X className="w-4 h-4" />
+            <Pencil className="w-4 h-4" />
           </Button>
         )}
       </div>
@@ -502,6 +530,16 @@ export function TeamRosterTabs({
           </Card>
         </TabsContent>
       )}
+
+      <EditRosterMemberDialog
+        teamId={teamId}
+        member={editingMember}
+        isLastAdmin={isLastAdmin}
+        open={!!editingMember}
+        onOpenChange={(v) => {
+          if (!v) setEditingMember(null);
+        }}
+      />
     </Tabs>
   );
 }

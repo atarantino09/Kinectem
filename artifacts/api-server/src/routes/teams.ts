@@ -322,17 +322,147 @@ router.post(
   }),
 );
 
+// Count accepted Admins (position = 'admin', status = 'accepted') currently
+// on a team. Used by both PATCH and DELETE on /members/:memberId to enforce
+// the "a team must always have at least one Admin" rule, so a manager can
+// never demote or remove the very last Admin and accidentally lock everyone
+// out of team management.
+async function countAcceptedAdmins(teamId: string): Promise<number> {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(rosterEntries)
+    .where(
+      and(
+        eq(rosterEntries.teamId, teamId),
+        eq(rosterEntries.position, "admin"),
+        eq(rosterEntries.status, "accepted"),
+      ),
+    );
+  return Number(count) || 0;
+}
+
+const ALLOWED_POSITIONS = new Set([
+  "player",
+  "coach",
+  "assistant_coach",
+  "admin",
+  "manager",
+  "parent",
+  "author",
+]);
+
+// Map a spec-level position string to the (role, position) pair we persist
+// in `roster_entries`. Mirrors the logic used by the add-member and
+// email-invite endpoints so every write path stores the same shape.
+function positionToRosterFields(positionRaw: string): {
+  role: "player" | "coach";
+  position: string | null;
+} {
+  const role: "player" | "coach" =
+    positionRaw === "coach" ||
+    positionRaw === "assistant_coach" ||
+    positionRaw === "admin"
+      ? "coach"
+      : "player";
+  return {
+    role,
+    position: positionRaw === "coach" ? null : positionRaw,
+  };
+}
+
+router.patch(
+  "/teams/:teamId/members/:memberId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const memberId = req.params.memberId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(eq(rosterEntries.id, memberId), eq(rosterEntries.teamId, teamId)),
+      )
+      .limit(1);
+    if (!entry) return notFound(res);
+
+    const positionRaw = req.body?.position;
+    if (typeof positionRaw !== "string" || !ALLOWED_POSITIONS.has(positionRaw)) {
+      return apiError(res, 400, "valid position required");
+    }
+    const { role: dbRole, position: newPosition } =
+      positionToRosterFields(positionRaw);
+
+    // Refuse to demote the very last accepted Admin away from "admin": a
+    // team must always have someone who can manage it. The UI surfaces
+    // this message inline in the Edit dialog.
+    const wasAdmin = entry.position === "admin" && entry.status === "accepted";
+    const willBeAdmin = newPosition === "admin";
+    if (wasAdmin && !willBeAdmin) {
+      const adminCount = await countAcceptedAdmins(teamId);
+      if (adminCount <= 1) {
+        return apiError(
+          res,
+          422,
+          "A team must have at least one Admin. Promote another member to Admin first.",
+        );
+      }
+    }
+
+    const [updated] = await db
+      .update(rosterEntries)
+      .set({ position: newPosition, role: dbRole })
+      .where(eq(rosterEntries.id, entry.id))
+      .returning();
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, entry.userId))
+      .limit(1);
+    if (!u) return notFound(res);
+    res.json(toTeamMember(updated, u));
+  }),
+);
+
 router.delete(
   "/teams/:teamId/members/:memberId",
   asyncHandler(async (req, res) => {
-    await db
-      .delete(rosterEntries)
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const memberId = req.params.memberId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
       .where(
-        and(
-          eq(rosterEntries.id, req.params.memberId),
-          eq(rosterEntries.teamId, req.params.teamId),
-        ),
-      );
+        and(eq(rosterEntries.id, memberId), eq(rosterEntries.teamId, teamId)),
+      )
+      .limit(1);
+    if (!entry) {
+      // Idempotent: nothing to do, the row is already gone.
+      return res.status(204).end();
+    }
+    // Same "last Admin" guard as the PATCH path — removing the last
+    // accepted Admin would leave the team with no one able to manage it.
+    if (entry.position === "admin" && entry.status === "accepted") {
+      const adminCount = await countAcceptedAdmins(teamId);
+      if (adminCount <= 1) {
+        return apiError(
+          res,
+          422,
+          "A team must have at least one Admin. Promote another member to Admin first.",
+        );
+      }
+    }
+    await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
     res.status(204).end();
   }),
 );
