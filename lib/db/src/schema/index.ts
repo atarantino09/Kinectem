@@ -65,6 +65,13 @@ export const users = pgTable("users", {
   guardianExpiredEmailOptOut: boolean("guardian_expired_email_opt_out")
     .notNull()
     .default(false),
+  // Per-recipient opt-out for the in-app "X shared your recap" bell
+  // notification (task #167). Default false → recap authors get bell-
+  // notified on every fresh share. Set true → POST /posts/:postId/share
+  // skips the insert for this user. Mirrors guardianExpiredEmailOptOut.
+  shareNotificationsOptOut: boolean("share_notifications_opt_out")
+    .notNull()
+    .default(false),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
   lastSignInAt: timestamp("last_sign_in_at"),
   deletedAt: timestamp("deleted_at"),

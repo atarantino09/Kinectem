@@ -238,11 +238,34 @@ describe("posts", () => {
     );
     expect(share.status).toBe(204);
 
-    // Idempotent: a second POST returns 204 without creating a dupe.
+    // Task #167 — sharing should bell-notify the recap's author with a
+    // "X shared your recap '<title>'" notification linking back to the
+    // post. Self-shares and duplicate toggles do not generate one.
+    const coachNotifs = await coachLogin.agent.get("/api/v1/notifications");
+    expect(coachNotifs.status).toBe(200);
+    const shareNotif = coachNotifs.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
+    );
+    expect(shareNotif).toBeDefined();
+    expect(shareNotif.title).toContain("shared your recap");
+    expect(shareNotif.title).toContain("Shareable recap");
+    expect(shareNotif.isRead).toBe(false);
+
+    // Idempotent: a second POST returns 204 without creating a dupe
+    // and without inserting a second notification.
     const shareAgain = await sharerAgent.post(
       `/api/v1/posts/${articlePostId}/share`,
     );
     expect(shareAgain.status).toBe(204);
+    const coachNotifsAfterDupe = await coachLogin.agent.get(
+      "/api/v1/notifications",
+    );
+    const dupeShareNotifs = coachNotifsAfterDupe.body.data.filter(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
+    );
+    expect(dupeShareNotifs).toHaveLength(1);
 
     const detail = await sharerAgent.get(`/api/v1/posts/${articlePostId}`);
     expect(detail.status).toBe(200);
@@ -284,6 +307,214 @@ describe("posts", () => {
     expect(
       profileAfter.body.data.find(
         (p: { id: string }) => p.id === articlePostId,
+      ),
+    ).toBeUndefined();
+
+    // Task #167 — DELETE retracts a still-unread share notification.
+    const coachNotifsAfterUnshare = await coachLogin.agent.get(
+      "/api/v1/notifications",
+    );
+    expect(
+      coachNotifsAfterUnshare.body.data.find(
+        (n: { type: string; data?: { link?: string } | null }) =>
+          n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("share notification stays put once the recap author has read it", async () => {
+    // Task #167 — A read notification is part of the author's history;
+    // unsharing should not silently rewrite it.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Read-then-unshare recap",
+      body: "Body",
+      gameDate: new Date().toISOString(),
+    });
+    expect(create.status).toBe(201);
+    const articlePostId: string = create.body.id;
+
+    const sharerEmail = `readshare+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: sharerEmail,
+      password: "test-password-123",
+      firstName: "Read",
+      lastName: "Sharer",
+      role: "athlete",
+    });
+    const sharerAgent = request.agent(app);
+    await sharerAgent
+      .post("/api/v1/auth/login")
+      .send({ email: sharerEmail, password: "test-password-123" });
+
+    const share = await sharerAgent.post(
+      `/api/v1/posts/${articlePostId}/share`,
+    );
+    expect(share.status).toBe(204);
+
+    const inbox = await coachLogin.agent.get("/api/v1/notifications");
+    const notif = inbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
+    );
+    expect(notif).toBeDefined();
+
+    const markRead = await coachLogin.agent.post(
+      `/api/v1/notifications/${notif.id}/read`,
+    );
+    expect(markRead.status).toBe(204);
+
+    const unshare = await sharerAgent.delete(
+      `/api/v1/posts/${articlePostId}/share`,
+    );
+    expect(unshare.status).toBe(204);
+
+    const inboxAfter = await coachLogin.agent.get("/api/v1/notifications");
+    const stillThere = inboxAfter.body.data.find(
+      (n: { id: string }) => n.id === notif.id,
+    );
+    expect(stillThere).toBeDefined();
+    expect(stillThere.isRead).toBe(true);
+  });
+
+  it("share notification is suppressed when the recap author opted out", async () => {
+    // Task #167 — Recipients who turn share notifications off via
+    // PATCH /notifications/share-preference should not receive the
+    // bell row, while the share itself still goes through.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Opted-out recap",
+      body: "Body",
+      gameDate: new Date().toISOString(),
+    });
+    expect(create.status).toBe(201);
+    const articlePostId: string = create.body.id;
+
+    // Author opts out of share notifications.
+    const optOut = await coachLogin.agent
+      .patch("/api/v1/notifications/share-preference")
+      .send({ shareOptOut: true });
+    expect(optOut.status).toBe(200);
+    expect(optOut.body.shareOptOut).toBe(true);
+
+    const sharerEmail = `optout+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: sharerEmail,
+      password: "test-password-123",
+      firstName: "Opt",
+      lastName: "Out",
+      role: "athlete",
+    });
+    const sharerAgent = request.agent(app);
+    await sharerAgent
+      .post("/api/v1/auth/login")
+      .send({ email: sharerEmail, password: "test-password-123" });
+
+    const share = await sharerAgent.post(
+      `/api/v1/posts/${articlePostId}/share`,
+    );
+    expect(share.status).toBe(204);
+
+    // The share row itself was created (shareCount went up) — only the
+    // notification was suppressed.
+    const detail = await sharerAgent.get(`/api/v1/posts/${articlePostId}`);
+    expect(detail.body.shareCount).toBe(1);
+
+    const inbox = await coachLogin.agent.get("/api/v1/notifications");
+    expect(
+      inbox.body.data.find(
+        (n: { type: string; data?: { link?: string } | null }) =>
+          n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
+      ),
+    ).toBeUndefined();
+
+    // Opting back in resumes delivery on the next fresh share. Unshare
+    // first so the next POST triggers a real insert.
+    const unshare = await sharerAgent.delete(
+      `/api/v1/posts/${articlePostId}/share`,
+    );
+    expect(unshare.status).toBe(204);
+
+    const optBackIn = await coachLogin.agent
+      .patch("/api/v1/notifications/share-preference")
+      .send({ shareOptOut: false });
+    expect(optBackIn.body.shareOptOut).toBe(false);
+
+    const reShare = await sharerAgent.post(
+      `/api/v1/posts/${articlePostId}/share`,
+    );
+    expect(reShare.status).toBe(204);
+
+    const inboxAfter = await coachLogin.agent.get("/api/v1/notifications");
+    expect(
+      inboxAfter.body.data.find(
+        (n: { type: string; data?: { link?: string } | null }) =>
+          n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
+      ),
+    ).toBeDefined();
+  });
+
+  it("share-preference GET/PATCH/PUT round-trip persists across requests", async () => {
+    const { agent } = await loginAs((u) => u.email === "lisa@kinectem.demo");
+    // Reset to a known state.
+    await agent
+      .patch("/api/v1/notifications/share-preference")
+      .send({ shareOptOut: false });
+    const before = await agent.get("/api/v1/notifications/share-preference");
+    expect(before.status).toBe(200);
+    expect(before.body.shareOptOut).toBe(false);
+
+    const set = await agent
+      .patch("/api/v1/notifications/share-preference")
+      .send({ shareOptOut: true });
+    expect(set.body.shareOptOut).toBe(true);
+    const after = await agent.get("/api/v1/notifications/share-preference");
+    expect(after.body.shareOptOut).toBe(true);
+
+    // PUT alias works too.
+    const putRes = await agent
+      .put("/api/v1/notifications/share-preference")
+      .send({ shareOptOut: false });
+    expect(putRes.status).toBe(200);
+    expect(putRes.body.shareOptOut).toBe(false);
+
+    // Unauthenticated request is rejected.
+    const unauth = await request(app).get(
+      "/api/v1/notifications/share-preference",
+    );
+    expect(unauth.status).toBe(401);
+  });
+
+  it("self-share by the recap author does not create a notification", async () => {
+    // Task #167 — sharing your own recap should not bell yourself.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Self-share recap",
+      body: "Body",
+      gameDate: new Date().toISOString(),
+    });
+    expect(create.status).toBe(201);
+    const articlePostId: string = create.body.id;
+
+    const share = await coachLogin.agent.post(
+      `/api/v1/posts/${articlePostId}/share`,
+    );
+    expect(share.status).toBe(204);
+
+    const inbox = await coachLogin.agent.get("/api/v1/notifications");
+    expect(
+      inbox.body.data.find(
+        (n: { type: string; data?: { link?: string } | null }) =>
+          n.type === "share" && n.data?.link === `/posts/${articlePostId}`,
       ),
     ).toBeUndefined();
   });

@@ -5195,10 +5195,34 @@ router.post(
         code: ErrorCodes.NOT_FOUND,
       });
     }
-    await db
+    const inserted = await db
       .insert(postShares)
       .values({ articleId: a.id, sharerUserId: me.id })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: postShares.id });
+    // Bell-notify the recap's author exactly once per fresh share.
+    // Mirrors the like-notification pattern: self-shares and duplicate
+    // toggles (no insert happened) skip the bell. Carries `actorUserId`
+    // and a `/posts/<postId>` link so the matching DELETE can locate
+    // and retract any still-unread notification. Recipients who have
+    // turned share notifications off via /notifications/share-preference
+    // are skipped here (the share row itself is unaffected).
+    if (inserted.length > 0 && a.authorId && a.authorId !== me.id) {
+      const [author] = await db
+        .select({ optOut: users.shareNotificationsOptOut })
+        .from(users)
+        .where(eq(users.id, a.authorId))
+        .limit(1);
+      if (!author?.optOut) {
+        await db.insert(notifications).values({
+          userId: a.authorId,
+          kind: "share",
+          message: `${displayName(me)} shared your recap '${a.title}'`,
+          link: `/posts/${articlePostId(a.id)}`,
+          actorUserId: me.id,
+        });
+      }
+    }
     res.status(204).end();
   }),
 );
@@ -5223,6 +5247,31 @@ router.delete(
           eq(postShares.sharerUserId, me.id),
         ),
       );
+    // Retract any still-unread share notification we put in the recap
+    // author's bell. Read notifications are left alone so the author
+    // doesn't see history rewritten under them. Done after the share
+    // delete so a partial failure leaves the bell, not a phantom share.
+    // We scope by recipient userId (the article's author) in addition to
+    // (kind, actorUserId, link, unread) so that future share-notification
+    // fan-out to additional recipients can't be accidentally retracted.
+    const [authorRow] = await db
+      .select({ authorId: articles.authorId })
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (authorRow?.authorId) {
+      await db
+        .delete(notifications)
+        .where(
+          and(
+            eq(notifications.userId, authorRow.authorId),
+            eq(notifications.kind, "share"),
+            eq(notifications.actorUserId, me.id),
+            eq(notifications.link, `/posts/${articlePostId(parsed.id)}`),
+            eq(notifications.read, false),
+          ),
+        );
+    }
     res.status(204).end();
   }),
 );
@@ -5834,6 +5883,41 @@ const updateEmailPreference = asyncHandler(async (req, res) => {
 
 router.patch("/notifications/email-preference", updateEmailPreference);
 router.put("/notifications/email-preference", updateEmailPreference);
+
+// Per-user opt-out for the in-app "X shared your recap" bell notification
+// (task #167). Mirrors the email-preference endpoint pattern: GET reads,
+// PATCH/PUT writes a single boolean. When optOut=true, POST /posts/:id/share
+// skips the bell row entirely; the share itself is unaffected.
+router.get(
+  "/notifications/share-preference",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [row] = await db
+      .select({ optOut: users.shareNotificationsOptOut })
+      .from(users)
+      .where(eq(users.id, me.id))
+      .limit(1);
+    res.json({ shareOptOut: !!row?.optOut });
+  }),
+);
+
+const updateSharePreference = asyncHandler(async (req, res) => {
+  const me = req.sessionUser;
+  if (!me) return apiError(res, 401, "Not authenticated");
+  if (typeof req.body?.shareOptOut !== "boolean") {
+    return apiError(res, 400, "shareOptOut must be a boolean");
+  }
+  const optOut = req.body.shareOptOut;
+  await db
+    .update(users)
+    .set({ shareNotificationsOptOut: optOut })
+    .where(eq(users.id, me.id));
+  res.json({ shareOptOut: optOut });
+});
+
+router.patch("/notifications/share-preference", updateSharePreference);
+router.put("/notifications/share-preference", updateSharePreference);
 
 // ---------------------------------------------------------------------------
 // Conversations / Messages (stubs)
