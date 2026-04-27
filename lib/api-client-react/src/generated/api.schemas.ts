@@ -493,6 +493,10 @@ export interface CreateOrganizationRequest {
   slug: string;
   description?: string;
   website?: string;
+  city?: string;
+  state?: string;
+  /** @nullable */
+  logoUrl?: string | null;
 }
 
 export interface UpdateOrganizationRequest {

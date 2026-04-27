@@ -831,6 +831,9 @@ export const CreateOrganizationBody = zod.object({
     .regex(createOrganizationBodySlugRegExp),
   description: zod.string().optional(),
   website: zod.string().url().optional(),
+  city: zod.string().optional(),
+  state: zod.string().optional(),
+  logoUrl: zod.string().nullish(),
 });
 
 /**

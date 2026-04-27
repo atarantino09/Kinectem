@@ -102,23 +102,16 @@ export function CreateOrgDialog({
       return;
     }
     try {
-      // The OpenAPI spec for CreateOrganizationRequest is currently a strict
-      // subset of what the API server accepts: `city`, `state`, and `logoUrl`
-      // are valid request fields but not yet declared in openapi.yaml. Until
-      // the spec is widened, we cast through `unknown` to send them.
-      const extendedBody = {
-        name: name.trim(),
-        slug: finalSlug,
-        description: description.trim() || undefined,
-        website: website.trim() || undefined,
-        city: city.trim() || undefined,
-        state: state.trim() || undefined,
-        logoUrl: logoUrl || undefined,
-      };
       const org = await createOrg.mutateAsync({
-        data: extendedBody as unknown as Parameters<
-          typeof createOrg.mutateAsync
-        >[0]["data"],
+        data: {
+          name: name.trim(),
+          slug: finalSlug,
+          description: description.trim() || undefined,
+          website: website.trim() || undefined,
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+          logoUrl: logoUrl || undefined,
+        },
       });
       toast({ title: "Organization created!" });
       await Promise.all([
