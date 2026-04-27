@@ -234,8 +234,8 @@ export async function seedIfEmpty(): Promise<void> {
     .returning();
 
   await db.insert(organizationAdmins).values([
-    { organizationId: westfield.id, userId: adminSam.id },
-    { organizationId: westfield.id, userId: coachDavis.id },
+    { organizationId: westfield.id, userId: adminSam.id, role: "owner" },
+    { organizationId: westfield.id, userId: coachDavis.id, role: "admin" },
   ]);
 
   const [varsityFootball, jvFootball, varsityBasketball] = await db

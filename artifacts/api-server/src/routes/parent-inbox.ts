@@ -1436,6 +1436,7 @@ router.post(
         and(
           eq(organizationAdmins.organizationId, team.organizationId),
           eq(organizationAdmins.userId, me.id),
+          inArray(organizationAdmins.role, ["owner", "admin"]),
         ),
       )
       .limit(1);

@@ -151,6 +151,7 @@ router.patch(
         and(
           eq(organizationAdmins.organizationId, existing.organizationId),
           eq(organizationAdmins.userId, me.id),
+          inArray(organizationAdmins.role, ["owner", "admin"]),
         ),
       )
       .limit(1);

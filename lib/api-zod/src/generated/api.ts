@@ -1131,6 +1131,33 @@ export const RemoveMemberParams = zod.object({
 });
 
 /**
+ * Transfers the `owner` role from the current owner to the target
+member in a single transaction. The target must already be a
+member of the organization. The previous owner is demoted to
+`admin` so they retain management permissions. Only the current
+owner may call this endpoint. Under concurrent transfers the
+loser may receive either `403` (the pre-check observed that the
+caller is no longer the owner) or `409` (the conditional update
+inside the transaction matched zero rows because another
+request finished first). In both cases the client should
+refetch and retry if needed.
+
+ * @summary Transfer organization ownership to another member
+ */
+export const TransferOrganizationOwnershipParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  userId: zod.coerce.string().uuid(),
+});
+
+export const TransferOrganizationOwnershipResponse = zod.object({
+  userId: zod.string().uuid(),
+  displayName: zod.string(),
+  avatarUrl: zod.string().url().nullish(),
+  role: zod.enum(["owner", "admin", "member"]),
+  joinedAt: zod.coerce.date(),
+});
+
+/**
  * Creates a new short or long-form post.
 
 For long-form posts, when the request includes a `gameDate`,

@@ -113,7 +113,11 @@ export function CreateOrgDialog({
           logoUrl: logoUrl || undefined,
         },
       });
-      toast({ title: "Organization created!" });
+      toast({
+        title: "Organization created!",
+        description:
+          "You're the owner. Add admins or transfer ownership any time from Manage members.",
+      });
       await Promise.all([
         qc.invalidateQueries({ queryKey: getListOrganizationsQueryKey() }),
         me?.id

@@ -10,6 +10,8 @@ import {
   getListOrgJoinRequestsQueryKey,
   getListOrgPostApprovalsQueryKey,
   getListFeedQueryKey,
+  getListMembersQueryKey,
+  getGetOrganizationByIdQueryKey,
   type JoinRequestResponse,
   type PostApprovalResponse,
 } from "@workspace/api-client-react";
@@ -27,8 +29,11 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
   const requests = jrResp?.data ?? [];
   const approvals = paResp?.data ?? [];
 
-  const invalidateJR = () =>
+  const invalidateJR = () => {
     qc.invalidateQueries({ queryKey: getListOrgJoinRequestsQueryKey(orgId) });
+    qc.invalidateQueries({ queryKey: getListMembersQueryKey(orgId) });
+    qc.invalidateQueries({ queryKey: getGetOrganizationByIdQueryKey(orgId) });
+  };
   const invalidatePA = () => {
     qc.invalidateQueries({ queryKey: getListOrgPostApprovalsQueryKey(orgId) });
     qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
@@ -95,19 +100,46 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                         declineJR.mutate({ orgId, requestId: r.id })
                       }
                       disabled={declineJR.isPending}
+                      data-testid={`btn-decline-join-${r.id}`}
+                      title="Decline"
                     >
                       <X className="w-3 h-3" />
                     </Button>
                     <Button
-                      variant="brand"
+                      variant="outline"
                       size="sm"
-                      className="px-3 gap-1"
+                      className="font-bold px-3 h-8"
                       onClick={() =>
-                        approveJR.mutate({ orgId, requestId: r.id, data: {} })
+                        approveJR.mutate({
+                          orgId,
+                          requestId: r.id,
+                          data: { role: "member" },
+                        })
                       }
                       disabled={approveJR.isPending}
+                      data-testid={`btn-approve-member-${r.id}`}
+                      title="Approve as member"
                     >
-                      <Check className="w-3 h-3" />
+                      <Check className="w-3 h-3 mr-1" />
+                      Member
+                    </Button>
+                    <Button
+                      variant="brand"
+                      size="sm"
+                      className="font-bold px-3 h-8"
+                      onClick={() =>
+                        approveJR.mutate({
+                          orgId,
+                          requestId: r.id,
+                          data: { role: "admin" },
+                        })
+                      }
+                      disabled={approveJR.isPending}
+                      data-testid={`btn-approve-admin-${r.id}`}
+                      title="Approve as admin"
+                    >
+                      <Check className="w-3 h-3 mr-1" />
+                      Admin
                     </Button>
                   </div>
                 </div>

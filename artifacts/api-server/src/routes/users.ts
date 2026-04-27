@@ -143,6 +143,7 @@ router.get(
             and(
               eq(organizationAdmins.userId, me.id),
               eq(rosterEntries.userId, u.id),
+              inArray(organizationAdmins.role, ["owner", "admin"]),
             ),
           )
           .limit(1);
@@ -598,7 +599,7 @@ router.get(
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(rosterEntries.userId, req.params.userId));
     const adminRows = await db
-      .select({ org: organizations })
+      .select({ org: organizations, role: organizationAdmins.role })
       .from(organizationAdmins)
       .innerJoin(organizations, eq(organizationAdmins.organizationId, organizations.id))
       .where(eq(organizationAdmins.userId, req.params.userId));
@@ -611,7 +612,13 @@ router.get(
       )
       .where(eq(organizationFollowers.userId, req.params.userId));
     const followedIds = new Set(followRows.map((r) => r.org.id));
-    const adminOrgIds = new Set(adminRows.map((r) => r.org.id));
+    // The user's stored role per org from organization_admins (owner /
+    // admin / member). Orgs the user is only on via a roster entry — i.e.
+    // not in organization_admins at all — fall back to the implicit
+    // "member" role surfaced by the page-membership UI.
+    const roleByOrg = new Map<string, "owner" | "admin" | "member">(
+      adminRows.map((r) => [r.org.id, r.role]),
+    );
     const seen = new Set<string>();
     const all = [...orgRows, ...adminRows, ...followRows].filter((r) => {
       if (seen.has(r.org.id)) return false;
@@ -619,13 +626,7 @@ router.get(
       return true;
     });
     const data = all.map((r) => {
-      const isAdmin = adminOrgIds.has(r.org.id);
-      const isOwner = r.org.createdById === req.params.userId;
-      const role: "owner" | "admin" | "member" = isOwner
-        ? "owner"
-        : isAdmin
-          ? "admin"
-          : "member";
+      const role: "owner" | "admin" | "member" = roleByOrg.get(r.org.id) ?? "member";
       return toOrganization(r.org, {
         isMember: true,
         role,

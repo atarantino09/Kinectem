@@ -1,7 +1,11 @@
 import { db, organizationAdmins, rosterEntries, teams, type teams as TeamsT } from "@workspace/db";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 
 type Team = typeof TeamsT.$inferSelect;
+
+// Roles that can act on behalf of the organization (edit, manage members,
+// approve content, etc.). Plain "member" is intentionally excluded.
+const MANAGE_ROLES = ["owner", "admin"] as const;
 
 export async function canManageTeam(userId: string, team: Team): Promise<boolean> {
   const [orgAdmin] = await db
@@ -11,6 +15,7 @@ export async function canManageTeam(userId: string, team: Team): Promise<boolean
       and(
         eq(organizationAdmins.organizationId, team.organizationId),
         eq(organizationAdmins.userId, userId),
+        inArray(organizationAdmins.role, [...MANAGE_ROLES]),
       ),
     )
     .limit(1);
@@ -39,10 +44,32 @@ export async function canManageOrganization(userId: string, organizationId: stri
       and(
         eq(organizationAdmins.organizationId, organizationId),
         eq(organizationAdmins.userId, userId),
+        inArray(organizationAdmins.role, [...MANAGE_ROLES]),
       ),
     )
     .limit(1);
   return Boolean(row);
+}
+
+// Returns the caller's stored role in the org, or null if they are not a
+// member at all. Distinct from `canManageOrganization`, which collapses
+// owner+admin into a single boolean — callers that need to check whether
+// they are specifically the owner (e.g. transfer-ownership) use this.
+export async function getOrgRole(
+  userId: string,
+  organizationId: string,
+): Promise<"owner" | "admin" | "member" | null> {
+  const [row] = await db
+    .select({ role: organizationAdmins.role })
+    .from(organizationAdmins)
+    .where(
+      and(
+        eq(organizationAdmins.organizationId, organizationId),
+        eq(organizationAdmins.userId, userId),
+      ),
+    )
+    .limit(1);
+  return row?.role ?? null;
 }
 
 export async function isTeamMember(userId: string, teamId: string): Promise<boolean> {
@@ -87,11 +114,17 @@ export async function canCreateRecap(
 // requiring a target team — used by the web client (via /auth/whoami) to
 // decide whether to show the "Game Recap" Create-menu item at all.
 export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
-  // Org admins can always author recaps for any team in their org.
+  // Org admins can always author recaps for any team in their org. Plain
+  // members (added in task #208) are excluded.
   const [orgAdminRow] = await db
     .select({ userId: organizationAdmins.userId })
     .from(organizationAdmins)
-    .where(eq(organizationAdmins.userId, userId))
+    .where(
+      and(
+        eq(organizationAdmins.userId, userId),
+        inArray(organizationAdmins.role, [...MANAGE_ROLES]),
+      ),
+    )
     .limit(1);
   if (orgAdminRow) return true;
   // Otherwise: any accepted roster entry where the user is either a coach
@@ -114,7 +147,18 @@ export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
 }
 
 export async function isOrgMember(userId: string, organizationId: string): Promise<boolean> {
-  if (await canManageOrganization(userId, organizationId)) return true;
+  // Anyone in organization_admins (owner/admin/member) is a member.
+  const [orgRow] = await db
+    .select({ userId: organizationAdmins.userId })
+    .from(organizationAdmins)
+    .where(
+      and(
+        eq(organizationAdmins.organizationId, organizationId),
+        eq(organizationAdmins.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (orgRow) return true;
   const [row] = await db
     .select({ id: teams.id })
     .from(teams)

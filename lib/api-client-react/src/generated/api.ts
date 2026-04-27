@@ -3170,6 +3170,7 @@ export const getUpdateMemberRoleMutationOptions = <
     | UnauthorizedResponse
     | ForbiddenResponse
     | NotFoundResponse
+    | ConflictResponse
     | InternalServerErrorResponse
   >,
   TContext = unknown,
@@ -3217,6 +3218,7 @@ export type UpdateMemberRoleMutationError = ErrorType<
   | UnauthorizedResponse
   | ForbiddenResponse
   | NotFoundResponse
+  | ConflictResponse
   | InternalServerErrorResponse
 >;
 
@@ -3229,6 +3231,7 @@ export const useUpdateMemberRole = <
     | UnauthorizedResponse
     | ForbiddenResponse
     | NotFoundResponse
+    | ConflictResponse
     | InternalServerErrorResponse
   >,
   TContext = unknown,
@@ -3273,6 +3276,7 @@ export const getRemoveMemberMutationOptions = <
     | UnauthorizedResponse
     | ForbiddenResponse
     | NotFoundResponse
+    | ConflictResponse
     | InternalServerErrorResponse
   >,
   TContext = unknown,
@@ -3320,6 +3324,7 @@ export type RemoveMemberMutationError = ErrorType<
   | UnauthorizedResponse
   | ForbiddenResponse
   | NotFoundResponse
+  | ConflictResponse
   | InternalServerErrorResponse
 >;
 
@@ -3332,6 +3337,7 @@ export const useRemoveMember = <
     | UnauthorizedResponse
     | ForbiddenResponse
     | NotFoundResponse
+    | ConflictResponse
     | InternalServerErrorResponse
   >,
   TContext = unknown,
@@ -3350,6 +3356,129 @@ export const useRemoveMember = <
   TContext
 > => {
   return useMutation(getRemoveMemberMutationOptions(options));
+};
+
+/**
+ * Transfers the `owner` role from the current owner to the target
+member in a single transaction. The target must already be a
+member of the organization. The previous owner is demoted to
+`admin` so they retain management permissions. Only the current
+owner may call this endpoint. Under concurrent transfers the
+loser may receive either `403` (the pre-check observed that the
+caller is no longer the owner) or `409` (the conditional update
+inside the transaction matched zero rows because another
+request finished first). In both cases the client should
+refetch and retry if needed.
+
+ * @summary Transfer organization ownership to another member
+ */
+export const getTransferOrganizationOwnershipUrl = (
+  orgId: string,
+  userId: string,
+) => {
+  return `/api/v1/organizations/${orgId}/members/${userId}/transfer-ownership`;
+};
+
+export const transferOrganizationOwnership = async (
+  orgId: string,
+  userId: string,
+  options?: RequestInit,
+): Promise<MemberResponse> => {
+  return customFetch<MemberResponse>(
+    getTransferOrganizationOwnershipUrl(orgId, userId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getTransferOrganizationOwnershipMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transferOrganizationOwnership>>,
+    TError,
+    { orgId: string; userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transferOrganizationOwnership>>,
+  TError,
+  { orgId: string; userId: string },
+  TContext
+> => {
+  const mutationKey = ["transferOrganizationOwnership"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transferOrganizationOwnership>>,
+    { orgId: string; userId: string }
+  > = (props) => {
+    const { orgId, userId } = props ?? {};
+
+    return transferOrganizationOwnership(orgId, userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TransferOrganizationOwnershipMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transferOrganizationOwnership>>
+>;
+
+export type TransferOrganizationOwnershipMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | ConflictResponse
+  | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Transfer organization ownership to another member
+ */
+export const useTransferOrganizationOwnership = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transferOrganizationOwnership>>,
+    TError,
+    { orgId: string; userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof transferOrganizationOwnership>>,
+  TError,
+  { orgId: string; userId: string },
+  TContext
+> => {
+  return useMutation(getTransferOrganizationOwnershipMutationOptions(options));
 };
 
 /**
@@ -14022,7 +14151,10 @@ export const approveOrgJoinRequest = async (
 
 export const getApproveOrgJoinRequestMutationOptions = <
   TError = ErrorType<
-    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
   >,
   TContext = unknown,
 >(options?: {
@@ -14070,7 +14202,10 @@ export type ApproveOrgJoinRequestMutationResult = NonNullable<
 export type ApproveOrgJoinRequestMutationBody =
   BodyType<ApproveJoinRequestBody>;
 export type ApproveOrgJoinRequestMutationError = ErrorType<
-  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
 >;
 
 /**
@@ -14078,7 +14213,10 @@ export type ApproveOrgJoinRequestMutationError = ErrorType<
  */
 export const useApproveOrgJoinRequest = <
   TError = ErrorType<
-    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
   >,
   TContext = unknown,
 >(options?: {

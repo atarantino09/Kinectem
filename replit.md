@@ -71,6 +71,14 @@ schemas are generated from the spec.
 
 - All hooks use **`useGetLoggedInUser()`** for the current session user — never hardcode
   a user UUID.
+- **Org membership roles** (task #208): `organization_admins.role` is one of
+  `owner | admin | member`. Every org has exactly one `owner`. `canManageOrganization`
+  gates writes to `inArray(role, ['owner','admin'])`. Use
+  `useUpdateMemberRole` / `useRemoveMember` / `useTransferOrganizationOwnership`
+  for membership admin; the owner cannot demote/remove themselves — transfer
+  ownership first (atomic swap). Approving a join request takes an optional
+  `role` (`member` default, `admin` opt-in). `useListMembers` returns every
+  member with their real role; sort order is owner → admin → member.
 - The home feed uses **`useListFeed()`**.
 - Search uses **`useCrossEntitySearch({ q, limit })`** and returns
   `{ users, organizations, teams }` sections.

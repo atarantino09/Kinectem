@@ -16,12 +16,12 @@ import {
   notifications,
   organizationJoinRequests,
 } from "@workspace/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canManageOrganization } from "../lib/permissions";
+import { canManageOrganization, getOrgRole } from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -52,6 +52,13 @@ import {
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 
 const router: IRouter = Router();
+
+class TransferRaceError extends Error {
+  constructor(reason: "not-current-owner" | "target-missing") {
+    super(`transfer-race:${reason}`);
+    this.name = "TransferRaceError";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Organizations
@@ -85,9 +92,12 @@ router.post(
         createdById: me.id,
       })
       .returning();
+    // The creator becomes the org's sole owner. The role column was
+    // added in task #208; before that the table held only admins and
+    // "owner" was implicit (first row in the admins table).
     await db
       .insert(organizationAdmins)
-      .values({ organizationId: org.id, userId: me.id })
+      .values({ organizationId: org.id, userId: me.id, role: "owner" })
       .onConflictDoNothing();
     await db
       .insert(organizationFollowers)
@@ -114,7 +124,7 @@ router.get(
     let isFollowing = false;
     if (me) {
       const [admin] = await db
-        .select()
+        .select({ role: organizationAdmins.role })
         .from(organizationAdmins)
         .where(
           and(
@@ -124,7 +134,7 @@ router.get(
         )
         .limit(1);
       if (admin) {
-        role = org.createdById === me.id ? "owner" : "admin";
+        role = admin.role;
         isMember = true;
       }
       const [follow] = await db
@@ -189,17 +199,241 @@ router.patch(
 router.get(
   "/organizations/:orgId/members",
   asyncHandler(async (req, res) => {
-    const adminRows = await db
-      .select({ u: users, joinedAt: organizationAdmins.createdAt })
+    // Returns every row in organization_admins with its real role (owner /
+    // admin / member). Owners first, then admins, then members; within
+    // each group the earliest joined are listed first.
+    const memberRows = await db
+      .select({
+        u: users,
+        role: organizationAdmins.role,
+        joinedAt: organizationAdmins.createdAt,
+      })
       .from(organizationAdmins)
       .innerJoin(users, eq(organizationAdmins.userId, users.id))
-      .where(eq(organizationAdmins.organizationId, req.params.orgId));
-    const data = adminRows.map((r, i) =>
-      toMember(r.u, i === 0 ? "owner" : "admin", r.joinedAt),
-    );
+      .where(eq(organizationAdmins.organizationId, req.params.orgId))
+      .orderBy(
+        sql`(case ${organizationAdmins.role} when 'owner' then 0 when 'admin' then 1 else 2 end)`,
+        asc(organizationAdmins.createdAt),
+      );
+    const data = memberRows.map((r) => toMember(r.u, r.role, r.joinedAt));
     res.json(paginate(data));
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Membership role + removal endpoints (task #208).
+//
+// All three are admin/owner-only on the server, regardless of whether the
+// UI hides the buttons. The org always has exactly one row with role
+// 'owner'; PATCH and DELETE refuse to disturb that invariant. Use
+// /transfer-ownership instead.
+// ---------------------------------------------------------------------------
+
+router.patch(
+  "/organizations/:orgId/members/:userId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const { orgId, userId } = req.params;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Org admins only");
+    }
+    const newRole = req.body?.role;
+    if (newRole !== "admin" && newRole !== "member") {
+      return apiError(res, 400, "role must be 'admin' or 'member'");
+    }
+    const [target] = await db
+      .select({ role: organizationAdmins.role })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, orgId),
+          eq(organizationAdmins.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!target) return notFound(res);
+    if (target.role === "owner") {
+      return apiError(
+        res,
+        409,
+        "The owner's role cannot be changed directly. Transfer ownership instead.",
+      );
+    }
+    if (target.role === newRole) {
+      const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!u) return notFound(res);
+      return res.json(
+        toMember(
+          u,
+          target.role,
+          (await getMemberJoinedAt(orgId, userId)) ?? new Date(),
+        ),
+      );
+    }
+    const [updated] = await db
+      .update(organizationAdmins)
+      .set({ role: newRole })
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, orgId),
+          eq(organizationAdmins.userId, userId),
+        ),
+      )
+      .returning();
+    if (!updated) return notFound(res);
+    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) return notFound(res);
+    res.json(toMember(u, updated.role, updated.createdAt));
+  }),
+);
+
+router.delete(
+  "/organizations/:orgId/members/:userId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const { orgId, userId } = req.params;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Org admins only");
+    }
+    const [target] = await db
+      .select({ role: organizationAdmins.role })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, orgId),
+          eq(organizationAdmins.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!target) return notFound(res);
+    if (target.role === "owner") {
+      return apiError(
+        res,
+        409,
+        "The owner cannot be removed. Transfer ownership first.",
+      );
+    }
+    await db
+      .delete(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, orgId),
+          eq(organizationAdmins.userId, userId),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/organizations/:orgId/members/:userId/transfer-ownership",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const { orgId, userId } = req.params;
+    if (me.id === userId) {
+      return apiError(res, 400, "Cannot transfer ownership to yourself");
+    }
+    const myRole = await getOrgRole(me.id, orgId);
+    if (myRole !== "owner") {
+      return apiError(res, 403, "Only the current owner can transfer ownership");
+    }
+    const [target] = await db
+      .select({ role: organizationAdmins.role, joinedAt: organizationAdmins.createdAt })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, orgId),
+          eq(organizationAdmins.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (!target) {
+      return apiError(res, 404, "Target user is not a member of this organization");
+    }
+    // Promote the new owner and demote the current one in a single
+    // transaction so the org is never temporarily ownerless or has two
+    // owners. Each statement is conditional on the role we expect to
+    // see (defence in depth against concurrent transfer requests from
+    // the same owner across two tabs / two requests). The partial
+    // unique index `organization_admins_one_owner_per_org` is the DB-
+    // level safety net: a racing transaction that tries to create a
+    // second owner row will fail with a unique-constraint violation
+    // and roll back, so the invariant "exactly one owner per org"
+    // holds even under concurrency.
+    try {
+      await db.transaction(async (tx) => {
+        const demoted = await tx
+          .update(organizationAdmins)
+          .set({ role: "admin" })
+          .where(
+            and(
+              eq(organizationAdmins.organizationId, orgId),
+              eq(organizationAdmins.userId, me.id),
+              eq(organizationAdmins.role, "owner"),
+            ),
+          )
+          .returning({ userId: organizationAdmins.userId });
+        if (demoted.length !== 1) {
+          // Another request already transferred ownership away from us.
+          throw new TransferRaceError("not-current-owner");
+        }
+        const promoted = await tx
+          .update(organizationAdmins)
+          .set({ role: "owner" })
+          .where(
+            and(
+              eq(organizationAdmins.organizationId, orgId),
+              eq(organizationAdmins.userId, userId),
+            ),
+          )
+          .returning({ userId: organizationAdmins.userId });
+        if (promoted.length !== 1) {
+          // Target row vanished mid-transaction — bail out to keep the
+          // org from being left without an owner.
+          throw new TransferRaceError("target-missing");
+        }
+      });
+    } catch (err) {
+      if (err instanceof TransferRaceError) {
+        return apiError(res, 409, "Ownership transfer raced with another request — refresh and retry");
+      }
+      // Unique-violation from organization_admins_one_owner_per_org
+      // (race produced two owners) — surface as 409 too.
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code?: string }).code === "23505"
+      ) {
+        return apiError(res, 409, "Ownership transfer raced with another request — refresh and retry");
+      }
+      throw err;
+    }
+    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) return notFound(res);
+    res.json(toMember(u, "owner", target.joinedAt));
+  }),
+);
+
+async function getMemberJoinedAt(
+  organizationId: string,
+  userId: string,
+): Promise<Date | null> {
+  const [r] = await db
+    .select({ createdAt: organizationAdmins.createdAt })
+    .from(organizationAdmins)
+    .where(
+      and(
+        eq(organizationAdmins.organizationId, organizationId),
+        eq(organizationAdmins.userId, userId),
+      ),
+    )
+    .limit(1);
+  return r?.createdAt ?? null;
+}
 
 router.get(
   "/organizations/:orgId/teams",
@@ -464,19 +698,23 @@ async function decideJoinRequest(
     .where(eq(organizationJoinRequests.id, r.id))
     .returning();
   if (decision === "approved") {
-    const role: "admin" | "member" =
-      req.body?.role === "admin" ? "admin" : "member";
-    if (role === "admin") {
-      await db
-        .insert(organizationAdmins)
-        .values({ organizationId: r.organizationId, userId: r.userId })
-        .onConflictDoNothing();
-    } else {
-      await db
-        .insert(organizationFollowers)
-        .values({ organizationId: r.organizationId, userId: r.userId })
-        .onConflictDoNothing();
+    const rawRole = req.body?.role;
+    if (rawRole !== undefined && rawRole !== "admin" && rawRole !== "member") {
+      return apiError(res, 400, "role must be 'admin' or 'member'");
     }
+    const role: "admin" | "member" = rawRole === "admin" ? "admin" : "member";
+    // Both members and admins live in organization_admins now (the table
+    // name is historical). Members get the same row with role 'member';
+    // permission helpers gate writes by checking role in ('owner','admin').
+    await db
+      .insert(organizationAdmins)
+      .values({ organizationId: r.organizationId, userId: r.userId, role })
+      .onConflictDoNothing();
+    // New members also follow the org so it shows up in their feed.
+    await db
+      .insert(organizationFollowers)
+      .values({ organizationId: r.organizationId, userId: r.userId })
+      .onConflictDoNothing();
   }
   const [u] = await db.select().from(users).where(eq(users.id, r.userId)).limit(1);
   res.json(toJoinRequest(updated, u ?? null));

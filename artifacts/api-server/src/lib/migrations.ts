@@ -63,10 +63,68 @@ ALTER TABLE post_shares
   DROP COLUMN IF EXISTS article_id;
 `;
 
+// Task #208 — Organization membership gains an explicit role column
+// (owner / admin / member). Before this change the table only held
+// admins, with the implicit "owner = first row" rule. Drizzle push
+// happily adds the new column with a default, but every existing org
+// then has zero owners (all rows defaulted to 'admin') and the org-page
+// "Manage members" UI has no one to demote / transfer from. This
+// backfill is idempotent: it picks one admin per org and sets it to
+// 'owner', preferring the original creator when still present, else
+// the earliest-joined admin. Runs before the new code reads `role`.
+const TASK_208_ORG_MEMBER_ROLES = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'org_member_role') THEN
+    CREATE TYPE org_member_role AS ENUM ('owner', 'admin', 'member');
+  END IF;
+END$migration$;
+
+ALTER TABLE organization_admins
+  ADD COLUMN IF NOT EXISTS role org_member_role NOT NULL DEFAULT 'admin';
+
+-- Promote the creator (or earliest admin) of every org to owner exactly
+-- once. Skips orgs that already have an owner so re-runs are no-ops.
+WITH ranked AS (
+  SELECT
+    oa.organization_id,
+    oa.user_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY oa.organization_id
+      ORDER BY (CASE WHEN o.created_by_id = oa.user_id THEN 0 ELSE 1 END),
+               oa.created_at,
+               oa.user_id
+    ) AS rn
+  FROM organization_admins oa
+  JOIN organizations o ON o.id = oa.organization_id
+  WHERE NOT EXISTS (
+    SELECT 1 FROM organization_admins oa2
+     WHERE oa2.organization_id = oa.organization_id
+       AND oa2.role = 'owner'
+  )
+)
+UPDATE organization_admins oa
+   SET role = 'owner'
+  FROM ranked r
+ WHERE r.rn = 1
+   AND oa.organization_id = r.organization_id
+   AND oa.user_id        = r.user_id;
+
+-- Enforce the "exactly one owner per org" invariant at the DB level so
+-- concurrent transfer-ownership requests cannot leave two owners.
+CREATE UNIQUE INDEX IF NOT EXISTS organization_admins_one_owner_per_org
+  ON organization_admins (organization_id)
+  WHERE role = 'owner';
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
     sql: TASK_190_POST_SHARES_POLYMORPHIC,
+  },
+  {
+    name: "2026-04-27-task-208-org-member-roles",
+    sql: TASK_208_ORG_MEMBER_ROLES,
   },
 ];
 

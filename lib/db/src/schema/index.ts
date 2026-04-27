@@ -15,6 +15,7 @@ export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "
 export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "declined", "removed"]);
 export const tagSourceEnum = pgEnum("tag_source", ["manual", "auto"]);
 export const assetStatusEnum = pgEnum("asset_status", ["pending", "confirmed"]);
+export const orgMemberRoleEnum = pgEnum("org_member_role", ["owner", "admin", "member"]);
 export const reportContentTypeEnum = pgEnum("report_content_type", ["article", "highlight", "org_post", "comment"]);
 export const reportStatusEnum = pgEnum("report_status", ["open", "resolved", "dismissed"]);
 export const adminActionTypeEnum = pgEnum("admin_action_type", [
@@ -108,9 +109,15 @@ export const organizations = pgTable("organizations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Despite the legacy table name, this records every member of an
+// organization — owners and admins (who can manage the org) as well as
+// regular members who joined without manage privileges. The `role`
+// column is the source of truth; `canManageOrganization` filters to
+// owner/admin. Each org has exactly one row with role 'owner'.
 export const organizationAdmins = pgTable("organization_admins", {
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  role: orgMemberRoleEnum("role").notNull().default("admin"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
 

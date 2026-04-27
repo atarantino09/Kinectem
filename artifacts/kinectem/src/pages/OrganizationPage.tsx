@@ -8,6 +8,7 @@ import {
   useListMembers,
   useFollowOrg,
   useUnfollowOrg,
+  useGetLoggedInUser,
   getGetOrganizationByIdQueryKey,
   getListFeedQueryKey,
 } from "@workspace/api-client-react";
@@ -16,7 +17,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, ChevronRight, Plus, Pencil } from "lucide-react";
+import {
+  Building2,
+  Users,
+  ChevronRight,
+  Plus,
+  Pencil,
+  Settings,
+} from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
@@ -24,6 +32,7 @@ import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
+import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { getInitials } from "@/lib/format";
 
 export default function OrganizationPage() {
@@ -35,6 +44,8 @@ export default function OrganizationPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
+  const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const { data: me } = useGetLoggedInUser();
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
   const { data: postsResp } = useListOrgPosts(orgId);
@@ -290,7 +301,21 @@ export default function OrganizationPage() {
       {/* Members preview */}
       {members.length > 0 && (
         <section>
-          <h2 className="text-xl font-black tracking-tight mb-4">Members</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-black tracking-tight">Members</h2>
+            {(organization.role === "owner" ||
+              organization.role === "admin") && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold rounded-full"
+                onClick={() => setManageMembersOpen(true)}
+                data-testid="btn-manage-members"
+              >
+                <Settings className="w-4 h-4 mr-1" /> Manage members
+              </Button>
+            )}
+          </div>
           <Card className="rounded-xl border border-border">
             <CardContent className="p-4">
               <div className="flex flex-wrap gap-3">
@@ -314,6 +339,18 @@ export default function OrganizationPage() {
               </div>
             </CardContent>
           </Card>
+          {me?.id &&
+            (organization.role === "owner" ||
+              organization.role === "admin") && (
+              <ManageMembersDialog
+                open={manageMembersOpen}
+                onOpenChange={setManageMembersOpen}
+                orgId={orgId}
+                orgName={organization.name}
+                myUserId={me.id}
+                myRole={organization.role}
+              />
+            )}
         </section>
       )}
 
