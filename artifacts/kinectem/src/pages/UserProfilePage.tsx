@@ -178,7 +178,7 @@ export default function UserProfilePage() {
                   Message
                 </Button>
                 <Button
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full px-6"
+                  className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
                   onClick={onToggleFollow}
                   disabled={followUser.isPending || unfollowUser.isPending}
                   data-testid="btn-follow-user"

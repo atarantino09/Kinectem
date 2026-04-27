@@ -178,7 +178,7 @@ export function TeamHeaderCard({
               </Button>
             )}
             <Button
-              className="bg-primary text-primary-foreground font-bold rounded-full px-5"
+              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
               onClick={onToggleFollow}
               disabled={followPending}
               data-testid="btn-follow-team"
