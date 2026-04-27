@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import express from "express";
 import supertest from "supertest";
+import { db, userFollowers } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { asyncHandler } from "../src/lib/async-handler";
-import { loginAs, request, app } from "./helpers";
+import { loginAs, request, app, findUser } from "./helpers";
 
 // ---------------------------------------------------------------------------
 // asyncHandler robustness
@@ -143,5 +145,66 @@ describe("GET /feed — discover fallback", () => {
   it("returns 401 for an unauthenticated request", async () => {
     const res = await request(app).get("/api/v1/feed");
     expect(res.status).toBe(401);
+  });
+
+  // Parity: when the viewer DOES follow someone, the personalized feed path
+  // takes over and the discover fallback must NOT run. We exercise this by
+  // briefly inserting a follow row (Sam -> Coach), hitting /feed, and then
+  // tearing the follow row down so other tests see the original empty seed.
+  it("uses the personalized feed (not discover) when the viewer follows someone", async () => {
+    const sam = await findUser((u) => u.email === "sam@kinectem.demo");
+    const coach = await findUser((u) => u.email === "coach@kinectem.demo");
+    await db
+      .insert(userFollowers)
+      .values({ followerUserId: sam.id, followingUserId: coach.id })
+      .onConflictDoNothing();
+    try {
+      const { agent } = await loginAs("sam@kinectem.demo");
+      const res = await agent.get("/api/v1/feed");
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThan(0);
+      // Coach authored the seeded recap articles. Once Sam follows Coach,
+      // at least one of those recap articles must show up — proof that the
+      // follow path produced the items, not the discover-on-empty branch.
+      const authorIds = res.body.data
+        .map((p: { author?: { id?: string } }) => p.author?.id)
+        .filter((x: unknown): x is string => typeof x === "string");
+      expect(authorIds).toContain(coach.id);
+    } finally {
+      await db
+        .delete(userFollowers)
+        .where(
+          and(
+            eq(userFollowers.followerUserId, sam.id),
+            eq(userFollowers.followingUserId, coach.id),
+          ),
+        );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// /auth/whoami sanity
+// ---------------------------------------------------------------------------
+//
+// /auth/whoami is the canonical sync handler that triggered the asyncHandler
+// regression in production. This pins the post-fix contract: after login it
+// returns 200 with the authenticated user payload, and a follow-up request
+// in the same session continues to succeed (no error middleware kicked in).
+
+describe("GET /auth/whoami", () => {
+  it("returns the authenticated user and does not break subsequent requests", async () => {
+    const { agent, user } = await loginAs("sam@kinectem.demo");
+    const who = await agent.get("/api/v1/auth/whoami");
+    expect(who.status).toBe(200);
+    expect(who.body?.authenticated).toBe(true);
+    expect(who.body?.realUser?.id).toBe(user.id);
+    expect(who.body?.realUser?.email).toBe(user.email);
+    // Any error thrown synchronously by whoami's handler used to surface as
+    // a 500 on the *next* request via Express's default error handler. A
+    // simple follow-up GET proves the session is still healthy.
+    const followup = await agent.get("/api/v1/feed");
+    expect(followup.status).toBe(200);
   });
 });
