@@ -1688,6 +1688,59 @@ describe("parent inbox: per-child unified notifications", () => {
       expect(restored?.status).toBe("pending");
     });
 
+    it("unset-decision on a removed highlight tag flips it back from declined to pending", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Undo highlight tag fixture",
+          videoUrl: "https://example.com/undo-clip.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+      const itemKey = `tag:${tag.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [declined] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(declined?.status).toBe("declined");
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+
+      const [restored] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      // Reverting a remove on a declined highlight tag should put it
+      // back into the parent's pending review queue, mirroring the
+      // article-tag undo path.
+      expect(restored?.status).toBe("pending");
+    });
+
     it("unset-decision on a removed comment clears hiddenAt", async () => {
       const samiraId = await findUserId("samira@kinectem.demo");
       const coachId = await findUserId("coach@kinectem.demo");

@@ -3980,6 +3980,12 @@ async function applyUnsetAction(
   childId: string,
 ): Promise<void> {
   if (kind === "tag") {
+    // The tagId may belong to either article_tags OR highlight_tags
+    // (both flow through the family inbox under the same `tag:` key),
+    // so mirror the dispatch used by `applyRemoveAction`. Both flips
+    // are scoped to rows currently `declined` so that an unrelated
+    // pending/approved row isn't silently disturbed by a stale inbox
+    // undo.
     await db
       .update(articleTags)
       .set({ status: "pending" })
@@ -3987,6 +3993,15 @@ async function applyUnsetAction(
         and(
           eq(articleTags.id, refId),
           eq(articleTags.status, "declined"),
+        ),
+      );
+    await db
+      .update(highlightTags)
+      .set({ status: "pending", updatedAt: new Date() })
+      .where(
+        and(
+          eq(highlightTags.id, refId),
+          eq(highlightTags.status, "declined"),
         ),
       );
     return;
