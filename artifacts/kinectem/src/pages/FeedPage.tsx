@@ -7,6 +7,7 @@ import {
   useListUserOrganizations,
   useListUserTeams,
   useListOrgTeams,
+  queryOpts,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,10 +23,10 @@ export default function FeedPage() {
   const [, setLocation] = useLocation();
   const { data: me } = useGetLoggedInUser();
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
-    query: { enabled: !!me?.id } as never,
+    query: queryOpts({ enabled: !!me?.id }),
   });
   const { data: myTeams } = useListUserTeams(me?.id ?? "", undefined, {
-    query: { enabled: !!me?.id } as never,
+    query: queryOpts({ enabled: !!me?.id }),
   });
   const memberTeamsByOrg = useMemo(() => {
     const map = new Map<string, { id: string; name: string }[]>();
@@ -209,7 +210,7 @@ function OrgRow({
     setLogoFailed(false);
   }, [orgLogoUrl]);
   const { data: teamsResp } = useListOrgTeams(orgId, undefined, {
-    query: { enabled: isOpen && isOrgAdmin } as never,
+    query: queryOpts({ enabled: isOpen && isOrgAdmin }),
   });
   const teams = isOrgAdmin
     ? (teamsResp?.data ?? []).map((t) => ({ id: t.id, name: t.name }))

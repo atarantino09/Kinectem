@@ -1,6 +1,6 @@
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response } from "express";
 import { db, sessions, users } from "@workspace/db";
-import { eq, gt, and, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 export const SESSION_COOKIE = "kinectem_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -18,49 +18,6 @@ declare global {
       isMasquerading?: boolean;
     }
   }
-}
-
-export async function loadSession(req: Request, _res: Response, next: NextFunction) {
-  const token = req.cookies?.[SESSION_COOKIE];
-  if (!token) return next();
-  try {
-    const [row] = await db
-      .select({ session: sessions, user: users })
-      .from(sessions)
-      .innerJoin(users, eq(sessions.userId, users.id))
-      .where(and(eq(sessions.id, token), gt(sessions.expiresAt, new Date())))
-      .limit(1);
-    if (row) {
-      // Ignore sessions whose owning user is soft-deleted.
-      if (row.user.deletedAt) return next();
-      req.realUser = row.user;
-      req.sessionRow = row.session;
-      const masqueradeId = row.session.masqueradingAsUserId;
-      if (masqueradeId && masqueradeId !== row.user.id) {
-        const [target] = await db
-          .select()
-          .from(users)
-          .where(and(eq(users.id, masqueradeId), isNull(users.deletedAt)))
-          .limit(1);
-        if (target) {
-          req.sessionUser = target;
-          req.isMasquerading = true;
-        } else {
-          // Target gone — fall back to real user, clear masquerade.
-          await db
-            .update(sessions)
-            .set({ masqueradingAsUserId: null })
-            .where(eq(sessions.id, row.session.id));
-          req.sessionUser = row.user;
-        }
-      } else {
-        req.sessionUser = row.user;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  next();
 }
 
 export async function createSession(userId: string): Promise<{ id: string; expiresAt: Date }> {
@@ -103,40 +60,6 @@ export function clearSessionCookie(res: Response) {
   });
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.sessionUser) {
-    res
-      .status(401)
-      .json({ error: "Not authenticated", code: "AUTH_REQUIRED" });
-    return;
-  }
-  next();
-}
-
-// Admin endpoints require:
-// - The real session owner to be an admin
-// - No active masquerade (admins cannot reach /admin/* while viewing as another user)
-// - The admin themselves to not be soft-deleted
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const real = req.realUser;
-  if (!real) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
-  }
-  if (real.role !== "admin" || real.deletedAt) {
-    res.status(403).json({ error: "Admin access required" });
-    return;
-  }
-  // Allow stopping a masquerade even while masquerading — that's the whole
-  // point. All other admin endpoints require the real admin to NOT be
-  // currently viewing as another user.
-  const path = req.path || "";
-  const isMasqueradeStop = path === "/masquerade/stop";
-  if (req.isMasquerading && !isMasqueradeStop) {
-    res.status(403).json({
-      error: "Exit masquerade before using admin tools.",
-    });
-    return;
-  }
-  next();
-}
+// Re-export auth middlewares from their new home in middlewares/auth.ts so
+// callers that historically imported them from lib/auth.ts keep working.
+export { loadSession, requireAuth, requireAdmin } from "../middlewares/auth";

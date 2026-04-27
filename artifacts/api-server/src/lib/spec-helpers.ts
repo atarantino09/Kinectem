@@ -753,3 +753,12 @@ export function toNotification(n: NotificationRow) {
     createdAt: n.createdAt.toISOString(),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Common 404 response — small wrapper around apiError so route handlers can
+// uniformly write `return notFound(res)` instead of repeating the literal.
+// ---------------------------------------------------------------------------
+
+export function notFound(res: Response) {
+  return apiError(res, 404, "Not found");
+}

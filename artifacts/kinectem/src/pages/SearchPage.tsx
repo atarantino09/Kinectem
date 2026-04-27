@@ -1,5 +1,5 @@
 import { Link, useSearch } from "wouter";
-import { useCrossEntitySearch } from "@workspace/api-client-react";
+import { useCrossEntitySearch, queryOpts } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
@@ -16,7 +16,7 @@ export default function SearchPage() {
   const enabled = q.length >= 3;
   const { data, isLoading } = useCrossEntitySearch(
     { q, limit: 8 },
-    { query: { enabled } as never },
+    { query: queryOpts({ enabled }) },
   );
 
   if (!enabled) {

@@ -6,6 +6,7 @@ import {
   useCreateRosterInvite,
   getListTeamMembersQueryKey,
   getListRosterInvitesQueryKey,
+  type AddTeamMemberRequestPosition,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -62,11 +63,12 @@ export function InviteRosterDialog({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
-  const [position, setPosition] = useState<string>("player");
+  const [position, setPosition] = useState<AddTeamMemberRequestPosition>("player");
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [emailPosition, setEmailPosition] = useState<string>("player");
+  const [emailPosition, setEmailPosition] =
+    useState<AddTeamMemberRequestPosition>("player");
 
   const addMember = useAddTeamMember();
   const createInvite = useCreateRosterInvite();
@@ -119,7 +121,7 @@ export function InviteRosterDialog({
         data: {
           userId: u.id,
           seasonId,
-          position: position as never,
+          position,
         },
       });
       toast({ title: `Added ${u.displayName} (pending acceptance)` });
@@ -142,7 +144,7 @@ export function InviteRosterDialog({
         data: {
           email: email.trim(),
           seasonId,
-          position: emailPosition as never,
+          position: emailPosition,
         },
       });
       toast({ title: `Invite sent to ${email}` });
@@ -178,7 +180,12 @@ export function InviteRosterDialog({
           <TabsContent value="search" className="space-y-3 mt-4">
             <div className="space-y-1.5">
               <Label className="font-bold">Position</Label>
-              <Select value={position} onValueChange={setPosition}>
+              <Select
+                value={position}
+                onValueChange={(v) =>
+                  setPosition(v as AddTeamMemberRequestPosition)
+                }
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -248,7 +255,12 @@ export function InviteRosterDialog({
             <form onSubmit={onSendInvite} className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Position</Label>
-                <Select value={emailPosition} onValueChange={setEmailPosition}>
+                <Select
+                  value={emailPosition}
+                  onValueChange={(v) =>
+                    setEmailPosition(v as AddTeamMemberRequestPosition)
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

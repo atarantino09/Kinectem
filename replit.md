@@ -22,10 +22,14 @@ schemas are generated from the spec.
 - **TypeScript version**: 5.9
 - **API server**: Express 5 with `express-openapi-validator` against
   `lib/api-spec/openapi.yaml` (~145 ops). The spec also drives `/api/docs`
-  (Scalar). All routes live in `artifacts/api-server/src/routes/spec.ts`
-  (the modular files like `routes/users.ts` are dead code — `routes/index.ts`
-  only exports `specRouter`). Errors flow through the `apiError` helper in
-  `src/lib/spec-helpers.ts` (returns `{ error, code, ...extras }`).
+  (Scalar). Routes are split by domain under
+  `artifacts/api-server/src/routes/` (e.g. `users.ts`, `posts.ts`,
+  `messages.ts`, `guardians.ts`, …) and mounted by `routes/index.ts`.
+  Cross-cutting helpers live in `src/lib/` (`post-stats.ts`,
+  `article-tagging.ts`, `team-follow.ts`, `guardian-confirmations.ts`,
+  `spec-helpers.ts`); auth middlewares live in `src/middlewares/auth.ts`.
+  Errors flow through the `apiError` helper in `src/lib/spec-helpers.ts`
+  (returns `{ error, code, ...extras }`).
 - **Web frontend**: React + Vite + Tailwind + shadcn/ui + wouter + tanstack-query
 - **API codegen**: Orval — generates a typed `react-query` client into
   `lib/api-client-react/src/generated` and matching Zod schemas into
@@ -94,15 +98,6 @@ schemas are generated from the spec.
   small avatars stuck on the fallback because Radix's loading state never
   sees the image mount. The wrapper renders `<AvatarImage>` unconditionally
   so it just works.
-
-## Routing gotcha (api-server)
-
-`artifacts/api-server/src/routes/index.ts` mounts ONLY `admin` and `spec.ts`.
-The standalone files `routes/users.ts`, `routes/notifications.ts`, and
-`routes/invites.ts` are NOT mounted — any handlers in them are dead code.
-All real route logic lives in `routes/spec.ts`. When adding behavior to an
-existing endpoint, edit it in `spec.ts`, not in the matching standalone
-file. (If you ever need to revive those, mount them in `routes/index.ts`.)
 
 ## Roster status mapping
 

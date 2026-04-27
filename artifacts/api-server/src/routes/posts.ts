@@ -1,0 +1,787 @@
+import { Router, type IRouter } from "express";
+import {
+  db,
+  users,
+  organizations,
+  organizationAdmins,
+  organizationFollowers,
+  userFollowers,
+  teamFollowers,
+  teams,
+  rosterEntries,
+  articles,
+  articleAuthors,
+  articleTags,
+  highlights,
+  highlightTags,
+  orgPosts,
+  notifications,
+  postReactions,
+  postComments,
+} from "@workspace/db";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
+import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
+import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
+import { asyncHandler } from "../lib/async-handler";
+import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
+import { canCreateRecap, canManageOrganization } from "../lib/permissions";
+import {
+  createSession,
+  destroySession,
+  setSessionCookie,
+  clearSessionCookie,
+  SESSION_COOKIE,
+} from "../lib/auth";
+import {
+  toPublicUser,
+  displayName,
+  toOrganization,
+  toTeam,
+  articleToPost,
+  highlightToPost,
+  orgPostToPost,
+  paginate,
+  parsePostId,
+  articlePostId,
+  highlightPostId,
+  toComment,
+  apiError,
+  notFound,
+} from "../lib/spec-helpers";
+import { loadPostStats, statsFor, loadPostOwnerId } from "../lib/post-stats";
+import { applyArticleTagFanout } from "../lib/article-tagging";
+
+const router: IRouter = Router();
+
+// ---------------------------------------------------------------------------
+// Posts
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/feed",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+
+    const [followedOrgRows, followedTeamRows, followedUserRows] = await Promise.all([
+      db
+        .select({ id: organizationFollowers.organizationId })
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, me.id)),
+      db
+        .select({ id: teamFollowers.teamId })
+        .from(teamFollowers)
+        .where(eq(teamFollowers.userId, me.id)),
+      db
+        .select({ id: userFollowers.followingUserId })
+        .from(userFollowers)
+        .where(eq(userFollowers.followerUserId, me.id)),
+    ]);
+    const followedOrgIds = followedOrgRows.map((r) => r.id);
+    const followedTeamIds = followedTeamRows.map((r) => r.id);
+    const followedUserIds = followedUserRows.map((r) => r.id);
+
+    if (
+      followedOrgIds.length === 0 &&
+      followedTeamIds.length === 0 &&
+      followedUserIds.length === 0
+    ) {
+      // User follows nothing: only show their own posts.
+      const ownArts = await db
+        .select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            eq(articles.authorId, me.id),
+            isNull(articles.hiddenAt),
+          ),
+        )
+        .orderBy(desc(articles.createdAt))
+        .limit(10);
+      const ownHls = await db
+        .select({ h: highlights, team: teams, org: organizations, uploader: users })
+        .from(highlights)
+        .innerJoin(teams, eq(highlights.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(highlights.uploaderId, users.id))
+        .where(and(eq(highlights.uploaderId, me.id), isNull(highlights.hiddenAt)))
+        .orderBy(desc(highlights.createdAt))
+        .limit(10);
+      const stats = await loadPostStats(me.id, [
+        ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+        ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ]);
+      const items = [
+        ...ownArts.map((r) =>
+          articleToPost(r.a, {
+            team: r.team,
+            org: r.org,
+            author: r.author,
+            ...statsFor(stats, "article", r.a.id),
+          }),
+        ),
+        ...ownHls.map((r) =>
+          highlightToPost(r.h, {
+            team: r.team,
+            org: r.org,
+            author: r.uploader,
+            ...statsFor(stats, "highlight", r.h.id),
+          }),
+        ),
+      ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return res.json(paginate(items));
+    }
+
+    // Articles whose tagged users include any followed user.
+    const articleIdsByTaggedUser = followedUserIds.length
+      ? (
+          await db
+            .selectDistinct({ id: articleTags.articleId })
+            .from(articleTags)
+            .where(inArray(articleTags.userId, followedUserIds))
+        ).map((r) => r.id)
+      : [];
+    const highlightIdsByTaggedUser = followedUserIds.length
+      ? (
+          await db
+            .selectDistinct({ id: highlightTags.highlightId })
+            .from(highlightTags)
+            .where(inArray(highlightTags.userId, followedUserIds))
+        ).map((r) => r.id)
+      : [];
+
+    const articleConds = [eq(articles.authorId, me.id)];
+    if (followedTeamIds.length)
+      articleConds.push(inArray(articles.teamId, followedTeamIds));
+    if (followedOrgIds.length)
+      articleConds.push(inArray(teams.organizationId, followedOrgIds));
+    if (followedUserIds.length)
+      articleConds.push(inArray(articles.authorId, followedUserIds));
+    if (articleIdsByTaggedUser.length)
+      articleConds.push(inArray(articles.id, articleIdsByTaggedUser));
+
+    const arts = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(
+        and(
+          eq(articles.status, "published"),
+          isNull(articles.hiddenAt),
+          or(...articleConds),
+        ),
+      )
+      .orderBy(desc(articles.createdAt))
+      .limit(20);
+
+    const highlightConds = [eq(highlights.uploaderId, me.id)];
+    if (followedTeamIds.length)
+      highlightConds.push(inArray(highlights.teamId, followedTeamIds));
+    if (followedOrgIds.length)
+      highlightConds.push(inArray(teams.organizationId, followedOrgIds));
+    if (followedUserIds.length)
+      highlightConds.push(inArray(highlights.uploaderId, followedUserIds));
+    if (highlightIdsByTaggedUser.length)
+      highlightConds.push(inArray(highlights.id, highlightIdsByTaggedUser));
+
+    const hls = await db
+      .select({ h: highlights, team: teams, org: organizations, uploader: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(and(isNull(highlights.hiddenAt), or(...highlightConds)))
+      .orderBy(desc(highlights.createdAt))
+      .limit(20);
+
+    // Org-level announcements from followed organizations.
+    const orgPostRows = followedOrgIds.length
+      ? await db
+          .select({ p: orgPosts, org: organizations, author: users })
+          .from(orgPosts)
+          .innerJoin(organizations, eq(orgPosts.organizationId, organizations.id))
+          .leftJoin(users, eq(orgPosts.authorId, users.id))
+          .where(
+            and(
+              eq(orgPosts.status, "published"),
+              isNull(orgPosts.hiddenAt),
+              inArray(orgPosts.organizationId, followedOrgIds),
+            ),
+          )
+          .orderBy(desc(orgPosts.createdAt))
+          .limit(20)
+      : [];
+
+    const stats = await loadPostStats(me?.id ?? null, [
+      ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+    ]);
+    const items = [
+      ...arts.map((r) =>
+        articleToPost(r.a, {
+          team: r.team,
+          org: r.org,
+          author: r.author,
+          ...statsFor(stats, "article", r.a.id),
+        }),
+      ),
+      ...hls.map((r) =>
+        highlightToPost(r.h, {
+          team: r.team,
+          org: r.org,
+          author: r.uploader,
+          ...statsFor(stats, "highlight", r.h.id),
+        }),
+      ),
+      ...orgPostRows.map((r) =>
+        orgPostToPost(r.p, {
+          org: r.org,
+          author: r.author,
+          ...statsFor(stats, "org_post", r.p.id),
+        }),
+      ),
+    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    res.json(paginate(items));
+  }),
+);
+
+router.get(
+  "/follow-suggestions",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+
+    const SUGGESTION_LIMIT = 5;
+
+    const [
+      followedOrgRows,
+      adminOrgRows,
+      followedTeamRows,
+      memberTeamRows,
+      followedUserRows,
+    ] = await Promise.all([
+      db
+        .select({ id: organizationFollowers.organizationId })
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, me.id)),
+      db
+        .select({ id: organizationAdmins.organizationId })
+        .from(organizationAdmins)
+        .where(eq(organizationAdmins.userId, me.id)),
+      db
+        .select({ id: teamFollowers.teamId })
+        .from(teamFollowers)
+        .where(eq(teamFollowers.userId, me.id)),
+      db
+        .select({ id: rosterEntries.teamId })
+        .from(rosterEntries)
+        .where(eq(rosterEntries.userId, me.id)),
+      db
+        .select({ id: userFollowers.followingUserId })
+        .from(userFollowers)
+        .where(eq(userFollowers.followerUserId, me.id)),
+    ]);
+
+    const excludedOrgIds = new Set<string>([
+      ...followedOrgRows.map((r) => r.id),
+      ...adminOrgRows.map((r) => r.id),
+    ]);
+    const excludedTeamIds = new Set<string>([
+      ...followedTeamRows.map((r) => r.id),
+      ...memberTeamRows.map((r) => r.id),
+    ]);
+    const excludedUserIds = new Set<string>([
+      ...followedUserRows.map((r) => r.id),
+      me.id,
+    ]);
+
+    const orgRows = await db
+      .select({
+        org: organizations,
+        followerCount: sql<number>`count(${organizationFollowers.userId})::int`,
+      })
+      .from(organizations)
+      .leftJoin(
+        organizationFollowers,
+        eq(organizationFollowers.organizationId, organizations.id),
+      )
+      .groupBy(organizations.id)
+      .orderBy(
+        desc(sql<number>`count(${organizationFollowers.userId})`),
+        desc(organizations.createdAt),
+      )
+      .limit(SUGGESTION_LIMIT + excludedOrgIds.size);
+    const orgSuggestions = orgRows
+      .filter((r) => !excludedOrgIds.has(r.org.id))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((r) => toOrganization(r.org, { isMember: false, isFollowing: false }));
+
+    const teamRows = await db
+      .select({
+        team: teams,
+        org: organizations,
+        followerCount: sql<number>`count(${teamFollowers.userId})::int`,
+      })
+      .from(teams)
+      .innerJoin(organizations, eq(organizations.id, teams.organizationId))
+      .leftJoin(teamFollowers, eq(teamFollowers.teamId, teams.id))
+      .groupBy(teams.id, organizations.id)
+      .orderBy(
+        desc(sql<number>`count(${teamFollowers.userId})`),
+        desc(teams.createdAt),
+      )
+      .limit(SUGGESTION_LIMIT + excludedTeamIds.size);
+    const teamSuggestions = teamRows
+      .filter((r) => !excludedTeamIds.has(r.team.id))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((r) =>
+        toTeam(r.team, r.org, {
+          followerCount: r.followerCount,
+          isFollowing: false,
+        }),
+      );
+
+    const userRows = await db
+      .select({
+        user: users,
+        followerCount: sql<number>`count(${userFollowers.followerUserId})::int`,
+      })
+      .from(users)
+      .leftJoin(
+        userFollowers,
+        eq(userFollowers.followingUserId, users.id),
+      )
+      .where(ne(users.id, me.id))
+      .groupBy(users.id)
+      .orderBy(
+        desc(sql<number>`count(${userFollowers.followerUserId})`),
+        desc(users.createdAt),
+      )
+      .limit(SUGGESTION_LIMIT + excludedUserIds.size);
+    const userSuggestions = userRows
+      .filter((r) => !excludedUserIds.has(r.user.id))
+      .slice(0, SUGGESTION_LIMIT)
+      .map((r) => toPublicUser(r.user, { isOwnProfile: false, isFollowing: false }));
+
+    res.json({
+      organizations: orgSuggestions,
+      teams: teamSuggestions,
+      users: userSuggestions,
+    });
+  }),
+);
+
+router.get(
+  "/posts/:postId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "article") {
+      const [row] = await db
+        .select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(eq(articles.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      if (row.a.hiddenAt && !isAdmin) return notFound(res);
+      const isAuthor = !!me && row.a.authorId === me.id;
+      const isOrgAdmin =
+        !!me && (await canManageOrganization(me.id, row.org.id));
+      if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
+        return notFound(res);
+      }
+      // Co-authors get the same edit affordance as the author. Skip
+      // the lookup if we already know the viewer can edit (author/admin)
+      // or if they're not logged in.
+      let isCoAuthor = false;
+      if (me && !isAuthor) {
+        const [coRow] = await db
+          .select({ id: articleAuthors.userId })
+          .from(articleAuthors)
+          .where(
+            and(
+              eq(articleAuthors.articleId, row.a.id),
+              eq(articleAuthors.userId, me.id),
+            ),
+          )
+          .limit(1);
+        isCoAuthor = !!coRow;
+      }
+      const canEdit = isAuthor || isCoAuthor || isOrgAdmin;
+      const stats = await loadPostStats(me?.id ?? null, [
+        { kind: "article", refId: row.a.id },
+      ]);
+      res.json(
+        articleToPost(row.a, {
+          team: row.team,
+          org: row.org,
+          author: row.author,
+          canEdit,
+          ...statsFor(stats, "article", row.a.id),
+        }),
+      );
+      return;
+    }
+    if (parsed.kind === "org_post") {
+      const [row] = await db
+        .select({ p: orgPosts, org: organizations, author: users })
+        .from(orgPosts)
+        .innerJoin(organizations, eq(orgPosts.organizationId, organizations.id))
+        .leftJoin(users, eq(orgPosts.authorId, users.id))
+        .where(eq(orgPosts.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      if (row.p.hiddenAt && !isAdmin) return notFound(res);
+      if (row.p.status !== "published") {
+        const isAuthor = !!me && row.p.authorId === me.id;
+        const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
+        if (!isAuthor && !isOrgAdmin) return notFound(res);
+      }
+      const stats = await loadPostStats(me?.id ?? null, [
+        { kind: "org_post", refId: row.p.id },
+      ]);
+      res.json(
+        orgPostToPost(row.p, {
+          org: row.org,
+          author: row.author,
+          ...statsFor(stats, "org_post", row.p.id),
+        }),
+      );
+      return;
+    }
+    const [row] = await db
+      .select({ h: highlights, team: teams, org: organizations, uploader: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(eq(highlights.id, parsed.id))
+      .limit(1);
+    if (!row) return notFound(res);
+    if (row.h.hiddenAt && !isAdmin) return notFound(res);
+    const stats = await loadPostStats(me?.id ?? null, [
+      { kind: "highlight", refId: row.h.id },
+    ]);
+    res.json(
+      highlightToPost(row.h, {
+        team: row.team,
+        org: row.org,
+        author: row.uploader,
+        ...statsFor(stats, "highlight", row.h.id),
+      }),
+    );
+  }),
+);
+
+router.get(
+  "/posts/:postId/comments",
+  asyncHandler(async (req, res) => {
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const conds = [
+      eq(postComments.postKind, parsed.kind),
+      eq(postComments.postRefId, parsed.id),
+      isNull(postComments.deletedAt),
+    ];
+    if (!isAdmin) conds.push(isNull(postComments.hiddenAt));
+    const rows = await db
+      .select({ c: postComments, author: users })
+      .from(postComments)
+      .leftJoin(users, eq(postComments.authorId, users.id))
+      .where(and(...conds))
+      .orderBy(asc(postComments.createdAt));
+    res.json(paginate(rows.map((r) => toComment(r.c, r.author))));
+  }),
+);
+
+router.post(
+  "/posts/:postId/comments",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    const body = String(req.body?.body ?? "").trim();
+    if (!body) return apiError(res, 400, "Comment body is required");
+    const [c] = await db
+      .insert(postComments)
+      .values({
+        postKind: parsed.kind,
+        postRefId: parsed.id,
+        authorId: me.id,
+        body,
+      })
+      .returning();
+    res.status(201).json(toComment(c, me));
+  }),
+);
+
+router.delete(
+  "/posts/:postId/comments/:commentId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [c] = await db
+      .select()
+      .from(postComments)
+      .where(eq(postComments.id, req.params.commentId))
+      .limit(1);
+    if (!c) return notFound(res);
+    if (c.authorId !== me.id)
+      return apiError(res, 403, "Only the author can delete this comment");
+    await db
+      .update(postComments)
+      .set({ deletedAt: new Date() })
+      .where(eq(postComments.id, c.id));
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/posts/:postId/reactions",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    const inserted = await db
+      .insert(postReactions)
+      .values({
+        postKind: parsed.kind,
+        postRefId: parsed.id,
+        userId: me.id,
+        reactionType: "like",
+      })
+      .onConflictDoNothing()
+      .returning({ userId: postReactions.userId });
+    // Bell-notify the post owner exactly once per fresh like. We
+    // look up the owner per post kind. The notification carries
+    // `actorUserId` so the family dashboard's Remove can revoke
+    // this specific like row, and a `/posts/<postId>` link so the
+    // Remove handler can locate the post unambiguously. Self-likes
+    // and re-likes (no insert happened) skip the bell.
+    if (inserted.length > 0) {
+      const ownerId = await loadPostOwnerId(parsed);
+      if (ownerId && ownerId !== me.id) {
+        await db.insert(notifications).values({
+          userId: ownerId,
+          kind: "like",
+          message: `${displayName(me)} liked your post`,
+          link: `/posts/${req.params.postId}`,
+          actorUserId: me.id,
+        });
+      }
+    }
+    res.status(204).end();
+  }),
+);
+
+router.delete(
+  "/posts/:postId/reactions",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    await db
+      .delete(postReactions)
+      .where(
+        and(
+          eq(postReactions.postKind, parsed.kind),
+          eq(postReactions.postRefId, parsed.id),
+          eq(postReactions.userId, me.id),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+router.get(
+  "/posts/:postId/tags",
+  asyncHandler(async (req, res) => {
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "article") {
+      const rows = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.articleId, parsed.id))
+        .orderBy(desc(articleTags.createdAt));
+      res.json({
+        tags: rows.map((t) => ({
+          id: t.id,
+          postId: articlePostId(parsed.id),
+          taggedEntityType: "user" as const,
+          taggedEntityId: t.userId,
+          direction: "lateral" as const,
+          status: t.status,
+          approverId: t.userId,
+          createdBy: t.taggerUserId ?? null,
+          createdAt: t.createdAt.toISOString(),
+          updatedAt: t.updatedAt.toISOString(),
+        })),
+      });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(highlightTags)
+      .where(eq(highlightTags.highlightId, parsed.id))
+      .orderBy(desc(highlightTags.createdAt));
+    res.json({
+      tags: rows.map((t) => ({
+        id: t.id,
+        postId: highlightPostId(parsed.id),
+        taggedEntityType: "user" as const,
+        taggedEntityId: t.userId,
+        direction: "lateral" as const,
+        status: t.status,
+        approverId: t.userId,
+        createdBy: t.taggerUserId ?? null,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/posts",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const body = req.body ?? {};
+    // Spec uses organizationId; we pick first team in that org as a default context.
+    let teamId: string | undefined = body.context?.id ?? body.teamId;
+    if (!teamId && body.organizationId) {
+      const [firstTeam] = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.organizationId, body.organizationId))
+        .limit(1);
+      teamId = firstTeam?.id;
+    }
+    if (!teamId) {
+      const [anyTeam] = await db.select().from(teams).limit(1);
+      teamId = anyTeam?.id;
+    }
+    if (!teamId) return apiError(res, 400, "no team context available");
+    if (body.postType === "long") {
+      const isDraft = body.status === "draft";
+      const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+      const [org] = team
+        ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+        : [null];
+      if (!team || !org) return notFound(res);
+      const allowed = await canCreateRecap(me.id, team);
+      if (!allowed)
+        return apiError(res, 403, "Only admins, coaches, and authors can create game recaps");
+      const isAdmin = await canManageOrganization(me.id, team.organizationId);
+      const status: "draft" | "pending_approval" | "published" = isDraft
+        ? "draft"
+        : isAdmin
+          ? "published"
+          : "pending_approval";
+      const photoUrls: string[] = Array.isArray(body.photoUrls)
+        ? body.photoUrls.filter((u: unknown) => typeof u === "string")
+        : [];
+      // Game-recap fields. The presence of `gameDate` is what marks
+      // an article as a recap and triggers the auto-tag fan-out below.
+      let gameDate: Date | null = null;
+      if (typeof body.gameDate === "string" && body.gameDate.length > 0) {
+        const parsed = new Date(body.gameDate);
+        if (!Number.isNaN(parsed.getTime())) gameDate = parsed;
+      }
+      const opponentName: string | null =
+        typeof body.opponentName === "string" && body.opponentName.trim().length > 0
+          ? body.opponentName.trim()
+          : null;
+      let teamScore: number | null = null;
+      let opponentScore: number | null = null;
+      if (typeof body.gameScore === "string") {
+        const m = /^(\d+)\s*-\s*(\d+)$/.exec(body.gameScore.trim());
+        if (m) {
+          teamScore = Number(m[1]);
+          opponentScore = Number(m[2]);
+        }
+      }
+      const [a] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: me.id,
+          title: body.title ?? "Untitled",
+          summary: body.description ?? undefined,
+          body: body.body ?? "",
+          coverImageUrl: body.coverImageUrl ?? photoUrls[0] ?? null,
+          videoUrl: body.videoUrl ?? null,
+          photoUrls: photoUrls.length > 0 ? photoUrls : null,
+          opponentName,
+          teamScore,
+          opponentScore,
+          gameDate,
+          status,
+          publishedAt: status === "published" ? new Date() : null,
+        })
+        .returning();
+
+      await applyArticleTagFanout({
+        articleId: a.id,
+        teamId,
+        taggerUserId: me.id,
+        explicitUserIds: Array.isArray(body.taggedUserIds)
+          ? body.taggedUserIds.filter((u: unknown): u is string => typeof u === "string")
+          : [],
+        gameDate,
+      });
+
+      res.status(201).json({
+        ...articleToPost(a, { team, org, author: me }),
+        approvalStatus: status,
+        requiresApproval: status === "pending_approval",
+      });
+      return;
+    }
+    const [h] = await db
+      .insert(highlights)
+      .values({
+        teamId,
+        uploaderId: me.id,
+        title: body.title ?? "Untitled",
+        description: body.description ?? undefined,
+        videoUrl: body.assets?.[0]?.url ?? "",
+      })
+      .returning();
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    const [org] = team
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
+    if (!team || !org) return notFound(res);
+    res.status(201).json(highlightToPost(h, { team, org, author: me }));
+  }),
+);
+
+export default router;

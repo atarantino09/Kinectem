@@ -3,12 +3,13 @@ import { useRoute, useLocation, Link } from "wouter";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Shield, UserPlus, CheckCircle2, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  ChildSetupCard,
+  type AddedChild,
+} from "@/components/invite-accept/ChildSetupCard";
+import { InviteHeaderCard } from "@/components/invite-accept/InviteHeaderCard";
 
 interface InviteEnvelope {
   invite: {
@@ -21,12 +22,6 @@ interface InviteEnvelope {
   };
   team: { id: string; name: string };
   organization: { id: string; name: string };
-}
-
-interface AddedChild {
-  id: string;
-  firstName: string;
-  lastName: string;
 }
 
 export default function InviteAcceptPage() {
@@ -158,163 +153,30 @@ export default function InviteAcceptPage() {
 
   return (
     <div className="max-w-xl mx-auto p-6 space-y-4">
-      {/* Invite context */}
-      <Card className="rounded-xl border-border overflow-hidden">
-        <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-6 text-white">
-          <p className="text-xs uppercase tracking-widest font-bold opacity-90">
-            {envelope.organization.name}
-          </p>
-          <h1 className="text-3xl font-black tracking-tight mt-1">
-            You're invited to{" "}
-            <span className="underline decoration-white/40">
-              {envelope.team.name}
-            </span>
-          </h1>
-          <Badge className="mt-3 bg-white/20 text-white border-white/30 font-bold">
-            {isPlayerInvite ? "Player roster" : envelope.invite.position ?? envelope.invite.role}
-          </Badge>
-        </div>
-
-        <CardContent className="p-6 space-y-4">
-          {isPlayerInvite && !accepted && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <Shield className="w-4 h-4 mt-0.5 shrink-0" />
-              <p>
-                <span className="font-bold">This invite is for a parent or guardian.</span>{" "}
-                After you accept, you'll add your child{childHint ? ` (${childHint})` : ""} to the roster — and any siblings on the same team.
-              </p>
-            </div>
-          )}
-          {!me && (
-            <div className="space-y-2">
-              <Link
-                href={`/login?signup=${isPlayerInvite ? "parent" : "user"}&returnTo=${encodeURIComponent(`/invites/${token}`)}`}
-              >
-                <Button
-                  size="lg"
-                  className="w-full font-bold rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
-                  data-testid="btn-create-guardian"
-                >
-                  {isPlayerInvite
-                    ? "Create a guardian account"
-                    : "Create your account"}
-                </Button>
-              </Link>
-              <p className="text-xs text-center text-muted-foreground">
-                Already on Kinectem?{" "}
-                <Link
-                  href={`/login?returnTo=${encodeURIComponent(`/invites/${token}`)}`}
-                  className="font-bold text-primary hover:underline"
-                >
-                  Sign in
-                </Link>
-              </p>
-            </div>
-          )}
-          {me && !accepted ? (
-            <Button
-              size="lg"
-              onClick={onAccept}
-              disabled={accepting}
-              className="w-full font-bold rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
-              data-testid="btn-accept-invite"
-            >
-              {accepting
-                ? "Accepting..."
-                : `Accept invite${isPlayerInvite ? " as guardian" : ""}`}
-            </Button>
-          ) : me && accepted && !needsChildSetup ? (
-            <div className="flex items-center justify-center gap-2 text-sm text-emerald-700">
-              <CheckCircle2 className="w-4 h-4" />
-              <span className="font-bold">Invite accepted</span>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* Child setup */}
+      <InviteHeaderCard
+        organizationName={envelope.organization.name}
+        teamName={envelope.team.name}
+        isPlayerInvite={isPlayerInvite}
+        positionLabel={envelope.invite.position ?? envelope.invite.role}
+        childHint={childHint}
+        loggedIn={!!me}
+        accepted={accepted}
+        needsChildSetup={needsChildSetup}
+        accepting={accepting}
+        token={token}
+        onAccept={onAccept}
+      />
       {needsChildSetup && (
-        <Card className="rounded-xl border-border">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-start gap-2">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shrink-0">
-                <UserPlus className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <h2 className="font-black tracking-tight">
-                  Add your child{children.length > 0 ? "ren" : ""} to the roster
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Add as many kids as you have on this team. Each gets their own
-                  athlete profile under your guardian account.
-                </p>
-              </div>
-            </div>
-
-            {children.length > 0 && (
-              <div className="space-y-2">
-                {children.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"
-                    data-testid={`row-added-child-${c.id}`}
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span className="font-bold">
-                      {c.firstName} {c.lastName}
-                    </span>
-                    <span className="text-emerald-700 ml-auto text-xs uppercase tracking-wider font-bold">
-                      On roster
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <form onSubmit={onAddChild} className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="font-bold text-xs">First name</Label>
-                  <Input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Jordan"
-                    data-testid="input-child-first"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="font-bold text-xs">Last name</Label>
-                  <Input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Carter"
-                    data-testid="input-child-last"
-                  />
-                </div>
-              </div>
-              <Button
-                type="submit"
-                disabled={savingChild}
-                className="font-bold rounded-full"
-                data-testid="btn-add-child"
-              >
-                {savingChild ? "Adding..." : "Add child to roster"}
-              </Button>
-            </form>
-
-            {children.length > 0 && (
-              <Button
-                variant="outline"
-                className="w-full font-bold rounded-full"
-                onClick={() => navigate(`/teams/${envelope.team.id}`)}
-                data-testid="btn-finish-setup"
-              >
-                Done — go to team{" "}
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <ChildSetupCard
+          children={children}
+          firstName={firstName}
+          lastName={lastName}
+          saving={savingChild}
+          onFirstNameChange={setFirstName}
+          onLastNameChange={setLastName}
+          onSubmit={onAddChild}
+          onFinish={() => navigate(`/teams/${envelope.team.id}`)}
+        />
       )}
     </div>
   );

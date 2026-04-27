@@ -1,0 +1,446 @@
+import { Fragment, useState } from "react";
+import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useRemoveTeamMember,
+  useAcceptTeamInvite,
+  useDeclineTeamInvite,
+  getListTeamMembersQueryKey,
+  getListRosterInvitesQueryKey,
+} from "@workspace/api-client-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { UserAvatar } from "@/components/UserAvatar";
+import { useToast } from "@/hooks/use-toast";
+import { formatDate } from "@/lib/format";
+import {
+  Shield,
+  UserPlus,
+  X,
+  Check,
+  Mail,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+
+export type ParentRef = {
+  id: string;
+  displayName: string;
+  email?: string | null;
+  avatarUrl?: string | null;
+};
+
+export type RosterMember = {
+  id: string;
+  userId: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  position?: string | null;
+  status?: string | null;
+  joinedAt?: string | null;
+  parents?: ParentRef[];
+};
+
+export type RosterInvite = {
+  id: string;
+  email?: string | null;
+  position?: string | null;
+  invitedBy?: { displayName: string } | null;
+  createdAt?: string | null;
+};
+
+interface TeamRosterTabsProps {
+  teamId: string;
+  isAdmin: boolean;
+  meId: string | undefined;
+  players: RosterMember[];
+  staff: RosterMember[];
+  invites: RosterInvite[];
+  onOpenInvite: () => void;
+}
+
+export function TeamRosterTabs({
+  teamId,
+  isAdmin,
+  meId,
+  players,
+  staff,
+  invites,
+  onOpenInvite,
+}: TeamRosterTabsProps) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
+
+  const invalidate = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: getListTeamMembersQueryKey(teamId) }),
+      qc.invalidateQueries({ queryKey: getListRosterInvitesQueryKey(teamId) }),
+    ]);
+  };
+
+  const removeMember = useRemoveTeamMember({
+    mutation: { onSuccess: () => invalidate() },
+  });
+  const acceptInvite = useAcceptTeamInvite({
+    mutation: { onSuccess: () => invalidate() },
+  });
+  const declineInvite = useDeclineTeamInvite({
+    mutation: { onSuccess: () => invalidate() },
+  });
+
+  const onRemove = async (memberId: string, name: string) => {
+    if (!confirm(`Remove ${name} from the roster?`)) return;
+    try {
+      await removeMember.mutateAsync({ teamId, memberId });
+      toast({ title: `Removed ${name}` });
+    } catch {
+      toast({ title: "Failed to remove member", variant: "destructive" });
+    }
+  };
+
+  const onAccept = async (memberId: string) => {
+    try {
+      await acceptInvite.mutateAsync({ teamId, memberId });
+      toast({ title: "Welcome to the team!" });
+    } catch {
+      toast({ title: "Failed to accept", variant: "destructive" });
+    }
+  };
+
+  const onDecline = async (memberId: string) => {
+    try {
+      await declineInvite.mutateAsync({ teamId, memberId });
+      toast({ title: "Invite declined" });
+    } catch {
+      toast({ title: "Failed to decline", variant: "destructive" });
+    }
+  };
+
+  const togglePlayerExpand = (id: string) => {
+    setExpandedPlayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderStatusBadge = (isPending: boolean) =>
+    isPending ? (
+      <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none font-bold uppercase tracking-wider text-[10px]">
+        Pending
+      </Badge>
+    ) : (
+      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-bold uppercase tracking-wider text-[10px]">
+        Active
+      </Badge>
+    );
+
+  const renderActions = (m: RosterMember) => {
+    const isMe = meId === m.userId;
+    const isPending = m.status === "pending";
+    return (
+      <div className="flex items-center justify-end gap-2">
+        {isPending && isMe && (
+          <>
+            <Button
+              size="sm"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onAccept(m.id)}
+              data-testid={`btn-accept-${m.id}`}
+            >
+              <Check className="w-3 h-3 mr-1" /> Accept
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onDecline(m.id)}
+              data-testid={`btn-decline-${m.id}`}
+            >
+              Decline
+            </Button>
+          </>
+        )}
+        {isAdmin && !isMe && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            onClick={() => onRemove(m.id, m.displayName)}
+            data-testid={`btn-remove-${m.id}`}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    );
+  };
+
+  const renderPlayerRow = (m: RosterMember) => {
+    const parents = m.parents ?? [];
+    const isExpanded = expandedPlayers.has(m.id);
+    const hasParents = parents.length > 0;
+    return (
+      <Fragment key={m.id}>
+        <TableRow data-testid={`row-player-${m.id}`}>
+          <TableCell className="w-8 pr-0">
+            {hasParents ? (
+              <button
+                type="button"
+                onClick={() => togglePlayerExpand(m.id)}
+                className="text-muted-foreground hover:text-foreground p-1"
+                data-testid={`btn-expand-${m.id}`}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+            ) : (
+              <span className="inline-block w-4 h-4" />
+            )}
+          </TableCell>
+          <TableCell>
+            <Link href={`/users/${m.userId}`}>
+              <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
+                <UserAvatar
+                  avatarUrl={m.avatarUrl}
+                  displayName={m.displayName}
+                  size="sm"
+                  fallbackClassName="bg-slate-900 text-primary-foreground"
+                />
+                <span className="font-semibold">{m.displayName}</span>
+              </div>
+            </Link>
+          </TableCell>
+          <TableCell className="text-xs text-muted-foreground">
+            {hasParents
+              ? `${parents.length} parent${parents.length > 1 ? "s" : ""}`
+              : "—"}
+          </TableCell>
+          <TableCell>{renderStatusBadge(m.status === "pending")}</TableCell>
+          <TableCell className="text-right">{renderActions(m)}</TableCell>
+        </TableRow>
+        {isExpanded && hasParents && (
+          <TableRow
+            key={`${m.id}-parents`}
+            className="bg-muted/30"
+            data-testid={`row-parents-${m.id}`}
+          >
+            <TableCell />
+            <TableCell colSpan={4} className="py-2">
+              <div className="space-y-1.5">
+                {parents.map((p) => (
+                  <Link key={p.id} href={`/users/${p.id}`}>
+                    <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
+                      <UserAvatar
+                        avatarUrl={p.avatarUrl}
+                        displayName={p.displayName}
+                        size="xs"
+                        fallbackClassName="bg-blue-100 text-blue-700"
+                      />
+                      <span className="font-semibold">{p.displayName}</span>
+                      <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none font-bold uppercase tracking-wider text-[10px]">
+                        Parent
+                      </Badge>
+                      {p.email && (
+                        <span className="text-xs text-muted-foreground">
+                          {p.email}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+      </Fragment>
+    );
+  };
+
+  const renderStaffRow = (m: RosterMember) => (
+    <TableRow key={m.id} data-testid={`row-staff-${m.id}`}>
+      <TableCell>
+        <Link href={`/users/${m.userId}`}>
+          <div className="flex items-center gap-3 cursor-pointer hover:text-primary">
+            <UserAvatar
+              avatarUrl={m.avatarUrl}
+              displayName={m.displayName}
+              size="sm"
+              fallbackClassName="bg-slate-900 text-primary-foreground"
+            />
+            <span className="font-semibold">{m.displayName}</span>
+          </div>
+        </Link>
+      </TableCell>
+      <TableCell className="text-sm capitalize">
+        {m.position?.replace(/_/g, " ") ?? "—"}
+      </TableCell>
+      <TableCell>{renderStatusBadge(m.status === "pending")}</TableCell>
+      <TableCell className="text-xs text-muted-foreground">
+        {formatDate(m.joinedAt ?? "")}
+      </TableCell>
+      <TableCell className="text-right">{renderActions(m)}</TableCell>
+    </TableRow>
+  );
+
+  return (
+    <Tabs defaultValue="roster">
+      <TabsList>
+        <TabsTrigger value="roster" className="font-bold">
+          Roster
+        </TabsTrigger>
+        <TabsTrigger value="staff" className="font-bold">
+          Staff
+        </TabsTrigger>
+        {isAdmin && invites.length > 0 && (
+          <TabsTrigger value="invites" className="font-bold">
+            Invites <Badge className="ml-1.5 h-5">{invites.length}</Badge>
+          </TabsTrigger>
+        )}
+      </TabsList>
+
+      <TabsContent value="roster" className="mt-4">
+        <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h3 className="font-black text-sm uppercase tracking-wider">
+              Players ({players.length})
+            </h3>
+            {isAdmin && (
+              <Button
+                size="sm"
+                className="font-bold"
+                onClick={onOpenInvite}
+                data-testid="btn-invite-roster"
+              >
+                <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Invite
+              </Button>
+            )}
+          </div>
+          <CardContent className="p-0">
+            {players.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                No players on the roster yet.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>Player</TableHead>
+                    <TableHead>Parents</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>{players.map(renderPlayerRow)}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="staff" className="mt-4">
+        <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h3 className="font-black text-sm uppercase tracking-wider">
+              Staff ({staff.length})
+            </h3>
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold"
+                onClick={onOpenInvite}
+              >
+                <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Invite
+              </Button>
+            )}
+          </div>
+          <CardContent className="p-0">
+            {staff.length === 0 ? (
+              <div className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Shield className="w-4 h-4" />
+                No coaches or staff listed.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Joined</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>{staff.map(renderStaffRow)}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      {isAdmin && invites.length > 0 && (
+        <TabsContent value="invites" className="mt-4">
+          <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-border">
+              <h3 className="font-black text-sm uppercase tracking-wider">
+                Pending Email Invites
+              </h3>
+            </div>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Invited by</TableHead>
+                    <TableHead>Sent</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invites.map((i) => (
+                    <TableRow key={i.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2 font-semibold">
+                          <Mail className="w-4 h-4 text-muted-foreground" />
+                          {i.email}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm capitalize">
+                        {i.position?.replace(/_/g, " ") ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {i.invitedBy?.displayName ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(i.createdAt ?? "")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      )}
+    </Tabs>
+  );
+}

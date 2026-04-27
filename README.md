@@ -113,12 +113,30 @@ When you change the API surface:
 
 1. Edit `lib/api-spec/openapi.yaml` first.
 2. Regenerate clients: `pnpm --filter @workspace/api-spec run codegen`.
-3. Update the matching handler in `artifacts/api-server/src/routes/spec.ts`.
+3. Update the matching handler in the per-domain module under
+   `artifacts/api-server/src/routes/` (e.g. `users.ts`, `posts.ts`,
+   `messages.ts`). `routes/index.ts` mounts every domain router.
 4. Run `pnpm --filter @workspace/api-server run test`.
 
 When you add or change error responses, use the `apiError` helper in
 `artifacts/api-server/src/lib/spec-helpers.ts` so the response keeps
 the standard `{ error, code }` shape.
+
+### API server module layout
+
+The Express routes are split by domain so each file stays focused. Cross-cutting
+helpers live in `src/lib/`:
+
+- `lib/spec-helpers.ts` — error envelope, response serializers (`toPublicUser`,
+  `articleToPost`, `paginate`, …), avatar guard, `notFound`.
+- `lib/post-stats.ts` — reaction/comment aggregation for feed-style endpoints.
+- `lib/article-tagging.ts` — auto-tag fan-out when a recap has a `gameDate`.
+- `lib/team-follow.ts` — auto-follow the parent org when a user joins a team.
+- `lib/guardian-confirmations.ts` — parent notifications/emails when a child's
+  guardian confirmation expires.
+- `middlewares/auth.ts` — `loadSession`, `requireAuth`, `requireAdmin`.
+- `lib/auth.ts` — session create/destroy + cookie helpers (re-exports the
+  middlewares above for legacy import sites).
 
 ## License
 

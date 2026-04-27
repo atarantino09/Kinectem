@@ -7,9 +7,19 @@ type Entry = { version: string; date: string; status?: "current"; changes: Chang
 
 const ENTRIES: Entry[] = [
   {
+    version: "v0.1.1",
+    date: "2026-04-26",
+    status: "current",
+    changes: [
+      { type: "changed", text: <>Internal: API server route handlers split from a single 7k-line module into per-domain files under <code>artifacts/api-server/src/routes/</code> (auth, users, organizations, teams, posts, drafts, messages, guardians, …). No URL or response shape changes — every endpoint is byte-identical.</> },
+      { type: "changed", text: <>Cross-cutting helpers extracted to <code>src/lib/</code> (<code>post-stats.ts</code>, <code>article-tagging.ts</code>, <code>team-follow.ts</code>, <code>guardian-confirmations.ts</code>) and auth middlewares moved to <code>src/middlewares/auth.ts</code>.</> },
+      { type: "fixed", text: <>Removed leftover <code>Bearer stub-clerk-session-token</code> fallback from the React client; the cookie session is now the only credential.</> },
+      { type: "added", text: <>New <code>queryOpts()</code> helper exported from <code>@workspace/api-client-react</code>: a typed wrapper for passing partial <code>UseQueryOptions</code> to generated <code>useXxx</code> hooks without an <code>as never</code> escape hatch.</> },
+    ],
+  },
+  {
     version: "v0.1.0",
     date: "2026-04-25",
-    status: "current",
     changes: [
       { type: "added", text: <>Public developer portal at <code>/dev-portal</code> with overview, getting started, authentication, conventions, interactive reference, and code samples.</> },
       { type: "added", text: <>OpenAPI 3.0.3 source of truth at <code>lib/api-spec/openapi.yaml</code>; React-Query and Zod clients are generated from it.</> },

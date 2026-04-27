@@ -4,6 +4,7 @@ import {
   useListUserFollowing,
   useListTeamFollowers,
   useListOrgFollowers,
+  queryOpts,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -108,28 +109,28 @@ function useFollowItems(
     v.kind === "user-followers" ? v.userId : "",
     undefined,
     {
-      query: { enabled: enabled && v.kind === "user-followers" } as never,
+      query: queryOpts({ enabled: enabled && v.kind === "user-followers" }),
     },
   );
   const userFollowing = useListUserFollowing(
     v.kind === "user-following" ? v.userId : "",
     undefined,
     {
-      query: { enabled: enabled && v.kind === "user-following" } as never,
+      query: queryOpts({ enabled: enabled && v.kind === "user-following" }),
     },
   );
   const teamFollowers = useListTeamFollowers(
     v.kind === "team-followers" ? v.teamId : "",
     undefined,
     {
-      query: { enabled: enabled && v.kind === "team-followers" } as never,
+      query: queryOpts({ enabled: enabled && v.kind === "team-followers" }),
     },
   );
   const orgFollowers = useListOrgFollowers(
     v.kind === "org-followers" ? v.orgId : "",
     undefined,
     {
-      query: { enabled: enabled && v.kind === "org-followers" } as never,
+      query: queryOpts({ enabled: enabled && v.kind === "org-followers" }),
     },
   );
 

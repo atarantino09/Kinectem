@@ -1,108 +1,571 @@
-import { Router, type IRouter } from "express";
-import { db, teams, organizations, rosterEntries, users, articles, highlights } from "@workspace/db";
-import { eq, desc, inArray } from "drizzle-orm";
+import { Router, type IRouter, type Request } from "express";
+import {
+  db,
+  users,
+  organizations,
+  organizationAdmins,
+  teamFollowers,
+  teams,
+  rosterEntries,
+  rosterInvites,
+  notifications,
+} from "@workspace/db";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  sql,
+} from "drizzle-orm";
+import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
+import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
-import { CreateTeamBody, AddRosterEntryBody } from "../lib/schemas";
-import { toTeam, toOrganization, toRosterEntry, toUser, toArticle, toHighlight } from "../lib/serializers";
+import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
+import { canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
+import {
+  createSession,
+  destroySession,
+  setSessionCookie,
+  clearSessionCookie,
+  SESSION_COOKIE,
+} from "../lib/auth";
+import {
+  displayName,
+  toTeam,
+  toTeamMember,
+  toInvite,
+  paginate,
+  apiError,
+  safeAvatarUrl,
+  notFound,
+} from "../lib/spec-helpers";
+import {
+  loadPostStats,
+  statsFor,
+  loadPostOwnerId,
+  type PostStats,
+  type StatsKind,
+} from "../lib/post-stats";
+import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { ensureOrgFollowedForTeam } from "../lib/team-follow";
 
 const router: IRouter = Router();
 
+// ---------------------------------------------------------------------------
+// Teams
+// ---------------------------------------------------------------------------
+
 router.post(
-  "/teams",
+  "/organizations/:orgId/teams",
   asyncHandler(async (req, res) => {
-    const body = CreateTeamBody.parse(req.body);
-    const [created] = await db.insert(teams).values(body).returning();
-    res.status(201).json(toTeam(created));
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) return apiError(res, 400, "name required");
+    const [team] = await db
+      .insert(teams)
+      .values({
+        organizationId: org.id,
+        name,
+        sport: req.body?.sport ?? undefined,
+        level: req.body?.level ?? undefined,
+        season: req.body?.season?.name ?? undefined,
+      })
+      .returning();
+    res.status(201).json(toTeam(team, org, { memberCount: 0 }));
   }),
 );
 
 router.get(
   "/teams/:teamId",
   asyncHandler(async (req, res) => {
-    const { teamId } = req.params;
-    const [team] = await db.select().from(teams).where(eq(teams.id, teamId));
-    if (!team) {
-      res.status(404).json({ error: "Team not found" });
-      return;
-    }
-    const [org] = await db.select().from(organizations).where(eq(organizations.id, team.organizationId));
-
-    const rosterRows = await db
-      .select({ entry: rosterEntries, user: users })
+    const [t] = await db.select().from(teams).where(eq(teams.id, req.params.teamId)).limit(1);
+    if (!t) return notFound(res);
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, t.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
       .from(rosterEntries)
-      .innerJoin(users, eq(rosterEntries.userId, users.id))
-      .where(eq(rosterEntries.teamId, teamId));
+      .where(eq(rosterEntries.teamId, t.id));
+    const me = req.sessionUser;
+    const [{ followerCount }] = await db
+      .select({ followerCount: sql<number>`count(*)::int` })
+      .from(teamFollowers)
+      .where(eq(teamFollowers.teamId, t.id));
+    let isFollowing = false;
+    if (me) {
+      const [f] = await db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(eq(teamFollowers.teamId, t.id), eq(teamFollowers.userId, me.id)),
+        )
+        .limit(1);
+      isFollowing = !!f;
+    }
+    res.json(toTeam(t, org, { memberCount: count, followerCount, isFollowing }));
+  }),
+);
 
-    res.json({
-      team: toTeam(team),
-      organization: org ? toOrganization(org) : undefined,
-      roster: rosterRows.map((r) => toRosterEntry(r.entry, toUser(r.user))),
-    });
+router.patch(
+  "/teams/:teamId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "unauthorized");
+    const [existing] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    if (!existing) return notFound(res);
+    const [adminRow] = await db
+      .select()
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, existing.organizationId),
+          eq(organizationAdmins.userId, me.id),
+        ),
+      )
+      .limit(1);
+    if (!adminRow) return apiError(res, 403, "forbidden");
+    const body = req.body ?? {};
+    const patch: Record<string, unknown> = {};
+    if (typeof body.name === "string") patch.name = body.name.trim();
+    if (typeof body.sport === "string") patch.sport = body.sport;
+    if (typeof body.level === "string") patch.level = body.level;
+    if (typeof body.description === "string") patch.description = body.description;
+    if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
+    if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
+    if (Object.keys(patch).length === 0) {
+      return apiError(res, 400, "no updatable fields");
+    }
+    const [t] = await db
+      .update(teams)
+      .set(patch)
+      .where(eq(teams.id, req.params.teamId))
+      .returning();
+    if (!t) return notFound(res);
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, t.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rosterEntries)
+      .where(eq(rosterEntries.teamId, t.id));
+    res.json(toTeam(t, org, { memberCount: count }));
   }),
 );
 
 router.get(
-  "/teams/:teamId/roster",
+  "/teams/:teamId/members",
   asyncHandler(async (req, res) => {
-    const { teamId } = req.params;
-    const role = typeof req.query["role"] === "string" ? req.query["role"] : undefined;
-
     const rows = await db
-      .select({ entry: rosterEntries, user: users })
+      .select({ r: rosterEntries, u: users })
       .from(rosterEntries)
       .innerJoin(users, eq(rosterEntries.userId, users.id))
-      .where(eq(rosterEntries.teamId, teamId));
+      .where(eq(rosterEntries.teamId, req.params.teamId));
+    const parentIds = Array.from(
+      new Set(
+        rows
+          .map((r) => r.u.parentId)
+          .filter((x): x is string => typeof x === "string"),
+      ),
+    );
+    const parentRows = parentIds.length
+      ? await db.select().from(users).where(inArray(users.id, parentIds))
+      : [];
+    const parentMap = new Map(parentRows.map((p) => [p.id, p]));
+    const me = req.sessionUser;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    let canSeeParentEmail = false;
+    if (me && team) {
+      canSeeParentEmail =
+        (await canManageOrganization(me.id, team.organizationId)) ||
+        (await isTeamMember(me.id, team.id));
+    }
+    const data = rows.map((r) => {
+      const base = toTeamMember(r.r, r.u);
+      const parent = r.u.parentId ? parentMap.get(r.u.parentId) : null;
+      return {
+        ...base,
+        parents: parent
+          ? [
+              {
+                id: parent.id,
+                displayName: parent.name || "Parent",
+                email: canSeeParentEmail ? (parent.email ?? null) : null,
+                avatarUrl: safeAvatarUrl(parent.avatarUrl),
+              },
+            ]
+          : [],
+      };
+    });
+    res.json(paginate(data));
+  }),
+);
 
-    const filtered = role ? rows.filter((r) => r.entry.role === role) : rows;
-    res.json(filtered.map((r) => toRosterEntry(r.entry, toUser(r.user))));
+router.get(
+  "/teams/:teamId/invites",
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .select({ i: rosterInvites, u: users })
+      .from(rosterInvites)
+      .leftJoin(users, eq(rosterInvites.invitedById, users.id))
+      .where(eq(rosterInvites.teamId, req.params.teamId));
+    const data = rows.map((r) => toInvite(r.i, r.u));
+    res.json(paginate(data));
+  }),
+);
+
+// Add a known Kinectem user directly to the roster (in pending state by default).
+router.post(
+  "/teams/:teamId/members",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const userId = String(req.body?.userId ?? "");
+    if (!userId) return apiError(res, 400, "userId required");
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
+    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) return notFound(res);
+    const positionRaw = String(req.body?.position ?? "player");
+    const dbRole: "player" | "coach" =
+      positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
+    const [existing] = await db
+      .select()
+      .from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, userId)))
+      .limit(1);
+    let entry = existing;
+    if (!entry) {
+      [entry] = await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId,
+          role: dbRole,
+          status: "pending",
+          position: positionRaw === "coach" ? null : positionRaw,
+          invitedById: me.id,
+        })
+        .returning();
+      await ensureOrgFollowedForTeam(userId, teamId);
+      await db.insert(notifications).values({
+        userId,
+        kind: "roster_invite",
+        message: `${displayName(me)} added you to ${t.name}. Tap to accept or decline.`,
+        link: `/teams/${teamId}`,
+        actorUserId: me.id,
+      });
+      // Fan out to the linked guardian, if any. A parent managing an
+      // under-13 athlete needs to see the invite in their own bell and
+      // be able to accept on the child's behalf from /family.
+      if (u.parentId) {
+        const childFirstName =
+          (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
+            ? u.name!.trim().split(/\s+/)[0]
+            : "your child";
+        await db.insert(notifications).values({
+          userId: u.parentId,
+          kind: "roster_invite_for_child",
+          message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
+          link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
+          actorUserId: me.id,
+        });
+      }
+    }
+    res.status(201).json(toTeamMember(entry, u));
+  }),
+);
+
+router.delete(
+  "/teams/:teamId/members/:memberId",
+  asyncHandler(async (req, res) => {
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.id, req.params.memberId),
+          eq(rosterEntries.teamId, req.params.teamId),
+        ),
+      );
+    res.status(204).end();
+  }),
+);
+
+// A roster spot can be acted on by either the entry's user themselves
+// (real, non-masquerading session) or the entry user's linked guardian
+// acting from a real (non-masquerading) parent session. This lets a
+// parent accept/decline a child's roster spot from /family or the
+// notifications bell on the child's behalf, without giving admins or
+// strangers the same power even if they impersonate.
+async function rosterEntryActor(
+  req: Request,
+  entryUserId: string,
+): Promise<{ allowed: boolean; actor: typeof users.$inferSelect | null }> {
+  const me = req.sessionUser;
+  if (!me) return { allowed: false, actor: null };
+  if (entryUserId === me.id && !req.isMasquerading) {
+    const [self] = await db.select().from(users).where(eq(users.id, me.id)).limit(1);
+    return { allowed: true, actor: self ?? null };
+  }
+  if (req.isMasquerading) return { allowed: false, actor: null };
+  const [child] = await db
+    .select({ parentId: users.parentId })
+    .from(users)
+    .where(eq(users.id, entryUserId))
+    .limit(1);
+  if (child && child.parentId === me.id) {
+    const [target] = await db.select().from(users).where(eq(users.id, entryUserId)).limit(1);
+    return { allowed: true, actor: target ?? null };
+  }
+  return { allowed: false, actor: null };
+}
+
+router.post(
+  "/teams/:teamId/members/:memberId/accept",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.id, req.params.memberId),
+          eq(rosterEntries.teamId, req.params.teamId),
+        ),
+      )
+      .limit(1);
+    if (!entry) return notFound(res);
+    const { allowed, actor } = await rosterEntryActor(req, entry.userId);
+    if (!allowed || !actor) return apiError(res, 403, "Forbidden");
+    const [updated] = await db
+      .update(rosterEntries)
+      .set({ status: "accepted" })
+      .where(eq(rosterEntries.id, entry.id))
+      .returning();
+    res.json(toTeamMember(updated, actor));
   }),
 );
 
 router.post(
-  "/teams/:teamId/roster",
+  "/teams/:teamId/members/:memberId/decline",
   asyncHandler(async (req, res) => {
-    const { teamId } = req.params;
-    const body = AddRosterEntryBody.parse(req.body);
-    const [created] = await db
-      .insert(rosterEntries)
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.id, req.params.memberId),
+          eq(rosterEntries.teamId, req.params.teamId),
+        ),
+      )
+      .limit(1);
+    if (!entry) return notFound(res);
+    const { allowed } = await rosterEntryActor(req, entry.userId);
+    if (!allowed) return apiError(res, 403, "Forbidden");
+    await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
+    res.status(204).end();
+  }),
+);
+
+// Email invite — creates a pending rosterInvite with a token.
+router.post(
+  "/teams/:teamId/invites",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
+    const email = String(req.body?.email ?? "").trim();
+    if (!email) return apiError(res, 400, "email required");
+    const positionRaw = String(req.body?.position ?? "player");
+    const dbRole: "player" | "coach" =
+      positionRaw === "coach" || positionRaw === "assistant_coach" ? "coach" : "player";
+    const token = `inv-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+    const [invite] = await db
+      .insert(rosterInvites)
       .values({
+        token,
         teamId,
-        userId: body.userId,
-        role: body.role,
-        position: body.position,
-        jerseyNumber: body.jerseyNumber,
+        invitedEmail: email,
+        invitedName: req.body?.name ?? null,
+        role: dbRole,
+        position: positionRaw === "coach" ? null : positionRaw,
+        invitedById: me.id,
       })
       .returning();
-    const [user] = await db.select().from(users).where(eq(users.id, created.userId));
-    res.status(201).json(toRosterEntry(created, toUser(user)));
+
+    // If a Kinectem account already exists for this email, also place that
+    // user on the roster as pending so they (and their linked guardian, if
+    // any) can accept the spot in-app without waiting for the email link.
+    // This mirrors the direct-add path's notification fan-out so that
+    // parents of children invited by email get the same /family deep-link
+    // they get from the direct-add path.
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()))
+      .limit(1);
+    if (existingUser) {
+      const [existingEntry] = await db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, existingUser.id),
+          ),
+        )
+        .limit(1);
+      if (!existingEntry) {
+        const [entry] = await db
+          .insert(rosterEntries)
+          .values({
+            teamId,
+            userId: existingUser.id,
+            role: dbRole,
+            status: "pending",
+            position: positionRaw === "coach" ? null : positionRaw,
+            invitedById: me.id,
+          })
+          .returning();
+        await ensureOrgFollowedForTeam(existingUser.id, teamId);
+        await db.insert(notifications).values({
+          userId: existingUser.id,
+          kind: "roster_invite",
+          message: `${displayName(me)} invited you to ${t.name}. Tap to accept or decline.`,
+          link: `/teams/${teamId}`,
+          actorUserId: me.id,
+        });
+        if (existingUser.parentId) {
+          const childFirstName =
+            (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
+              ? existingUser.name!.trim().split(/\s+/)[0]
+              : "your child";
+          await db.insert(notifications).values({
+            userId: existingUser.parentId,
+            kind: "roster_invite_for_child",
+            message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
+            link: `/family?childId=${existingUser.id}&entryId=${entry.id}&teamId=${teamId}`,
+            actorUserId: me.id,
+          });
+        }
+      }
+    }
+
+    res.status(201).json(toInvite(invite, me));
   }),
 );
 
+// Pending team-invites for a guardian-managed child. The parent (or a real
+// admin) needs a single endpoint that returns every team that has invited
+// this child but isn't accepted yet, plus enough metadata to render the
+// row without follow-up round-trips.
 router.get(
-  "/teams/:teamId/articles",
+  "/users/me/children/:childId/pending-team-invites",
   asyncHandler(async (req, res) => {
-    const { teamId } = req.params;
-    const [team] = await db.select().from(teams).where(eq(teams.id, teamId));
-    const rows = await db
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const childId = req.params.childId;
+    const [child] = await db
       .select()
-      .from(articles)
-      .where(eq(articles.teamId, teamId))
-      .orderBy(desc(articles.createdAt));
-    res.json(rows.map((a) => toArticle(a, { teamName: team?.name })));
-  }),
-);
+      .from(users)
+      .where(eq(users.id, childId))
+      .limit(1);
+    if (!child) return notFound(res);
 
-router.get(
-  "/teams/:teamId/highlights",
-  asyncHandler(async (req, res) => {
-    const { teamId } = req.params;
-    const [team] = await db.select().from(teams).where(eq(teams.id, teamId));
+    // Same authorization shape as GET /users/:userId/teams: the linked
+    // guardian on a real (non-masquerading) parent session, or a real admin.
+    const isRealAdmin =
+      req.realUser?.role === "admin" && !req.isMasquerading;
+    const isGuardian =
+      child.parentId === me.id && !req.isMasquerading;
+    if (!isGuardian && !isRealAdmin) {
+      return apiError(res, 403, "Forbidden");
+    }
+
     const rows = await db
-      .select()
-      .from(highlights)
-      .where(eq(highlights.teamId, teamId))
-      .orderBy(desc(highlights.createdAt));
-    res.json(rows.map((h) => toHighlight(h, { teamName: team?.name })));
+      .select({ entry: rosterEntries, team: teams, org: organizations })
+      .from(rosterEntries)
+      .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(
+        and(
+          eq(rosterEntries.userId, childId),
+          eq(rosterEntries.status, "pending"),
+        ),
+      )
+      .orderBy(desc(rosterEntries.createdAt));
+
+    // Resolve "who invited" directly from `rosterEntries.invitedById`,
+    // which both the direct-add and email-invite paths populate.
+    const inviterIds = Array.from(
+      new Set(
+        rows
+          .map((r) => r.entry.invitedById)
+          .filter((id): id is string => !!id),
+      ),
+    );
+    const inviterMap = new Map<string, typeof users.$inferSelect>();
+    if (inviterIds.length > 0) {
+      const inviterRows = await db
+        .select()
+        .from(users)
+        .where(inArray(users.id, inviterIds));
+      for (const u of inviterRows) inviterMap.set(u.id, u);
+    }
+
+    const data = rows.map((r) => {
+      const inviter = r.entry.invitedById
+        ? inviterMap.get(r.entry.invitedById) ?? null
+        : null;
+      return {
+        entryId: r.entry.id,
+        teamId: r.team.id,
+        teamName: r.team.name,
+        teamLogoUrl: r.team.logoUrl ?? null,
+        organization: { id: r.org.id, name: r.org.name },
+        role: r.entry.role === "coach" ? "coach" : "player",
+        position: r.entry.position ?? null,
+        invitedAt: r.entry.createdAt.toISOString(),
+        invitedBy: inviter
+          ? {
+              id: inviter.id,
+              displayName: displayName(inviter),
+              avatarUrl: safeAvatarUrl(inviter.avatarUrl),
+            }
+          : null,
+      };
+    });
+
+    res.json({ data });
   }),
 );
 
