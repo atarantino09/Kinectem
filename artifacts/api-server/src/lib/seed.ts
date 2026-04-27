@@ -3,7 +3,9 @@ import {
   users,
   organizations,
   organizationAdmins,
+  organizationFollowers,
   teams,
+  teamFollowers,
   rosterEntries,
   rosterInvites,
   articles,
@@ -12,8 +14,12 @@ import {
   articleTags,
   highlightTags,
   notifications,
+  userFollowers,
+  postReactions,
+  postComments,
+  postShares,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { hashPassword } from "./passwords";
 
@@ -83,6 +89,14 @@ export async function seedIfEmpty(): Promise<void> {
     // Ensure newly-required demo users (added after the initial seed) are
     // present even when the DB already has data.
     await ensureRequiredDemoUsers(demoPasswordHash);
+    // Backfill demo activity (follows / reactions / comments / extra shares)
+    // for partially-seeded DBs that pre-date this helper. Wrapped so a
+    // schema mismatch never blocks server boot.
+    try {
+      await backfillDemoActivityIfMissing();
+    } catch (err) {
+      logger.warn({ err }, "Demo activity backfill failed (non-fatal)");
+    }
     logger.info({ userCount: count }, "Database already seeded");
     return;
   }
@@ -362,7 +376,255 @@ export async function seedIfEmpty(): Promise<void> {
     },
   ]);
 
+  // Use the same backfill helper that runs on subsequent boots so the
+  // empty-seed branch and the already-seeded branch converge on identical
+  // activity state. The helper does its own email-based user lookup, so
+  // it picks up REQUIRED_DEMO_USERS (e.g. Morgan) that aren't bound to
+  // local vars in this scope.
+  await backfillDemoActivityIfMissing();
+
   logger.info("Database seeded successfully");
 }
 
 function samiraPlaceholder(id: string) { return id; }
+
+// ---------------------------------------------------------------------------
+// Demo activity seeding
+// ---------------------------------------------------------------------------
+//
+// Without follows / reactions / comments the personalized feed is empty for
+// every demo signin and the app feels lifeless. These helpers add a small
+// realistic graph of social activity. Both branches of seedIfEmpty (empty
+// seed and partially-seeded backfill) reuse seedDemoActivity, so every
+// insert here uses onConflictDoNothing for idempotency.
+
+type DemoActor = { id: string };
+
+interface DemoActivityInputs {
+  org: { id: string };
+  teams: { varsityFootball: { id: string }; varsityBasketball: { id: string } };
+  users: {
+    marcus: DemoActor;
+    jordan: DemoActor;
+    tyler: DemoActor;
+    coachDavis: DemoActor;
+    adminSam: DemoActor;
+    daniela: DemoActor;
+    chris: DemoActor;
+    parentLisa: DemoActor;
+    childSamira: DemoActor;
+    morgan?: DemoActor;
+  };
+  articles: { recap1: { id: string }; recap2: { id: string } };
+  highlights: { hl1: { id: string }; hl2: { id: string }; hl3: { id: string } };
+}
+
+async function seedDemoActivity(input: DemoActivityInputs): Promise<void> {
+  const {
+    org,
+    teams: { varsityFootball, varsityBasketball },
+    users: u,
+    articles: { recap1, recap2 },
+    highlights: { hl1, hl2, hl3 },
+  } = input;
+
+  // User-to-user follows. Picked so every canonical demo user has an
+  // inbound or outbound follow that surfaces real content in their
+  // personalized feed (Coach + Marcus author/star in the seeded recaps).
+  const follows: Array<{ followingUserId: string; followerUserId: string }> = [
+    { followerUserId: u.parentLisa.id, followingUserId: u.marcus.id },
+    { followerUserId: u.parentLisa.id, followingUserId: u.jordan.id },
+    { followerUserId: u.parentLisa.id, followingUserId: u.childSamira.id },
+    { followerUserId: u.parentLisa.id, followingUserId: u.coachDavis.id },
+    { followerUserId: u.adminSam.id, followingUserId: u.coachDavis.id },
+    { followerUserId: u.adminSam.id, followingUserId: u.marcus.id },
+    { followerUserId: u.jordan.id, followingUserId: u.marcus.id },
+    { followerUserId: u.tyler.id, followingUserId: u.jordan.id },
+    { followerUserId: u.marcus.id, followingUserId: u.jordan.id },
+    { followerUserId: u.chris.id, followingUserId: u.coachDavis.id },
+    { followerUserId: u.daniela.id, followingUserId: u.marcus.id },
+    { followerUserId: u.coachDavis.id, followingUserId: u.marcus.id },
+  ];
+  if (u.morgan) {
+    follows.push(
+      { followerUserId: u.morgan.id, followingUserId: u.daniela.id },
+      { followerUserId: u.morgan.id, followingUserId: u.coachDavis.id },
+    );
+  }
+  await db.insert(userFollowers).values(follows).onConflictDoNothing();
+
+  // Team follows: parents + admin watch both varsity teams; cross-sport
+  // athlete follows so basketball folks see football content too.
+  const teamFollowRows: Array<{ teamId: string; userId: string }> = [
+    { teamId: varsityFootball.id, userId: u.parentLisa.id },
+    { teamId: varsityFootball.id, userId: u.adminSam.id },
+    { teamId: varsityBasketball.id, userId: u.parentLisa.id },
+    { teamId: varsityBasketball.id, userId: u.adminSam.id },
+    { teamId: varsityBasketball.id, userId: u.marcus.id },
+    { teamId: varsityBasketball.id, userId: u.jordan.id },
+    { teamId: varsityFootball.id, userId: u.daniela.id },
+  ];
+  await db.insert(teamFollowers).values(teamFollowRows).onConflictDoNothing();
+
+  // Org follows: most demo users follow Westfield Athletic Club.
+  const orgFollowRows: Array<{ organizationId: string; userId: string }> = [
+    { organizationId: org.id, userId: u.parentLisa.id },
+    { organizationId: org.id, userId: u.adminSam.id },
+    { organizationId: org.id, userId: u.marcus.id },
+    { organizationId: org.id, userId: u.jordan.id },
+    { organizationId: org.id, userId: u.daniela.id },
+    { organizationId: org.id, userId: u.childSamira.id },
+    { organizationId: org.id, userId: u.tyler.id },
+    { organizationId: org.id, userId: u.chris.id },
+  ];
+  if (u.morgan) orgFollowRows.push({ organizationId: org.id, userId: u.morgan.id });
+  await db.insert(organizationFollowers).values(orgFollowRows).onConflictDoNothing();
+
+  // Reactions ("like" is the only enum value today). Spread across both
+  // recaps and all three highlights so post stats look populated.
+  const reactionRows: Array<{ postKind: "article"; postRefId: string; userId: string } | { postKind: "highlight"; postRefId: string; userId: string }> = [
+    { postKind: "article", postRefId: recap1.id, userId: u.parentLisa.id },
+    { postKind: "article", postRefId: recap1.id, userId: u.adminSam.id },
+    { postKind: "article", postRefId: recap1.id, userId: u.jordan.id },
+    { postKind: "article", postRefId: recap1.id, userId: u.tyler.id },
+    { postKind: "article", postRefId: recap2.id, userId: u.parentLisa.id },
+    { postKind: "article", postRefId: recap2.id, userId: u.daniela.id },
+    { postKind: "highlight", postRefId: hl1.id, userId: u.parentLisa.id },
+    { postKind: "highlight", postRefId: hl1.id, userId: u.adminSam.id },
+    { postKind: "highlight", postRefId: hl1.id, userId: u.jordan.id },
+    { postKind: "highlight", postRefId: hl2.id, userId: u.parentLisa.id },
+    { postKind: "highlight", postRefId: hl3.id, userId: u.parentLisa.id },
+    { postKind: "highlight", postRefId: hl3.id, userId: u.adminSam.id },
+  ];
+  await db.insert(postReactions).values(reactionRows).onConflictDoNothing();
+
+  // Comments — kept short and on-topic. We dedupe within a single insert
+  // call by author+body so repeat backfills don't pile on duplicates: the
+  // post_comments table has no unique constraint, so the dedupe is done
+  // by checking what's already present before inserting.
+  const desiredComments: Array<{ postKind: "article"; postRefId: string; authorId: string; body: string }> = [
+    { postKind: "article", postRefId: recap1.id, authorId: u.parentLisa.id, body: "So proud of these boys!" },
+    { postKind: "article", postRefId: recap1.id, authorId: u.adminSam.id, body: "Great team win." },
+    { postKind: "article", postRefId: recap1.id, authorId: u.jordan.id, body: "Locked in. On to the next one." },
+    { postKind: "article", postRefId: recap2.id, authorId: u.marcus.id, body: "Big stop by Chris at the end." },
+    { postKind: "article", postRefId: recap2.id, authorId: u.parentLisa.id, body: "Heart-stopper. Well played." },
+  ];
+  for (const c of desiredComments) {
+    const [existing] = await db
+      .select({ id: postComments.id })
+      .from(postComments)
+      .where(
+        sql`${postComments.postKind} = ${c.postKind}
+          AND ${postComments.postRefId} = ${c.postRefId}
+          AND ${postComments.authorId} = ${c.authorId}
+          AND ${postComments.body} = ${c.body}`,
+      )
+      .limit(1);
+    if (!existing) {
+      await db.insert(postComments).values(c);
+    }
+  }
+
+  // Extra shares so re-shared recaps appear in followers' feeds. We
+  // include shares by users that the canonical demo viewers follow
+  // (e.g. Jordan / Marcus, both followed by Lisa) so the personalized
+  // feed query surfaces them via the post_shares path — not just
+  // direct authorship.
+  await db
+    .insert(postShares)
+    .values([
+      { articleId: recap1.id, sharerUserId: u.parentLisa.id },
+      { articleId: recap2.id, sharerUserId: u.adminSam.id },
+      { articleId: recap1.id, sharerUserId: u.jordan.id },
+      { articleId: recap2.id, sharerUserId: u.marcus.id },
+    ])
+    .onConflictDoNothing();
+}
+
+// Looks up the canonical demo users by email and runs seedDemoActivity if
+// the canonical entities are present. seedDemoActivity is fully idempotent
+// (onConflictDoNothing + comment dedupe), so running it on every server
+// boot is safe and lets future expansions of the seed automatically apply
+// to existing dev DBs without a destructive reseed. Bails out gracefully
+// when any required user/team/article is missing — better to leave the DB
+// alone than write half-formed activity.
+async function backfillDemoActivityIfMissing(): Promise<void> {
+  const REQUIRED_EMAILS = [
+    "marcus@kinectem.demo",
+    "jordan@kinectem.demo",
+    "tyler@kinectem.demo",
+    "coach@kinectem.demo",
+    "sam@kinectem.demo",
+    "daniela@kinectem.demo",
+    "chris@kinectem.demo",
+    "lisa@kinectem.demo",
+    "samira@kinectem.demo",
+  ] as const;
+
+  const userRows = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(inArray(users.email, [...REQUIRED_EMAILS, "morgan@kinectem.demo"]));
+  const byEmail = new Map(userRows.map((r) => [r.email ?? "", r.id]));
+  for (const e of REQUIRED_EMAILS) {
+    if (!byEmail.has(e)) {
+      logger.info({ missing: e }, "Skipping demo activity backfill (missing demo user)");
+      return;
+    }
+  }
+
+  const [westfield] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.name, "Westfield Athletic Club"))
+    .limit(1);
+  if (!westfield) return;
+
+  const teamRows = await db
+    .select({ id: teams.id, name: teams.name })
+    .from(teams)
+    .where(eq(teams.organizationId, westfield.id));
+  const varsityFootball = teamRows.find((t) => t.name === "Varsity Football");
+  const varsityBasketball = teamRows.find((t) => t.name === "Varsity Boys Basketball");
+  if (!varsityFootball || !varsityBasketball) return;
+
+  const articleRows = await db
+    .select({ id: articles.id, title: articles.title })
+    .from(articles)
+    .where(eq(articles.teamId, varsityFootball.id));
+  const recap1 = articleRows.find((a) => a.title.startsWith("Westfield Dominates"));
+  const recap2 = articleRows.find((a) => a.title.startsWith("Hard-Fought Win"));
+  if (!recap1 || !recap2) return;
+
+  const highlightRows = await db
+    .select({ id: highlights.id, title: highlights.title })
+    .from(highlights)
+    .where(eq(highlights.teamId, varsityFootball.id));
+  const hl1 = highlightRows.find((h) => h.title.startsWith("40-yard TD"));
+  const hl2 = highlightRows.find((h) => h.title.startsWith("One-Handed"));
+  const hl3 = highlightRows.find((h) => h.title.startsWith("Walker"));
+  if (!hl1 || !hl2 || !hl3) return;
+
+  const morganId = byEmail.get("morgan@kinectem.demo");
+
+  await seedDemoActivity({
+    org: westfield,
+    teams: { varsityFootball, varsityBasketball },
+    users: {
+      marcus: { id: byEmail.get("marcus@kinectem.demo")! },
+      jordan: { id: byEmail.get("jordan@kinectem.demo")! },
+      tyler: { id: byEmail.get("tyler@kinectem.demo")! },
+      coachDavis: { id: byEmail.get("coach@kinectem.demo")! },
+      adminSam: { id: byEmail.get("sam@kinectem.demo")! },
+      daniela: { id: byEmail.get("daniela@kinectem.demo")! },
+      chris: { id: byEmail.get("chris@kinectem.demo")! },
+      parentLisa: { id: byEmail.get("lisa@kinectem.demo")! },
+      childSamira: { id: byEmail.get("samira@kinectem.demo")! },
+      morgan: morganId ? { id: morganId } : undefined,
+    },
+    articles: { recap1, recap2 },
+    highlights: { hl1, hl2, hl3 },
+  });
+
+  logger.info("Backfilled demo activity (follows / reactions / comments / shares)");
+}

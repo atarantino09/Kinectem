@@ -22,6 +22,21 @@ interface SignInFormProps {
   onPendingGuardian: (info: GuardianPendingInfo) => void;
 }
 
+const DEMO_ACCOUNTS: Array<{
+  testid: string;
+  label: string;
+  sublabel: string;
+  email: string;
+}> = [
+  { testid: "coach", label: "Coach", sublabel: "Mike Davis", email: "coach@kinectem.demo" },
+  { testid: "parent", label: "Parent", sublabel: "Lisa Carter", email: "lisa@kinectem.demo" },
+  { testid: "athlete", label: "Athlete", sublabel: "Marcus Rivera", email: "marcus@kinectem.demo" },
+  { testid: "child-athlete", label: "Athlete (under 13)", sublabel: "Samira Carter", email: "samira@kinectem.demo" },
+  { testid: "admin", label: "Admin", sublabel: "Sam Patel", email: "sam@kinectem.demo" },
+];
+
+const DEMO_PASSWORD = "demo1234";
+
 export function SignInForm({
   returnTo,
   onForgot,
@@ -33,17 +48,19 @@ export function SignInForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [demoBusy, setDemoBusy] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
+  const performLogin = async (
+    submitEmail: string,
+    submitPassword: string,
+  ) => {
     onError(null);
     try {
       await customFetch("/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
+          email: submitEmail.trim().toLowerCase(),
+          password: submitPassword,
         }),
       });
       await qc.invalidateQueries();
@@ -65,16 +82,38 @@ export function SignInForm({
       const msg = rateMsg ?? e?.body?.error ?? e?.message ?? "Sign-in failed";
       if (!rateMsg && e?.body?.pendingGuardianConfirmation) {
         onPendingGuardian({
-          email: email.trim().toLowerCase(),
-          password,
+          email: submitEmail.trim().toLowerCase(),
+          password: submitPassword,
           message: msg,
           expired: !!e?.body?.guardianConfirmExpired,
         });
       } else {
         onError(msg);
       }
+      throw err;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await performLogin(email, password);
+    } catch {
+      // performLogin already surfaced the error; keep the form interactive.
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const signInAsDemo = async (demoEmail: string) => {
+    setDemoBusy(demoEmail);
+    try {
+      await performLogin(demoEmail, DEMO_PASSWORD);
+    } catch {
+      // performLogin already surfaced the error.
+    } finally {
+      setDemoBusy(null);
     }
   };
 
@@ -158,6 +197,48 @@ export function SignInForm({
           Create an account
         </button>
       </p>
+
+      <div
+        className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3"
+        data-testid="panel-demo-accounts"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">
+            Try a demo account
+          </h3>
+          <span className="text-[11px] text-slate-500">
+            Password:{" "}
+            <code className="font-mono text-slate-700">demo1234</code>
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {DEMO_ACCOUNTS.map((acc) => {
+            const busy = demoBusy === acc.email;
+            return (
+              <button
+                key={acc.email}
+                type="button"
+                disabled={!!demoBusy || submitting}
+                onClick={() => signInAsDemo(acc.email)}
+                data-testid={`btn-demo-signin-${acc.testid}`}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left hover:border-violet-300 hover:bg-violet-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-2">
+                  {busy && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                  )}
+                  <div className="font-bold text-sm text-slate-900">
+                    {acc.label}
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500 truncate">
+                  {acc.sublabel}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </form>
   );
 }
