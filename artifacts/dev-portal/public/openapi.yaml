@@ -4040,6 +4040,9 @@ paths:
                     nullable: true
                     allOf:
                       - $ref: '#/components/schemas/AdminWhoamiUser'
+                  canAuthorRecap:
+                    type: boolean
+                    description: True when the (effective) session user can author a Game Recap on at least one team — i.e. they are an org admin of any organization, OR have an accepted roster entry as a coach, OR have an accepted roster entry with the explicit "author" position.
                 additionalProperties: true
 
   /reports:
