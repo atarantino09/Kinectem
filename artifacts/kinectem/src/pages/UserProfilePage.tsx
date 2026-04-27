@@ -329,9 +329,17 @@ export default function UserProfilePage() {
                               fallbackClassName="bg-slate-900 text-primary-foreground font-black"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="font-bold text-sm truncate">
-                                {t.teamName}
-                              </p>
+                              <div className="flex items-baseline gap-2 min-w-0">
+                                <p className="font-bold text-sm truncate">
+                                  {t.teamName}
+                                </p>
+                                <span
+                                  className="text-xs font-bold text-muted-foreground shrink-0"
+                                  data-testid={`text-team-jersey-${t.teamId}`}
+                                >
+                                  {t.jerseyNumber ? `#${t.jerseyNumber}` : "—"}
+                                </span>
+                              </div>
                               <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                 <Badge
                                   variant="outline"

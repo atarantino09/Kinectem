@@ -620,6 +620,12 @@ export const ListUserTeamsResponse = zod.object({
       status: zod.enum(["pending", "active"]),
       seasonId: zod.string().uuid(),
       seasonName: zod.string().nullish(),
+      jerseyNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "The athlete's jersey number on this specific team's roster. Null when no number has been recorded for this membership.\n",
+        ),
       joinedAt: zod.coerce.date(),
     }),
   ),

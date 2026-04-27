@@ -84,5 +84,11 @@ export interface UserTeamMembershipResponse {
   seasonId: string;
   /** @nullable */
   seasonName?: string | null;
+  /**
+   * The athlete's jersey number on this specific team's roster. Null when no number has been recorded for this membership.
+
+   * @nullable
+   */
+  jerseyNumber?: string | null;
   joinedAt: Date;
 }

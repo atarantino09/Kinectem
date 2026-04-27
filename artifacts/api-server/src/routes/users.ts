@@ -684,6 +684,7 @@ router.get(
       status: r.r.status === "accepted" ? "active" : "pending",
       seasonId: r.t.id,
       seasonName: r.t.season ?? null,
+      jerseyNumber: r.r.jerseyNumber ?? null,
       joinedAt: r.r.createdAt.toISOString(),
     }));
     res.json(paginate(data));
