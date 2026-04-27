@@ -15,15 +15,31 @@ async function getFootballTeamId(): Promise<string> {
 }
 
 describe("invites", () => {
-  it("lists existing seeded invites", async () => {
+  it("lists existing seeded invites for a manager", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
     const teamId = await getFootballTeamId();
-    const res = await request(app).get(`/api/v1/teams/${teamId}/invites`);
+    const res = await agent.get(`/api/v1/teams/${teamId}/invites`);
     expect(res.status).toBe(200);
     expect(
       res.body.data.find(
         (i: { token: string }) => i.token === "demo-invite-token-001",
       ),
     ).toBeDefined();
+  });
+
+  it("requires authentication to list team invites", async () => {
+    const teamId = await getFootballTeamId();
+    const res = await request(app).get(`/api/v1/teams/${teamId}/invites`);
+    expect(res.status).toBe(401);
+  });
+
+  it("forbids non-managers from listing team invites", async () => {
+    // Pending-invite emails are PII; only org admins or coach-level
+    // staff should be able to enumerate them.
+    const { agent } = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    const res = await agent.get(`/api/v1/teams/${teamId}/invites`);
+    expect(res.status).toBe(403);
   });
 
   it("looks up an invite by token", async () => {
@@ -119,5 +135,47 @@ describe("invites", () => {
       .post(`/api/v1/invites/${token}/children`)
       .send({ firstName: "Solo" });
     expect(res.status).toBe(400);
+  });
+
+  it("lets a manager withdraw a pending invite", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    const created = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "withdraw-me@example.com", position: "player" });
+    expect(created.status).toBe(201);
+    const inviteId = created.body.id as string;
+
+    const res = await coach.agent.delete(
+      `/api/v1/teams/${teamId}/invites/${inviteId}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("withdrawn");
+
+    // After withdrawal, the invite's status is reflected as "withdrawn"
+    // in the listing (so the team page's pending filter drops it).
+    const listed = await coach.agent.get(`/api/v1/teams/${teamId}/invites`);
+    expect(listed.status).toBe(200);
+    const found = listed.body.data.find(
+      (i: { id: string }) => i.id === inviteId,
+    );
+    expect(found).toBeDefined();
+    expect(found.status).toBe("withdrawn");
+  });
+
+  it("forbids non-managers from revoking invites", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    const created = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "guarded@example.com", position: "player" });
+    expect(created.status).toBe(201);
+    const inviteId = created.body.id as string;
+
+    const { agent } = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const res = await agent.delete(
+      `/api/v1/teams/${teamId}/invites/${inviteId}`,
+    );
+    expect(res.status).toBe(403);
   });
 });

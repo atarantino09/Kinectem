@@ -69,11 +69,32 @@ export default function TeamPage() {
   const followTeam = useFollowTeam();
   const unfollowTeam = useUnfollowTeam();
   const { data: membersResp } = useListTeamMembers(teamId);
-  const { data: invitesResp } = useListRosterInvites(teamId);
   const { data: org } = useGetOrganizationById(team?.organization.id ?? "", {
     query: queryOpts({ enabled: !!team?.organization.id }),
   });
   const { data: me } = useGetLoggedInUser();
+
+  // Mirrors `canManageTeam` on the server: org admins/owners always
+  // can, and so can anyone whose accepted roster entry has a coach-
+  // level position. We compute this here so the invites list query is
+  // only fired for managers — non-managers would get a 403 since
+  // pending-invite emails are PII restricted to staff.
+  const isAdmin = org?.role === "owner" || org?.role === "admin";
+  const COACH_LEVEL_POSITIONS = ["coach", "assistant_coach", "admin"];
+  const allMembersForGate = (membersResp?.data ?? []) as RosterMember[];
+  const canManage =
+    isAdmin ||
+    (!!me?.id &&
+      allMembersForGate.some(
+        (m) =>
+          m.userId === me.id &&
+          m.status !== "pending" &&
+          COACH_LEVEL_POSITIONS.includes((m.position ?? "").toLowerCase()),
+      ));
+
+  const { data: invitesResp } = useListRosterInvites(teamId, undefined, {
+    query: queryOpts({ enabled: !!teamId && canManage }),
+  });
 
   const { data: postsResp } = useQuery<{ data: PostResponse[] }>({
     queryKey: ["team-posts", teamId],
@@ -107,14 +128,13 @@ export default function TeamPage() {
     );
   }
 
-  const allMembers = (membersResp?.data ?? []) as RosterMember[];
+  const allMembers = allMembersForGate;
   const players = allMembers.filter((m) => m.position === "player");
   const staff = allMembers.filter((m) => m.position !== "player");
   const invites = ((invitesResp?.data ?? []) as RosterInvite[]).filter(
     (i) => (i as { status?: string }).status === "pending" && !!i.email,
   );
 
-  const isAdmin = org?.role === "owner" || org?.role === "admin";
   const seasonId = team.currentSeason?.id ?? team.id;
   const recentPosts = postsResp?.data ?? [];
 

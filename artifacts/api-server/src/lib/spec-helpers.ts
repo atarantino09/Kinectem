@@ -391,7 +391,17 @@ export function toInvite(i: InviteRow, invitedBy: UserRow | null) {
       | "parent"
       | null,
     role: (i.role === "coach" ? "admin" : "member") as "owner" | "admin" | "member",
-    status: i.status as "pending" | "accepted" | "declined" | "expired" | "withdrawn" | "resolved",
+    // The DB enum is `pending|accepted|expired|revoked`; the OpenAPI
+    // surface speaks `pending|accepted|declined|expired|withdrawn|resolved`.
+    // Translate the one mismatched value here so every consumer of the
+    // invite payload sees the spec vocabulary.
+    status: (i.status === "revoked" ? "withdrawn" : i.status) as
+      | "pending"
+      | "accepted"
+      | "declined"
+      | "expired"
+      | "withdrawn"
+      | "resolved",
     invitedBy: {
       id: invitedBy?.id ?? "system",
       displayName: invitedBy ? displayName(invitedBy) : "System",

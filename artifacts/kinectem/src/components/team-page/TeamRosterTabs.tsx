@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useAcceptTeamInvite,
   useDeclineTeamInvite,
+  useWithdrawRosterInvite,
   getListTeamMembersQueryKey,
   getListRosterInvitesQueryKey,
 } from "@workspace/api-client-react";
@@ -30,6 +31,7 @@ import {
   Mail,
   ChevronDown,
   ChevronRight,
+  X,
 } from "lucide-react";
 import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
 
@@ -101,6 +103,9 @@ export function TeamRosterTabs({
   const declineInvite = useDeclineTeamInvite({
     mutation: { onSuccess: () => invalidate() },
   });
+  const withdrawInvite = useWithdrawRosterInvite({
+    mutation: { onSuccess: () => invalidate() },
+  });
 
   // Determine the only-Admin scenario from the rosters we already have:
   // an "Admin" is a roster entry with position === "admin" and an active
@@ -156,6 +161,22 @@ export function TeamRosterTabs({
       toast({ title: "Invite declined" });
     } catch {
       toast({ title: "Failed to decline", variant: "destructive" });
+    }
+  };
+
+  const onRevoke = async (inviteId: string, label: string) => {
+    if (
+      !window.confirm(
+        `Revoke the invitation for ${label}? They won't be able to join with this link.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await withdrawInvite.mutateAsync({ teamId, inviteId });
+      toast({ title: "Invitation revoked" });
+    } catch {
+      toast({ title: "Failed to revoke invite", variant: "destructive" });
     }
   };
 
@@ -409,9 +430,16 @@ export function TeamRosterTabs({
         <TabsTrigger value="staff" className="font-bold">
           Staff
         </TabsTrigger>
-        {isAdmin && invites.length > 0 && (
-          <TabsTrigger value="invites" className="font-bold">
-            Invites <Badge className="ml-1.5 h-5">{invites.length}</Badge>
+        {canManage && (
+          <TabsTrigger
+            value="invites"
+            className="font-bold"
+            data-testid="tab-invites"
+          >
+            Pending
+            {invites.length > 0 && (
+              <Badge className="ml-1.5 h-5">{invites.length}</Badge>
+            )}
           </TabsTrigger>
         )}
       </TabsList>
@@ -498,46 +526,87 @@ export function TeamRosterTabs({
         </Card>
       </TabsContent>
 
-      {isAdmin && invites.length > 0 && (
+      {canManage && (
         <TabsContent value="invites" className="mt-4">
           <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-border">
+            <div className="px-5 py-3 border-b border-border flex items-center justify-between">
               <h3 className="font-black text-sm uppercase tracking-wider">
-                Pending Email Invites
+                Pending Invitations ({invites.length})
               </h3>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="font-bold"
+                  onClick={onOpenInvite}
+                  data-testid="btn-invite-pending"
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Invite
+                </Button>
+              )}
             </div>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Invited by</TableHead>
-                    <TableHead>Sent</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invites.map((i) => (
-                    <TableRow key={i.id} data-roster-entry-id={i.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2 font-semibold">
-                          <Mail className="w-4 h-4 text-muted-foreground" />
-                          {i.email}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm capitalize">
-                        {i.position?.replace(/_/g, " ") ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {i.invitedBy?.displayName ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(i.createdAt ?? "")}
-                      </TableCell>
+              {invites.length === 0 ? (
+                <div
+                  className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground"
+                  data-testid="empty-invites"
+                >
+                  <Mail className="w-4 h-4" />
+                  No invitations are waiting on a response.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invitee</TableHead>
+                      <TableHead>Position</TableHead>
+                      <TableHead>Invited by</TableHead>
+                      <TableHead>Sent</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {invites.map((i) => {
+                      const label = i.email ?? "this person";
+                      return (
+                        <TableRow
+                          key={i.id}
+                          data-testid={`row-invite-${i.id}`}
+                          data-roster-entry-id={i.id}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2 font-semibold">
+                              <Mail className="w-4 h-4 text-muted-foreground" />
+                              {i.email ?? "—"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm capitalize">
+                            {i.position?.replace(/_/g, " ") ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {i.invitedBy?.displayName ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {formatDate(i.createdAt ?? "")}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive"
+                              onClick={() => onRevoke(i.id, label)}
+                              disabled={withdrawInvite.isPending}
+                              data-testid={`btn-revoke-${i.id}`}
+                            >
+                              <X className="w-3 h-3 mr-1" /> Revoke
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

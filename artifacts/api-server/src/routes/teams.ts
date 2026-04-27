@@ -251,11 +251,23 @@ router.get(
 router.get(
   "/teams/:teamId/invites",
   asyncHandler(async (req, res) => {
+    // Pending-invite metadata (specifically the invited email) is PII
+    // that only managers should see. Mirror the create/withdraw paths
+    // by gating this list behind canManageTeam so non-managers can't
+    // enumerate invitees via the network even when the UI hides the
+    // tab from them.
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
     const rows = await db
       .select({ i: rosterInvites, u: users })
       .from(rosterInvites)
       .leftJoin(users, eq(rosterInvites.invitedById, users.id))
-      .where(eq(rosterInvites.teamId, req.params.teamId));
+      .where(eq(rosterInvites.teamId, teamId));
     const data = rows.map((r) => toInvite(r.i, r.u));
     res.json(paginate(data));
   }),
@@ -698,6 +710,52 @@ router.post(
     }
 
     res.status(201).json(toInvite(invite, me));
+  }),
+);
+
+// Withdraw a still-pending email invite. Managers (org admins/owners or a
+// team coach) need to be able to cancel an outstanding invitation from the
+// team page so a mistakenly-invited address doesn't sit forever in the
+// pending list. Idempotent on already-resolved invites: returns the
+// current status either way so the UI can refresh.
+router.delete(
+  "/teams/:teamId/invites/:inviteId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const inviteId = req.params.inviteId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
+    const [invite] = await db
+      .select()
+      .from(rosterInvites)
+      .where(
+        and(
+          eq(rosterInvites.id, inviteId),
+          eq(rosterInvites.teamId, teamId),
+        ),
+      )
+      .limit(1);
+    if (!invite) return notFound(res);
+    // Only flip pending -> revoked. Anything else (already accepted /
+    // expired) is left alone so we don't lose history. The DB enum
+    // calls this state "revoked" but the OpenAPI surface exposes it as
+    // "withdrawn" — translate at the boundary so spec consumers see a
+    // single, consistent vocabulary.
+    if (invite.status === "pending") {
+      await db
+        .update(rosterInvites)
+        .set({ status: "revoked" })
+        .where(eq(rosterInvites.id, invite.id));
+      return res.json({ id: invite.id, status: "withdrawn" });
+    }
+    res.json({
+      id: invite.id,
+      status: invite.status === "revoked" ? "withdrawn" : invite.status,
+    });
   }),
 );
 
