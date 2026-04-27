@@ -11,6 +11,8 @@ import {
   articles,
   articleTags,
   assets,
+  highlights,
+  postShares,
 } from "@workspace/db";
 import {
   and,
@@ -38,6 +40,7 @@ import {
   toPrivateUser,
   toOrganization,
   articleToPost,
+  highlightToPost,
   paginate,
   emptyPagination,
   splitName,
@@ -45,11 +48,14 @@ import {
   safeAvatarUrl,
   MAX_AVATAR_DATA_URL_LENGTH,
   notFound,
+  toPostAuthor,
 } from "../lib/spec-helpers";
 import {
   loadPostStats,
   statsFor,
   loadPostOwnerId,
+  loadPostShareStats,
+  shareStatsFor,
   type PostStats,
   type StatsKind,
 } from "../lib/post-stats";
@@ -344,17 +350,24 @@ router.get(
   "/users/:userId/posts",
   asyncHandler(async (req, res) => {
     // The Posts tab on a profile is a chronological archive of:
-    //   1. Articles the user authored, AND
-    //   2. Articles the user is tagged in (via article_tags).
-    // Visibility rules for #2:
+    //   1. Articles the user authored,
+    //   2. Articles the user is tagged in (via article_tags),
+    //   3. Highlights the user uploaded, AND
+    //   4. Re-shares (article|highlight) the user posted (task #190).
+    // Visibility for #2 mirrors the recap visibility rules:
     //   - Strangers only see articles where their tag is approved.
     //   - The user themselves, their real (non-masquerading) parent,
     //     and real admins also see pending-tag articles, with a small
     //     `tagStatus: "pending"` annotation so the client can render a
     //     "Pending tag" affordance.
-    // Ordering: gameDate desc nulls last, then createdAt desc.
-    // Articles authored AND tagged are merged into a single row
-    // (authored takes precedence so no `tagStatus` is set on those).
+    // Visibility for #3/#4 mirrors the public listing rules — hidden
+    // posts are filtered out for everyone but real admins, and shares
+    // pointing at hidden / unpublished targets simply drop out of the
+    // feed (so a user's profile can never resurface a recap that has
+    // been moderated away).
+    // Ordering uses an "effective date" per row: shares use sharedAt
+    // (so a freshly-shared old recap rises to the top), originals use
+    // gameDate (recaps) or createdAt (everything else).
     const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
     if (!u) return notFound(res);
 
@@ -367,8 +380,8 @@ router.get(
     }
     const canSeePending = isSelf || isAdmin || isParent;
 
-    const baseConds = [eq(articles.status, "published")];
-    if (!isAdmin) baseConds.push(isNull(articles.hiddenAt));
+    const articleConds = [eq(articles.status, "published")];
+    if (!isAdmin) articleConds.push(isNull(articles.hiddenAt));
 
     // 1) Articles the user authored.
     const authored = await db
@@ -382,7 +395,7 @@ router.get(
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.authorId, u.id), ...baseConds));
+      .where(and(eq(articles.authorId, u.id), ...articleConds));
 
     // 2) Articles the user is tagged in. Stranger viewers only see
     //    approved tags; self/parent/admin also see pending.
@@ -408,23 +421,98 @@ router.get(
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(and(...tagConds), ...baseConds));
+      .where(and(and(...tagConds), ...articleConds));
 
-    // Merge by article id (authored wins so the tag annotation drops).
-    type MergedRow = {
+    // 3) Highlights the user uploaded.
+    const highlightConds = [eq(highlights.uploaderId, u.id)];
+    if (!isAdmin) highlightConds.push(isNull(highlights.hiddenAt));
+    const uploadedHighlights = await db
+      .select({
+        h: highlights,
+        team: teams,
+        org: organizations,
+        author: users,
+      })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(and(...highlightConds));
+
+    // 4) Re-shares the user has posted. Each share row is joined
+    //    against its underlying post; rows whose target has gone
+    //    away (deleted, hidden to non-admins, or no longer a valid
+    //    recap) are dropped at the merge step below.
+    const shares = await db
+      .select({
+        share: postShares,
+      })
+      .from(postShares)
+      .where(eq(postShares.sharerUserId, u.id));
+
+    const sharedArticleIds = shares
+      .filter((s) => s.share.postKind === "article")
+      .map((s) => s.share.postRefId);
+    const sharedHighlightIds = shares
+      .filter((s) => s.share.postKind === "highlight")
+      .map((s) => s.share.postRefId);
+
+    const sharedArticleRows = sharedArticleIds.length
+      ? await db
+          .select({ a: articles, team: teams, org: organizations, author: users })
+          .from(articles)
+          .innerJoin(teams, eq(articles.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .where(and(inArray(articles.id, sharedArticleIds), ...articleConds))
+      : [];
+    const sharedHighlightRows = sharedHighlightIds.length
+      ? await db
+          .select({ h: highlights, team: teams, org: organizations, author: users })
+          .from(highlights)
+          .innerJoin(teams, eq(highlights.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(highlights.uploaderId, users.id))
+          .where(
+            and(
+              inArray(highlights.id, sharedHighlightIds),
+              ...(isAdmin ? [] : [isNull(highlights.hiddenAt)]),
+            ),
+          )
+      : [];
+
+    type ArticleRow = {
+      kind: "article";
       a: typeof articles.$inferSelect;
       team: typeof teams.$inferSelect;
       org: typeof organizations.$inferSelect;
       author: typeof users.$inferSelect | null;
       tagStatus?: "approved" | "pending";
+      sharedAt?: Date;
     };
+    type HighlightRow = {
+      kind: "highlight";
+      h: typeof highlights.$inferSelect;
+      team: typeof teams.$inferSelect;
+      org: typeof organizations.$inferSelect;
+      author: typeof users.$inferSelect | null;
+      sharedAt?: Date;
+    };
+    type MergedRow = ArticleRow | HighlightRow;
+
+    // We key by post id so authored / tagged / share rows for the
+    // same item collapse into one card. Original (non-share) rows
+    // win over share rows so a user who shared their own recap is
+    // still presented as the author rather than a re-sharer.
     const seen = new Map<string, MergedRow>();
     for (const row of authored) {
-      seen.set(row.a.id, row);
+      seen.set(`article-${row.a.id}`, { kind: "article", ...row });
     }
     for (const row of tagged) {
-      if (seen.has(row.a.id)) continue;
-      seen.set(row.a.id, {
+      const key = `article-${row.a.id}`;
+      if (seen.has(key)) continue;
+      seen.set(key, {
+        kind: "article",
         a: row.a,
         team: row.team,
         org: row.org,
@@ -432,27 +520,87 @@ router.get(
         tagStatus: row.tagStatus as "approved" | "pending",
       });
     }
-    // Order: gameDate desc nulls last, then createdAt desc.
-    const ordered = Array.from(seen.values()).sort((x, y) => {
-      const xd = x.a.gameDate ? x.a.gameDate.getTime() : -Infinity;
-      const yd = y.a.gameDate ? y.a.gameDate.getTime() : -Infinity;
-      if (xd !== yd) return yd - xd;
-      return y.a.createdAt.getTime() - x.a.createdAt.getTime();
-    });
+    for (const row of uploadedHighlights) {
+      seen.set(`highlight-${row.h.id}`, { kind: "highlight", ...row });
+    }
+    const shareByKey = new Map<string, Date>();
+    for (const s of shares) {
+      shareByKey.set(`${s.share.postKind}-${s.share.postRefId}`, s.share.createdAt);
+    }
+    for (const row of sharedArticleRows) {
+      const key = `article-${row.a.id}`;
+      const sharedAt = shareByKey.get(key);
+      if (!sharedAt) continue;
+      const existing = seen.get(key);
+      if (existing) {
+        // Already authored / tagged — leave the original card alone.
+        continue;
+      }
+      seen.set(key, { kind: "article", ...row, sharedAt });
+    }
+    for (const row of sharedHighlightRows) {
+      const key = `highlight-${row.h.id}`;
+      const sharedAt = shareByKey.get(key);
+      if (!sharedAt) continue;
+      if (seen.has(key)) continue;
+      seen.set(key, { kind: "highlight", ...row, sharedAt });
+    }
+
+    // Order by "effective date": shares use sharedAt (so a freshly
+    // shared old recap rises), articles use gameDate, everything
+    // else falls back to createdAt.
+    const effectiveDate = (row: MergedRow): number => {
+      if (row.sharedAt) return row.sharedAt.getTime();
+      if (row.kind === "article") {
+        return (row.a.gameDate ?? row.a.createdAt).getTime();
+      }
+      return row.h.createdAt.getTime();
+    };
+    const ordered = Array.from(seen.values()).sort((x, y) => effectiveDate(y) - effectiveDate(x));
     const limited = ordered.slice(0, 20);
 
+    // Bulk-load reaction / comment / share stats for the page.
+    const statKeys: { kind: StatsKind; refId: string }[] = limited.map((row) =>
+      row.kind === "article"
+        ? { kind: "article", refId: row.a.id }
+        : { kind: "highlight", refId: row.h.id },
+    );
+    const shareStatKeys = statKeys.filter(
+      (k): k is { kind: "article" | "highlight"; refId: string } =>
+        k.kind === "article" || k.kind === "highlight",
+    );
+    const [stats, shareStats] = await Promise.all([
+      loadPostStats(me?.id ?? null, statKeys),
+      loadPostShareStats(me?.id ?? null, shareStatKeys),
+    ]);
+
     const posts = limited.map((row) => {
-      const post = articleToPost(row.a, {
+      const sharedBy = row.sharedAt ? toPostAuthor(u) : undefined;
+      const sharedAt = row.sharedAt ? row.sharedAt.toISOString() : undefined;
+      if (row.kind === "article") {
+        const post = articleToPost(row.a, {
+          team: row.team,
+          org: row.org,
+          author: row.author,
+          ...statsFor(stats, "article", row.a.id),
+          ...shareStatsFor(shareStats, "article", row.a.id),
+          sharedBy,
+          sharedAt,
+        });
+        if (row.tagStatus === "pending") {
+          return { ...post, tagStatus: "pending" as const };
+        }
+        return post;
+      }
+      return highlightToPost(row.h, {
         team: row.team,
         org: row.org,
         author: row.author,
+        ...statsFor(stats, "highlight", row.h.id),
+        ...shareStatsFor(shareStats, "highlight", row.h.id),
+        sharedBy,
+        sharedAt,
       });
-      // Only annotate when the article was surfaced via the user's
-      // pending tag — clients render the badge for these.
-      if (row.tagStatus === "pending") {
-        return { ...post, tagStatus: "pending" as const };
-      }
-      return post;
     });
     res.json(paginate(posts));
   }),

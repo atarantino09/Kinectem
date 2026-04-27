@@ -95,28 +95,28 @@ export interface PostResponse {
    */
   recentReactorName?: string | null;
   /**
-   * Number of times this post has been re-shared. Always 0
-for non-shareable kinds (highlights, org posts) — only
-game-recap articles can be shared per task #162.
+   * Number of times this post has been re-shared. Per task
+#190 game-recap articles and highlights are both
+shareable; org posts are not, so they always report 0.
 
    * @minimum 0
    */
   shareCount?: number;
   /** True when the requesting user has re-shared this post.
-Always false for non-shareable kinds.
+Always false for org posts (not a shareable kind).
  */
   hasShared?: boolean;
   /** Set when this card represents a re-share (e.g. on the
 sharer's profile Posts tab or in the home feed of someone
 following the sharer). Identifies who re-published the
-recap. The original `author` and `context` fields still
-describe the original recap.
+recap or highlight. The original `author` and `context`
+fields still describe the original post.
  */
   sharedBy?: PostAuthor | null;
   /**
    * ISO datetime the share was created. Only set when
 `sharedBy` is set; clients sort shared cards by this
-timestamp so a recently-shared old recap rises to the
+timestamp so a recently-shared old post rises to the
 top of the sharer's profile feed.
 
    * @nullable

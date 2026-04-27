@@ -86,7 +86,7 @@ export function PostInteractions({ post }: { post: PostResponse }) {
   const onShareError = (prev: PostResponse | undefined, action: string) => {
     if (prev) qc.setQueryData(getGetPostQueryKey(post.id), prev);
     toast({
-      title: `Couldn't ${action} this recap`,
+      title: `Couldn't ${action} this ${shareKindLabel}`,
       description: "Please try again in a moment.",
       variant: "destructive",
     });
@@ -120,11 +120,16 @@ export function PostInteractions({ post }: { post: PostResponse }) {
     }
   };
 
-  // Recap-only: article post with gameDate (matches server gating).
+  // Task #190 — Shareable kinds are game-recap articles (long-form
+  // article + gameDate) and any highlight. Org posts and free-form
+  // long-form articles without a gameDate stay un-shareable to mirror
+  // the server gating.
   const isShareable =
-    post.id.startsWith("article-") &&
-    post.postType === "long" &&
-    !!post.gameDate;
+    (post.id.startsWith("article-") &&
+      post.postType === "long" &&
+      !!post.gameDate) ||
+    post.id.startsWith("highlight-");
+  const shareKindLabel = post.id.startsWith("highlight-") ? "highlight" : "recap";
   const onToggleShare = () => {
     if (post.hasShared) {
       unsharePost.mutate({ postId: post.id });
@@ -178,7 +183,11 @@ export function PostInteractions({ post }: { post: PostResponse }) {
             className="font-bold gap-2"
             data-testid="button-share"
             aria-pressed={post.hasShared}
-            aria-label={post.hasShared ? "Unshare recap" : "Share recap"}
+            aria-label={
+              post.hasShared
+                ? `Unshare ${shareKindLabel}`
+                : `Share ${shareKindLabel}`
+            }
           >
             <Share2
               className={`w-4 h-4 ${post.hasShared ? "fill-current" : ""}`}
@@ -254,6 +263,7 @@ export function PostInteractions({ post }: { post: PostResponse }) {
         onOpenChange={setConfirmShareOpen}
         onConfirm={onConfirmShare}
         recapTitle={post.title}
+        kind={shareKindLabel}
       />
     </div>
   );

@@ -113,4 +113,44 @@ const updateEmailPreference = asyncHandler(async (req, res) => {
 router.patch("/notifications/email-preference", updateEmailPreference);
 router.put("/notifications/email-preference", updateEmailPreference);
 
+// ---------------------------------------------------------------------------
+// Share-notification preference (task #190)
+// ---------------------------------------------------------------------------
+//
+// Mirrors /notifications/email-preference: a single boolean stored
+// on `users.shareNotificationsOptOut`. When true the share route
+// suppresses the bell notification that would otherwise fire on a
+// fresh re-share of one of the recipient's recaps or highlights.
+
+router.get(
+  "/notifications/share-preference",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [row] = await db
+      .select({ optOut: users.shareNotificationsOptOut })
+      .from(users)
+      .where(eq(users.id, me.id))
+      .limit(1);
+    res.json({ shareOptOut: !!row?.optOut });
+  }),
+);
+
+const updateSharePreference = asyncHandler(async (req, res) => {
+  const me = req.sessionUser;
+  if (!me) return apiError(res, 401, "Not authenticated");
+  if (typeof req.body?.shareOptOut !== "boolean") {
+    return apiError(res, 400, "shareOptOut must be a boolean");
+  }
+  const optOut = req.body.shareOptOut;
+  await db
+    .update(users)
+    .set({ shareNotificationsOptOut: optOut })
+    .where(eq(users.id, me.id));
+  res.json({ shareOptOut: optOut });
+});
+
+router.patch("/notifications/share-preference", updateSharePreference);
+router.put("/notifications/share-preference", updateSharePreference);
+
 export default router;

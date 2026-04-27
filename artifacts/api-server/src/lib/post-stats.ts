@@ -1,4 +1,4 @@
-import { db, articles, highlights, orgPosts, postReactions, postComments, users } from "@workspace/db";
+import { db, articles, highlights, orgPosts, postReactions, postComments, postShares, users } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 export interface PostStats {
@@ -6,6 +6,11 @@ export interface PostStats {
   hasReacted: boolean;
   commentCount: number;
   recentReactorName: string | null;
+}
+
+export interface PostShareStats {
+  shareCount: number;
+  hasShared: boolean;
 }
 
 export type StatsKind = "article" | "highlight" | "org_post";
@@ -250,6 +255,73 @@ export function statsFor(
       recentReactorName: null,
     }
   );
+}
+
+// Share stats — only `article` and `highlight` are valid share targets;
+// org_post is rejected at the share API layer (#190).
+export type ShareStatsKind = "article" | "highlight";
+
+export async function loadPostShareStats(
+  meId: string | null,
+  items: Array<{ kind: ShareStatsKind; refId: string }>,
+): Promise<Map<string, PostShareStats>> {
+  const map = new Map<string, PostShareStats>();
+  if (items.length === 0) return map;
+  for (const it of items) {
+    map.set(statsKey(it.kind, it.refId), { shareCount: 0, hasShared: false });
+  }
+  const articleIds = items.filter((i) => i.kind === "article").map((i) => i.refId);
+  const highlightIds = items.filter((i) => i.kind === "highlight").map((i) => i.refId);
+
+  const tasks: Promise<unknown>[] = [];
+  for (const [kind, refIds] of [
+    ["article", articleIds] as const,
+    ["highlight", highlightIds] as const,
+  ]) {
+    if (refIds.length === 0) continue;
+    tasks.push(
+      (async () => {
+        const counts = await db
+          .select({
+            postRefId: postShares.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(postShares)
+          .where(and(eq(postShares.postKind, kind), inArray(postShares.postRefId, refIds)))
+          .groupBy(postShares.postRefId);
+        for (const r of counts) {
+          const s = map.get(statsKey(kind, r.postRefId));
+          if (s) s.shareCount = Number(r.count);
+        }
+        if (meId) {
+          const my = await db
+            .select({ postRefId: postShares.postRefId })
+            .from(postShares)
+            .where(
+              and(
+                eq(postShares.postKind, kind),
+                eq(postShares.sharerUserId, meId),
+                inArray(postShares.postRefId, refIds),
+              ),
+            );
+          for (const r of my) {
+            const s = map.get(statsKey(kind, r.postRefId));
+            if (s) s.hasShared = true;
+          }
+        }
+      })(),
+    );
+  }
+  await Promise.all(tasks);
+  return map;
+}
+
+export function shareStatsFor(
+  map: Map<string, PostShareStats>,
+  kind: ShareStatsKind,
+  refId: string,
+): PostShareStats {
+  return map.get(statsKey(kind, refId)) ?? { shareCount: 0, hasShared: false };
 }
 
 // Resolve the owner (author / uploader) of a post given its parsed

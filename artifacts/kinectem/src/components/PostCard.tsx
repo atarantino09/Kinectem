@@ -141,7 +141,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const onShareError = (snapshot: ListSnapshot, action: string) => {
     snapshot.forEach((s) => qc.setQueryData(s.key, s.data));
     toast({
-      title: `Couldn't ${action} this recap`,
+      title: `Couldn't ${action} this ${shareKindLabel}`,
       description: "Please try again in a moment.",
       variant: "destructive",
     });
@@ -173,11 +173,20 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
     }
   };
 
-  // Recap-only: article post with gameDate (matches server gating).
+  // Task #190 — Shareable kinds are game-recap articles (long-form
+  // article + gameDate) and any highlight. Org posts and free-form
+  // long-form articles without a gameDate stay un-shareable to mirror
+  // the server gating.
   const isShareable =
-    post.id.startsWith("article-") &&
-    post.postType === "long" &&
-    !!post.gameDate;
+    (post.id.startsWith("article-") &&
+      post.postType === "long" &&
+      !!post.gameDate) ||
+    post.id.startsWith("highlight-");
+  const shareKindLabel: "highlight" | "recap" = post.id.startsWith(
+    "highlight-",
+  )
+    ? "highlight"
+    : "recap";
   const onToggleShare = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -286,6 +295,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             onOpenChange={setConfirmShareOpen}
             onConfirm={onConfirmShare}
             recapTitle={post.title}
+            kind={shareKindLabel}
           />
         )}
 
@@ -377,7 +387,11 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               className="font-bold gap-1.5 h-8"
               data-testid={`button-share-${post.id}`}
               aria-pressed={post.hasShared}
-              aria-label={post.hasShared ? "Unshare recap" : "Share recap"}
+              aria-label={
+                post.hasShared
+                  ? `Unshare ${shareKindLabel}`
+                  : `Share ${shareKindLabel}`
+              }
             >
               <Share2
                 className={`w-3.5 h-3.5 ${post.hasShared ? "fill-current" : ""}`}

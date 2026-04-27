@@ -65,64 +65,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { FeedAuthor } from "./feedAuthor";
-import type { FeedContext } from "./feedContext";
-import type { FeedPostAsset } from "./feedPostAsset";
-import type { FeedPostPostType } from "./feedPostPostType";
 
-export interface FeedPost {
-  id: string;
-  postType: FeedPostPostType;
-  /** @nullable */
-  title?: string | null;
-  /** @nullable */
-  description?: string | null;
-  /** @nullable */
-  body?: string | null;
-  /** True when description or body was truncated in the feed page */
-  bodyTruncated: boolean;
-  isEdited: boolean;
-  createdAt: Date;
-  updatedAt?: Date;
-  author: FeedAuthor;
-  context: FeedContext;
-  assets: FeedPostAsset[];
-  /** @minimum 0 */
-  reactionCount: number;
-  hasReacted: boolean;
-  /** @minimum 0 */
-  commentCount: number;
-  /**
-   * Display name of the most recent reactor, for "X and N others reacted" UI.
-   * @nullable
-   */
-  recentReactorName?: string | null;
-  /**
-   * Re-share count for game-recap articles and highlights; always 0 for org posts.
-   * @minimum 0
-   */
-  shareCount?: number;
-  /** True when the requesting user has re-shared this post. */
-  hasShared?: boolean;
-  /** Set when this card represents a re-share visible to the
-viewer (the share comes from the viewer or someone they
-follow). The card's `author` and `context` describe the
-original recap or highlight.
- */
-  sharedBy?: FeedAuthor | null;
-  /**
-   * ISO datetime the share was created; only set when `sharedBy` is set.
-   * @nullable
-   */
-  sharedAt?: Date | null;
-  /**
-   * For long-form game-recap article cards, the date of the
-game the recap covers. Null on non-recap article cards
-and on highlight / org-post cards. Per task #190 the
-client allows sharing both recaps (article + gameDate)
-and highlights; only org posts are not shareable.
-
-   * @nullable
-   */
-  gameDate?: Date | null;
+export interface UpdateSharePreferenceRequest {
+  shareOptOut: boolean;
 }

@@ -658,28 +658,28 @@ export interface PostResponse {
    */
   recentReactorName?: string | null;
   /**
-   * Number of times this post has been re-shared. Always 0
-for non-shareable kinds (highlights, org posts) — only
-game-recap articles can be shared per task #162.
+   * Number of times this post has been re-shared. Per task
+#190 game-recap articles and highlights are both
+shareable; org posts are not, so they always report 0.
 
    * @minimum 0
    */
   shareCount?: number;
   /** True when the requesting user has re-shared this post.
-Always false for non-shareable kinds.
+Always false for org posts (not a shareable kind).
  */
   hasShared?: boolean;
   /** Set when this card represents a re-share (e.g. on the
 sharer's profile Posts tab or in the home feed of someone
 following the sharer). Identifies who re-published the
-recap. The original `author` and `context` fields still
-describe the original recap.
+recap or highlight. The original `author` and `context`
+fields still describe the original post.
  */
   sharedBy?: PostAuthor | null;
   /**
    * ISO datetime the share was created. Only set when
 `sharedBy` is set; clients sort shared cards by this
-timestamp so a recently-shared old recap rises to the
+timestamp so a recently-shared old post rises to the
 top of the sharer's profile feed.
 
    * @nullable
@@ -1116,6 +1116,17 @@ export interface EmailPreferenceResponse {
 
 export interface UpdateEmailPreferenceRequest {
   emailOptOut: boolean;
+}
+
+export interface SharePreferenceResponse {
+  /** True when the user has opted out of bell notifications
+for re-shares of their recaps and highlights (task #190).
+ */
+  shareOptOut: boolean;
+}
+
+export interface UpdateSharePreferenceRequest {
+  shareOptOut: boolean;
 }
 
 export type CreateConversationRequestRecipientType =
@@ -1746,7 +1757,7 @@ export interface FeedPost {
    */
   recentReactorName?: string | null;
   /**
-   * Re-share count for game-recap articles; always 0 for other kinds.
+   * Re-share count for game-recap articles and highlights; always 0 for org posts.
    * @minimum 0
    */
   shareCount?: number;
@@ -1755,7 +1766,7 @@ export interface FeedPost {
   /** Set when this card represents a re-share visible to the
 viewer (the share comes from the viewer or someone they
 follow). The card's `author` and `context` describe the
-original recap.
+original recap or highlight.
  */
   sharedBy?: FeedAuthor | null;
   /**
@@ -1766,8 +1777,9 @@ original recap.
   /**
    * For long-form game-recap article cards, the date of the
 game the recap covers. Null on non-recap article cards
-and on highlight / org-post cards. Used by the client to
-gate the Share button to recap-only kinds.
+and on highlight / org-post cards. Per task #190 the
+client allows sharing both recaps (article + gameDate)
+and highlights; only org posts are not shareable.
 
    * @nullable
    */

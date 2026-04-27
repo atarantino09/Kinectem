@@ -519,11 +519,10 @@ describe("posts", () => {
     ).toBeUndefined();
   });
 
-  it("rejects sharing a non-article post (highlight or org_post)", async () => {
+  it("rejects sharing an org_post (only article + highlight are shareable per task #190)", async () => {
     const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
     const { org } = await getOrgAndTeam();
 
-    // org-post is the easiest non-article kind to author here.
     const create = await agent.post(`/api/v1/organizations/${org.id}/posts`).send({
       title: "Reminder",
       body: "Practice moved to 5pm",
@@ -536,6 +535,255 @@ describe("posts", () => {
     expect(share.status).toBe(400);
     const unshare = await agent.delete(`/api/v1/posts/${orgPostId}/share`);
     expect(unshare.status).toBe(400);
+  });
+
+  it("highlight share toggles increment shareCount, surface the highlight on the sharer's profile, and notify the uploader", async () => {
+    // Task #190 — Highlights are now polymorphically shareable. The
+    // re-share fires a "shared your highlight" notification, the
+    // highlight surfaces on the sharer's profile with sharedBy
+    // attribution, and an unshare cleanly retracts both.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Shareable highlight",
+      description: "Used by the highlight share-toggle test",
+      assets: [{ fileType: "video/mp4", url: "https://example.com/clip.mp4" }],
+    });
+    expect(create.status).toBe(201);
+    const highlightPostId: string = create.body.id;
+    expect(highlightPostId.startsWith("highlight-")).toBe(true);
+    expect(create.body.shareCount).toBe(0);
+    expect(create.body.hasShared).toBe(false);
+
+    const sharerEmail = `hlsharer+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: sharerEmail,
+      password: "test-password-123",
+      firstName: "Highlight",
+      lastName: "Sharer",
+      role: "athlete",
+    });
+    const sharerAgent = request.agent(app);
+    await sharerAgent
+      .post("/api/v1/auth/login")
+      .send({ email: sharerEmail, password: "test-password-123" });
+    const meRes = await sharerAgent.get("/api/v1/users/me");
+    const sharerUserId: string = meRes.body.id;
+
+    const share = await sharerAgent.post(`/api/v1/posts/${highlightPostId}/share`);
+    expect(share.status).toBe(204);
+
+    const inbox = await coachLogin.agent.get("/api/v1/notifications");
+    const notif = inbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "share" && n.data?.link === `/posts/${highlightPostId}`,
+    );
+    expect(notif).toBeDefined();
+    expect(notif.title).toContain("shared your highlight");
+    expect(notif.title).toContain("Shareable highlight");
+
+    const detail = await sharerAgent.get(`/api/v1/posts/${highlightPostId}`);
+    expect(detail.body.shareCount).toBe(1);
+    expect(detail.body.hasShared).toBe(true);
+
+    const profile = await sharerAgent.get(`/api/v1/users/${sharerUserId}/posts`);
+    const sharedCard = profile.body.data.find(
+      (p: { id: string }) => p.id === highlightPostId,
+    );
+    expect(sharedCard).toBeDefined();
+    expect(sharedCard.sharedBy?.id).toBe(sharerUserId);
+
+    const unshare = await sharerAgent.delete(
+      `/api/v1/posts/${highlightPostId}/share`,
+    );
+    expect(unshare.status).toBe(204);
+    const after = await sharerAgent.get(`/api/v1/posts/${highlightPostId}`);
+    expect(after.body.shareCount).toBe(0);
+    expect(after.body.hasShared).toBe(false);
+
+    const inboxAfter = await coachLogin.agent.get("/api/v1/notifications");
+    expect(
+      inboxAfter.body.data.find(
+        (n: { type: string; data?: { link?: string } | null }) =>
+          n.type === "share" && n.data?.link === `/posts/${highlightPostId}`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("team-follower fan can share a highlight (any post viewer is a valid sharer)", async () => {
+    // Task #190 — Sharing is no longer gated by org/team membership.
+    // A new athlete who only follows the team (not on the roster) can
+    // still re-share a highlight from that team.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Fan-shareable highlight",
+      description: "Anyone who can see it can share it",
+      assets: [{ fileType: "video/mp4", url: "https://example.com/fan.mp4" }],
+    });
+    expect(create.status).toBe(201);
+    const highlightPostId: string = create.body.id;
+
+    const fanEmail = `fanshare+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: fanEmail,
+      password: "test-password-123",
+      firstName: "Fan",
+      lastName: "Sharer",
+      role: "athlete",
+    });
+    const fanAgent = request.agent(app);
+    await fanAgent
+      .post("/api/v1/auth/login")
+      .send({ email: fanEmail, password: "test-password-123" });
+
+    // Fan never joins the org/team — they're effectively a public
+    // viewer. The share must still go through.
+    const share = await fanAgent.post(`/api/v1/posts/${highlightPostId}/share`);
+    expect(share.status).toBe(204);
+
+    const detail = await fanAgent.get(`/api/v1/posts/${highlightPostId}`);
+    expect(detail.body.shareCount).toBe(1);
+    expect(detail.body.hasShared).toBe(true);
+  });
+
+  it("highlight share is idempotent (a second POST is a no-op, count stays at 1)", async () => {
+    // Task #190 — The (post_kind, post_ref_id, sharer_user_id)
+    // unique index makes a duplicate share a no-op rather than a 409.
+    // Toggling Share twice from the UI should not double-count.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Idempotent highlight",
+      description: "Re-sharing must not double-count",
+      assets: [{ fileType: "video/mp4", url: "https://example.com/idem.mp4" }],
+    });
+    expect(create.status).toBe(201);
+    const highlightPostId: string = create.body.id;
+
+    const sharerEmail = `idem+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: sharerEmail,
+      password: "test-password-123",
+      firstName: "Idem",
+      lastName: "Potent",
+      role: "athlete",
+    });
+    const sharerAgent = request.agent(app);
+    await sharerAgent
+      .post("/api/v1/auth/login")
+      .send({ email: sharerEmail, password: "test-password-123" });
+
+    const first = await sharerAgent.post(`/api/v1/posts/${highlightPostId}/share`);
+    expect(first.status).toBe(204);
+    const second = await sharerAgent.post(`/api/v1/posts/${highlightPostId}/share`);
+    expect(second.status).toBe(204);
+
+    const detail = await sharerAgent.get(`/api/v1/posts/${highlightPostId}`);
+    expect(detail.body.shareCount).toBe(1);
+    expect(detail.body.hasShared).toBe(true);
+  });
+
+  it("self-share by the highlight uploader does not create a notification", async () => {
+    // Task #190 — Mirror of the existing self-share test for recaps:
+    // the uploader should not get a "you shared your own highlight"
+    // bell row.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Self-shared highlight",
+      description: "Uploader shares their own clip",
+      assets: [{ fileType: "video/mp4", url: "https://example.com/self.mp4" }],
+    });
+    expect(create.status).toBe(201);
+    const highlightPostId: string = create.body.id;
+
+    const share = await coachLogin.agent.post(
+      `/api/v1/posts/${highlightPostId}/share`,
+    );
+    expect(share.status).toBe(204);
+
+    const inbox = await coachLogin.agent.get("/api/v1/notifications");
+    const selfNotif = inbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "share" && n.data?.link === `/posts/${highlightPostId}`,
+    );
+    expect(selfNotif).toBeUndefined();
+  });
+
+  it("team page surfaces real share state for both recap and highlight cards (no stale 0/false)", async () => {
+    // Task #190 — `/teams/:teamId/posts` has to load shareCount /
+    // hasShared for both kinds so the team-page Share button matches
+    // the post-detail view. Without the wiring this regresses to the
+    // schema default of 0 / false for every card.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team, org } = await getOrgAndTeam();
+
+    const recap = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: team.id,
+      title: "Team-page recap",
+      body: "Game recap body",
+      gameDate: "2026-04-20",
+    });
+    expect(recap.status).toBe(201);
+    const recapId: string = recap.body.id;
+
+    const highlight = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Team-page highlight",
+      description: "Surfaces with share state on team page",
+      assets: [{ fileType: "video/mp4", url: "https://example.com/team.mp4" }],
+    });
+    expect(highlight.status).toBe(201);
+    const highlightId: string = highlight.body.id;
+
+    const fanEmail = `teamfan+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: fanEmail,
+      password: "test-password-123",
+      firstName: "Team",
+      lastName: "Fan",
+      role: "athlete",
+    });
+    const fanAgent = request.agent(app);
+    await fanAgent
+      .post("/api/v1/auth/login")
+      .send({ email: fanEmail, password: "test-password-123" });
+
+    expect((await fanAgent.post(`/api/v1/posts/${recapId}/share`)).status).toBe(204);
+    expect(
+      (await fanAgent.post(`/api/v1/posts/${highlightId}/share`)).status,
+    ).toBe(204);
+
+    const teamPage = await fanAgent.get(`/api/v1/teams/${team.id}/posts`);
+    expect(teamPage.status).toBe(200);
+    const recapCard = teamPage.body.data.find((p: { id: string }) => p.id === recapId);
+    const hlCard = teamPage.body.data.find((p: { id: string }) => p.id === highlightId);
+    expect(recapCard).toBeDefined();
+    expect(hlCard).toBeDefined();
+    expect(recapCard.shareCount).toBe(1);
+    expect(recapCard.hasShared).toBe(true);
+    expect(hlCard.shareCount).toBe(1);
+    expect(hlCard.hasShared).toBe(true);
+
+    // Logged-out viewer sees the count but never hasShared=true.
+    const anon = await request(app).get(`/api/v1/teams/${team.id}/posts`);
+    const anonHl = anon.body.data.find((p: { id: string }) => p.id === highlightId);
+    expect(anonHl.shareCount).toBe(1);
+    expect(anonHl.hasShared).toBe(false);
   });
 
   it("returns 404 when sharing an article that isn't a game recap (no gameDate)", async () => {

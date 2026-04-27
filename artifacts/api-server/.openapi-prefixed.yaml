@@ -1771,6 +1771,77 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/v1/notifications/share-preference:
+    get:
+      operationId: getSharePreference
+      summary: Get share notification preference
+      description: |
+        Returns whether the requesting user has opted out of bell
+        notifications for re-shares of their recaps and highlights
+        (task #190). Defaults to `false` (opted in) for new users.
+      tags:
+        - Notifications
+      responses:
+        "200":
+          description: Share notification preference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePreferenceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      operationId: updateSharePreference
+      summary: Update share notification preference
+      tags:
+        - Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSharePreferenceRequest"
+      responses:
+        "200":
+          description: Updated share notification preference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePreferenceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      operationId: updateSharePreferenceAlias
+      summary: Update share notification preference (alias)
+      description: |
+        Convenience alias for `PATCH /notifications/share-preference`.
+      tags:
+        - Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSharePreferenceRequest"
+      responses:
+        "200":
+          description: Updated share notification preference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePreferenceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/conversations:
     post:
       operationId: createConversation
@@ -2780,16 +2851,18 @@ paths:
   /api/v1/posts/{postId}/share:
     post:
       operationId: sharePost
-      summary: Re-share a game-recap article post
+      summary: Re-share a game-recap article or highlight post
       description: |
-        Re-shares the article so it appears on the requesting user's
+        Re-shares the post so it appears on the requesting user's
         profile Posts tab and home feed (and the home feed of users
         who follow them) with a "Shared by …" annotation. Idempotent
         — calling twice is a no-op (the second call returns 204
-        without creating a duplicate share row). Only game-recap
-        articles can be shared; calling on a highlight or org post
-        returns 400. The article must be visible to the requester
-        (published and not hidden) — otherwise 404.
+        without creating a duplicate share row). Per task #190 both
+        game-recap articles and highlights are shareable; calling on
+        an org post returns 400. The post must be visible to the
+        requester (published and not hidden) — otherwise 404. Any
+        viewer of the post (including team-follower fans who are
+        not on the roster) may share it.
       tags:
         - Posts
       parameters:
@@ -2810,8 +2883,8 @@ paths:
       summary: Remove the requesting user's re-share of a post
       description: |
         Idempotent — calling when no share exists is a no-op and
-        still returns 204. Same article-only constraint as
-        `sharePost`.
+        still returns 204. Same article|highlight-only constraint as
+        `sharePost`; org posts return 400.
       tags:
         - Posts
       parameters:
@@ -7002,22 +7075,22 @@ components:
           type: integer
           minimum: 0
           description: |
-            Number of times this post has been re-shared. Always 0
-            for non-shareable kinds (highlights, org posts) — only
-            game-recap articles can be shared per task #162.
+            Number of times this post has been re-shared. Per task
+            #190 game-recap articles and highlights are both
+            shareable; org posts are not, so they always report 0.
         hasShared:
           type: boolean
           description: |
             True when the requesting user has re-shared this post.
-            Always false for non-shareable kinds.
+            Always false for org posts (not a shareable kind).
         sharedBy:
           nullable: true
           description: |
             Set when this card represents a re-share (e.g. on the
             sharer's profile Posts tab or in the home feed of someone
             following the sharer). Identifies who re-published the
-            recap. The original `author` and `context` fields still
-            describe the original recap.
+            recap or highlight. The original `author` and `context`
+            fields still describe the original post.
           allOf:
             - $ref: "#/components/schemas/PostAuthor"
         sharedAt:
@@ -7027,7 +7100,7 @@ components:
           description: |
             ISO datetime the share was created. Only set when
             `sharedBy` is set; clients sort shared cards by this
-            timestamp so a recently-shared old recap rises to the
+            timestamp so a recently-shared old post rises to the
             top of the sharer's profile feed.
         gameDate:
           type: string
@@ -7227,6 +7300,24 @@ components:
       additionalProperties: false
       properties:
         emailOptOut:
+          type: boolean
+    SharePreferenceResponse:
+      type: object
+      required:
+        - shareOptOut
+      properties:
+        shareOptOut:
+          type: boolean
+          description: |
+            True when the user has opted out of bell notifications
+            for re-shares of their recaps and highlights (task #190).
+    UpdateSharePreferenceRequest:
+      type: object
+      required:
+        - shareOptOut
+      additionalProperties: false
+      properties:
+        shareOptOut:
           type: boolean
     CreateConversationRequest:
       type: object
@@ -8273,7 +8364,7 @@ components:
         shareCount:
           type: integer
           minimum: 0
-          description: Re-share count for game-recap articles; always 0 for other kinds.
+          description: Re-share count for game-recap articles and highlights; always 0 for org posts.
         hasShared:
           type: boolean
           description: True when the requesting user has re-shared this post.
@@ -8283,7 +8374,7 @@ components:
             Set when this card represents a re-share visible to the
             viewer (the share comes from the viewer or someone they
             follow). The card's `author` and `context` describe the
-            original recap.
+            original recap or highlight.
           allOf:
             - $ref: "#/components/schemas/FeedAuthor"
         sharedAt:
@@ -8298,8 +8389,9 @@ components:
           description: |
             For long-form game-recap article cards, the date of the
             game the recap covers. Null on non-recap article cards
-            and on highlight / org-post cards. Used by the client to
-            gate the Share button to recap-only kinds.
+            and on highlight / org-post cards. Per task #190 the
+            client allows sharing both recaps (article + gameDate)
+            and highlights; only org posts are not shareable.
     FeedResponse:
       type: object
       required:

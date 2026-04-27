@@ -18,6 +18,7 @@ import {
   notifications,
   postReactions,
   postComments,
+  postShares,
 } from "@workspace/db";
 import {
   and,
@@ -50,6 +51,7 @@ import {
   articleToPost,
   highlightToPost,
   orgPostToPost,
+  toPostAuthor,
   paginate,
   parsePostId,
   articlePostId,
@@ -58,7 +60,7 @@ import {
   apiError,
   notFound,
 } from "../lib/spec-helpers";
-import { loadPostStats, statsFor, loadPostOwnerId } from "../lib/post-stats";
+import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import { applyArticleTagFanout } from "../lib/article-tagging";
 
 const router: IRouter = Router();
@@ -121,9 +123,13 @@ router.get(
         .where(and(eq(highlights.uploaderId, me.id), isNull(highlights.hiddenAt)))
         .orderBy(desc(highlights.createdAt))
         .limit(10);
-      const stats = await loadPostStats(me.id, [
+      const statKeys = [
         ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ];
+      const [stats, shareStats] = await Promise.all([
+        loadPostStats(me.id, statKeys),
+        loadPostShareStats(me.id, statKeys),
       ]);
       const items = [
         ...ownArts.map((r) =>
@@ -132,6 +138,7 @@ router.get(
             org: r.org,
             author: r.author,
             ...statsFor(stats, "article", r.a.id),
+            ...shareStatsFor(shareStats, "article", r.a.id),
           }),
         ),
         ...ownHls.map((r) =>
@@ -140,6 +147,7 @@ router.get(
             org: r.org,
             author: r.uploader,
             ...statsFor(stats, "highlight", r.h.id),
+            ...shareStatsFor(shareStats, "highlight", r.h.id),
           }),
         ),
       ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -228,18 +236,86 @@ router.get(
           .limit(20)
       : [];
 
-    const stats = await loadPostStats(me?.id ?? null, [
+    // Re-shares posted by the viewer or any followed user. Each
+    // share row joins back to its underlying article/highlight; we
+    // drop targets that have been hidden / deleted / unpublished so
+    // a moderation action can never resurface a post via a stale
+    // share. Originals already in the feed win — we only inject the
+    // share card if the viewer hasn't seen the post yet (in which
+    // case it appears with `sharedBy`/`sharedAt` set).
+    const sharerIds = [me.id, ...followedUserIds];
+    const shareRows = await db
+      .select({ s: postShares, sharer: users })
+      .from(postShares)
+      .leftJoin(users, eq(postShares.sharerUserId, users.id))
+      .where(inArray(postShares.sharerUserId, sharerIds))
+      .orderBy(desc(postShares.createdAt))
+      .limit(40);
+
+    const sharedArticleIds = shareRows
+      .filter((r) => r.s.postKind === "article")
+      .map((r) => r.s.postRefId);
+    const sharedHighlightIds = shareRows
+      .filter((r) => r.s.postKind === "highlight")
+      .map((r) => r.s.postRefId);
+
+    const sharedArticleRows = sharedArticleIds.length
+      ? await db
+          .select({ a: articles, team: teams, org: organizations, author: users })
+          .from(articles)
+          .innerJoin(teams, eq(articles.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .where(
+            and(
+              inArray(articles.id, sharedArticleIds),
+              eq(articles.status, "published"),
+              isNull(articles.hiddenAt),
+            ),
+          )
+      : [];
+    const sharedHighlightRows = sharedHighlightIds.length
+      ? await db
+          .select({ h: highlights, team: teams, org: organizations, uploader: users })
+          .from(highlights)
+          .innerJoin(teams, eq(highlights.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(highlights.uploaderId, users.id))
+          .where(and(inArray(highlights.id, sharedHighlightIds), isNull(highlights.hiddenAt)))
+      : [];
+
+    const sharedArticleById = new Map(sharedArticleRows.map((r) => [r.a.id, r]));
+    const sharedHighlightById = new Map(sharedHighlightRows.map((r) => [r.h.id, r]));
+
+    const statKeys = [
       ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
       ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+      ...sharedArticleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...sharedHighlightRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+    ];
+    const shareStatKeys = statKeys.filter(
+      (k): k is { kind: "article" | "highlight"; refId: string } =>
+        k.kind === "article" || k.kind === "highlight",
+    );
+    const [stats, shareStats] = await Promise.all([
+      loadPostStats(me?.id ?? null, statKeys),
+      loadPostShareStats(me?.id ?? null, shareStatKeys),
     ]);
-    const items = [
+
+    const seenIds = new Set<string>([
+      ...arts.map((r) => `article-${r.a.id}`),
+      ...hls.map((r) => `highlight-${r.h.id}`),
+    ]);
+
+    const items: ReturnType<typeof articleToPost>[] = [
       ...arts.map((r) =>
         articleToPost(r.a, {
           team: r.team,
           org: r.org,
           author: r.author,
           ...statsFor(stats, "article", r.a.id),
+          ...shareStatsFor(shareStats, "article", r.a.id),
         }),
       ),
       ...hls.map((r) =>
@@ -248,6 +324,7 @@ router.get(
           org: r.org,
           author: r.uploader,
           ...statsFor(stats, "highlight", r.h.id),
+          ...shareStatsFor(shareStats, "highlight", r.h.id),
         }),
       ),
       ...orgPostRows.map((r) =>
@@ -257,7 +334,53 @@ router.get(
           ...statsFor(stats, "org_post", r.p.id),
         }),
       ),
-    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    ];
+
+    for (const sr of shareRows) {
+      const key = `${sr.s.postKind}-${sr.s.postRefId}`;
+      if (seenIds.has(key)) continue;
+      seenIds.add(key);
+      const sharedBy = sr.sharer ? toPostAuthor(sr.sharer) : null;
+      const sharedAt = sr.s.createdAt.toISOString();
+      if (sr.s.postKind === "article") {
+        const row = sharedArticleById.get(sr.s.postRefId);
+        if (!row) continue;
+        items.push(
+          articleToPost(row.a, {
+            team: row.team,
+            org: row.org,
+            author: row.author,
+            ...statsFor(stats, "article", row.a.id),
+            ...shareStatsFor(shareStats, "article", row.a.id),
+            sharedBy,
+            sharedAt,
+          }),
+        );
+      } else if (sr.s.postKind === "highlight") {
+        const row = sharedHighlightById.get(sr.s.postRefId);
+        if (!row) continue;
+        items.push(
+          highlightToPost(row.h, {
+            team: row.team,
+            org: row.org,
+            author: row.uploader,
+            ...statsFor(stats, "highlight", row.h.id),
+            ...shareStatsFor(shareStats, "highlight", row.h.id),
+            sharedBy,
+            sharedAt,
+          }),
+        );
+      }
+    }
+
+    // Order by effective date: shares use sharedAt so a freshly
+    // shared old recap rises to the top; everything else uses its
+    // own createdAt.
+    items.sort((a, b) => {
+      const ad = a.sharedAt ?? a.createdAt;
+      const bd = b.sharedAt ?? b.createdAt;
+      return ad < bd ? 1 : -1;
+    });
     res.json(paginate(items));
   }),
 );
@@ -430,8 +553,9 @@ router.get(
         isCoAuthor = !!coRow;
       }
       const canEdit = isAuthor || isCoAuthor || isOrgAdmin;
-      const stats = await loadPostStats(me?.id ?? null, [
-        { kind: "article", refId: row.a.id },
+      const [stats, shareStats] = await Promise.all([
+        loadPostStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
+        loadPostShareStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
       ]);
       res.json(
         articleToPost(row.a, {
@@ -440,6 +564,7 @@ router.get(
           author: row.author,
           canEdit,
           ...statsFor(stats, "article", row.a.id),
+          ...shareStatsFor(shareStats, "article", row.a.id),
         }),
       );
       return;
@@ -481,8 +606,9 @@ router.get(
       .limit(1);
     if (!row) return notFound(res);
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
-    const stats = await loadPostStats(me?.id ?? null, [
-      { kind: "highlight", refId: row.h.id },
+    const [stats, shareStats] = await Promise.all([
+      loadPostStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
+      loadPostShareStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
     ]);
     res.json(
       highlightToPost(row.h, {
@@ -490,6 +616,7 @@ router.get(
         org: row.org,
         author: row.uploader,
         ...statsFor(stats, "highlight", row.h.id),
+        ...shareStatsFor(shareStats, "highlight", row.h.id),
       }),
     );
   }),
@@ -556,6 +683,146 @@ router.delete(
       .update(postComments)
       .set({ deletedAt: new Date() })
       .where(eq(postComments.id, c.id));
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Share / Re-share — task #190 (polymorphic over article|highlight)
+// ---------------------------------------------------------------------------
+//
+// Re-shares are stored polymorphically in `post_shares (postKind,
+// postRefId, sharerUserId)` and are scoped to the two viewer-facing
+// post kinds: game-recap articles and highlights. Org posts are
+// rejected with 400. Visibility mirrors GET /posts/:postId — drafts,
+// hidden, and non-recap articles return 404 to non-authors. Any
+// viewer of the post (including team-follower fans who are not on
+// the roster) may share it.
+
+async function loadShareableTarget(
+  parsed: { kind: "article" | "highlight"; id: string },
+  meId: string | null,
+  isAdmin: boolean,
+): Promise<{ ok: true; ownerId: string | null; title: string; kindLabel: "recap" | "highlight" } | { ok: false }> {
+  if (parsed.kind === "article") {
+    const [row] = await db
+      .select({
+        a: articles,
+        org: organizations,
+      })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (!row) return { ok: false };
+    if (row.a.hiddenAt && !isAdmin) return { ok: false };
+    const isAuthor = !!meId && row.a.authorId === meId;
+    const isOrgAdmin =
+      !!meId && (await canManageOrganization(meId, row.org.id));
+    if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
+      return { ok: false };
+    }
+    // Recap-only: a long-form article without a gameDate is not a
+    // game recap and is not shareable per task #162 (kept under #190).
+    if (!row.a.gameDate) return { ok: false };
+    return { ok: true, ownerId: row.a.authorId, title: row.a.title, kindLabel: "recap" };
+  }
+  const [row] = await db
+    .select({ h: highlights })
+    .from(highlights)
+    .where(eq(highlights.id, parsed.id))
+    .limit(1);
+  if (!row) return { ok: false };
+  if (row.h.hiddenAt && !isAdmin) return { ok: false };
+  return { ok: true, ownerId: row.h.uploaderId, title: row.h.title, kindLabel: "highlight" };
+}
+
+router.post(
+  "/posts/:postId/share",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "org_post") {
+      return apiError(res, 400, "Org posts cannot be re-shared");
+    }
+    const shareableParsed = parsed as { kind: "article" | "highlight"; id: string };
+    const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const target = await loadShareableTarget(shareableParsed, me.id, isAdmin);
+    if (!target.ok) return notFound(res);
+
+    const inserted = await db
+      .insert(postShares)
+      .values({
+        postKind: shareableParsed.kind,
+        postRefId: shareableParsed.id,
+        sharerUserId: me.id,
+      })
+      .onConflictDoNothing()
+      .returning({ id: postShares.id });
+
+    // Bell-notify the original uploader on a fresh share (not on
+    // duplicate toggles, not on self-shares, not when the recipient
+    // has opted out via PATCH /notifications/share-preference, and
+    // not for orphaned posts whose author has been deleted).
+    if (inserted.length > 0 && target.ownerId && target.ownerId !== me.id) {
+      const [owner] = await db
+        .select({
+          id: users.id,
+          shareOptOut: users.shareNotificationsOptOut,
+        })
+        .from(users)
+        .where(eq(users.id, target.ownerId))
+        .limit(1);
+      if (owner && !owner.shareOptOut) {
+        await db.insert(notifications).values({
+          userId: owner.id,
+          kind: "share",
+          message: `${displayName(me)} shared your ${target.kindLabel} '${target.title}'`,
+          link: `/posts/${req.params.postId}`,
+          actorUserId: me.id,
+        });
+      }
+    }
+    res.status(204).end();
+  }),
+);
+
+router.delete(
+  "/posts/:postId/share",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "org_post") {
+      return apiError(res, 400, "Org posts cannot be re-shared");
+    }
+    await db
+      .delete(postShares)
+      .where(
+        and(
+          eq(postShares.postKind, parsed.kind),
+          eq(postShares.postRefId, parsed.id),
+          eq(postShares.sharerUserId, me.id),
+        ),
+      );
+    // Retract the still-unread share notification (if any) so the
+    // bell doesn't claim a share that the sharer has rolled back.
+    // Read notifications stay put — they're part of the recipient's
+    // history and should not be silently rewritten.
+    await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.kind, "share"),
+          eq(notifications.link, `/posts/${req.params.postId}`),
+          eq(notifications.actorUserId, me.id),
+          eq(notifications.read, false),
+        ),
+      );
     res.status(204).end();
   }),
 );

@@ -263,17 +263,20 @@ export const highlightTags = pgTable("highlight_tags", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Re-shares of game-recap articles to the sharer's own profile/feed.
-// Article-only by design — highlights and org posts are not shareable
-// per task #162. (articleId, sharerUserId) is unique so toggling acts
-// idempotently and a user can only share each recap once.
+// Re-shares of game-recap articles or highlights to the sharer's
+// own profile/feed. Polymorphic over (postKind, postRefId) — only
+// `article` and `highlight` are valid at write time; org posts
+// are rejected at the API layer per task #190. (postKind,
+// postRefId, sharerUserId) is unique so toggling acts idempotently
+// and a user can only share each post once.
 export const postShares = pgTable("post_shares", {
   id: uuid("id").primaryKey().defaultRandom(),
-  articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  postKind: postKindEnum("post_kind").notNull(),
+  postRefId: uuid("post_ref_id").notNull(),
   sharerUserId: uuid("sharer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
-  uniqArticleSharer: uniqueIndex("post_shares_article_sharer_uniq").on(t.articleId, t.sharerUserId),
+  uniqPostSharer: uniqueIndex("post_shares_kind_ref_sharer_uniq").on(t.postKind, t.postRefId, t.sharerUserId),
 }));
 
 export const postReactions = pgTable("post_reactions", {

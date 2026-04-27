@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
+import { runStartupMigrations } from "./lib/migrations";
 
 const rawPort = process.env["PORT"];
 
@@ -17,6 +18,14 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function start() {
+  // Task #190 — Run idempotent SQL migrations *before* seeding so the
+  // schema is in its current shape before any seed query touches the
+  // affected tables.
+  try {
+    await runStartupMigrations();
+  } catch (err) {
+    logger.error({ err }, "Startup migrations failed (non-fatal)");
+  }
   try {
     await seedIfEmpty();
   } catch (err) {

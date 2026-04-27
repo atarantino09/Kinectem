@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page, request as pwRequest } from "@playwright/test";
 
 // All API helpers must receive the page-context's request so that cookies
 // set during UI sign-in are reused on the API side.
@@ -7,6 +7,12 @@ const SHARER_EMAIL = "daniela@kinectem.demo";
 const SHARER_PASSWORD = "demo1234";
 const SHARER_DISPLAY_NAME = "Daniela Ortiz";
 const RECAP_TITLE = "Westfield Dominates Lincoln High 34-14";
+const HIGHLIGHT_TITLE = "40-yard TD Catch vs. Lincoln HS";
+const TEAM_NAME = "Varsity Football";
+// Morgan follows Daniela in the seed (see lib/seed.ts userFollowers),
+// so anything Daniela shares should land in Morgan's home feed.
+const FOLLOWER_EMAIL = "morgan@kinectem.demo";
+const FOLLOWER_PASSWORD = "demo1234";
 
 type FeedPost = {
   id: string;
@@ -151,5 +157,120 @@ test.describe("Share button — end-to-end", () => {
     await expect(
       page.getByTestId(`label-shared-by-${recap.id}`),
     ).toHaveCount(0);
+  });
+
+  // Task #190 — Fan re-shares both a recap *and* a highlight from the
+  // team page (not the post-detail page), and a separate follower
+  // account confirms both posts land in their home feed with the
+  // "Shared by Daniela Ortiz" attribution. This exercises the new
+  // polymorphic share flow end-to-end across team page + follower
+  // feed propagation.
+  test("fan re-shares recap + highlight from team page → follower sees both in feed", async ({ page }, testInfo) => {
+    await loginViaUi(page);
+    const api = page.context().request;
+    const me = await getMe(api);
+    // Resolve baseURL via the project use config so the fresh
+    // follower context below routes through the same proxy as the
+    // page fixture.
+    const baseURL =
+      (testInfo.project.use.baseURL as string | undefined) ??
+      process.env.E2E_BASE_URL ??
+      "http://localhost:80";
+
+    // Find the team and the two posts we'll share.
+    const teamsRes = await api.get("/api/v1/teams", {
+      params: { q: TEAM_NAME },
+    });
+    expect(teamsRes.ok()).toBeTruthy();
+    const teamsBody = (await teamsRes.json()) as {
+      data: Array<{ id: string; name: string }>;
+    };
+    const team = teamsBody.data.find((t) => t.name === TEAM_NAME);
+    if (!team) throw new Error(`Could not find seeded team "${TEAM_NAME}".`);
+
+    const teamPostsRes = await api.get(`/api/v1/teams/${team.id}/posts`);
+    expect(teamPostsRes.ok()).toBeTruthy();
+    const teamPostsBody = (await teamPostsRes.json()) as { data: FeedPost[] };
+    const recap = teamPostsBody.data.find(
+      (p) => p.id.startsWith("article-") && p.title === RECAP_TITLE,
+    );
+    const highlight = teamPostsBody.data.find(
+      (p) => p.id.startsWith("highlight-") && p.title === HIGHLIGHT_TITLE,
+    );
+    if (!recap) throw new Error(`Recap "${RECAP_TITLE}" not on team page.`);
+    if (!highlight) {
+      throw new Error(`Highlight "${HIGHLIGHT_TITLE}" not on team page.`);
+    }
+
+    // Reset state so re-runs are deterministic.
+    for (const p of [recap, highlight]) {
+      if (p.hasShared) {
+        const reset = await api.delete(`/api/v1/posts/${p.id}/share`);
+        expect(reset.ok() || reset.status() === 404).toBeTruthy();
+      }
+    }
+
+    // Navigate to the team page and share both cards via their UI
+    // share buttons.
+    await page.goto(`/teams/${team.id}`);
+
+    for (const [post, kindLabel] of [
+      [recap, "recap"] as const,
+      [highlight, "highlight"] as const,
+    ]) {
+      const shareButton = page.getByTestId(`button-share-${post.id}`);
+      await expect(shareButton).toBeVisible();
+      await expect(shareButton).toHaveAttribute("aria-pressed", "false");
+      await expect(shareButton).toHaveAttribute(
+        "aria-label",
+        `Share ${kindLabel}`,
+      );
+      await shareButton.click();
+      const confirmBtn = page.getByTestId("button-confirm-share");
+      await expect(confirmBtn).toBeVisible();
+      await confirmBtn.click();
+      await expect
+        .poll(async () => (await getPost(api, post.id)).hasShared, {
+          timeout: 10_000,
+        })
+        .toBe(true);
+    }
+
+    // 2) Open a fresh request context as Morgan (a seeded follower of
+    //    Daniela) and confirm both posts surface in her home feed
+    //    with sharedBy = Daniela. A standalone request context does
+    //    not inherit `use.baseURL` from the page fixture, so pass it
+    //    through explicitly here.
+    const followerCtx = await pwRequest.newContext({ baseURL });
+    try {
+      const loginRes = await followerCtx.post("/api/v1/auth/login", {
+        data: { email: FOLLOWER_EMAIL, password: FOLLOWER_PASSWORD },
+      });
+      expect(
+        loginRes.ok(),
+        `follower login failed: ${loginRes.status()}`,
+      ).toBeTruthy();
+
+      const feedRes = await followerCtx.get("/api/v1/feed");
+      expect(feedRes.ok()).toBeTruthy();
+      const feed = (await feedRes.json()) as {
+        data: Array<FeedPost & { sharedBy?: { id: string } | null }>;
+      };
+
+      const recapInFeed = feed.data.find(
+        (p) => p.id === recap.id && p.sharedBy?.id === me.id,
+      );
+      const hlInFeed = feed.data.find(
+        (p) => p.id === highlight.id && p.sharedBy?.id === me.id,
+      );
+      expect(recapInFeed, "recap missing from follower feed").toBeDefined();
+      expect(hlInFeed, "highlight missing from follower feed").toBeDefined();
+    } finally {
+      await followerCtx.dispose();
+    }
+
+    // 3) Clean up so the test is re-runnable.
+    await api.delete(`/api/v1/posts/${recap.id}/share`);
+    await api.delete(`/api/v1/posts/${highlight.id}/share`);
   });
 });

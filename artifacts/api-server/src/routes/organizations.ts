@@ -43,7 +43,12 @@ import {
   apiError,
   notFound,
 } from "../lib/spec-helpers";
-import { loadPostStats, statsFor } from "../lib/post-stats";
+import {
+  loadPostStats,
+  statsFor,
+  loadPostShareStats,
+  shareStatsFor,
+} from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 
 const router: IRouter = Router();
@@ -225,6 +230,12 @@ router.get(
 router.get(
   "/teams/:teamId/posts",
   asyncHandler(async (req, res) => {
+    // Task #190 — Team-page post cards must surface real share state
+    // (shareCount + hasShared) for both articles and highlights so the
+    // UI matches the home feed and post-detail views. Without this
+    // wiring the share button on every team-page card would render as
+    // "0 / not shared" until the user navigates away.
+    const me = req.sessionUser;
     const rows = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
@@ -234,9 +245,6 @@ router.get(
       .where(and(eq(articles.status, "published"), eq(articles.teamId, req.params.teamId)))
       .orderBy(desc(articles.createdAt))
       .limit(20);
-    const articleData = rows.map((r) =>
-      articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
-    );
     const hRows = await db
       .select({ h: highlights, team: teams, org: organizations, author: users })
       .from(highlights)
@@ -246,8 +254,27 @@ router.get(
       .where(eq(highlights.teamId, req.params.teamId))
       .orderBy(desc(highlights.createdAt))
       .limit(20);
+
+    const shareStats = await loadPostShareStats(me?.id ?? null, [
+      ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+    ]);
+
+    const articleData = rows.map((r) =>
+      articleToPost(r.a, {
+        team: r.team,
+        org: r.org,
+        author: r.author,
+        ...shareStatsFor(shareStats, "article", r.a.id),
+      }),
+    );
     const highlightData = hRows.map((r) =>
-      highlightToPost(r.h, { team: r.team, org: r.org, author: r.author }),
+      highlightToPost(r.h, {
+        team: r.team,
+        org: r.org,
+        author: r.author,
+        ...shareStatsFor(shareStats, "highlight", r.h.id),
+      }),
     );
     const merged = [...articleData, ...highlightData].sort((a, b) =>
       a.createdAt < b.createdAt ? 1 : -1,
@@ -287,6 +314,12 @@ router.get(
       ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
     ]);
+    // Task #190 — Articles surface share state on org-page cards too
+    // (org_post is non-shareable, so it stays at the default 0/false).
+    const shareStats = await loadPostShareStats(
+      me?.id ?? null,
+      articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+    );
 
     const data = [
       ...articleRows.map((r) =>
@@ -295,6 +328,7 @@ router.get(
           org: r.org,
           author: r.author,
           ...statsFor(stats, "article", r.a.id),
+          ...shareStatsFor(shareStats, "article", r.a.id),
         }),
       ),
       ...orgPostRows.map((r) =>

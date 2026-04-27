@@ -253,6 +253,7 @@ import type {
   SearchUsersParams,
   SendMessageRequest,
   SetAssetIdRequest,
+  SharePreferenceResponse,
   StartAdminMasquerade200,
   StopAdminMasquerade200,
   TagResponse,
@@ -275,6 +276,7 @@ import type {
   UpdatePhoneRequest,
   UpdatePostRequest,
   UpdatePrivacySettingsRequest,
+  UpdateSharePreferenceRequest,
   UpdateTagConsent200,
   UpdateTagConsentBody,
   UpdateTeamMemberRequest,
@@ -7196,6 +7198,278 @@ export const useUpdateEmailPreferenceAlias = <
 };
 
 /**
+ * Returns whether the requesting user has opted out of bell
+notifications for re-shares of their recaps and highlights
+(task #190). Defaults to `false` (opted in) for new users.
+
+ * @summary Get share notification preference
+ */
+export const getGetSharePreferenceUrl = () => {
+  return `/api/v1/notifications/share-preference`;
+};
+
+export const getSharePreference = async (
+  options?: RequestInit,
+): Promise<SharePreferenceResponse> => {
+  return customFetch<SharePreferenceResponse>(getGetSharePreferenceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSharePreferenceQueryKey = () => {
+  return [`/api/v1/notifications/share-preference`] as const;
+};
+
+export const getGetSharePreferenceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSharePreference>>,
+  TError = ErrorType<UnauthorizedResponse | InternalServerErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSharePreference>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSharePreferenceQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSharePreference>>
+  > = ({ signal }) => getSharePreference({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSharePreference>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSharePreferenceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSharePreference>>
+>;
+export type GetSharePreferenceQueryError = ErrorType<
+  UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Get share notification preference
+ */
+
+export function useGetSharePreference<
+  TData = Awaited<ReturnType<typeof getSharePreference>>,
+  TError = ErrorType<UnauthorizedResponse | InternalServerErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSharePreference>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSharePreferenceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update share notification preference
+ */
+export const getUpdateSharePreferenceUrl = () => {
+  return `/api/v1/notifications/share-preference`;
+};
+
+export const updateSharePreference = async (
+  updateSharePreferenceRequest: UpdateSharePreferenceRequest,
+  options?: RequestInit,
+): Promise<SharePreferenceResponse> => {
+  return customFetch<SharePreferenceResponse>(getUpdateSharePreferenceUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSharePreferenceRequest),
+  });
+};
+
+export const getUpdateSharePreferenceMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSharePreference>>,
+    TError,
+    { data: BodyType<UpdateSharePreferenceRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSharePreference>>,
+  TError,
+  { data: BodyType<UpdateSharePreferenceRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateSharePreference"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSharePreference>>,
+    { data: BodyType<UpdateSharePreferenceRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateSharePreference(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSharePreferenceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSharePreference>>
+>;
+export type UpdateSharePreferenceMutationBody =
+  BodyType<UpdateSharePreferenceRequest>;
+export type UpdateSharePreferenceMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Update share notification preference
+ */
+export const useUpdateSharePreference = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSharePreference>>,
+    TError,
+    { data: BodyType<UpdateSharePreferenceRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSharePreference>>,
+  TError,
+  { data: BodyType<UpdateSharePreferenceRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateSharePreferenceMutationOptions(options));
+};
+
+/**
+ * Convenience alias for `PATCH /notifications/share-preference`.
+
+ * @summary Update share notification preference (alias)
+ */
+export const getUpdateSharePreferenceAliasUrl = () => {
+  return `/api/v1/notifications/share-preference`;
+};
+
+export const updateSharePreferenceAlias = async (
+  updateSharePreferenceRequest: UpdateSharePreferenceRequest,
+  options?: RequestInit,
+): Promise<SharePreferenceResponse> => {
+  return customFetch<SharePreferenceResponse>(
+    getUpdateSharePreferenceAliasUrl(),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSharePreferenceRequest),
+    },
+  );
+};
+
+export const getUpdateSharePreferenceAliasMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSharePreferenceAlias>>,
+    TError,
+    { data: BodyType<UpdateSharePreferenceRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSharePreferenceAlias>>,
+  TError,
+  { data: BodyType<UpdateSharePreferenceRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateSharePreferenceAlias"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSharePreferenceAlias>>,
+    { data: BodyType<UpdateSharePreferenceRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateSharePreferenceAlias(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSharePreferenceAliasMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSharePreferenceAlias>>
+>;
+export type UpdateSharePreferenceAliasMutationBody =
+  BodyType<UpdateSharePreferenceRequest>;
+export type UpdateSharePreferenceAliasMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Update share notification preference (alias)
+ */
+export const useUpdateSharePreferenceAlias = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSharePreferenceAlias>>,
+    TError,
+    { data: BodyType<UpdateSharePreferenceRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSharePreferenceAlias>>,
+  TError,
+  { data: BodyType<UpdateSharePreferenceRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateSharePreferenceAliasMutationOptions(options));
+};
+
+/**
  * Creates a new conversation with the given recipient. If an active conversation already exists between the same participants (same type, same participants), returns the existing conversation with 200 instead of creating a duplicate (201).
 
  * @summary Create or resume a conversation
@@ -11260,16 +11534,18 @@ export function useListPostReactors<
 }
 
 /**
- * Re-shares the article so it appears on the requesting user's
+ * Re-shares the post so it appears on the requesting user's
 profile Posts tab and home feed (and the home feed of users
 who follow them) with a "Shared by …" annotation. Idempotent
 — calling twice is a no-op (the second call returns 204
-without creating a duplicate share row). Only game-recap
-articles can be shared; calling on a highlight or org post
-returns 400. The article must be visible to the requester
-(published and not hidden) — otherwise 404.
+without creating a duplicate share row). Per task #190 both
+game-recap articles and highlights are shareable; calling on
+an org post returns 400. The post must be visible to the
+requester (published and not hidden) — otherwise 404. Any
+viewer of the post (including team-follower fans who are
+not on the roster) may share it.
 
- * @summary Re-share a game-recap article post
+ * @summary Re-share a game-recap article or highlight post
  */
 export const getSharePostUrl = (postId: string) => {
   return `/api/v1/posts/${postId}/share`;
@@ -11340,7 +11616,7 @@ export type SharePostMutationError = ErrorType<
 >;
 
 /**
- * @summary Re-share a game-recap article post
+ * @summary Re-share a game-recap article or highlight post
  */
 export const useSharePost = <
   TError = ErrorType<
@@ -11369,8 +11645,8 @@ export const useSharePost = <
 
 /**
  * Idempotent — calling when no share exists is a no-op and
-still returns 204. Same article-only constraint as
-`sharePost`.
+still returns 204. Same article|highlight-only constraint as
+`sharePost`; org posts return 400.
 
  * @summary Remove the requesting user's re-share of a post
  */

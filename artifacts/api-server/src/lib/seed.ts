@@ -636,18 +636,23 @@ async function seedDemoActivity(input: DemoActivityInputs): Promise<void> {
     }
   }
 
-  // Extra shares so re-shared recaps appear in followers' feeds. We
-  // include shares by users that the canonical demo viewers follow
-  // (e.g. Jordan / Marcus, both followed by Lisa) so the personalized
-  // feed query surfaces them via the post_shares path — not just
-  // direct authorship.
+  // Extra shares so re-shared recaps and highlights appear in
+  // followers' feeds. We include shares by users that the canonical
+  // demo viewers follow (e.g. Jordan / Marcus, both followed by
+  // Lisa) so the personalized feed query surfaces them via the
+  // post_shares path — not just direct authorship. Per task #190
+  // shares are polymorphic (article|highlight) and team-follower
+  // fans (e.g. parentLisa, who only follows the team) can share too.
   await db
     .insert(postShares)
     .values([
-      { articleId: recap1.id, sharerUserId: u.parentLisa.id },
-      { articleId: recap2.id, sharerUserId: u.adminSam.id },
-      { articleId: recap1.id, sharerUserId: u.jordan.id },
-      { articleId: recap2.id, sharerUserId: u.marcus.id },
+      { postKind: "article", postRefId: recap1.id, sharerUserId: u.parentLisa.id },
+      { postKind: "article", postRefId: recap2.id, sharerUserId: u.adminSam.id },
+      { postKind: "article", postRefId: recap1.id, sharerUserId: u.jordan.id },
+      { postKind: "article", postRefId: recap2.id, sharerUserId: u.marcus.id },
+      { postKind: "highlight", postRefId: hl1.id, sharerUserId: u.parentLisa.id },
+      { postKind: "highlight", postRefId: hl2.id, sharerUserId: u.adminSam.id },
+      { postKind: "highlight", postRefId: hl3.id, sharerUserId: u.jordan.id },
     ])
     .onConflictDoNothing();
 }
