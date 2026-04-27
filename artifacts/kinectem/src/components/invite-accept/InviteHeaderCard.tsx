@@ -67,8 +67,9 @@ export function InviteHeaderCard({
               href={`/login?signup=${isPlayerInvite ? "parent" : "user"}&returnTo=${returnTo}`}
             >
               <Button
+                variant="brand"
                 size="lg"
-                className="w-full font-bold rounded-full brand-gradient hover:opacity-90 text-white"
+                className="w-full"
                 data-testid="btn-create-guardian"
               >
                 {isPlayerInvite
@@ -89,10 +90,11 @@ export function InviteHeaderCard({
         )}
         {loggedIn && !accepted ? (
           <Button
+            variant="brand"
             size="lg"
             onClick={onAccept}
             disabled={accepting}
-            className="w-full font-bold rounded-full brand-gradient hover:opacity-90 text-white"
+            className="w-full"
             data-testid="btn-accept-invite"
           >
             {accepting

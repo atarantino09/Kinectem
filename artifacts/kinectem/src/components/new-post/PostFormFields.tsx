@@ -239,8 +239,8 @@ export function PostFormFields({
         )}
         <Button
           type="submit"
+          variant="brand"
           disabled={publishing}
-          className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
           data-testid="button-publish-bottom"
         >
           {publishing

@@ -287,8 +287,8 @@ export function CreateOrgDialog({
             </Button>
             <Button
               type="submit"
+              variant="brand"
               disabled={createOrg.isPending}
-              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
               data-testid="btn-create-org"
             >
               {createOrg.isPending ? "Creating..." : "Create organization"}

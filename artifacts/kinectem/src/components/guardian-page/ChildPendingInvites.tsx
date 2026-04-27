@@ -89,8 +89,8 @@ export function ChildPendingInvites({
                 Decline
               </Button>
               <Button
-                size="sm"
-                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full h-7 px-3 text-xs"
+                variant="brand"
+                size="xs"
                 disabled={acting}
                 onClick={() => onAction(child, inv, "accept")}
                 data-testid={`btn-accept-pending-${inv.entryId}`}

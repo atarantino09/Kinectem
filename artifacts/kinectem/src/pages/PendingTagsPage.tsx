@@ -89,8 +89,9 @@ export default function PendingTagsPage() {
                   <X className="w-3.5 h-3.5" /> Decline
                 </Button>
                 <Button
+                  variant="brand"
                   size="sm"
-                  className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-4 gap-1"
+                  className="px-4"
                   onClick={() => approve.mutate({ tagId: t.id })}
                   disabled={approve.isPending}
                   data-testid={`button-approve-tag-${t.id}`}

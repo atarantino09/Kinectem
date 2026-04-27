@@ -346,8 +346,9 @@ function SuggestionRow({
         )}
       </div>
       <Button
+        variant="brand"
         size="sm"
-        className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5 shrink-0"
+        className="shrink-0"
         onClick={onFollow}
         disabled={disabled}
         data-testid={testId}

@@ -217,8 +217,8 @@ export function CreateTeamDialog({
             </Button>
             <Button
               type="submit"
+              variant="brand"
               disabled={createTeam.isPending}
-              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
               data-testid="btn-create-team"
             >
               {createTeam.isPending ? "Creating..." : "Create team"}

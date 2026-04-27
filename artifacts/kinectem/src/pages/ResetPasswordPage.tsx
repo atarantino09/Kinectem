@@ -61,8 +61,8 @@ export default function ResetPasswordPage() {
               You can now sign in with your new password.
             </p>
             <Button
+              variant="brandBlock"
               onClick={() => setLocation("/login")}
-              className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
               data-testid="btn-go-signin"
             >
               Go to sign in
@@ -122,8 +122,8 @@ export default function ResetPasswordPage() {
             </div>
             <Button
               type="submit"
+              variant="brandBlock"
               disabled={submitting}
-              className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
               data-testid="btn-set-password"
             >
               {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

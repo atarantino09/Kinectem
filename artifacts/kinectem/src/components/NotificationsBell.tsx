@@ -442,9 +442,8 @@ export function NotificationsBell() {
                         Decline
                       </Button>
                       <Button
-                        size="sm"
-                        variant="default"
-                        className="brand-gradient hover:opacity-90 text-white h-7 px-3 rounded-full text-xs font-bold"
+                        variant="brand"
+                        size="xs"
                         disabled={acting}
                         onClick={(e) => {
                           e.stopPropagation();

@@ -126,8 +126,8 @@ export default function GuardianConfirmPage() {
 
               <Button
                 type="submit"
+                variant="brandBlock"
                 disabled={state.kind === "submitting"}
-                className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
                 data-testid="btn-guardian-confirm"
               >
                 {state.kind === "submitting" && (
@@ -146,8 +146,8 @@ export default function GuardianConfirmPage() {
                 {state.athleteName}'s account is now active. They can sign in.
               </p>
               <Button
+                variant="brandBlock"
                 onClick={() => setLocation("/login")}
-                className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
               >
                 Go to sign in
               </Button>

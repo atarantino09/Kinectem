@@ -42,7 +42,7 @@ export default function DraftsPage() {
           </p>
         </div>
         <Link href="/posts/new">
-          <Button className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6" data-testid="button-new-draft">
+          <Button variant="brand" data-testid="button-new-draft">
             <Plus className="w-4 h-4 mr-1.5" /> New
           </Button>
         </Link>

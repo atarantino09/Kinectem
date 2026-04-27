@@ -99,8 +99,9 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                       <X className="w-3 h-3" />
                     </Button>
                     <Button
+                      variant="brand"
                       size="sm"
-                      className="brand-gradient hover:opacity-90 text-white font-bold rounded-full h-8 px-3 gap-1"
+                      className="px-3 gap-1"
                       onClick={() =>
                         approveJR.mutate({ orgId, requestId: r.id, data: {} })
                       }
@@ -161,8 +162,9 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                       <X className="w-3 h-3" />
                     </Button>
                     <Button
+                      variant="brand"
                       size="sm"
-                      className="brand-gradient hover:opacity-90 text-white font-bold rounded-full h-8 px-3 gap-1"
+                      className="px-3 gap-1"
                       onClick={() =>
                         approvePA.mutate({ orgId, approvalId: a.id })
                       }

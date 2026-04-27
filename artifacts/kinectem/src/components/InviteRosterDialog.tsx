@@ -335,8 +335,8 @@ export function InviteRosterDialog({
                 </Button>
                 <Button
                   type="submit"
+                  variant="brand"
                   disabled={createInvite.isPending}
-                  className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
                   data-testid="btn-send-invite"
                 >
                   {createInvite.isPending ? "Sending..." : "Send invite"}

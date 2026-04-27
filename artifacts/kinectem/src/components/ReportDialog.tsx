@@ -172,9 +172,9 @@ export function ReportDialog({
           </Button>
           {!alreadyReported && (
             <Button
+              variant="brand"
               onClick={submit}
               disabled={submitting || mineLoading}
-              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
               data-testid="btn-submit-report"
             >
               {submitting ? "Submitting…" : "Submit report"}

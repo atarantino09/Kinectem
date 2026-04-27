@@ -116,9 +116,9 @@ export function GuardianPendingPanel({
       </div>
       <Button
         type="button"
+        variant="brandBlock"
         onClick={handleResend}
         disabled={submitting}
-        className="w-full h-11 rounded-xl font-bold brand-gradient hover:opacity-90 text-white"
         data-testid="btn-guardian-resend"
       >
         {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

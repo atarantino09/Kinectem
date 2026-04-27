@@ -92,8 +92,8 @@ export function ChildSetupCard({
           </div>
           <Button
             type="submit"
+            variant="brand"
             disabled={saving}
-            className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
             data-testid="btn-add-child"
           >
             {saving ? "Adding..." : "Add child to roster"}

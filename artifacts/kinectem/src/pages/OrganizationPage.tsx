@@ -147,7 +147,7 @@ export default function OrganizationPage() {
               </Button>
             )}
             <Button
-              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
+              variant="brand"
               onClick={onToggleFollow}
               disabled={followOrg.isPending || unfollowOrg.isPending}
               data-testid="btn-follow-org"
@@ -212,9 +212,9 @@ export default function OrganizationPage() {
             </span>
             {(organization.role === "admin" || organization.role === "owner") && (
               <Button
+                variant="brand"
                 size="sm"
                 onClick={() => setCreateTeamOpen(true)}
-                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
                 data-testid="btn-add-team"
               >
                 <Plus className="w-4 h-4 mr-1" /> Add team

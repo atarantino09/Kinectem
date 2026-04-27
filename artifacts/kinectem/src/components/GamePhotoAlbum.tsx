@@ -128,7 +128,8 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
           <DialogTrigger asChild>
             <Button
-              className="brand-gradient hover:opacity-90 text-white font-bold gap-2 rounded-full px-5"
+              variant="brand"
+              size="sm"
               data-testid="button-open-upload"
             >
               <ImagePlus className="w-4 h-4" />
@@ -208,9 +209,9 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
                 Cancel
               </Button>
               <Button
+                variant="brand"
                 onClick={onSubmit}
                 disabled={saving || files.length === 0}
-                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
                 data-testid="button-submit-photos"
               >
                 {saving ? "Adding…" : `Add ${files.length || ""} photo${files.length === 1 ? "" : "s"}`.trim()}

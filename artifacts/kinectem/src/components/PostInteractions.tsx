@@ -217,9 +217,9 @@ export function PostInteractions({ post }: { post: PostResponse }) {
             <div className="flex justify-end">
               <Button
                 type="submit"
+                variant="brand"
                 size="sm"
                 disabled={!body.trim() || createComment.isPending}
-                className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5"
                 data-testid="button-submit-comment"
               >
                 Post Comment

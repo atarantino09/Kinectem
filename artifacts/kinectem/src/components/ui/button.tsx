@@ -26,15 +26,36 @@ const buttonVariants = cva(
         // @replit no hover, transparent border
         ghost: "border border-transparent",
         link: "text-primary underline-offset-4 hover:underline",
+        // Kinectem brand pill: purple→blue gradient, fully rounded, white bold text.
+        // Use this for primary calls-to-action so the brand styling stays consistent
+        // and doesn't drift back to the plain `bg-primary` blue.
+        brand:
+          "brand-gradient hover:opacity-90 text-white font-bold rounded-full",
+        // Same gradient, but as a full-width rounded-xl block — used for auth and form submit buttons.
+        brandBlock:
+          "brand-gradient hover:opacity-90 text-white font-bold rounded-xl w-full",
       },
       size: {
         // @replit changed sizes
         default: "min-h-9 px-4 py-2",
+        // Tiny inline pill height — used for accept / dismiss style buttons in dense lists.
+        xs: "h-7 px-3 text-xs",
         sm: "min-h-8 rounded-md px-3 text-xs",
         lg: "min-h-10 rounded-md px-8",
         icon: "h-9 w-9",
       },
     },
+    compoundVariants: [
+      // Brand pill default size = roomy px-6 (the standard primary action)
+      { variant: "brand", size: "default", className: "px-6" },
+      // Brand pill stays a pill at every size — never picks up `rounded-md`
+      { variant: "brand", size: "sm", className: "rounded-full" },
+      { variant: "brand", size: "lg", className: "rounded-full" },
+      { variant: "brand", size: "xs", className: "rounded-full" },
+      { variant: "brand", size: "icon", className: "rounded-full" },
+      // Brand block (auth / form submit) gets the standard h-11 height
+      { variant: "brandBlock", size: "default", className: "h-11" },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",

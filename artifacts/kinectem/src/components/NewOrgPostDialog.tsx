@@ -249,9 +249,9 @@ export function NewOrgPostDialog({
             Cancel
           </Button>
           <Button
+            variant="brand"
             onClick={onSubmit}
             disabled={createOrgPost.isPending}
-            className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
             data-testid="button-publish-org-post"
           >
             {createOrgPost.isPending ? "Publishing…" : "Publish"}

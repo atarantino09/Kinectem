@@ -129,8 +129,9 @@ export default function MessagesPage() {
         <div className="flex items-center justify-between px-2 mb-2">
           <h2 className="text-xl font-black tracking-tight">Messages</h2>
           <Button
+            variant="brand"
             size="sm"
-            className="font-bold rounded-full gap-1.5 brand-gradient text-primary-foreground hover:opacity-95"
+            className="gap-1.5"
             onClick={() => setComposeOpen(true)}
             data-testid="button-new-message"
           >
@@ -452,8 +453,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           />
           <Button
             type="submit"
+            variant="brand"
             disabled={!body.trim() || send.isPending}
-            className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-5 gap-2 self-end"
+            className="self-end"
             data-testid="button-send-message"
           >
             <Send className="w-4 h-4" />
@@ -818,7 +820,7 @@ function NewMessageDialog({
                     create.isPending ||
                     isUploading
                   }
-                  className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6 gap-2"
+                  variant="brand"
                   data-testid="button-send-new-message"
                 >
                   <Send className="w-4 h-4" />

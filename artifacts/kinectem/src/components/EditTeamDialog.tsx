@@ -296,8 +296,8 @@ export function EditTeamDialog({
             </Button>
             <Button
               type="submit"
+              variant="brand"
               disabled={saving || uploading}
-              className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
               data-testid="btn-save-edit-team"
             >
               {saving ? "Saving..." : "Save changes"}

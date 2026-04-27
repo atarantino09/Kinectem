@@ -347,11 +347,11 @@ export function EditProfileDialog({
             Cancel
           </Button>
           <Button
+            variant="brand"
             onClick={onSave}
             disabled={
               update.isPending || avatarUploading || !firstName || !lastName
             }
-            className="brand-gradient hover:opacity-90 text-white font-bold rounded-full px-6"
             data-testid="button-save-profile"
           >
             {update.isPending ? "Saving…" : "Save"}
