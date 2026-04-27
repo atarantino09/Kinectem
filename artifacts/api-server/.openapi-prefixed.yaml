@@ -2352,6 +2352,7 @@ paths:
               - player
               - coach
               - assistant_coach
+              - admin
               - manager
               - parent
               - author
@@ -6077,6 +6078,7 @@ components:
             - player
             - coach
             - assistant_coach
+            - admin
             - manager
             - parent
             - author
@@ -7845,6 +7847,7 @@ components:
             - player
             - coach
             - assistant_coach
+            - admin
             - manager
             - parent
             - author
@@ -7876,6 +7879,7 @@ components:
             - player
             - coach
             - assistant_coach
+            - admin
             - manager
             - parent
             - author
@@ -7901,6 +7905,7 @@ components:
             - player
             - coach
             - assistant_coach
+            - admin
             - manager
             - parent
             - author
@@ -7938,6 +7943,7 @@ components:
             - player
             - coach
             - assistant_coach
+            - admin
             - manager
             - parent
             - author
@@ -7973,6 +7979,7 @@ components:
             - player
             - coach
             - assistant_coach
+            - admin
             - manager
             - parent
             - author
