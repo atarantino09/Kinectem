@@ -355,8 +355,11 @@ router.get(
     // feed (so a user's profile can never resurface a recap that has
     // been moderated away).
     // Ordering uses an "effective date" per row: shares use sharedAt
-    // (so a freshly-shared old recap rises to the top), originals use
-    // gameDate (recaps) or createdAt (everything else).
+    // (so a freshly-shared old recap rises to the top), recap articles
+    // use their publish time (publishedAt ?? createdAt) so a freshly
+    // written recap about an old game lands at the top of the feed
+    // instead of being buried next to the game it covers, and
+    // highlights fall back to createdAt.
     const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
     if (!u) return notFound(res);
 
@@ -536,12 +539,14 @@ router.get(
     }
 
     // Order by "effective date": shares use sharedAt (so a freshly
-    // shared old recap rises), articles use gameDate, everything
-    // else falls back to createdAt.
+    // shared old recap rises), recap articles use their publish time
+    // (publishedAt ?? createdAt) so newly-written recaps land at the
+    // top regardless of when the game was played, and highlights
+    // fall back to createdAt.
     const effectiveDate = (row: MergedRow): number => {
       if (row.sharedAt) return row.sharedAt.getTime();
       if (row.kind === "article") {
-        return (row.a.gameDate ?? row.a.createdAt).getTime();
+        return (row.a.publishedAt ?? row.a.createdAt).getTime();
       }
       return row.h.createdAt.getTime();
     };

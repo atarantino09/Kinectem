@@ -1811,7 +1811,7 @@ describe("GET /users/:userId/posts merges authored + tagged", () => {
     expect(adminList.find((p) => p.id === created.body.id)).toBeUndefined();
   });
 
-  it("orders tagged posts by gameDate desc nulls last", async () => {
+  it("orders tagged posts by publish time, newest first", async () => {
     const { orgId } = await getFootballTeam();
     const marcusId = await findUserId("marcus@kinectem.demo");
 
@@ -1850,6 +1850,60 @@ describe("GET /users/:userId/posts merges authored + tagged", () => {
     expect(idxNewer).toBeGreaterThanOrEqual(0);
     expect(idxOlder).toBeGreaterThanOrEqual(0);
     expect(idxNewer).toBeLessThan(idxOlder);
+  });
+
+  it("sorts a freshly published recap about an old game above an older recap about a recent game", async () => {
+    // Regression test for task #252 — the profile feed used to sort
+    // recap articles by gameDate, which meant a brand-new write-up of
+    // an old game would be buried weeks down a player's profile.
+    // Now ordering uses publishedAt (when the post actually went live)
+    // so the most recently published item is always at the top.
+    const { orgId } = await getFootballTeam();
+    const marcusId = await findUserId("marcus@kinectem.demo");
+
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // 1) Publish first: a recap about a RECENT game.
+    const recentGameOldPost = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Westfield 21, Cranford 14",
+      body: "Tight one in the rain.",
+      gameDate: new Date("2025-11-21T19:00:00Z").toISOString(),
+      opponentName: "Cranford",
+      gameScore: "21-14",
+    });
+    expect(recentGameOldPost.status).toBe(201);
+
+    // 2) Publish second (so its publishedAt is later): a recap about
+    //    an OLD game. Under the old gameDate-based sort this would
+    //    land BELOW the recent-game post; under the publish-time
+    //    sort it must land ABOVE it.
+    const oldGameNewPost = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Westfield 10, Linden 9 (catch-up writeup)",
+      body: "Finally getting the recap up for our season opener.",
+      gameDate: new Date("2025-08-29T19:00:00Z").toISOString(),
+      opponentName: "Linden",
+      gameScore: "10-9",
+    });
+    expect(oldGameNewPost.status).toBe(201);
+
+    const { agent } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const res = await agent.get(`/api/v1/users/${marcusId}/posts`);
+    expect(res.status).toBe(200);
+    const list = (res.body.data ?? res.body.items ?? []) as Array<{ id: string }>;
+    const idxNewPost = list.findIndex((p) => p.id === oldGameNewPost.body.id);
+    const idxOldPost = list.findIndex((p) => p.id === recentGameOldPost.body.id);
+    expect(idxNewPost).toBeGreaterThanOrEqual(0);
+    expect(idxOldPost).toBeGreaterThanOrEqual(0);
+    // The most recently published post wins, even though its game is older.
+    expect(idxNewPost).toBeLessThan(idxOldPost);
   });
 });
 
