@@ -7242,6 +7242,15 @@ components:
           type: string
           nullable: true
           description: Parent org slug for team contexts only.
+        orgId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent org id for team contexts only; enables linking to the org page.
+        orgName:
+          type: string
+          nullable: true
+          description: Parent org display name for team contexts only.
         avatarUrl:
           type: string
           format: uri
@@ -8514,6 +8523,15 @@ components:
         orgSlug:
           type: string
           nullable: true
+        orgId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent org id for team contexts only; enables linking to the org page.
+        orgName:
+          type: string
+          nullable: true
+          description: Parent org display name for team contexts only.
         avatarUrl:
           type: string
           nullable: true

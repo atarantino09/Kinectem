@@ -566,6 +566,8 @@ function basePost(p: {
         name: team.name,
         slug: slugify(team.name),
         orgSlug: slugify(p.extras.org.name),
+        orgId: p.extras.org.id,
+        orgName: p.extras.org.name,
         avatarUrl: team.logoUrl ?? null,
         // Team posts carry the parent org's logo so PostCard can show
         // the org logo as the team's avatar. Null when the parent org
@@ -578,6 +580,8 @@ function basePost(p: {
         name: p.extras.org.name,
         slug: slugify(p.extras.org.name),
         orgSlug: null,
+        orgId: null,
+        orgName: null,
         avatarUrl: p.extras.org.logoUrl ?? null,
         orgAvatarUrl: null,
       };

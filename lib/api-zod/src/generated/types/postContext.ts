@@ -83,6 +83,16 @@ export interface PostContext {
    */
   orgSlug?: string | null;
   /**
+   * Parent org id for team contexts only; enables linking to the org page.
+   * @nullable
+   */
+  orgId?: string | null;
+  /**
+   * Parent org display name for team contexts only.
+   * @nullable
+   */
+  orgName?: string | null;
+  /**
    * Signed S3 URL resolved at read time for org/team avatars.
    * @nullable
    */

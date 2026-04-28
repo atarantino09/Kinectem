@@ -258,6 +258,16 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               );
             })()}
             <div className="min-w-0">
+              {post.context.type === "team" && post.context.orgName && post.context.orgId && (
+                <Link href={`/organizations/${post.context.orgId}`}>
+                  <p
+                    className="text-xs text-muted-foreground truncate hover:underline"
+                    data-testid={`text-post-parent-org-${post.id}`}
+                  >
+                    {post.context.orgName}
+                  </p>
+                </Link>
+              )}
               <Link href={getContextHref(post.context)}>
                 <p className="font-bold text-sm truncate hover:underline">
                   {post.context.name ?? post.context.type}

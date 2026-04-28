@@ -1417,6 +1417,17 @@ export const GetPostResponse = zod.object({
       .string()
       .nullish()
       .describe("Parent org slug for team contexts only."),
+    orgId: zod
+      .string()
+      .uuid()
+      .nullish()
+      .describe(
+        "Parent org id for team contexts only; enables linking to the org page.",
+      ),
+    orgName: zod
+      .string()
+      .nullish()
+      .describe("Parent org display name for team contexts only."),
     avatarUrl: zod
       .string()
       .url()
@@ -1559,6 +1570,17 @@ export const UpdatePostResponse = zod.object({
       .string()
       .nullish()
       .describe("Parent org slug for team contexts only."),
+    orgId: zod
+      .string()
+      .uuid()
+      .nullish()
+      .describe(
+        "Parent org id for team contexts only; enables linking to the org page.",
+      ),
+    orgName: zod
+      .string()
+      .nullish()
+      .describe("Parent org display name for team contexts only."),
     avatarUrl: zod
       .string()
       .url()
@@ -1727,6 +1749,17 @@ export const ListOrgPostsResponse = zod.object({
           .string()
           .nullish()
           .describe("Parent org slug for team contexts only."),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
         avatarUrl: zod
           .string()
           .url()
@@ -2111,6 +2144,17 @@ export const ListUserPostsResponse = zod.object({
           .string()
           .nullish()
           .describe("Parent org slug for team contexts only."),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
         avatarUrl: zod
           .string()
           .url()
@@ -3794,6 +3838,17 @@ export const ListFeedResponse = zod.object({
         name: zod.string().nullish(),
         slug: zod.string().nullish(),
         orgSlug: zod.string().nullish(),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
         avatarUrl: zod.string().nullish(),
       }),
       assets: zod.array(
@@ -4448,6 +4503,17 @@ export const ListTeamPostsResponse = zod.object({
           .string()
           .nullish()
           .describe("Parent org slug for team contexts only."),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
         avatarUrl: zod
           .string()
           .url()
@@ -4938,6 +5004,17 @@ export const ListOrgPostApprovalsResponse = zod.object({
                 .string()
                 .nullish()
                 .describe("Parent org slug for team contexts only."),
+              orgId: zod
+                .string()
+                .uuid()
+                .nullish()
+                .describe(
+                  "Parent org id for team contexts only; enables linking to the org page.",
+                ),
+              orgName: zod
+                .string()
+                .nullish()
+                .describe("Parent org display name for team contexts only."),
               avatarUrl: zod
                 .string()
                 .url()
@@ -5088,6 +5165,17 @@ export const ApproveOrgPostApprovalResponse = zod.object({
           .string()
           .nullish()
           .describe("Parent org slug for team contexts only."),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
         avatarUrl: zod
           .string()
           .url()
@@ -5228,6 +5316,17 @@ export const DeclineOrgPostApprovalResponse = zod.object({
           .string()
           .nullish()
           .describe("Parent org slug for team contexts only."),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
         avatarUrl: zod
           .string()
           .url()
@@ -5556,6 +5655,17 @@ export const GetPostPreviewResponse = zod.object({
       name: zod.string().nullish(),
       slug: zod.string().nullish(),
       orgSlug: zod.string().nullish(),
+      orgId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "Parent org id for team contexts only; enables linking to the org page.",
+        ),
+      orgName: zod
+        .string()
+        .nullish()
+        .describe("Parent org display name for team contexts only."),
       avatarUrl: zod.string().nullish(),
     })
     .optional(),
