@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import {
   db,
   articles,
+  articleAuthors,
   articleTags,
   notifications,
   organizationAdmins,
@@ -1196,6 +1197,411 @@ describe("auto-tag rostered players on game-recap articles", () => {
     });
     expect(created.status).toBe(400);
     expect(String(created.body?.error ?? "")).toMatch(/team/i);
+  });
+
+  it("POST /posts publishing a brand-new recap notifies every newly auto-tagged player exactly once (task #249)", async () => {
+    // Brand-new recap path. Before #249 only the post-publish edit
+    // path notified players; fresh recaps fanned out tags but never
+    // fired the "you were tagged" bell, so players had to stumble
+    // onto the article on their own profile to know it existed.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach, user: coachUser } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Westfield 31, Roselle Catholic 7",
+      body: "Big road win.",
+      gameDate: new Date("2026-01-09T19:00:00Z").toISOString(),
+      opponentName: "Roselle Catholic",
+      gameScore: "31-7",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const link = `/posts/${postId}`;
+
+    const acceptedPlayers = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(acceptedPlayers.length).toBeGreaterThan(0);
+
+    const notifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // One bell row per rostered player, and never the coach themselves.
+    expect(notifs.length).toBe(acceptedPlayers.length);
+    const notifiedIds = new Set(notifs.map((n) => n.userId));
+    for (const p of acceptedPlayers) {
+      expect(notifiedIds.has(p.userId)).toBe(true);
+    }
+    expect(notifiedIds.has(coachUser.id)).toBe(false);
+    for (const n of notifs) {
+      expect(n.read).toBe(false);
+      expect(n.message).toBe('You were tagged in "Westfield 31, Roselle Catholic 7"');
+      expect(n.actorUserId).toBe(coachUser.id);
+    }
+  });
+
+  it("POST /posts skips notifications when the recap is saved as a draft (task #249)", async () => {
+    // Draft recaps don't have a public article to point a bell row at,
+    // and the publish handler will re-run the fan-out + notify when
+    // the draft actually goes live.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Draft recap, no notify",
+      body: "Saved for later.",
+      gameDate: new Date("2026-01-16T19:00:00Z").toISOString(),
+      status: "draft",
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const link = `/posts/${postId}`;
+
+    const notifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(notifs).toHaveLength(0);
+    // Sanity: teamId is exercised in the rest of the suite.
+    expect(teamId).toBeTruthy();
+  });
+
+  it("POST /posts pre-tagged players don't get a duplicate bell when the create-time fan-out runs (task #249)", async () => {
+    // A coach who manually @-mentions a rostered player AND posts the
+    // article as a recap should land each player with exactly one
+    // article_tags row and exactly one bell notification — the
+    // explicit @-mention is already represented by its own (manual)
+    // tag, so the auto fan-out's "newly tagged" set must not include
+    // it, and therefore the notify helper must skip it too.
+    const { teamId, orgId } = await getFootballTeam();
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const created = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Westfield 20, Cranford 17",
+      body: "Jordan was the player of the game.",
+      gameDate: new Date("2026-01-23T19:00:00Z").toISOString(),
+      opponentName: "Cranford",
+      gameScore: "20-17",
+      taggedUserIds: [jordanId],
+    });
+    expect(created.status).toBe(201);
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    const link = `/posts/${postId}`;
+
+    // Jordan has exactly one tag row and exactly one bell notification.
+    const jordanTags = await db
+      .select()
+      .from(articleTags)
+      .where(
+        and(eq(articleTags.articleId, articleId), eq(articleTags.userId, jordanId)),
+      );
+    expect(jordanTags).toHaveLength(1);
+    expect(jordanTags[0].source).toBe("manual");
+
+    const jordanNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, link),
+          eq(notifications.userId, jordanId),
+        ),
+      );
+    expect(jordanNotifs).toHaveLength(1);
+
+    // Total bell-row count still matches the rostered player count
+    // (Jordan's row is the manual one, but the notify helper still
+    // covered him because the create handler treats explicit ids as
+    // newly-tagged users on first insert).
+    const acceptedPlayers = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    const allNotifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // Deterministic check: the recipient set is exactly the
+    // accepted-player roster (Jordan included), with no duplicates
+    // and no extras (e.g. coach is excluded because the helper drops
+    // the actor from its userIds set).
+    const ids = allNotifs.map((n) => n.userId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(allNotifs.length).toBe(acceptedPlayers.length);
+    const notifiedIds = new Set(ids);
+    for (const p of acceptedPlayers) {
+      expect(notifiedIds.has(p.userId)).toBe(true);
+    }
+    expect(notifiedIds.has(jordanId)).toBe(true);
+  });
+
+  it("POST /posts/:id/publish publishing a draft recap notifies every newly-tagged player exactly once (task #249)", async () => {
+    // Save → publish path. The publish handler runs the fan-out at
+    // publish time (because PATCH on a draft never does), so the
+    // notify must fire from the same place.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach, user: coachUser } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    const draft = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Draft → published recap",
+      body: "Wrote this in the locker room.",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    const postId = draft.body.id;
+    const link = `/posts/${postId}`;
+
+    // No bells yet — draft hasn't fanned out.
+    let notifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(notifs).toHaveLength(0);
+
+    // Add the gameDate then publish.
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2026-01-30T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+    const published = await coach
+      .post(`/api/v1/posts/${postId}/publish`)
+      .send();
+    expect(published.status).toBe(200);
+
+    const acceptedPlayers = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(acceptedPlayers.length).toBeGreaterThan(0);
+
+    notifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    // One bell row per rostered player, exactly once. The coach is
+    // never on the receiving end.
+    expect(notifs.length).toBe(acceptedPlayers.length);
+    const notifiedIds = new Set(notifs.map((n) => n.userId));
+    for (const p of acceptedPlayers) {
+      expect(notifiedIds.has(p.userId)).toBe(true);
+    }
+    expect(notifiedIds.has(coachUser.id)).toBe(false);
+    for (const n of notifs) {
+      expect(n.read).toBe(false);
+      expect(n.message).toBe('You were tagged in "Draft → published recap"');
+      // Actor on the bell row is whoever pressed Publish (the
+      // "acting user as actor" requirement from task #249). Here
+      // the publisher is the same as the author, but the dedicated
+      // co-author test below exercises the case where they differ.
+      expect(n.actorUserId).toBe(coachUser.id);
+    }
+  });
+
+  it("POST /posts/:id/publish credits the publishing co-author (not the original author) as the bell-notification actor (task #249)", async () => {
+    // When a co-author publishes someone else's draft recap, the
+    // bell row's actor must be the user who pressed Publish — the
+    // "acting user as actor" requirement. Without that, players see
+    // a notification attributed to a coach who didn't actually
+    // publish the article. Both `sam@kinectem.demo` and
+    // `coach@kinectem.demo` are Westfield admins, so this also
+    // exercises the auto-publish (admin → "published") branch.
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach, user: coachUser } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { agent: sam, user: samUser } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+
+    const draft = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Co-author publishes",
+      body: "Sam will press publish on Coach Davis's draft.",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    const postId = draft.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    const link = `/posts/${postId}`;
+
+    // Wire Sam in as a co-author so the publish handler accepts him.
+    await db.insert(articleAuthors).values({
+      articleId,
+      userId: samUser.id,
+    });
+
+    // Add the gameDate via PATCH so the publish-time fan-out is the
+    // one that actually inserts auto rows (and therefore drives the
+    // notify).
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2026-02-12T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    // Sam (the co-author, not the original author) presses Publish.
+    const published = await sam.post(`/api/v1/posts/${postId}/publish`).send();
+    expect(published.status).toBe(200);
+
+    const acceptedPlayers = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(acceptedPlayers.length).toBeGreaterThan(0);
+
+    const notifs = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(notifs.length).toBe(acceptedPlayers.length);
+    for (const n of notifs) {
+      // The publisher (Sam) is the actor — NOT the article's
+      // original author (Coach Davis).
+      expect(n.actorUserId).toBe(samUser.id);
+      expect(n.actorUserId).not.toBe(coachUser.id);
+      expect(n.message).toBe('You were tagged in "Co-author publishes"');
+      expect(n.read).toBe(false);
+    }
+  });
+
+  it("POST /posts/:id/publish doesn't double-notify players who were manually pre-tagged on the draft (task #249)", async () => {
+    // A coach who hand-mentioned a player while drafting should not
+    // see that player get two bells when publishing — the fan-out's
+    // dedupe means the publish-time notify skips that user.
+    const { orgId } = await getFootballTeam();
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+
+    // Draft a recap with Jordan pre-tagged via taggedUserIds and NO
+    // gameDate yet. Without a gameDate the create-time fan-out is a
+    // no-op, so the only article_tags row at this point is Jordan's
+    // manual @-mention. Drafts also skip the notify, so no bell row
+    // exists yet. The gameDate gets added in the next step so the
+    // publish handler is the one that runs the roster fan-out.
+    const draft = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Pre-tagged Jordan",
+      body: "Manual tag at draft time.",
+      status: "draft",
+      taggedUserIds: [jordanId],
+    });
+    expect(draft.status).toBe(201);
+    const postId = draft.body.id;
+    const articleId = postId.replace(/^article-/, "");
+    const link = `/posts/${postId}`;
+
+    // PATCH the draft to add the gameDate. Drafts intentionally skip
+    // fan-out on PATCH, so Jordan's manual row is still the only one
+    // and nobody has a bell yet.
+    const patched = await coach.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2026-02-06T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+
+    // Sanity: Jordan has exactly one manual tag row and zero bells.
+    const jordanTagsBefore = await db
+      .select()
+      .from(articleTags)
+      .where(
+        and(eq(articleTags.articleId, articleId), eq(articleTags.userId, jordanId)),
+      );
+    expect(jordanTagsBefore).toHaveLength(1);
+    expect(jordanTagsBefore[0].source).toBe("manual");
+    const baseline = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)));
+    expect(baseline).toHaveLength(0);
+
+    // Publish the draft. The publish handler runs the fan-out and
+    // inserts auto rows for every other rostered player. Jordan's
+    // row is unchanged (still manual) and the notify helper must
+    // NOT include him in the userIds set — `applyArticleTagFanout`
+    // already deduped him.
+    const published = await coach.post(`/api/v1/posts/${postId}/publish`).send();
+    expect(published.status).toBe(200);
+
+    const jordanTagsAfter = await db
+      .select()
+      .from(articleTags)
+      .where(
+        and(eq(articleTags.articleId, articleId), eq(articleTags.userId, jordanId)),
+      );
+    expect(jordanTagsAfter).toHaveLength(1);
+
+    // Jordan still has zero bell rows for this post — the dedupe
+    // worked end-to-end.
+    const jordanNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, link),
+          eq(notifications.userId, jordanId),
+        ),
+      );
+    expect(jordanNotifs).toHaveLength(0);
+
+    // Other rostered players DID get notified (one row each).
+    const otherNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(eq(notifications.kind, "post_tag"), eq(notifications.link, link)),
+      );
+    expect(otherNotifs.length).toBeGreaterThan(0);
+    const otherIds = otherNotifs.map((n) => n.userId);
+    expect(otherIds).not.toContain(jordanId);
+    expect(new Set(otherIds).size).toBe(otherIds.length);
   });
 
   it("non-admin, non-author cannot PATCH a published recap", async () => {

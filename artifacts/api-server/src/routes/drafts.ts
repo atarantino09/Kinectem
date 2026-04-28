@@ -306,13 +306,34 @@ router.post(
     // members get inserted, and existing tag statuses (approved /
     // pending / declined) are preserved untouched.
     if (updated.gameDate) {
-      await applyArticleTagFanout({
+      const newlyTagged = await applyArticleTagFanout({
         articleId: updated.id,
         teamId: updated.teamId,
+        // Tag attribution stays with the original author so the
+        // article_tags row keeps the same "who tagged you" identity
+        // every other path uses. Fall back to the acting user only
+        // when the article has no author on record (legacy / deleted).
         taggerUserId: updated.authorId ?? me.id,
         explicitUserIds: [],
         gameDate: updated.gameDate,
       });
+      // Notify the players this fan-out actually inserted (the helper's
+      // return value is the dedupe-aware "newly tagged" set, so manual
+      // pre-tags from the draft don't get pinged twice). Only fires when
+      // the draft is going live for real — pending_approval defers the
+      // notify to the admin approval handler so players don't get
+      // pinged about a recap that may still be rejected. The bell row's
+      // actor is the user who pressed Publish (per task #249's "acting
+      // user as the actor"), which is also what a co-author publishing
+      // someone else's draft would expect to see. (task #249)
+      if (newStatus === "published" && newlyTagged.length > 0) {
+        await notifyNewlyTaggedInRecap({
+          userIds: newlyTagged,
+          articleId: updated.id,
+          articleTitle: updated.title,
+          actorUserId: me.id,
+        });
+      }
     }
     const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
     const [org] = team

@@ -65,7 +65,7 @@ import {
   notFound,
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
-import { applyArticleTagFanout } from "../lib/article-tagging";
+import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 
 const router: IRouter = Router();
 
@@ -1112,7 +1112,7 @@ router.post(
         })
         .returning();
 
-      await applyArticleTagFanout({
+      const newlyTagged = await applyArticleTagFanout({
         articleId: a.id,
         teamId,
         taggerUserId: me.id,
@@ -1121,6 +1121,21 @@ router.post(
           : [],
         gameDate,
       });
+      // Bell-notify each newly-tagged player. Drafts skip this — there
+      // is no published article to link to yet, and the publish handler
+      // re-runs the fan-out + notify when the draft goes live. Pending-
+      // approval recaps also skip this step; the admin approval handler
+      // (organizations.ts) runs the notify after it flips the status to
+      // "published" so players don't get pinged about a recap that may
+      // never go live. (task #249)
+      if (status === "published" && newlyTagged.length > 0) {
+        await notifyNewlyTaggedInRecap({
+          userIds: newlyTagged,
+          articleId: a.id,
+          articleTitle: a.title,
+          actorUserId: me.id,
+        });
+      }
 
       res.status(201).json({
         ...articleToPost(a, { team, org, author: me }),
