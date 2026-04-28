@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -521,6 +522,7 @@ function VideoEmbed({ url }: { url: string }) {
 
 function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const initial = images.slice(0, 4);
   const rest = images.slice(4);
   const hasMore = rest.length > 0;
@@ -538,7 +540,11 @@ function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (isLastTile) setExpanded(true);
+                if (isLastTile) {
+                  setExpanded(true);
+                } else {
+                  setLightboxIndex(i);
+                }
               }}
               className="relative aspect-square rounded-lg overflow-hidden bg-muted border border-border group"
               data-testid={`photo-tile-${postId}-${i}`}
@@ -573,6 +579,15 @@ function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
           Show fewer photos
         </button>
       )}
+      <PhotoLightbox
+        images={images}
+        startIndex={lightboxIndex ?? 0}
+        open={lightboxIndex !== null}
+        onOpenChange={(o) => {
+          if (!o) setLightboxIndex(null);
+        }}
+        testIdPrefix={`photo-lightbox-${postId}`}
+      />
     </div>
   );
 }
