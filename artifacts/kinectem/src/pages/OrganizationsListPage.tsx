@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useListOrganizations } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -5,6 +6,34 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Building2, ChevronRight } from "lucide-react";
 import { getInitials } from "@/lib/format";
+
+function OrgLogoTile({
+  name,
+  logoUrl,
+}: {
+  name: string;
+  logoUrl: string | null;
+}) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [logoUrl]);
+  if (logoUrl && !logoFailed) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        onError={() => setLogoFailed(true)}
+        className="w-14 h-14 rounded-xl object-cover bg-muted shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-14 h-14 rounded-xl brand-gradient-dark flex items-center justify-center text-primary font-black shrink-0">
+      {getInitials(name)}
+    </div>
+  );
+}
 
 export default function OrganizationsListPage() {
   const { data, isLoading } = useListOrganizations();
@@ -40,9 +69,7 @@ export default function OrganizationsListPage() {
               <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 rounded-xl brand-gradient-dark flex items-center justify-center text-primary font-black shrink-0">
-                      {getInitials(org.name)}
-                    </div>
+                    <OrgLogoTile name={org.name} logoUrl={org.logoUrl ?? null} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="font-black text-lg leading-tight tracking-tight group-hover:text-primary transition-colors">
