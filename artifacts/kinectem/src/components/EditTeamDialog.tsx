@@ -169,7 +169,7 @@ export function EditTeamDialog({
               Edit team
             </DialogTitle>
             <DialogDescription>
-              Update your team's name, sport, level, description, and
+              Update your team's name, sport, league, description, and
               background photo.
             </DialogDescription>
           </DialogHeader>
@@ -268,7 +268,7 @@ export function EditTeamDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-team-level" className="font-bold">
-                  Level / League
+                  League
                 </Label>
                 <Input
                   id="edit-team-level"
