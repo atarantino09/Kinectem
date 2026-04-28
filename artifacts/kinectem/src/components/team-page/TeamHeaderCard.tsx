@@ -86,8 +86,13 @@ export function TeamHeaderCard({
       </div>
       <CardContent className="p-6 pt-0">
         {/* Avatar block: org logo, overlapping the bottom of the banner.
-            Org name sits directly under the logo as a link to the org. */}
-        <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 -mt-16">
+            Org name sits directly under the logo as a link to the org.
+            The logo column gets its own positioning + z-index so it is
+            painted in front of the banner's absolutely-positioned <img>;
+            otherwise CSS paints positioned descendants above non-positioned
+            siblings in the same stacking context, which would let the
+            uploaded team photo cover the logo square. */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 -mt-16">
           <div className="shrink-0 flex flex-col items-center sm:items-start">
             <AvatarLightbox
               avatarUrl={orgLogoUrl || null}
