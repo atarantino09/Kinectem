@@ -138,7 +138,7 @@ export default function OrganizationPage() {
         <div className="space-y-6 min-w-0">
           {/* Hero */}
           <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
-            <div className="h-32 brand-gradient-cover relative" />
+            <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
             <div className="px-6 pb-6 -mt-20 flex items-end justify-between gap-4 flex-wrap relative z-10">
               <div className="flex items-end gap-4">
                 <div className="shrink-0">
