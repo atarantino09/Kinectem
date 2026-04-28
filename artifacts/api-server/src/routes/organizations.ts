@@ -73,6 +73,21 @@ router.get(
   }),
 );
 
+// Task #230 — `state` must be one of these 2-letter US codes (50 states
+// plus DC) and `zipCode` must match the standard 5 / ZIP+4 formats.
+// The same constraints live in the OpenAPI spec; we re-validate here
+// because the server doesn't currently auto-validate request bodies
+// from the spec.
+const US_STATE_CODES = new Set([
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL",
+  "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME",
+  "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH",
+  "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+  "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI",
+  "WY",
+]);
+const US_ZIP_PATTERN = /^\d{5}(-\d{4})?$/;
+
 router.post(
   "/organizations",
   asyncHandler(async (req, res) => {
@@ -80,13 +95,34 @@ router.post(
     if (!me) return apiError(res, 401, "Not authenticated");
     const name = String(req.body?.name ?? "").trim();
     if (!name) return apiError(res, 400, "name required");
+    const city = String(req.body?.city ?? "").trim();
+    if (!city) return apiError(res, 400, "city required");
+    const stateRaw = String(req.body?.state ?? "").trim().toUpperCase();
+    if (!stateRaw) return apiError(res, 400, "state required");
+    if (!US_STATE_CODES.has(stateRaw)) {
+      return apiError(
+        res,
+        400,
+        "state must be a 2-letter US state code (e.g. NJ)",
+      );
+    }
+    const zipCode = String(req.body?.zipCode ?? "").trim();
+    if (!zipCode) return apiError(res, 400, "zipCode required");
+    if (!US_ZIP_PATTERN.test(zipCode)) {
+      return apiError(
+        res,
+        400,
+        "zipCode must be a US zip (5 digits or 5+4 like 12345-6789)",
+      );
+    }
     const [org] = await db
       .insert(organizations)
       .values({
         name,
         description: req.body?.description ?? undefined,
-        city: req.body?.city ?? undefined,
-        state: req.body?.state ?? undefined,
+        city,
+        state: stateRaw,
+        zipCode,
         website: req.body?.website ?? undefined,
         logoUrl: req.body?.logoUrl ?? undefined,
         createdById: me.id,

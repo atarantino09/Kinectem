@@ -470,6 +470,12 @@ export interface OrganizationResponse {
   website?: string | null;
   /** @nullable */
   logoUrl?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  zipCode?: string | null;
   isMember: boolean;
   isFollowing?: boolean;
   /** @minimum 0 */
@@ -479,6 +485,66 @@ export interface OrganizationResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Two-letter US state postal code (50 states + DC).
+ */
+export type CreateOrganizationRequestState =
+  (typeof CreateOrganizationRequestState)[keyof typeof CreateOrganizationRequestState];
+
+export const CreateOrganizationRequestState = {
+  AL: "AL",
+  AK: "AK",
+  AZ: "AZ",
+  AR: "AR",
+  CA: "CA",
+  CO: "CO",
+  CT: "CT",
+  DE: "DE",
+  DC: "DC",
+  FL: "FL",
+  GA: "GA",
+  HI: "HI",
+  ID: "ID",
+  IL: "IL",
+  IN: "IN",
+  IA: "IA",
+  KS: "KS",
+  KY: "KY",
+  LA: "LA",
+  ME: "ME",
+  MD: "MD",
+  MA: "MA",
+  MI: "MI",
+  MN: "MN",
+  MS: "MS",
+  MO: "MO",
+  MT: "MT",
+  NE: "NE",
+  NV: "NV",
+  NH: "NH",
+  NJ: "NJ",
+  NM: "NM",
+  NY: "NY",
+  NC: "NC",
+  ND: "ND",
+  OH: "OH",
+  OK: "OK",
+  OR: "OR",
+  PA: "PA",
+  RI: "RI",
+  SC: "SC",
+  SD: "SD",
+  TN: "TN",
+  TX: "TX",
+  UT: "UT",
+  VT: "VT",
+  VA: "VA",
+  WA: "WA",
+  WV: "WV",
+  WI: "WI",
+  WY: "WY",
+} as const;
 
 export interface CreateOrganizationRequest {
   name: string;
@@ -490,8 +556,15 @@ export interface CreateOrganizationRequest {
   slug: string;
   description?: string;
   website?: string;
-  city?: string;
-  state?: string;
+  /** @minLength 1 */
+  city: string;
+  /** Two-letter US state postal code (50 states + DC). */
+  state: CreateOrganizationRequestState;
+  /**
+   * US zip code; either 5 digits or ZIP+4 (e.g. 12345 or 12345-6789).
+   * @pattern ^\d{5}(-\d{4})?$
+   */
+  zipCode: string;
   /** @nullable */
   logoUrl?: string | null;
 }

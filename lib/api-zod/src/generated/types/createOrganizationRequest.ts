@@ -65,6 +65,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateOrganizationRequestState } from "./createOrganizationRequestState";
 
 export interface CreateOrganizationRequest {
   name: string;
@@ -76,8 +77,15 @@ export interface CreateOrganizationRequest {
   slug: string;
   description?: string;
   website?: string;
-  city?: string;
-  state?: string;
+  /** @minLength 1 */
+  city: string;
+  /** Two-letter US state postal code (50 states + DC). */
+  state: CreateOrganizationRequestState;
+  /**
+   * US zip code; either 5 digits or ZIP+4 (e.g. 12345 or 12345-6789).
+   * @pattern ^\d{5}(-\d{4})?$
+   */
+  zipCode: string;
   /** @nullable */
   logoUrl?: string | null;
 }

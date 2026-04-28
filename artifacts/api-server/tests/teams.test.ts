@@ -494,6 +494,9 @@ describe("teams", () => {
         .post("/api/v1/organizations")
         .send({
           name: `T218 Org ${Math.random().toString(36).slice(2, 8)}`,
+          city: "Westfield",
+          state: "NJ",
+          zipCode: "07090",
         });
       expect(created.status).toBe(201);
       const orgId: string = created.body.id;

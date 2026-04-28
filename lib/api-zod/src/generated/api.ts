@@ -762,6 +762,9 @@ export const ListUserOrganizationsResponse = zod.object({
       description: zod.string().nullish(),
       website: zod.string().url().nullish(),
       logoUrl: zod.string().url().nullish(),
+      city: zod.string().nullish(),
+      state: zod.string().nullish(),
+      zipCode: zod.string().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       followerCount: zod
@@ -790,6 +793,10 @@ export const createOrganizationBodySlugRegExp = new RegExp(
   "^[a-z0-9]+(-[a-z0-9]+)\*$",
 );
 
+export const createOrganizationBodyZipCodeRegExp = new RegExp(
+  "^\\d{5}(-\\d{4})?$",
+);
+
 export const CreateOrganizationBody = zod.object({
   name: zod.string(),
   slug: zod
@@ -799,8 +806,68 @@ export const CreateOrganizationBody = zod.object({
     .regex(createOrganizationBodySlugRegExp),
   description: zod.string().optional(),
   website: zod.string().url().optional(),
-  city: zod.string().optional(),
-  state: zod.string().optional(),
+  city: zod.string().min(1),
+  state: zod
+    .enum([
+      "AL",
+      "AK",
+      "AZ",
+      "AR",
+      "CA",
+      "CO",
+      "CT",
+      "DE",
+      "DC",
+      "FL",
+      "GA",
+      "HI",
+      "ID",
+      "IL",
+      "IN",
+      "IA",
+      "KS",
+      "KY",
+      "LA",
+      "ME",
+      "MD",
+      "MA",
+      "MI",
+      "MN",
+      "MS",
+      "MO",
+      "MT",
+      "NE",
+      "NV",
+      "NH",
+      "NJ",
+      "NM",
+      "NY",
+      "NC",
+      "ND",
+      "OH",
+      "OK",
+      "OR",
+      "PA",
+      "RI",
+      "SC",
+      "SD",
+      "TN",
+      "TX",
+      "UT",
+      "VT",
+      "VA",
+      "WA",
+      "WV",
+      "WI",
+      "WY",
+    ])
+    .describe("Two-letter US state postal code (50 states + DC)."),
+  zipCode: zod
+    .string()
+    .regex(createOrganizationBodyZipCodeRegExp)
+    .describe(
+      "US zip code; either 5 digits or ZIP+4 (e.g. 12345 or 12345-6789).",
+    ),
   logoUrl: zod.string().nullish(),
 });
 
@@ -841,6 +908,9 @@ export const ListOrganizationsResponse = zod.object({
       description: zod.string().nullish(),
       website: zod.string().url().nullish(),
       logoUrl: zod.string().url().nullish(),
+      city: zod.string().nullish(),
+      state: zod.string().nullish(),
+      zipCode: zod.string().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       followerCount: zod
@@ -875,6 +945,9 @@ export const GetOrganizationByIdResponse = zod.object({
   description: zod.string().nullish(),
   website: zod.string().url().nullish(),
   logoUrl: zod.string().url().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zipCode: zod.string().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
   followerCount: zod
@@ -911,6 +984,9 @@ export const UpdateOrganizationResponse = zod.object({
   description: zod.string().nullish(),
   website: zod.string().url().nullish(),
   logoUrl: zod.string().url().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zipCode: zod.string().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
   followerCount: zod
@@ -3699,6 +3775,9 @@ export const ListFollowSuggestionsResponse = zod.object({
       description: zod.string().nullish(),
       website: zod.string().url().nullish(),
       logoUrl: zod.string().url().nullish(),
+      city: zod.string().nullish(),
+      state: zod.string().nullish(),
+      zipCode: zod.string().nullish(),
       isMember: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       followerCount: zod
@@ -4496,6 +4575,9 @@ export const SetOrgAvatarResponse = zod.object({
   description: zod.string().nullish(),
   website: zod.string().url().nullish(),
   logoUrl: zod.string().url().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zipCode: zod.string().nullish(),
   isMember: zod.boolean(),
   isFollowing: zod.boolean().optional(),
   followerCount: zod

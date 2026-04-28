@@ -102,6 +102,7 @@ export const organizations = pgTable("organizations", {
   location: text("location"),
   city: text("city"),
   state: text("state"),
+  zipCode: text("zip_code"),
   description: text("description"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),

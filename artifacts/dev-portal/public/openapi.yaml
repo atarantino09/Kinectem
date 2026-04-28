@@ -6470,6 +6470,15 @@ components:
           type: string
           nullable: true
           format: uri
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
         isMember:
           type: boolean
         isFollowing:
@@ -6496,6 +6505,9 @@ components:
       required:
         - name
         - slug
+        - city
+        - state
+        - zipCode
       additionalProperties: false
       properties:
         name:
@@ -6512,8 +6524,66 @@ components:
           format: uri
         city:
           type: string
+          minLength: 1
         state:
           type: string
+          description: Two-letter US state postal code (50 states + DC).
+          enum:
+            - AL
+            - AK
+            - AZ
+            - AR
+            - CA
+            - CO
+            - CT
+            - DE
+            - DC
+            - FL
+            - GA
+            - HI
+            - ID
+            - IL
+            - IN
+            - IA
+            - KS
+            - KY
+            - LA
+            - ME
+            - MD
+            - MA
+            - MI
+            - MN
+            - MS
+            - MO
+            - MT
+            - NE
+            - NV
+            - NH
+            - NJ
+            - NM
+            - NY
+            - NC
+            - ND
+            - OH
+            - OK
+            - OR
+            - PA
+            - RI
+            - SC
+            - SD
+            - TN
+            - TX
+            - UT
+            - VT
+            - VA
+            - WA
+            - WV
+            - WI
+            - WY
+        zipCode:
+          type: string
+          description: US zip code; either 5 digits or ZIP+4 (e.g. 12345 or 12345-6789).
+          pattern: '^\d{5}(-\d{4})?$'
         logoUrl:
           type: string
           nullable: true

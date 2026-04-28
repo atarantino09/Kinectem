@@ -276,6 +276,7 @@ export function toOrganization(
     website: o.website ?? null,
     city: o.city ?? null,
     state: o.state ?? null,
+    zipCode: o.zipCode ?? null,
     logoUrl: o.logoUrl ?? null,
     isMember: opts.isMember ?? false,
     role: opts.role ?? null,

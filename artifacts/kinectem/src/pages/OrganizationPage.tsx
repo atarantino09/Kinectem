@@ -180,20 +180,35 @@ export default function OrganizationPage() {
                         </span>
                       </>
                     )}
-                    {((organization as { city?: string | null }).city ||
-                      (organization as { state?: string | null }).state) && (
-                      <>
-                        <span className="opacity-50">•</span>
-                        <span className="font-medium">
-                          {[
-                            (organization as { city?: string | null }).city,
-                            (organization as { state?: string | null }).state,
-                          ]
-                            .filter(Boolean)
-                            .join(", ")}
-                        </span>
-                      </>
-                    )}
+                    {(() => {
+                      const o = organization as {
+                        city?: string | null;
+                        state?: string | null;
+                        zipCode?: string | null;
+                      };
+                      if (!o.city && !o.state && !o.zipCode) return null;
+                      // Render as "City, ST 07090" — falling through to
+                      // whichever pieces are present so older orgs that
+                      // never collected zip / state keep their existing
+                      // "City, ST" rendering.
+                      const cityState = [o.city, o.state]
+                        .filter(Boolean)
+                        .join(", ");
+                      const text = [cityState, o.zipCode]
+                        .filter(Boolean)
+                        .join(" ");
+                      return (
+                        <>
+                          <span className="opacity-50">•</span>
+                          <span
+                            className="font-medium"
+                            data-testid="text-org-address"
+                          >
+                            {text}
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import {
   useGetLoggedInUser,
   getListOrganizationsQueryKey,
   getListUserOrganizationsQueryKey,
+  type CreateOrganizationRequestState,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -19,6 +20,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
@@ -33,6 +41,64 @@ function slugify(s: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 50);
 }
+
+// Task #230 — 50 US states + DC, displayed by full name and submitted as
+// the 2-letter postal code. Matches the enum on the OpenAPI spec.
+const US_STATES: Array<{ code: string; name: string }> = [
+  { code: "AL", name: "Alabama" },
+  { code: "AK", name: "Alaska" },
+  { code: "AZ", name: "Arizona" },
+  { code: "AR", name: "Arkansas" },
+  { code: "CA", name: "California" },
+  { code: "CO", name: "Colorado" },
+  { code: "CT", name: "Connecticut" },
+  { code: "DE", name: "Delaware" },
+  { code: "DC", name: "District of Columbia" },
+  { code: "FL", name: "Florida" },
+  { code: "GA", name: "Georgia" },
+  { code: "HI", name: "Hawaii" },
+  { code: "ID", name: "Idaho" },
+  { code: "IL", name: "Illinois" },
+  { code: "IN", name: "Indiana" },
+  { code: "IA", name: "Iowa" },
+  { code: "KS", name: "Kansas" },
+  { code: "KY", name: "Kentucky" },
+  { code: "LA", name: "Louisiana" },
+  { code: "ME", name: "Maine" },
+  { code: "MD", name: "Maryland" },
+  { code: "MA", name: "Massachusetts" },
+  { code: "MI", name: "Michigan" },
+  { code: "MN", name: "Minnesota" },
+  { code: "MS", name: "Mississippi" },
+  { code: "MO", name: "Missouri" },
+  { code: "MT", name: "Montana" },
+  { code: "NE", name: "Nebraska" },
+  { code: "NV", name: "Nevada" },
+  { code: "NH", name: "New Hampshire" },
+  { code: "NJ", name: "New Jersey" },
+  { code: "NM", name: "New Mexico" },
+  { code: "NY", name: "New York" },
+  { code: "NC", name: "North Carolina" },
+  { code: "ND", name: "North Dakota" },
+  { code: "OH", name: "Ohio" },
+  { code: "OK", name: "Oklahoma" },
+  { code: "OR", name: "Oregon" },
+  { code: "PA", name: "Pennsylvania" },
+  { code: "RI", name: "Rhode Island" },
+  { code: "SC", name: "South Carolina" },
+  { code: "SD", name: "South Dakota" },
+  { code: "TN", name: "Tennessee" },
+  { code: "TX", name: "Texas" },
+  { code: "UT", name: "Utah" },
+  { code: "VT", name: "Vermont" },
+  { code: "VA", name: "Virginia" },
+  { code: "WA", name: "Washington" },
+  { code: "WV", name: "West Virginia" },
+  { code: "WI", name: "Wisconsin" },
+  { code: "WY", name: "Wyoming" },
+];
+
+const US_ZIP_PATTERN = /^\d{5}(-\d{4})?$/;
 
 export function CreateOrgDialog({
   open,
@@ -50,8 +116,15 @@ export function CreateOrgDialog({
   const [website, setWebsite] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>("");
+  const [errors, setErrors] = useState<{
+    name?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  }>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const createOrg = useCreateOrganization();
@@ -64,8 +137,10 @@ export function CreateOrgDialog({
     setWebsite("");
     setCity("");
     setState("");
+    setZipCode("");
     setSlugDirty(false);
     setLogoUrl("");
+    setErrors({});
   };
 
   const onPickLogo = () => fileInputRef.current?.click();
@@ -97,19 +172,39 @@ export function CreateOrgDialog({
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalSlug = slug || slugify(name);
-    if (!name.trim() || !finalSlug) {
-      toast({ title: "Name is required", variant: "destructive" });
+    const trimmedName = name.trim();
+    const trimmedCity = city.trim();
+    const trimmedZip = zipCode.trim();
+    const nextErrors: typeof errors = {};
+    if (!trimmedName || !finalSlug) nextErrors.name = "Name is required";
+    if (!trimmedCity) nextErrors.city = "City is required";
+    if (!state) nextErrors.state = "State is required";
+    if (!trimmedZip) {
+      nextErrors.zipCode = "Zip code is required";
+    } else if (!US_ZIP_PATTERN.test(trimmedZip)) {
+      nextErrors.zipCode = "Enter a US zip (12345 or 12345-6789)";
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      const first =
+        nextErrors.name ??
+        nextErrors.city ??
+        nextErrors.state ??
+        nextErrors.zipCode ??
+        "Please fix the highlighted fields";
+      toast({ title: first, variant: "destructive" });
       return;
     }
     try {
       const org = await createOrg.mutateAsync({
         data: {
-          name: name.trim(),
+          name: trimmedName,
           slug: finalSlug,
           description: description.trim() || undefined,
           website: website.trim() || undefined,
-          city: city.trim() || undefined,
-          state: state.trim() || undefined,
+          city: trimmedCity,
+          state: state as CreateOrganizationRequestState,
+          zipCode: trimmedZip,
           logoUrl: logoUrl || undefined,
         },
       });
@@ -207,6 +302,14 @@ export function CreateOrgDialog({
                 autoFocus
                 data-testid="input-org-name"
               />
+              {errors.name && (
+                <p
+                  className="text-xs font-medium text-destructive"
+                  data-testid="error-org-name"
+                >
+                  {errors.name}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="org-slug" className="font-bold">
@@ -227,9 +330,12 @@ export function CreateOrgDialog({
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5 col-span-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="org-city" className="font-bold">
                   City
+                  <span className="text-destructive ml-0.5" aria-hidden>
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="org-city"
@@ -238,21 +344,75 @@ export function CreateOrgDialog({
                   placeholder="Westfield"
                   data-testid="input-org-city"
                 />
+                {errors.city && (
+                  <p
+                    className="text-xs font-medium text-destructive"
+                    data-testid="error-org-city"
+                  >
+                    {errors.city}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="org-state" className="font-bold">
                   State
+                  <span className="text-destructive ml-0.5" aria-hidden>
+                    *
+                  </span>
+                </Label>
+                <Select value={state} onValueChange={setState}>
+                  <SelectTrigger
+                    id="org-state"
+                    data-testid="input-org-state"
+                    aria-label="State"
+                  >
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {US_STATES.map((s) => (
+                      <SelectItem
+                        key={s.code}
+                        value={s.code}
+                        data-testid={`option-org-state-${s.code}`}
+                      >
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.state && (
+                  <p
+                    className="text-xs font-medium text-destructive"
+                    data-testid="error-org-state"
+                  >
+                    {errors.state}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="org-zip" className="font-bold">
+                  Zip
+                  <span className="text-destructive ml-0.5" aria-hidden>
+                    *
+                  </span>
                 </Label>
                 <Input
-                  id="org-state"
-                  value={state}
-                  onChange={(e) =>
-                    setState(e.target.value.toUpperCase().slice(0, 2))
-                  }
-                  placeholder="NJ"
-                  maxLength={2}
-                  data-testid="input-org-state"
+                  id="org-zip"
+                  value={zipCode}
+                  onChange={(e) => setZipCode(e.target.value)}
+                  placeholder="07090"
+                  inputMode="numeric"
+                  maxLength={10}
+                  data-testid="input-org-zip"
                 />
+                {errors.zipCode && (
+                  <p
+                    className="text-xs font-medium text-destructive"
+                    data-testid="error-org-zip"
+                  >
+                    {errors.zipCode}
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-1.5">

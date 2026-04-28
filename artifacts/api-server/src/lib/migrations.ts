@@ -117,6 +117,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_admins_one_owner_per_org
   WHERE role = 'owner';
 `;
 
+// Task #230 — Add a zip_code column to organizations. The create-org
+// endpoint will enforce presence on new orgs going forward, but we
+// keep the column nullable so existing rows are unaffected (no
+// forced backfill).
+const TASK_230_ORG_ZIP_CODE = `
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS zip_code text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -125,6 +134,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-208-org-member-roles",
     sql: TASK_208_ORG_MEMBER_ROLES,
+  },
+  {
+    name: "2026-04-28-task-230-org-zip-code",
+    sql: TASK_230_ORG_ZIP_CODE,
   },
 ];
 

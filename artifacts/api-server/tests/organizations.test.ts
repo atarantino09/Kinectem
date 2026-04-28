@@ -33,10 +33,19 @@ describe("organizations", () => {
     const { agent, user } = await loginAs((u) => u.role === "admin");
     const res = await agent
       .post("/api/v1/organizations")
-      .send({ name: "Test Org", description: "Created in tests" });
+      .send({
+        name: "Test Org",
+        description: "Created in tests",
+        city: "Westfield",
+        state: "NJ",
+        zipCode: "07090",
+      });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe("Test Org");
     expect(res.body.role).toBe("owner");
+    expect(res.body.city).toBe("Westfield");
+    expect(res.body.state).toBe("NJ");
+    expect(res.body.zipCode).toBe("07090");
     // The creator should be listed as a member of the new org.
     const orgs = await agent.get(`/api/v1/users/${user.id}/organizations`);
     expect(
@@ -48,6 +57,55 @@ describe("organizations", () => {
     const { agent } = await loginAs((u) => u.role === "admin");
     const res = await agent.post("/api/v1/organizations").send({ name: "  " });
     expect(res.status).toBe(400);
+  });
+
+  it("rejects creating an organization without city/state/zipCode (task #230)", async () => {
+    const { agent } = await loginAs((u) => u.role === "admin");
+    const noCity = await agent.post("/api/v1/organizations").send({
+      name: "Test Org",
+      state: "NJ",
+      zipCode: "07090",
+    });
+    expect(noCity.status).toBe(400);
+    const noState = await agent.post("/api/v1/organizations").send({
+      name: "Test Org",
+      city: "Westfield",
+      zipCode: "07090",
+    });
+    expect(noState.status).toBe(400);
+    const noZip = await agent.post("/api/v1/organizations").send({
+      name: "Test Org",
+      city: "Westfield",
+      state: "NJ",
+    });
+    expect(noZip.status).toBe(400);
+  });
+
+  it("rejects creating an organization with an invalid state code or zip (task #230)", async () => {
+    const { agent } = await loginAs((u) => u.role === "admin");
+    const badState = await agent.post("/api/v1/organizations").send({
+      name: "Test Org",
+      city: "Westfield",
+      state: "ZZ",
+      zipCode: "07090",
+    });
+    expect(badState.status).toBe(400);
+    const badZip = await agent.post("/api/v1/organizations").send({
+      name: "Test Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "abcde",
+    });
+    expect(badZip.status).toBe(400);
+    // ZIP+4 is accepted.
+    const ok = await agent.post("/api/v1/organizations").send({
+      name: "Test Org Plus Four",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090-1234",
+    });
+    expect(ok.status).toBe(201);
+    expect(ok.body.zipCode).toBe("07090-1234");
   });
 });
 
@@ -63,7 +121,12 @@ describe("organization member roles (task #208)", () => {
   ): Promise<string> {
     const created = await ownerAgent
       .post("/api/v1/organizations")
-      .send({ name: `T208 Org ${Math.random().toString(36).slice(2, 8)}` });
+      .send({
+        name: `T208 Org ${Math.random().toString(36).slice(2, 8)}`,
+        city: "Westfield",
+        state: "NJ",
+        zipCode: "07090",
+      });
     expect(created.status).toBe(201);
     const orgId: string = created.body.id;
     const jr = await joinerAgent
@@ -88,7 +151,12 @@ describe("organization member roles (task #208)", () => {
     const { agent } = await loginAs((u) => u.role === "admin");
     const created = await agent
       .post("/api/v1/organizations")
-      .send({ name: "T208 Owner Test" });
+      .send({
+        name: "T208 Owner Test",
+        city: "Westfield",
+        state: "NJ",
+        zipCode: "07090",
+      });
     expect(created.status).toBe(201);
     expect(created.body.role).toBe("owner");
     const list = await agent.get(
@@ -152,7 +220,12 @@ describe("organization member roles (task #208)", () => {
     );
     const created = await owner
       .post("/api/v1/organizations")
-      .send({ name: "T208 Owner Lock" });
+      .send({
+        name: "T208 Owner Lock",
+        city: "Westfield",
+        state: "NJ",
+        zipCode: "07090",
+      });
     expect(created.status).toBe(201);
     const orgId: string = created.body.id;
     const res = await owner
@@ -282,7 +355,12 @@ describe("organization member roles (task #208)", () => {
     );
     const created = await owner
       .post("/api/v1/organizations")
-      .send({ name: `T208 RaceOrg ${Math.random().toString(36).slice(2, 8)}` });
+      .send({
+        name: `T208 RaceOrg ${Math.random().toString(36).slice(2, 8)}`,
+        city: "Westfield",
+        state: "NJ",
+        zipCode: "07090",
+      });
     expect(created.status).toBe(201);
     const orgId: string = created.body.id;
     for (const [agent, uid] of [
