@@ -49,7 +49,7 @@ import {
   loadPostShareStats,
   shareStatsFor,
 } from "../lib/post-stats";
-import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 
 const router: IRouter = Router();
 
@@ -891,6 +891,32 @@ async function transitionApproval(
       publishedAt: next === "published" ? new Date() : null,
     })
     .where(eq(articles.id, a.id));
+  // When an admin approves a recap, run the auto-tag fan-out so every
+  // accepted player on the team's roster gets tagged. The publish path
+  // (drafts.ts) only runs the fan-out for status="published" transitions,
+  // so a recap that was created as pending_approval — or one whose
+  // gameDate was added/changed via PATCH while pending — would otherwise
+  // never get its roster tagged. Fan-out is idempotent (article_tags has
+  // ON CONFLICT DO NOTHING on (article_id, user_id)) so it's safe to run
+  // here even if the publish path already ran it. (task #242)
+  if (next === "published" && a.gameDate) {
+    const taggerUserId = a.authorId ?? me.id;
+    const newlyTagged = await applyArticleTagFanout({
+      articleId: a.id,
+      teamId: a.teamId,
+      taggerUserId,
+      explicitUserIds: [],
+      gameDate: a.gameDate,
+    });
+    if (newlyTagged.length > 0) {
+      await notifyNewlyTaggedInRecap({
+        userIds: newlyTagged,
+        articleId: a.id,
+        articleTitle: a.title,
+        actorUserId: taggerUserId,
+      });
+    }
+  }
   res.json({ status: next === "published" ? "approved" : "declined" });
 }
 

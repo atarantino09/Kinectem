@@ -941,21 +941,90 @@ router.post(
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const body = req.body ?? {};
-    // Spec uses organizationId; we pick first team in that org as a default context.
+    // Team selection rules. The team chosen here is the team the article
+    // is filed under AND the roster the auto-tag fan-out runs against,
+    // so it must be unambiguous — silently picking "any team in the
+    // database" was the regression that caused recaps to tag the wrong
+    // (or no) players (task #242).
+    //   1. Explicit context.id / teamId always wins.
+    //   2. With only an organizationId, resolve to the user's single
+    //      authoring team in that org:
+    //        - Coach/author roster affiliations: exactly 1 -> use it,
+    //          multiple -> 400 (ambiguous).
+    //        - Org admin with no specific roster affiliation: exactly 1
+    //          team in the org -> use it, multiple -> 400 (ambiguous).
+    //          We deliberately do NOT silently pick orgTeams[0] for
+    //          admins, because canCreateRecap is true for them on every
+    //          team in the org and the fan-out would tag the wrong
+    //          roster (task #242).
+    //        - Unauthorized user, no affiliation: fall back to
+    //          orgTeams[0] so the inner canCreateRecap below returns
+    //          its own clean 403 — preserves the
+    //          "Only admins, coaches, and authors can create game
+    //          recaps" message tests depend on.
+    //   3. With neither teamId nor organizationId, return 400.
     let teamId: string | undefined = body.context?.id ?? body.teamId;
     if (!teamId && body.organizationId) {
-      const [firstTeam] = await db
+      const orgTeams = await db
         .select()
         .from(teams)
-        .where(eq(teams.organizationId, body.organizationId))
-        .limit(1);
-      teamId = firstTeam?.id;
+        .where(eq(teams.organizationId, body.organizationId));
+      const callerTeamRows = await db
+        .select({ teamId: rosterEntries.teamId })
+        .from(rosterEntries)
+        .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+        .where(
+          and(
+            eq(teams.organizationId, body.organizationId),
+            eq(rosterEntries.userId, me.id),
+            eq(rosterEntries.status, "accepted"),
+            or(
+              eq(rosterEntries.role, "coach"),
+              eq(rosterEntries.position, "author"),
+            ),
+          ),
+        );
+      const callerTeamIds = new Set(callerTeamRows.map((r) => r.teamId));
+      if (callerTeamIds.size === 1) {
+        teamId = [...callerTeamIds][0];
+      } else if (callerTeamIds.size > 1) {
+        return apiError(
+          res,
+          400,
+          "Multiple teams available — please pick a team before posting.",
+        );
+      } else {
+        // No specific coach/author affiliation. If the caller is an org
+        // admin we still need to resolve a team to avoid silently
+        // picking the wrong one for fan-out.
+        const isOrgAdmin = await canManageOrganization(
+          me.id,
+          body.organizationId,
+        );
+        if (isOrgAdmin) {
+          if (orgTeams.length === 1) {
+            teamId = orgTeams[0].id;
+          } else if (orgTeams.length > 1) {
+            return apiError(
+              res,
+              400,
+              "Multiple teams available — please pick a team before posting.",
+            );
+          }
+          // 0 teams in the org falls through to the !teamId 400 below.
+        } else if (orgTeams.length > 0) {
+          // Unauthorized user — let canCreateRecap return the proper
+          // 403 with the message tests depend on.
+          teamId = orgTeams[0].id;
+        }
+      }
     }
-    if (!teamId) {
-      const [anyTeam] = await db.select().from(teams).limit(1);
-      teamId = anyTeam?.id;
-    }
-    if (!teamId) return apiError(res, 400, "no team context available");
+    if (!teamId)
+      return apiError(
+        res,
+        400,
+        "teamId is required (post from a team page or include teamId in the request).",
+      );
     if (body.postType === "long") {
       const isDraft = body.status === "draft";
       const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);

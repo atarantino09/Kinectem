@@ -1006,6 +1006,192 @@ describe("auto-tag rostered players on game-recap articles", () => {
     expect(teamId).toBeTruthy();
   });
 
+  it("admin approval fans out the roster when an author added gameDate after submitting (task #242)", async () => {
+    // Regression for task #242. Path:
+    //   1) Non-admin author creates a long-form post WITHOUT a gameDate.
+    //      It enters the approval queue as "pending_approval" and the
+    //      create handler skips the fan-out (no gameDate).
+    //   2) Author realizes they meant to file it as a recap and PATCHes
+    //      the article to add a gameDate. The PATCH handler only runs
+    //      the fan-out for already-published recaps, so for a
+    //      pending_approval row no tags are inserted yet.
+    //   3) Admin approves the recap. Before #242 the approval handler
+    //      just flipped status="published" with no tag fan-out — so the
+    //      recap went live with zero rostered players tagged and never
+    //      surfaced on their profile pages. After the fix, approval
+    //      itself runs the fan-out (idempotently) so every accepted
+    //      player ends up tagged and the recap appears under their
+    //      profile's Posts tab.
+    //
+    // The seeded coach@kinectem.demo is also an org admin (so their
+    // recaps auto-publish), so this test grants Marcus the "author"
+    // position on JV Football to exercise a true non-admin author path.
+    const orgId = (await getFootballTeam()).orgId;
+    // Find JV Football's id.
+    const [jv] = await db
+      .select()
+      .from(teams)
+      .where(and(eq(teams.organizationId, orgId), eq(teams.name, "JV Football")))
+      .limit(1);
+    if (!jv) throw new Error("JV Football missing from seed");
+    const teamId = jv.id;
+    const marcusId = await findUserId("marcus@kinectem.demo");
+
+    // Add Marcus to JV Football as an author + accepted, alongside a
+    // few of his teammates so the fan-out has multiple players to tag.
+    await ensureRosterPlayer(teamId, marcusId);
+    await db
+      .update(rosterEntries)
+      .set({ position: "author" })
+      .where(
+        and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, marcusId)),
+      );
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    const tylerId = await findUserId("tyler@kinectem.demo");
+    await ensureRosterPlayer(teamId, jordanId);
+    await ensureRosterPlayer(teamId, tylerId);
+
+    const { agent: marcus } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+
+    // 1) Marcus posts without gameDate. He's a non-admin author so the
+    //    server routes this through the approval queue.
+    const created = await marcus.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      teamId,
+      title: "JV upset of the week",
+      body: "Filed before I had the date handy.",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.approvalStatus).toBe("pending_approval");
+    const postId = created.body.id;
+    const articleId = postId.replace(/^article-/, "");
+
+    // No tags yet — there's no gameDate so the create handler's
+    // fan-out is a no-op.
+    let tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows).toHaveLength(0);
+
+    // 2) Marcus edits the pending recap to add the game date. The
+    //    PATCH handler intentionally skips fan-out for non-published
+    //    statuses — the fan-out happens at the next status transition
+    //    (publish or, in this flow, admin approval).
+    const patched = await marcus.patch(`/api/v1/posts/${postId}`).send({
+      gameDate: new Date("2025-09-12T19:00:00Z").toISOString(),
+    });
+    expect(patched.status).toBe(200);
+    tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(tagRows).toHaveLength(0);
+
+    // 3) Admin approves. This is the moment the regression fixed —
+    //    the approval handler must now run the fan-out itself.
+    const { agent: admin } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    const approve = await admin.post(
+      `/api/v1/organizations/${orgId}/post-approvals/${postId}/approve`,
+    );
+    expect(approve.status).toBe(200);
+    expect(approve.body.status).toBe("approved");
+
+    // The article is now published.
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    expect(a.status).toBe("published");
+
+    // Every accepted player on the team's roster must now be tagged
+    // exactly once, with source = "auto".
+    tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const taggedSet = new Set(tagRows.map((t) => t.userId));
+    const accepted = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(accepted.length).toBeGreaterThan(0);
+    for (const r of accepted) {
+      expect(taggedSet.has(r.userId)).toBe(true);
+    }
+    for (const t of tagRows) {
+      expect(t.source).toBe("auto");
+    }
+    // No duplicates.
+    expect(tagRows.length).toBe(taggedSet.size);
+
+    // End-to-end check: the recap shows up on each tagged player's
+    // profile feed (/users/:userId/posts) — the user-visible symptom
+    // task #242 was filed for. We use Jordan (no consent flag) so the
+    // tag is approved and visible to a stranger viewer.
+    const strangerRes = await admin.get(`/api/v1/users/${jordanId}/posts`);
+    expect(strangerRes.status).toBe(200);
+    const profileIds = (
+      strangerRes.body.data ?? strangerRes.body.items ?? []
+    ).map((p: { id: string }) => p.id);
+    expect(profileIds).toContain(postId);
+
+    // Idempotency guard: re-approving (in practice, an admin who hits
+    // the endpoint twice) must not double-insert tags. The endpoint
+    // 404s the second call because status flipped off pending_approval,
+    // but we still verify the tag set is unchanged.
+    const reApprove = await admin.post(
+      `/api/v1/organizations/${orgId}/post-approvals/${postId}/approve`,
+    );
+    expect(reApprove.status).toBe(404);
+    const after = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(after.length).toBe(tagRows.length);
+  });
+
+  it("rejects organizationId-only recap creation by an org admin with multiple teams (task #242)", async () => {
+    // Regression for task #242. An org admin (sam, with no specific
+    // coach/author roster affiliation in Westfield) used to be able
+    // to POST /posts with only an organizationId — the server would
+    // silently pick the first team in the org and run the auto-tag
+    // fan-out against the wrong roster. The fix forces the admin to
+    // pick a team explicitly.
+    const { orgId } = await getFootballTeam();
+    const { agent: admin } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    // Sanity: Westfield has more than one team in the seed.
+    const orgTeams = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.organizationId, orgId));
+    expect(orgTeams.length).toBeGreaterThan(1);
+
+    const created = await admin.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Ambiguous recap",
+      body: "no team picked",
+      gameDate: new Date("2025-09-12T19:00:00Z").toISOString(),
+    });
+    expect(created.status).toBe(400);
+    expect(String(created.body?.error ?? "")).toMatch(/team/i);
+  });
+
   it("non-admin, non-author cannot PATCH a published recap", async () => {
     // Negative path for the permission check: a regular logged-in
     // user (not author, not co-author, not org admin) gets 403.
