@@ -32,6 +32,8 @@ import {
   type RosterMember,
   type RosterInvite,
 } from "@/components/team-page/TeamRosterTabs";
+import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
+import { useIsLg } from "@/hooks/use-mobile";
 
 export default function TeamPage() {
   const params = useParams<{ teamId: string }>();
@@ -57,6 +59,7 @@ export default function TeamPage() {
     showRoster ? "roster" : "posts",
   );
   const [followersOpen, setFollowersOpen] = useState(false);
+  const isLg = useIsLg();
 
   // Re-evaluate when navigating between team URLs without remounting
   // the page (e.g. clicking another team-invite notification while
@@ -139,49 +142,62 @@ export default function TeamPage() {
   const recentPosts = postsResp?.data ?? [];
 
   return (
-    <div className="space-y-6">
-      <TeamHeaderCard
-        team={team}
-        isAdmin={isAdmin}
-        expanded={expanded}
-        playerCount={players.length}
-        staffCount={staff.length}
-        followPending={followTeam.isPending || unfollowTeam.isPending}
-        onSetExpanded={setExpanded}
-        onToggleFollow={onToggleFollow}
-        onEdit={() => setEditOpen(true)}
-        onOpenFollowers={() => setFollowersOpen(true)}
-      />
-
-      <FollowListDialog
-        open={followersOpen}
-        onOpenChange={setFollowersOpen}
-        title={`${team.name} followers`}
-        variant={{ kind: "team-followers", teamId }}
-      />
-
-      {expanded === "posts" && (
-        <TeamPostsSection
-          teamId={teamId}
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+      <div className="space-y-6 min-w-0">
+        <TeamHeaderCard
+          team={team}
           isAdmin={isAdmin}
-          posts={recentPosts}
+          expanded={expanded}
+          playerCount={players.length}
+          staffCount={staff.length}
+          followPending={followTeam.isPending || unfollowTeam.isPending}
+          onSetExpanded={setExpanded}
+          onToggleFollow={onToggleFollow}
+          onEdit={() => setEditOpen(true)}
+          onOpenFollowers={() => setFollowersOpen(true)}
         />
-      )}
 
-      {expanded === "roster" && (
-        <TeamRosterTabs
-          teamId={teamId}
-          isAdmin={isAdmin}
-          meId={me?.id}
-          players={players}
-          staff={staff}
-          invites={invites}
-          highlightEntryId={highlightEntryId}
-          onOpenInvite={() => setInviteOpen(true)}
+        <FollowListDialog
+          open={followersOpen}
+          onOpenChange={setFollowersOpen}
+          title={`${team.name} followers`}
+          variant={{ kind: "team-followers", teamId }}
         />
-      )}
 
-      {expanded === "admin" && isAdmin && <TeamAdminPanel teamId={teamId} />}
+        {/* Roster rail: inline above sections on mobile/tablet, in
+            right rail on lg+. Only one instance mounts at a time so
+            test ids stay unique. */}
+        {!isLg && <TeamRosterRail players={players} staff={staff} />}
+
+        {expanded === "posts" && (
+          <TeamPostsSection
+            teamId={teamId}
+            isAdmin={isAdmin}
+            posts={recentPosts}
+          />
+        )}
+
+        {expanded === "roster" && (
+          <TeamRosterTabs
+            teamId={teamId}
+            isAdmin={isAdmin}
+            meId={me?.id}
+            players={players}
+            staff={staff}
+            invites={invites}
+            highlightEntryId={highlightEntryId}
+            onOpenInvite={() => setInviteOpen(true)}
+          />
+        )}
+
+        {expanded === "admin" && isAdmin && <TeamAdminPanel teamId={teamId} />}
+      </div>
+
+      {isLg && (
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          <TeamRosterRail players={players} staff={staff} />
+        </aside>
+      )}
 
       <InviteRosterDialog
         teamId={teamId}
