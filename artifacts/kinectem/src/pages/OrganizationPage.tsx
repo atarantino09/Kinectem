@@ -13,6 +13,7 @@ import {
   getListFeedQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { useIsLg } from "@/hooks/use-mobile";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ export default function OrganizationPage() {
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
@@ -247,6 +249,16 @@ export default function OrganizationPage() {
 
           {isOrgManager && <OrgAdminPanel orgId={orgId} />}
 
+          {/* Teams: inline on mobile, in rail on lg+. The hook ensures
+              only one instance mounts at a time so testids stay unique. */}
+          {!isLg && (
+            <TeamsRail
+              teams={teams}
+              canManage={isOrgManager}
+              onAddTeam={() => setCreateTeamOpen(true)}
+            />
+          )}
+
           {/* Members preview */}
           {members.length > 0 && (
             <section>
@@ -329,14 +341,16 @@ export default function OrganizationPage() {
           </section>
         </div>
 
-        {/* Right rail */}
-        <aside className="lg:sticky lg:top-20 lg:self-start">
-          <TeamsRail
-            teams={teams}
-            canManage={isOrgManager}
-            onAddTeam={() => setCreateTeamOpen(true)}
-          />
-        </aside>
+        {/* Right rail (lg+ only — on mobile this renders inline above) */}
+        {isLg && (
+          <aside className="lg:sticky lg:top-20 lg:self-start">
+            <TeamsRail
+              teams={teams}
+              canManage={isOrgManager}
+              onAddTeam={() => setCreateTeamOpen(true)}
+            />
+          </aside>
+        )}
       </div>
     </>
   );
