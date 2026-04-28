@@ -7915,6 +7915,13 @@ components:
         level:
           type: string
           nullable: true
+        gender:
+          type: string
+          nullable: true
+          enum:
+            - boys
+            - girls
+            - coed
         avatarUrl:
           type: string
           format: uri
@@ -7983,6 +7990,13 @@ components:
           type: string
         level:
           type: string
+        gender:
+          type: string
+          nullable: true
+          enum:
+            - boys
+            - girls
+            - coed
         bannerUrl:
           type: string
           nullable: true
@@ -8014,6 +8028,13 @@ components:
           type: string
         level:
           type: string
+        gender:
+          type: string
+          nullable: true
+          enum:
+            - boys
+            - girls
+            - coed
         bannerUrl:
           type: string
           nullable: true
