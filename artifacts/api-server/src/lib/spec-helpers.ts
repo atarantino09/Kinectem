@@ -247,11 +247,26 @@ export function toPrivateUser(
   };
 }
 
-export function toPostAuthor(u: UserRow) {
+// Allowed values for the optional authorRole label on a post author. Mirrors
+// the `PostAuthor.authorRole` enum in the OpenAPI spec and the
+// `AuthorRoleLabel` type in `permissions.ts` — kept here as a structural
+// mirror so this module doesn't have to import permissions.
+export type PostAuthorRoleLabel = "Coach" | "Author" | "Owner" | "Admin";
+
+export function toPostAuthor(
+  u: UserRow,
+  opts: { authorRole?: PostAuthorRoleLabel | null } = {},
+) {
   return {
     id: u.id,
     displayName: displayName(u),
     avatarUrl: safeAvatarUrl(u.avatarUrl),
+    // Article-backed long-form posts populate this with the author's
+    // strongest team-relevant role (Coach > Author > Owner > Admin) so
+    // the recap header can render "Jane Doe · Coach". Highlights, org
+    // posts, sharedBy authors, and any caller that doesn't pass an
+    // opt-in default to null.
+    authorRole: opts.authorRole ?? null,
   };
 }
 
@@ -435,6 +450,11 @@ interface PostExtras {
   hasShared?: boolean;
   sharedBy?: { id: string; displayName: string; avatarUrl: string | null } | null;
   sharedAt?: string | null;
+  // The strongest team-relevant role that authorized this article's
+  // author to write the recap, computed at read time. Article-backed
+  // posts populate it (or pass null when no role applies); highlight /
+  // org posts leave it undefined and the response ships null.
+  authorRole?: PostAuthorRoleLabel | null;
 }
 
 export function articleToPost(a: ArticleRow, extras: PostExtras) {
@@ -556,8 +576,8 @@ function basePost(p: {
   extras: PostExtras;
 }) {
   const author = p.extras.author
-    ? toPostAuthor(p.extras.author)
-    : { id: "system", displayName: "System", avatarUrl: null };
+    ? toPostAuthor(p.extras.author, { authorRole: p.extras.authorRole ?? null })
+    : { id: "system", displayName: "System", avatarUrl: null, authorRole: null };
   const team = p.extras.team;
   const context = team
     ? {

@@ -348,6 +348,7 @@ export * from "./postApprovalResponse";
 export * from "./postApprovalStatus";
 export * from "./postAssetResponse";
 export * from "./postAuthor";
+export * from "./postAuthorAuthorRole";
 export * from "./postContext";
 export * from "./postContextType";
 export * from "./postPreviewResponse";

@@ -24,6 +24,7 @@ import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordRe
 import {
   canManageOrganization,
   computeArticleCanEditMap,
+  computeArticleAuthorRoleMap,
   getOrgRole,
 } from "../lib/permissions";
 import {
@@ -559,7 +560,7 @@ router.get(
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
-    const [shareStats, canEditMap] = await Promise.all([
+    const [shareStats, canEditMap, authorRoleMap] = await Promise.all([
       loadPostShareStats(me?.id ?? null, [
         ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
@@ -572,6 +573,14 @@ router.get(
           orgId: r.org.id,
         })),
       ),
+      computeArticleAuthorRoleMap(
+        rows.map((r) => ({
+          articleId: r.a.id,
+          authorId: r.a.authorId,
+          teamId: r.team.id,
+          orgId: r.org.id,
+        })),
+      ),
     ]);
 
     const articleData = rows.map((r) =>
@@ -580,6 +589,7 @@ router.get(
         org: r.org,
         author: r.author,
         canEdit: canEditMap.get(r.a.id) ?? false,
+        authorRole: authorRoleMap.get(r.a.id) ?? null,
         ...shareStatsFor(shareStats, "article", r.a.id),
       }),
     );
@@ -625,7 +635,7 @@ router.get(
         .limit(20),
     ]);
 
-    const [stats, shareStats, canEditMap] = await Promise.all([
+    const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
       loadPostStats(me?.id ?? null, [
         ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
@@ -644,6 +654,14 @@ router.get(
           orgId: r.org.id,
         })),
       ),
+      computeArticleAuthorRoleMap(
+        articleRows.map((r) => ({
+          articleId: r.a.id,
+          authorId: r.a.authorId,
+          teamId: r.team.id,
+          orgId: r.org.id,
+        })),
+      ),
     ]);
 
     const data = [
@@ -653,6 +671,7 @@ router.get(
           org: r.org,
           author: r.author,
           canEdit: canEditMap.get(r.a.id) ?? false,
+          authorRole: authorRoleMap.get(r.a.id) ?? null,
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
         }),
@@ -864,6 +883,14 @@ router.get(
         ),
       )
       .orderBy(desc(articles.createdAt));
+    const approvalAuthorRoleMap = await computeArticleAuthorRoleMap(
+      rows.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        teamId: r.team.id,
+        orgId: r.org.id,
+      })),
+    );
     res.json(
       paginate(
         rows.map((r) => {
@@ -871,6 +898,7 @@ router.get(
             team: r.team,
             org: r.org,
             author: r.author,
+            authorRole: approvalAuthorRoleMap.get(r.a.id) ?? null,
           });
           return {
             id: post.id,

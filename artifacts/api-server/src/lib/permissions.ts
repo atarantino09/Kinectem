@@ -206,6 +206,144 @@ export async function computeArticleCanEditMap(
   return result;
 }
 
+// Labels surfaced next to a recap author's name. Mirrors the priority order
+// used to resolve the strongest team-relevant role the author currently
+// holds on the recap's team / parent org. Kept in sync with the
+// `PostAuthor.authorRole` enum in the OpenAPI spec.
+export type AuthorRoleLabel = "Coach" | "Author" | "Owner" | "Admin";
+
+// Batched "what role authorized this person to write the recap?" lookup.
+//
+// For each row we resolve the author's strongest role in this priority
+// order: team coach → "Coach", roster "author" position → "Author",
+// organization owner → "Owner", organization admin → "Admin". Anything
+// else (incl. plain org members or authors who have since left the team)
+// resolves to null and the client falls back to the name-only header.
+//
+// Only article-backed long-form posts use this; short-form (highlight)
+// and org posts do not pass an authorRole at all.
+export async function computeArticleAuthorRoleMap(
+  rows: Array<{
+    articleId: string;
+    authorId: string | null;
+    teamId: string;
+    orgId: string;
+  }>,
+): Promise<Map<string, AuthorRoleLabel | null>> {
+  const result = new Map<string, AuthorRoleLabel | null>();
+  for (const r of rows) result.set(r.articleId, null);
+  const candidates = rows.filter(
+    (
+      r,
+    ): r is {
+      articleId: string;
+      authorId: string;
+      teamId: string;
+      orgId: string;
+    } => r.authorId != null,
+  );
+  if (candidates.length === 0) return result;
+
+  // Dedupe by (teamId, userId) and (orgId, userId) so the same author
+  // appearing across multiple recaps on the same team only generates
+  // one OR branch.
+  const teamUserPairs = new Map<string, { teamId: string; userId: string }>();
+  const orgUserPairs = new Map<string, { orgId: string; userId: string }>();
+  for (const r of candidates) {
+    teamUserPairs.set(`${r.teamId}|${r.authorId}`, {
+      teamId: r.teamId,
+      userId: r.authorId,
+    });
+    orgUserPairs.set(`${r.orgId}|${r.authorId}`, {
+      orgId: r.orgId,
+      userId: r.authorId,
+    });
+  }
+
+  const teamConds = Array.from(teamUserPairs.values()).map((p) =>
+    and(eq(rosterEntries.teamId, p.teamId), eq(rosterEntries.userId, p.userId)),
+  );
+  const orgConds = Array.from(orgUserPairs.values()).map((p) =>
+    and(
+      eq(organizationAdmins.organizationId, p.orgId),
+      eq(organizationAdmins.userId, p.userId),
+    ),
+  );
+
+  const [rosterRows, adminRows] = await Promise.all([
+    db
+      .select({
+        teamId: rosterEntries.teamId,
+        userId: rosterEntries.userId,
+        role: rosterEntries.role,
+        position: rosterEntries.position,
+      })
+      .from(rosterEntries)
+      .where(and(eq(rosterEntries.status, "accepted"), or(...teamConds))),
+    db
+      .select({
+        orgId: organizationAdmins.organizationId,
+        userId: organizationAdmins.userId,
+        role: organizationAdmins.role,
+      })
+      .from(organizationAdmins)
+      .where(or(...orgConds)),
+  ]);
+
+  // A single roster entry can carry both a coach role and the explicit
+  // "author" position (rare but legal), and a user can have multiple
+  // entries on the same team across positions; collapse them per pair.
+  const rosterByPair = new Map<
+    string,
+    { isCoach: boolean; isAuthor: boolean }
+  >();
+  for (const r of rosterRows) {
+    const key = `${r.teamId}|${r.userId}`;
+    const prev = rosterByPair.get(key) ?? { isCoach: false, isAuthor: false };
+    if (r.role === "coach") prev.isCoach = true;
+    if (r.position === "author") prev.isAuthor = true;
+    rosterByPair.set(key, prev);
+  }
+  // Each (org, user) pair should have at most one row, but if the data
+  // ever drifts prefer the strongest role (owner > admin > member).
+  const adminByPair = new Map<string, "owner" | "admin" | "member">();
+  for (const r of adminRows) {
+    const key = `${r.orgId}|${r.userId}`;
+    const prev = adminByPair.get(key);
+    if (!prev) {
+      adminByPair.set(key, r.role);
+      continue;
+    }
+    if (prev !== "owner" && r.role === "owner") {
+      adminByPair.set(key, r.role);
+    } else if (prev === "member" && r.role === "admin") {
+      adminByPair.set(key, r.role);
+    }
+  }
+
+  for (const r of candidates) {
+    const roster = rosterByPair.get(`${r.teamId}|${r.authorId}`);
+    if (roster?.isCoach) {
+      result.set(r.articleId, "Coach");
+      continue;
+    }
+    if (roster?.isAuthor) {
+      result.set(r.articleId, "Author");
+      continue;
+    }
+    const admin = adminByPair.get(`${r.orgId}|${r.authorId}`);
+    if (admin === "owner") {
+      result.set(r.articleId, "Owner");
+      continue;
+    }
+    if (admin === "admin") {
+      result.set(r.articleId, "Admin");
+      continue;
+    }
+  }
+  return result;
+}
+
 export async function isOrgMember(userId: string, organizationId: string): Promise<boolean> {
   // Anyone in organization_admins (owner/admin/member) is a member.
   const [orgRow] = await db

@@ -31,6 +31,7 @@ import {
   canCreateRecap,
   canManageOrganization,
   computeArticleCanEditMap,
+  computeArticleAuthorRoleMap,
   isTeamMember,
   canManageTeam,
 } from "../lib/permissions";
@@ -563,17 +564,25 @@ router.get(
       (k): k is { kind: "article" | "highlight"; refId: string } =>
         k.kind === "article" || k.kind === "highlight",
     );
-    const articleEditRows = limited
-      .filter((row): row is Extract<MergedRow, { kind: "article" }> => row.kind === "article")
-      .map((row) => ({
-        articleId: row.a.id,
-        authorId: row.a.authorId,
-        orgId: row.org.id,
-      }));
-    const [stats, shareStats, canEditMap] = await Promise.all([
+    const articleRows = limited.filter(
+      (row): row is Extract<MergedRow, { kind: "article" }> => row.kind === "article",
+    );
+    const articleEditRows = articleRows.map((row) => ({
+      articleId: row.a.id,
+      authorId: row.a.authorId,
+      orgId: row.org.id,
+    }));
+    const articleRoleRows = articleRows.map((row) => ({
+      articleId: row.a.id,
+      authorId: row.a.authorId,
+      teamId: row.team.id,
+      orgId: row.org.id,
+    }));
+    const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
       computeArticleCanEditMap(me?.id ?? null, articleEditRows),
+      computeArticleAuthorRoleMap(articleRoleRows),
     ]);
 
     const posts = limited.map((row) => {
@@ -585,6 +594,7 @@ router.get(
           org: row.org,
           author: row.author,
           canEdit: canEditMap.get(row.a.id) ?? false,
+          authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
           ...shareStatsFor(shareStats, "article", row.a.id),
           sharedBy,

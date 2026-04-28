@@ -166,8 +166,19 @@ export default function PostPage() {
         </AvatarLightbox>
         <div className="flex-1 min-w-0">
           <Link href={`/users/${post.author.id}`}>
-            <p className="font-bold text-sm hover:text-primary cursor-pointer">
+            <p
+              className="font-bold text-sm hover:text-primary cursor-pointer"
+              data-testid={`text-post-author-name-${post.id}`}
+            >
               {post.author.displayName}
+              {post.author.authorRole && (
+                <span
+                  className="ml-1 text-xs text-muted-foreground font-medium"
+                  data-testid={`text-post-author-role-${post.id}`}
+                >
+                  · {post.author.authorRole}
+                </span>
+              )}
             </p>
           </Link>
           <p className="text-xs text-muted-foreground font-medium">

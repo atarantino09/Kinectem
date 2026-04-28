@@ -39,6 +39,7 @@ import {
   canCreateRecap,
   canManageOrganization,
   computeArticleCanEditMap,
+  computeArticleAuthorRoleMap,
 } from "../lib/permissions";
 import {
   createSession,
@@ -131,7 +132,13 @@ router.get(
         ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
       ];
-      const [stats, shareStats, canEditMap] = await Promise.all([
+      const articleRoleRows = ownArts.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        teamId: r.team.id,
+        orgId: r.org.id,
+      }));
+      const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
         loadPostStats(me.id, statKeys),
         loadPostShareStats(me.id, statKeys),
         computeArticleCanEditMap(
@@ -142,6 +149,7 @@ router.get(
             orgId: r.org.id,
           })),
         ),
+        computeArticleAuthorRoleMap(articleRoleRows),
       ]);
       const items = [
         ...ownArts.map((r) =>
@@ -150,6 +158,7 @@ router.get(
             org: r.org,
             author: r.author,
             canEdit: canEditMap.get(r.a.id) ?? false,
+            authorRole: authorRoleMap.get(r.a.id) ?? null,
             ...statsFor(stats, "article", r.a.id),
             ...shareStatsFor(shareStats, "article", r.a.id),
           }),
@@ -323,10 +332,28 @@ router.get(
         orgId: r.org.id,
       })),
     ];
-    const [stats, shareStats, canEditMap] = await Promise.all([
+    // Same row set as `articleEditRows`, but extended with the team id
+    // so the role lookup can scope coach / "author" position lookups
+    // to the recap's team without a per-row query.
+    const articleRoleRows = [
+      ...arts.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        teamId: r.team.id,
+        orgId: r.org.id,
+      })),
+      ...sharedArticleRows.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        teamId: r.team.id,
+        orgId: r.org.id,
+      })),
+    ];
+    const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
       computeArticleCanEditMap(me?.id ?? null, articleEditRows),
+      computeArticleAuthorRoleMap(articleRoleRows),
     ]);
 
     const seenIds = new Set<string>([
@@ -341,6 +368,7 @@ router.get(
           org: r.org,
           author: r.author,
           canEdit: canEditMap.get(r.a.id) ?? false,
+          authorRole: authorRoleMap.get(r.a.id) ?? null,
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
         }),
@@ -378,6 +406,7 @@ router.get(
             org: row.org,
             author: row.author,
             canEdit: canEditMap.get(row.a.id) ?? false,
+            authorRole: authorRoleMap.get(row.a.id) ?? null,
             ...statsFor(stats, "article", row.a.id),
             ...shareStatsFor(shareStats, "article", row.a.id),
             sharedBy,
@@ -581,9 +610,17 @@ router.get(
         isCoAuthor = !!coRow;
       }
       const canEdit = isAuthor || isCoAuthor || isOrgAdmin;
-      const [stats, shareStats] = await Promise.all([
+      const [stats, shareStats, authorRoleMap] = await Promise.all([
         loadPostStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
         loadPostShareStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
+        computeArticleAuthorRoleMap([
+          {
+            articleId: row.a.id,
+            authorId: row.a.authorId,
+            teamId: row.team.id,
+            orgId: row.org.id,
+          },
+        ]),
       ]);
       res.json(
         articleToPost(row.a, {
@@ -591,6 +628,7 @@ router.get(
           org: row.org,
           author: row.author,
           canEdit,
+          authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
           ...shareStatsFor(shareStats, "article", row.a.id),
         }),
@@ -1137,8 +1175,18 @@ router.post(
         });
       }
 
+      // Compute the role label so the response carries the same
+      // header data the client will need when it opens the recap.
+      const authorRoleMap = await computeArticleAuthorRoleMap([
+        { articleId: a.id, authorId: a.authorId, teamId: team.id, orgId: org.id },
+      ]);
       res.status(201).json({
-        ...articleToPost(a, { team, org, author: me }),
+        ...articleToPost(a, {
+          team,
+          org,
+          author: me,
+          authorRole: authorRoleMap.get(a.id) ?? null,
+        }),
         approvalStatus: status,
         requiresApproval: status === "pending_approval",
       });

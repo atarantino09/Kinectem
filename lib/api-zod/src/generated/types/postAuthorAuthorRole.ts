@@ -65,15 +65,9 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { PostAuthorAuthorRole } from "./postAuthorAuthorRole";
 
-export interface PostAuthor {
-  id: string;
-  displayName: string;
-  /** @nullable */
-  avatarUrl?: string | null;
-  /**
-   * The strongest team-relevant role that authorizes this user
+/**
+ * The strongest team-relevant role that authorizes this user
 to author the post on the post's team, resolved at read
 time. Priority: team coach → "Coach", roster "author"
 position → "Author", organization owner → "Owner",
@@ -82,7 +76,15 @@ organization admin → "Admin". Only article-backed
 and org posts always omit it / send null. Null when the
 author no longer holds any of those roles.
 
-   * @nullable
-   */
-  authorRole?: PostAuthorAuthorRole;
-}
+ * @nullable
+ */
+export type PostAuthorAuthorRole =
+  | (typeof PostAuthorAuthorRole)[keyof typeof PostAuthorAuthorRole]
+  | null;
+
+export const PostAuthorAuthorRole = {
+  Coach: "Coach",
+  Author: "Author",
+  Owner: "Owner",
+  Admin: "Admin",
+} as const;

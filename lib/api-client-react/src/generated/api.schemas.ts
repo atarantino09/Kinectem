@@ -713,11 +713,47 @@ export const PostResponsePostType = {
   long: "long",
 } as const;
 
+/**
+ * The strongest team-relevant role that authorizes this user
+to author the post on the post's team, resolved at read
+time. Priority: team coach → "Coach", roster "author"
+position → "Author", organization owner → "Owner",
+organization admin → "Admin". Only article-backed
+(long-form) posts populate this; short-form (highlight)
+and org posts always omit it / send null. Null when the
+author no longer holds any of those roles.
+
+ * @nullable
+ */
+export type PostAuthorAuthorRole =
+  | (typeof PostAuthorAuthorRole)[keyof typeof PostAuthorAuthorRole]
+  | null;
+
+export const PostAuthorAuthorRole = {
+  Coach: "Coach",
+  Author: "Author",
+  Owner: "Owner",
+  Admin: "Admin",
+} as const;
+
 export interface PostAuthor {
   id: string;
   displayName: string;
   /** @nullable */
   avatarUrl?: string | null;
+  /**
+   * The strongest team-relevant role that authorizes this user
+to author the post on the post's team, resolved at read
+time. Priority: team coach → "Coach", roster "author"
+position → "Author", organization owner → "Owner",
+organization admin → "Admin". Only article-backed
+(long-form) posts populate this; short-form (highlight)
+and org posts always omit it / send null. Null when the
+author no longer holds any of those roles.
+
+   * @nullable
+   */
+  authorRole?: PostAuthorAuthorRole;
 }
 
 export type PostContextType =

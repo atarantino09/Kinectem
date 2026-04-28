@@ -17,7 +17,10 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canManageOrganization } from "../lib/permissions";
+import {
+  canManageOrganization,
+  computeArticleAuthorRoleMap,
+} from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -174,14 +177,23 @@ router.get(
         const childIsOrgAdmin = await canManageOrganization(child.id, row.org.id);
         if (!childIsAuthor && !childIsOrgAdmin && !isAdmin) return notFound(res);
       }
-      const stats = await loadPostStats(child.id, [
-        { kind: "article", refId: row.a.id },
+      const [stats, authorRoleMap] = await Promise.all([
+        loadPostStats(child.id, [{ kind: "article", refId: row.a.id }]),
+        computeArticleAuthorRoleMap([
+          {
+            articleId: row.a.id,
+            authorId: row.a.authorId,
+            teamId: row.team.id,
+            orgId: row.org.id,
+          },
+        ]),
       ]);
       res.json(
         articleToPost(row.a, {
           team: row.team,
           org: row.org,
           author: row.author,
+          authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
         }),
       );

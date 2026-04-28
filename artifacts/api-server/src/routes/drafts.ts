@@ -14,7 +14,10 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canManageOrganization } from "../lib/permissions";
+import {
+  canManageOrganization,
+  computeArticleAuthorRoleMap,
+} from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -73,8 +76,21 @@ router.get(
       seen.add(r.a.id);
       return true;
     });
+    const authorRoleMap = await computeArticleAuthorRoleMap(
+      all.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        teamId: r.team.id,
+        orgId: r.org.id,
+      })),
+    );
     const data = all.map((r) =>
-      articleToPost(r.a, { team: r.team, org: r.org, author: r.author }),
+      articleToPost(r.a, {
+        team: r.team,
+        org: r.org,
+        author: r.author,
+        authorRole: authorRoleMap.get(r.a.id) ?? null,
+      }),
     );
     res.json(paginate(data));
   }),
@@ -249,12 +265,21 @@ router.patch(
       ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
       : [null];
     if (!org) return notFound(res);
+    const authorRoleMap = await computeArticleAuthorRoleMap([
+      {
+        articleId: updated.id,
+        authorId: updated.authorId,
+        teamId: team.id,
+        orgId: org.id,
+      },
+    ]);
     res.json(
       articleToPost(updated, {
         team,
         org,
         author,
         canEdit: true,
+        authorRole: authorRoleMap.get(updated.id) ?? null,
       }),
     );
   }),
@@ -340,7 +365,22 @@ router.post(
       ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
       : [null];
     if (!team || !org) return notFound(res);
-    res.json(articleToPost(updated, { team, org, author: me }));
+    const publishRoleMap = await computeArticleAuthorRoleMap([
+      {
+        articleId: updated.id,
+        authorId: updated.authorId,
+        teamId: team.id,
+        orgId: org.id,
+      },
+    ]);
+    res.json(
+      articleToPost(updated, {
+        team,
+        org,
+        author: me,
+        authorRole: publishRoleMap.get(updated.id) ?? null,
+      }),
+    );
   }),
 );
 
