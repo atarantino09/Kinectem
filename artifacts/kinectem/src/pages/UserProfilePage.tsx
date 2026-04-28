@@ -17,6 +17,7 @@ import {
   type PrivateUserResponse,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { useIsLg } from "@/hooks/use-mobile";
 import {
   Select,
   SelectContent,
@@ -28,11 +29,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import {
   Building2,
@@ -53,6 +49,7 @@ export default function UserProfilePage() {
   const userId = params.userId;
   const [followersOpen, setFollowersOpen] = useState(false);
   const [followingOpen, setFollowingOpen] = useState(false);
+  const isLg = useIsLg();
   const { data: user, isLoading } = useGetUserById(userId);
   const { data: me } = useGetLoggedInUser();
   const { data: postsResp } = useListUserPosts(userId);
@@ -126,8 +123,173 @@ export default function UserProfilePage() {
     !!user.parentId &&
     user.parentId === me.id;
 
+  // Pre-render the per-section item arrays so the same content can be
+  // dropped into the right rail (lg+) or inline below the hero (mobile).
+  const linked = (
+    user as {
+      linkedAccounts?: {
+        parents?: Array<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          role: string;
+          avatarUrl: string | null;
+        }>;
+        children?: Array<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          role: string;
+          avatarUrl: string | null;
+        }>;
+      };
+    }
+  ).linkedAccounts;
+  const parents = linked?.parents ?? [];
+  const childAccounts = linked?.children ?? [];
+  const family = [
+    ...parents.map((p) => ({ ...p, relation: "Parent / Guardian" as const })),
+    ...childAccounts.map((c) => ({ ...c, relation: "Child" as const })),
+  ];
+
+  const orgItems: ReactNode[] = orgs.map((org) => (
+    <Link key={org.id} href={`/organizations/${org.id}`}>
+      <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
+        <CardContent className="p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
+            {getInitials(org.name)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-sm truncate">{org.name}</p>
+            {org.role && (
+              <Badge
+                variant="outline"
+                className="mt-1 text-[10px] uppercase tracking-wider font-bold"
+              >
+                {org.role}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  ));
+
+  const teamItems: ReactNode[] = teams.map((t) => {
+    const isPending = t.status === "pending";
+    return (
+      <Link key={t.id} href={`/teams/${t.teamId}`}>
+        <Card
+          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+          data-testid={`card-team-${t.teamId}`}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <TeamAvatar
+              avatarUrl={t.teamAvatarUrl}
+              displayName={t.teamName}
+              size="lg"
+              rounded="full"
+              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <p className="font-bold text-sm truncate">{t.teamName}</p>
+                <span
+                  className="text-xs font-bold text-muted-foreground shrink-0"
+                  data-testid={`text-team-jersey-${t.teamId}`}
+                >
+                  {t.jerseyNumber ? `#${t.jerseyNumber}` : "—"}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] uppercase tracking-wider font-bold"
+                >
+                  {t.organization.name}
+                </Badge>
+                {isPending && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
+                    data-testid={`badge-team-pending-${t.teamId}`}
+                  >
+                    Pending
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    );
+  });
+
+  const familyItems: ReactNode[] = family.map((m) => {
+    const name = `${m.firstName} ${m.lastName}`.trim();
+    return (
+      <Link key={`${m.relation}-${m.id}`} href={`/users/${m.id}`}>
+        <Card
+          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+          data-testid={`card-linked-${m.id}`}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <UserAvatar
+              avatarUrl={m.avatarUrl}
+              displayName={name}
+              size="lg"
+              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-sm truncate">{name}</p>
+              <Badge
+                variant="outline"
+                className="mt-1 text-[10px] uppercase tracking-wider font-bold"
+              >
+                {m.relation}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    );
+  });
+
+  const hasAnyAffiliation =
+    orgItems.length > 0 || teamItems.length > 0 || familyItems.length > 0;
+
+  const affiliationsStack = hasAnyAffiliation ? (
+    <div className="flex flex-col gap-4">
+      {orgItems.length > 0 && (
+        <AffiliationColumn
+          title="Organizations"
+          icon={<Building2 className="w-5 h-5 text-primary" />}
+          testId="orgs"
+          items={orgItems}
+        />
+      )}
+      {teamItems.length > 0 && (
+        <AffiliationColumn
+          title="Teams"
+          icon={<Shield className="w-5 h-5 text-primary" />}
+          testId="teams"
+          items={teamItems}
+        />
+      )}
+      {familyItems.length > 0 && (
+        <AffiliationColumn
+          title="Family"
+          icon={<Users className="w-5 h-5 text-primary" />}
+          testId="family"
+          items={familyItems}
+        />
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+      <div className="space-y-6 min-w-0">
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
         <div className="h-24 brand-gradient-cover relative">
@@ -251,170 +413,10 @@ export default function UserProfilePage() {
         )}
       </div>
 
-      {/* Affiliations: Organizations / Teams / Family */}
-      {(() => {
-        const linked = (user as { linkedAccounts?: { parents?: Array<{ id: string; firstName: string; lastName: string; role: string; avatarUrl: string | null }>; children?: Array<{ id: string; firstName: string; lastName: string; role: string; avatarUrl: string | null }> } }).linkedAccounts;
-        const parents = linked?.parents ?? [];
-        const children = linked?.children ?? [];
-        const family = [
-          ...parents.map((p) => ({ ...p, relation: "Parent / Guardian" as const })),
-          ...children.map((c) => ({ ...c, relation: "Child" as const })),
-        ];
-
-        const orgsVisible = orgs.length > 0;
-        const teamsVisible = teams.length > 0;
-        const familyVisible = family.length > 0;
-        if (!orgsVisible && !teamsVisible && !familyVisible) return null;
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-            {orgsVisible && (
-              <AffiliationColumn
-                title="Organizations"
-                icon={<Building2 className="w-5 h-5 text-primary" />}
-                count={orgs.length}
-                testId="orgs"
-              >
-                <div className="flex flex-col gap-3">
-                  {orgs.map((org) => (
-                    <Link key={org.id} href={`/organizations/${org.id}`}>
-                      <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
-                        <CardContent className="p-4 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-                            {getInitials(org.name)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm truncate">
-                              {org.name}
-                            </p>
-                            {org.role && (
-                              <Badge
-                                variant="outline"
-                                className="mt-1 text-[10px] uppercase tracking-wider font-bold"
-                              >
-                                {org.role}
-                              </Badge>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
-              </AffiliationColumn>
-            )}
-
-            {teamsVisible && (
-              <AffiliationColumn
-                title="Teams"
-                icon={<Shield className="w-5 h-5 text-primary" />}
-                count={teams.length}
-                testId="teams"
-              >
-                <div className="flex flex-col gap-3">
-                  {teams.map((t) => {
-                    const isPending = t.status === "pending";
-                    return (
-                      <Link key={t.id} href={`/teams/${t.teamId}`}>
-                        <Card
-                          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
-                          data-testid={`card-team-${t.teamId}`}
-                        >
-                          <CardContent className="p-4 flex items-center gap-3">
-                            <TeamAvatar
-                              avatarUrl={t.teamAvatarUrl}
-                              displayName={t.teamName}
-                              size="lg"
-                              rounded="full"
-                              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline gap-2 min-w-0">
-                                <p className="font-bold text-sm truncate">
-                                  {t.teamName}
-                                </p>
-                                <span
-                                  className="text-xs font-bold text-muted-foreground shrink-0"
-                                  data-testid={`text-team-jersey-${t.teamId}`}
-                                >
-                                  {t.jerseyNumber ? `#${t.jerseyNumber}` : "—"}
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] uppercase tracking-wider font-bold"
-                                >
-                                  {t.organization.name}
-                                </Badge>
-                                {isPending && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
-                                    data-testid={`badge-team-pending-${t.teamId}`}
-                                  >
-                                    Pending
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </AffiliationColumn>
-            )}
-
-            {familyVisible && (
-              <AffiliationColumn
-                title="Family"
-                icon={<Users className="w-5 h-5 text-primary" />}
-                count={family.length}
-                testId="family"
-              >
-                <div className="flex flex-col gap-3">
-                  {family.map((m) => {
-                    const name = `${m.firstName} ${m.lastName}`.trim();
-                    return (
-                      <Link
-                        key={`${m.relation}-${m.id}`}
-                        href={`/users/${m.id}`}
-                      >
-                        <Card
-                          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
-                          data-testid={`card-linked-${m.id}`}
-                        >
-                          <CardContent className="p-4 flex items-center gap-3">
-                            <UserAvatar
-                              avatarUrl={m.avatarUrl}
-                              displayName={name}
-                              size="lg"
-                              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="font-bold text-sm truncate">
-                                {name}
-                              </p>
-                              <Badge
-                                variant="outline"
-                                className="mt-1 text-[10px] uppercase tracking-wider font-bold"
-                              >
-                                {m.relation}
-                              </Badge>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </AffiliationColumn>
-            )}
-          </div>
-        );
-      })()}
+      {/* Affiliations stack: inline on mobile (between hero and posts),
+          rendered in the right rail on lg+. Only one copy mounts at a
+          time so testids stay unique. */}
+      {!isLg && affiliationsStack}
 
       {/* Posts (authored + tagged) */}
       <section>
@@ -454,6 +456,14 @@ export default function UserProfilePage() {
           )}
         </div>
       </section>
+      </div>
+
+      {/* Right rail (lg+ only — on mobile this renders inline above) */}
+      {isLg && hasAnyAffiliation && (
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          {affiliationsStack}
+        </aside>
+      )}
     </div>
   );
 }
@@ -461,29 +471,25 @@ export default function UserProfilePage() {
 function AffiliationColumn({
   title,
   icon,
-  count,
   testId,
-  children,
+  items,
 }: {
   title: string;
   icon: ReactNode;
-  count: number;
   testId: string;
-  children: ReactNode;
+  items: ReactNode[];
 }) {
   const [open, setOpen] = useState(false);
+  // Caller must skip rendering this card when items is empty.
+  if (items.length === 0) return null;
+  const hasMore = items.length > 1;
+  const [first, ...rest] = items;
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
+    <div
       className="rounded-xl border border-border bg-card shadow-sm"
       data-testid={`affiliation-column-${testId}`}
     >
-      <CollapsibleTrigger
-        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/40 rounded-xl transition-colors"
-        data-testid={`affiliation-toggle-${testId}`}
-        aria-label={`Toggle ${title}`}
-      >
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
           {icon}
           <h2 className="text-base font-black tracking-tight truncate">
@@ -494,22 +500,36 @@ function AffiliationColumn({
             className="text-[10px] uppercase tracking-wider font-bold"
             data-testid={`affiliation-count-${testId}`}
           >
-            {count}
+            {items.length}
           </Badge>
         </div>
-        <ChevronDown
-          className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${
-            open ? "rotate-180" : ""
-          }`}
-          aria-hidden
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent
+        {hasMore && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-full p-1 hover:bg-muted/40 transition-colors shrink-0"
+            data-testid={`affiliation-toggle-${testId}`}
+            aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
+            aria-expanded={open}
+          >
+            <ChevronDown
+              className={`w-4 h-4 text-muted-foreground transition-transform ${
+                open ? "rotate-180" : ""
+              }`}
+              aria-hidden
+            />
+          </button>
+        )}
+      </div>
+      <div
         className="px-3 pb-3"
         data-testid={`affiliation-content-${testId}`}
       >
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
+        <div className="flex flex-col gap-3">
+          {first}
+          {hasMore && open && rest}
+        </div>
+      </div>
+    </div>
   );
 }
