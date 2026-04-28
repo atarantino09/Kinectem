@@ -288,7 +288,11 @@ export default function UserProfilePage() {
   ) : null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+    <div
+      className={`grid grid-cols-1 ${
+        hasAnyAffiliation ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""
+      } gap-6 items-start`}
+    >
       <div className="space-y-6 min-w-0">
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
