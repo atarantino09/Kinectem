@@ -21,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Building2,
   ChevronDown,
-  ChevronRight,
   Pencil,
   Plus,
   Settings,
@@ -43,6 +42,7 @@ type TeamRailItem = {
   name: string;
   sport?: string | null;
   avatarUrl?: string | null;
+  bannerUrl?: string | null;
   followerCount?: number | null;
 };
 
@@ -437,27 +437,27 @@ function TeamsRail({
                 : "overflow-hidden max-h-[calc(100vh-14rem)]"
             }
           >
-            <div ref={innerRef} className="flex flex-col p-2">
+            <div ref={innerRef} className="flex flex-col gap-2 p-2">
               {teams.map((team) => (
                 <Link key={team.id} href={`/teams/${team.id}`}>
                   <div
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/60 cursor-pointer group"
+                    className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
                     data-testid={`card-team-${team.id}`}
                   >
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center shrink-0">
-                      {team.avatarUrl ? (
+                    {/* Banner visual: team-specific photo if set, otherwise
+                        the same gradient empty-state used by the team-page
+                        hero so branding stays consistent. */}
+                    <div className="relative h-20 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+                      {team.bannerUrl && (
                         <img
-                          src={team.avatarUrl}
-                          alt={team.name}
-                          className="w-full h-full object-cover"
+                          src={team.bannerUrl}
+                          alt={`${team.name} background`}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          data-testid={`img-team-banner-${team.id}`}
                         />
-                      ) : (
-                        <span className="text-xs font-black text-primary">
-                          {team.name.slice(0, 2).toUpperCase()}
-                        </span>
                       )}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="p-2.5">
                       <div className="flex items-center gap-2 min-w-0">
                         <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">
                           {team.name}
@@ -476,7 +476,6 @@ function TeamsRail({
                         {team.followerCount ?? 0} Followers
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </div>
                 </Link>
               ))}

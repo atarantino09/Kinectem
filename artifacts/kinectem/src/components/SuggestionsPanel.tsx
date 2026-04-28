@@ -12,9 +12,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Building2, Users, UserCheck } from "lucide-react";
 import { getInitials } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type Variant = "full" | "compact";
 
@@ -171,12 +172,11 @@ export function SuggestionsPanel({
                 key={`t-${t.id}`}
                 href={`/teams/${t.id}`}
                 avatar={
-                  <TeamAvatar
-                    avatarUrl={t.avatarUrl}
-                    displayName={t.name}
-                    size="md"
-                    rounded="full"
-                    fallbackClassName="bg-slate-100 text-slate-800"
+                  <TeamBannerThumb
+                    bannerUrl={t.bannerUrl}
+                    teamName={t.name}
+                    teamId={t.id}
+                    size="sm"
                   />
                 }
                 title={t.name}
@@ -239,12 +239,11 @@ export function SuggestionsPanel({
                 key={team.id}
                 href={`/teams/${team.id}`}
                 avatar={
-                  <TeamAvatar
-                    avatarUrl={team.avatarUrl}
-                    displayName={team.name}
-                    size="lg"
-                    rounded="full"
-                    fallbackClassName="bg-slate-100 text-slate-800"
+                  <TeamBannerThumb
+                    bannerUrl={team.bannerUrl}
+                    teamName={team.name}
+                    teamId={team.id}
+                    size="md"
                   />
                 }
                 title={team.name}
@@ -403,6 +402,42 @@ function CompactRow({
       >
         Follow
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Tiny banner-cropped thumbnail for team suggestion rows. Uses the team's
+ * editable `bannerUrl` (cover-cropped) to mirror the team-page hero, with
+ * the same gradient empty-state when no banner has been uploaded.
+ */
+function TeamBannerThumb({
+  bannerUrl,
+  teamName,
+  teamId,
+  size,
+}: {
+  bannerUrl?: string | null;
+  teamName: string;
+  teamId: string;
+  size: "sm" | "md";
+}) {
+  const sizeClass = size === "sm" ? "w-12 h-9" : "w-16 h-10";
+  return (
+    <div
+      className={cn(
+        "relative rounded-md overflow-hidden border border-border shrink-0 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5",
+        sizeClass,
+      )}
+    >
+      {bannerUrl && (
+        <img
+          src={bannerUrl}
+          alt={`${teamName} background`}
+          className="absolute inset-0 w-full h-full object-cover"
+          data-testid={`img-suggested-team-banner-${teamId}`}
+        />
+      )}
     </div>
   );
 }
