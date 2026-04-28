@@ -42,7 +42,6 @@ import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
-import { getInitials } from "@/lib/format";
 
 export default function UserProfilePage() {
   const params = useParams<{ userId: string }>();
@@ -156,9 +155,13 @@ export default function UserProfilePage() {
     <Link key={org.id} href={`/organizations/${org.id}`}>
       <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
         <CardContent className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-            {getInitials(org.name)}
-          </div>
+          <TeamAvatar
+            avatarUrl={org.logoUrl}
+            displayName={org.name}
+            size="lg"
+            rounded="lg"
+            fallbackClassName="brand-gradient-dark text-primary font-black"
+          />
           <div className="min-w-0 flex-1">
             <p className="font-bold text-sm truncate">{org.name}</p>
             {org.role && (
