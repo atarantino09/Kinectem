@@ -77,6 +77,15 @@ router.post(
     }
     const name = String(req.body?.name ?? "").trim();
     if (!name) return apiError(res, 400, "name required");
+    const ALLOWED_GENDERS = ["boys", "girls", "coed"] as const;
+    let gender: "boys" | "girls" | "coed" | null = null;
+    if (req.body?.gender != null) {
+      const g = String(req.body.gender).toLowerCase();
+      if (!(ALLOWED_GENDERS as readonly string[]).includes(g)) {
+        return apiError(res, 400, "invalid gender");
+      }
+      gender = g as "boys" | "girls" | "coed";
+    }
     // Wrap the team insert and the creator's auto-staff entry in a single
     // transaction so a team is never persisted without its creator on the
     // roster as Admin. We deliberately skip the "you were invited to a
@@ -90,6 +99,7 @@ router.post(
           name,
           sport: req.body?.sport ?? undefined,
           level: req.body?.level ?? undefined,
+          gender: gender ?? undefined,
           season: req.body?.season?.name ?? undefined,
           bannerUrl:
             typeof req.body?.bannerUrl === "string"
@@ -178,6 +188,15 @@ router.patch(
     if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
     if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
     else if (body.bannerUrl === null) patch.bannerUrl = null;
+    if (body.gender === null) {
+      patch.gender = null;
+    } else if (typeof body.gender === "string") {
+      const g = body.gender.toLowerCase();
+      if (!["boys", "girls", "coed"].includes(g)) {
+        return apiError(res, 400, "invalid gender");
+      }
+      patch.gender = g;
+    }
     if (Object.keys(patch).length === 0) {
       return apiError(res, 400, "no updatable fields");
     }

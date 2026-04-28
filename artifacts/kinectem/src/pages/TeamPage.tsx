@@ -213,6 +213,7 @@ export default function TeamPage() {
           description: team.description,
           sport: team.sport,
           level: team.level,
+          gender: team.gender,
           bannerUrl: team.bannerUrl,
         }}
         canManagePhoto={isAdmin}

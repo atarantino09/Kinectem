@@ -46,6 +46,7 @@ type TeamLike = {
   description?: string | null;
   sport?: string | null;
   level?: string | null;
+  gender?: "boys" | "girls" | "coed" | null;
   bannerUrl?: string | null;
 };
 
@@ -66,6 +67,9 @@ export function EditTeamDialog({
   const [name, setName] = useState(team.name);
   const [description, setDescription] = useState(team.description ?? "");
   const [sport, setSport] = useState(team.sport ?? "");
+  const [gender, setGender] = useState<"boys" | "girls" | "coed" | "">(
+    team.gender ?? "",
+  );
   const [level, setLevel] = useState(team.level ?? "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -76,6 +80,7 @@ export function EditTeamDialog({
       setName(team.name);
       setDescription(team.description ?? "");
       setSport(team.sport ?? "");
+      setGender(team.gender ?? "");
       setLevel(team.level ?? "");
     }
     // Only re-seed the form when the dialog transitions to open, or when
@@ -148,6 +153,7 @@ export function EditTeamDialog({
           description,
           sport,
           level,
+          gender: gender || null,
         }),
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
@@ -250,7 +256,7 @@ export function EditTeamDialog({
                 data-testid="input-edit-team-name"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Sport</Label>
                 <Select value={sport} onValueChange={setSport}>
@@ -263,6 +269,27 @@ export function EditTeamDialog({
                         {s}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="font-bold">Gender</Label>
+                <Select
+                  value={gender || "none"}
+                  onValueChange={(v) =>
+                    setGender(
+                      v === "none" ? "" : (v as "boys" | "girls" | "coed"),
+                    )
+                  }
+                >
+                  <SelectTrigger data-testid="select-edit-team-gender">
+                    <SelectValue placeholder="Pick gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="boys">Boys</SelectItem>
+                    <SelectItem value="girls">Girls</SelectItem>
+                    <SelectItem value="coed">Coed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

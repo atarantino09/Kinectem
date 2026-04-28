@@ -2941,6 +2941,7 @@ export const CreateTeamBody = zod.object({
   description: zod.string().optional(),
   sport: zod.string().optional(),
   level: zod.string().optional(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
   bannerUrl: zod
     .string()
     .nullish()
@@ -2999,6 +3000,7 @@ export const ListOrgTeamsResponse = zod.object({
       description: zod.string().nullish(),
       sport: zod.string().nullish(),
       level: zod.string().nullish(),
+      gender: zod.enum(["boys", "girls", "coed"]).nullish(),
       avatarUrl: zod.string().url().nullish(),
       bannerUrl: zod
         .string()
@@ -3054,6 +3056,7 @@ export const GetTeamByIdResponse = zod.object({
   description: zod.string().nullish(),
   sport: zod.string().nullish(),
   level: zod.string().nullish(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
   avatarUrl: zod.string().url().nullish(),
   bannerUrl: zod
     .string()
@@ -3091,6 +3094,7 @@ export const UpdateTeamBody = zod.object({
   description: zod.string().optional(),
   sport: zod.string().optional(),
   level: zod.string().optional(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
   bannerUrl: zod
     .string()
     .nullish()
@@ -3113,6 +3117,7 @@ export const UpdateTeamResponse = zod.object({
   description: zod.string().nullish(),
   sport: zod.string().nullish(),
   level: zod.string().nullish(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
   avatarUrl: zod.string().url().nullish(),
   bannerUrl: zod
     .string()
@@ -3881,6 +3886,7 @@ export const ListFollowSuggestionsResponse = zod.object({
       description: zod.string().nullish(),
       sport: zod.string().nullish(),
       level: zod.string().nullish(),
+      gender: zod.enum(["boys", "girls", "coed"]).nullish(),
       avatarUrl: zod.string().url().nullish(),
       bannerUrl: zod
         .string()
@@ -4530,6 +4536,7 @@ export const SetTeamAvatarResponse = zod.object({
   description: zod.string().nullish(),
   sport: zod.string().nullish(),
   level: zod.string().nullish(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
   avatarUrl: zod.string().url().nullish(),
   bannerUrl: zod
     .string()

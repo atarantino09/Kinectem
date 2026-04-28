@@ -39,6 +39,54 @@ describe("teams", () => {
     expect(res.body.name).toBe("Test Team");
   });
 
+  it("persists, returns, and updates the optional team gender field", async () => {
+    const { agent } = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeams();
+
+    // Create with gender — value is stored lowercase and round-trips.
+    const created = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "U14 Boys Test", sport: "Soccer", gender: "boys" });
+    expect(created.status).toBe(201);
+    expect(created.body.gender).toBe("boys");
+
+    // Reading the team returns the gender.
+    const detail = await request(app).get(`/api/v1/teams/${created.body.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.gender).toBe("boys");
+
+    // Update via PATCH switches the gender and clearing with null works.
+    const patched = await agent
+      .patch(`/api/v1/teams/${created.body.id}`)
+      .send({ gender: "coed" });
+    expect(patched.status).toBe(200);
+    expect(patched.body.gender).toBe("coed");
+
+    const cleared = await agent
+      .patch(`/api/v1/teams/${created.body.id}`)
+      .send({ gender: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.gender).toBeNull();
+
+    // Invalid value is rejected with a 400 on both endpoints.
+    const badCreate = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Bad Gender", gender: "men" });
+    expect(badCreate.status).toBe(400);
+
+    const badPatch = await agent
+      .patch(`/api/v1/teams/${created.body.id}`)
+      .send({ gender: "men" });
+    expect(badPatch.status).toBe(400);
+
+    // A team created without gender stays null (optional everywhere).
+    const created2 = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "No Gender Team", sport: "Soccer" });
+    expect(created2.status).toBe(201);
+    expect(created2.body.gender).toBeNull();
+  });
+
   it("auto-adds the team creator to the roster as an active Admin", async () => {
     // Sam is an org admin who can create teams. We verify that creating
     // the team also lands Sam on the roster as an accepted coach with

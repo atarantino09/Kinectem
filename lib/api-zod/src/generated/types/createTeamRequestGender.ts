@@ -65,38 +65,16 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { TeamOrganizationEmbed } from "./teamOrganizationEmbed";
-import type { TeamResponseCurrentSeason } from "./teamResponseCurrentSeason";
-import type { TeamResponseGender } from "./teamResponseGender";
 
-export interface TeamResponse {
-  id: string;
-  organization: TeamOrganizationEmbed;
-  name: string;
-  slug: string;
-  /** @nullable */
-  description?: string | null;
-  /** @nullable */
-  sport?: string | null;
-  /** @nullable */
-  level?: string | null;
-  /** @nullable */
-  gender?: TeamResponseGender;
-  /** @nullable */
-  avatarUrl?: string | null;
-  /**
-   * The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
-   * @nullable
-   */
-  bannerUrl?: string | null;
-  /**
-   * The team's current active season, or null if none.
-   * @nullable
-   */
-  currentSeason?: TeamResponseCurrentSeason;
-  /** @minimum 0 */
-  followerCount: number;
-  isFollowing: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
+/**
+ * @nullable
+ */
+export type CreateTeamRequestGender =
+  | (typeof CreateTeamRequestGender)[keyof typeof CreateTeamRequestGender]
+  | null;
+
+export const CreateTeamRequestGender = {
+  boys: "boys",
+  girls: "girls",
+  coed: "coed",
+} as const;

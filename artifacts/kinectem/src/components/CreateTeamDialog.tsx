@@ -67,6 +67,7 @@ export function CreateTeamDialog({
   const [slugDirty, setSlugDirty] = useState(false);
   const [description, setDescription] = useState("");
   const [sport, setSport] = useState<string>("");
+  const [gender, setGender] = useState<"boys" | "girls" | "coed" | "">("");
   const [league, setLeague] = useState<string>("");
   const [seasonName, setSeasonName] = useState("");
   // Pre-shrunk team background photo as a data URL. Stays local until
@@ -83,6 +84,7 @@ export function CreateTeamDialog({
     setSlugDirty(false);
     setDescription("");
     setSport("");
+    setGender("");
     setLeague("");
     setSeasonName("");
     setBannerDataUrl(null);
@@ -134,6 +136,7 @@ export function CreateTeamDialog({
           slug: finalSlug,
           description: description.trim() || undefined,
           sport: sport || undefined,
+          gender: gender || undefined,
           level: league.trim() || undefined,
           bannerUrl: bannerDataUrl ?? undefined,
           season: { name: finalSeason },
@@ -190,11 +193,11 @@ export function CreateTeamDialog({
                 placeholder="westfield-u14-boys"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Sport</Label>
                 <Select value={sport} onValueChange={setSport}>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-team-sport">
                     <SelectValue placeholder="Pick sport" />
                   </SelectTrigger>
                   <SelectContent>
@@ -203,6 +206,27 @@ export function CreateTeamDialog({
                         {s}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="font-bold">Gender</Label>
+                <Select
+                  value={gender || "none"}
+                  onValueChange={(v) =>
+                    setGender(
+                      v === "none" ? "" : (v as "boys" | "girls" | "coed"),
+                    )
+                  }
+                >
+                  <SelectTrigger data-testid="select-team-gender">
+                    <SelectValue placeholder="Pick gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="boys">Boys</SelectItem>
+                    <SelectItem value="girls">Girls</SelectItem>
+                    <SelectItem value="coed">Coed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

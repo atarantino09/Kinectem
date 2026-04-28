@@ -150,6 +150,7 @@ export const teams = pgTable("teams", {
   season: text("season"),
   sport: text("sport"),
   level: text("level"),
+  gender: text("gender"),
   description: text("description"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),

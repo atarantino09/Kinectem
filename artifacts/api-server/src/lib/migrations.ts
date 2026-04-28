@@ -126,6 +126,14 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS zip_code text;
 `;
 
+// Task #244 — Add a gender column to teams (Boys / Girls / Coed).
+// Nullable so existing teams stay null until edited; the create/edit
+// endpoints validate the allowed values but never require it.
+const TASK_244_TEAM_GENDER = `
+ALTER TABLE teams
+  ADD COLUMN IF NOT EXISTS gender text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -138,6 +146,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-28-task-230-org-zip-code",
     sql: TASK_230_ORG_ZIP_CODE,
+  },
+  {
+    name: "2026-04-28-task-244-team-gender",
+    sql: TASK_244_TEAM_GENDER,
   },
 ];
 

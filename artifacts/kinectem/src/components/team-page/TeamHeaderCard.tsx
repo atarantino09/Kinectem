@@ -20,6 +20,7 @@ interface Team {
   description?: string | null;
   sport?: string | null;
   level?: string | null;
+  gender?: "boys" | "girls" | "coed" | null;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
   isFollowing?: boolean;
@@ -162,6 +163,14 @@ export function TeamHeaderCard({
           {team.level && (
             <div className="font-bold text-muted-foreground text-sm uppercase tracking-wider">
               {team.level}
+            </div>
+          )}
+          {team.gender && (
+            <div
+              className="font-bold text-foreground bg-muted px-3 py-1.5 rounded-md text-sm capitalize"
+              data-testid="chip-team-gender"
+            >
+              {team.gender}
             </div>
           )}
           <div className="ml-auto flex items-center gap-2 flex-wrap">

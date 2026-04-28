@@ -318,6 +318,7 @@ export function toTeam(
     description: t.description ?? null,
     sport: t.sport ?? null,
     level: t.level ?? null,
+    gender: (t.gender as "boys" | "girls" | "coed" | null) ?? null,
     avatarUrl: t.logoUrl ?? null,
     bannerUrl: t.bannerUrl ?? null,
     currentSeason: t.season

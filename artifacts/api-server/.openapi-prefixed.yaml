@@ -7816,6 +7816,13 @@ components:
           type: string
           nullable: true
           example: U18
+        gender:
+          type: string
+          nullable: true
+          enum:
+            - boys
+            - girls
+            - coed
         avatarUrl:
           type: string
           format: uri
@@ -7890,6 +7897,13 @@ components:
         level:
           type: string
           example: Travel
+        gender:
+          type: string
+          nullable: true
+          enum:
+            - boys
+            - girls
+            - coed
         bannerUrl:
           type: string
           nullable: true
@@ -7925,6 +7939,13 @@ components:
         level:
           type: string
           example: U18
+        gender:
+          type: string
+          nullable: true
+          enum:
+            - boys
+            - girls
+            - coed
         bannerUrl:
           type: string
           nullable: true

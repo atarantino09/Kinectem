@@ -1423,6 +1423,19 @@ export interface TeamSeasonResponse {
 }
 
 /**
+ * @nullable
+ */
+export type TeamResponseGender =
+  | (typeof TeamResponseGender)[keyof typeof TeamResponseGender]
+  | null;
+
+export const TeamResponseGender = {
+  boys: "boys",
+  girls: "girls",
+  coed: "coed",
+} as const;
+
+/**
  * The team's current active season, or null if none.
  * @nullable
  */
@@ -1449,6 +1462,8 @@ export interface TeamResponse {
   /** @nullable */
   level?: string | null;
   /** @nullable */
+  gender?: TeamResponseGender;
+  /** @nullable */
   avatarUrl?: string | null;
   /**
    * The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
@@ -1467,6 +1482,19 @@ export interface TeamResponse {
   updatedAt: string;
 }
 
+/**
+ * @nullable
+ */
+export type CreateTeamRequestGender =
+  | (typeof CreateTeamRequestGender)[keyof typeof CreateTeamRequestGender]
+  | null;
+
+export const CreateTeamRequestGender = {
+  boys: "boys",
+  girls: "girls",
+  coed: "coed",
+} as const;
+
 export type CreateTeamRequestSeason = {
   name: string;
   startDate?: string;
@@ -1484,6 +1512,8 @@ export interface CreateTeamRequest {
   description?: string;
   sport?: string;
   level?: string;
+  /** @nullable */
+  gender?: CreateTeamRequestGender;
   /**
    * Optional team background photo to set at creation time. May be a data URL or a CDN URL.
    * @nullable
@@ -1492,11 +1522,26 @@ export interface CreateTeamRequest {
   season: CreateTeamRequestSeason;
 }
 
+/**
+ * @nullable
+ */
+export type UpdateTeamRequestGender =
+  | (typeof UpdateTeamRequestGender)[keyof typeof UpdateTeamRequestGender]
+  | null;
+
+export const UpdateTeamRequestGender = {
+  boys: "boys",
+  girls: "girls",
+  coed: "coed",
+} as const;
+
 export interface UpdateTeamRequest {
   name?: string;
   description?: string;
   sport?: string;
   level?: string;
+  /** @nullable */
+  gender?: UpdateTeamRequestGender;
   /**
    * The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.
    * @nullable

@@ -65,12 +65,15 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateTeamRequestGender } from "./updateTeamRequestGender";
 
 export interface UpdateTeamRequest {
   name?: string;
   description?: string;
   sport?: string;
   level?: string;
+  /** @nullable */
+  gender?: UpdateTeamRequestGender;
   /**
    * The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.
    * @nullable

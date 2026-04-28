@@ -65,6 +65,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateTeamRequestGender } from "./createTeamRequestGender";
 import type { CreateTeamRequestSeason } from "./createTeamRequestSeason";
 
 export interface CreateTeamRequest {
@@ -78,6 +79,8 @@ export interface CreateTeamRequest {
   description?: string;
   sport?: string;
   level?: string;
+  /** @nullable */
+  gender?: CreateTeamRequestGender;
   /**
    * Optional team background photo to set at creation time. May be a data URL or a CDN URL.
    * @nullable
