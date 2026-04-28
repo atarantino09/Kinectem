@@ -155,9 +155,10 @@ export default function FeedPage() {
                 {orgs.data.slice(0, 5).map((org) => (
                   <Link key={org.id} href={`/organizations/${org.id}`}>
                     <div className="flex items-start gap-3 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded">
-                      <div className="w-9 h-9 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-                        {getInitials(org.name)}
-                      </div>
+                      <FeaturedOrgLogoTile
+                        name={org.name}
+                        logoUrl={org.logoUrl ?? null}
+                      />
                       <div className="min-w-0">
                         <p className="font-bold text-sm leading-tight truncate">
                           {org.name}
@@ -282,6 +283,34 @@ function OrgRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function FeaturedOrgLogoTile({
+  name,
+  logoUrl,
+}: {
+  name: string;
+  logoUrl: string | null;
+}) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [logoUrl]);
+  if (logoUrl && !logoFailed) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        onError={() => setLogoFailed(true)}
+        className="w-9 h-9 rounded-lg object-cover bg-muted shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-9 h-9 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
+      {getInitials(name)}
     </div>
   );
 }
