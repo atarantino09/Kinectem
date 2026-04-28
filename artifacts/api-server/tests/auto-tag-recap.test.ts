@@ -804,8 +804,10 @@ describe("auto-tag rostered players on game-recap articles", () => {
     });
     expect(created.status).toBe(201);
     const postId = created.body.id;
-    const articleId = postId.replace(/^article-/, "");
-    const link = `/posts/${articleId}`;
+    // Bell rows use the canonical prefixed post id (`article-<uuid>`)
+    // so /posts/:postId resolves them — bare uuids 404 on the post page
+    // (see NotificationsBell.tsx and parsePostId in spec-helpers.ts).
+    const link = `/posts/${postId}`;
 
     // Pre-condition: nobody has a post_tag notification for this
     // article yet (since the fan-out hasn't run).
@@ -875,7 +877,9 @@ describe("auto-tag rostered players on game-recap articles", () => {
     expect(created.status).toBe(201);
     const postId = created.body.id;
     const articleId = postId.replace(/^article-/, "");
-    const link = `/posts/${articleId}`;
+    // Bell rows use the canonical prefixed post id (`article-<uuid>`)
+    // so /posts/:postId resolves them — bare uuids 404 on the post page.
+    const link = `/posts/${postId}`;
 
     // Toggle ON via PATCH so the post-publish notification helper
     // inserts unread bell rows for every newly auto-tagged player.
@@ -956,7 +960,9 @@ describe("auto-tag rostered players on game-recap articles", () => {
     expect(created.status).toBe(201);
     const postId = created.body.id;
     const articleId = postId.replace(/^article-/, "");
-    const link = `/posts/${articleId}`;
+    // Bell rows use the canonical prefixed post id (`article-<uuid>`)
+    // so /posts/:postId resolves them — bare uuids 404 on the post page.
+    const link = `/posts/${postId}`;
 
     // Toggle ON #1: every accepted player gets one unread bell row.
     let on = await coach.patch(`/api/v1/posts/${postId}`).send({

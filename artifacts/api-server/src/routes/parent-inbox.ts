@@ -155,8 +155,10 @@ async function loadChildNotificationItems(
     });
   }
 
-  // 2. Tags for the child (only approved/pending — declined tags should
-  //    never resurface).
+  // 2. Tags for the child (only `pending` — once the child or the
+  //    parent makes a final decision the row should drop out of the
+  //    family inbox immediately. `approved` rows are no longer awaiting
+  //    the parent's review, and `declined` was already filtered.
   const tagRows = await db
     .select({
       t: articleTags,
@@ -169,7 +171,7 @@ async function loadChildNotificationItems(
     .where(
       and(
         eq(articleTags.userId, childId),
-        inArray(articleTags.status, ["approved", "pending"] as const),
+        eq(articleTags.status, "pending"),
         gt(articleTags.createdAt, since),
       ),
     )
@@ -205,9 +207,12 @@ async function loadChildNotificationItems(
     });
   }
 
-  // 2b. Highlight-clip tags for the child (only approved/pending — same
-  //     filter as article tags). Surfaced in the family inbox so a parent
-  //     can approve/decline highlight tags on behalf of their child.
+  // 2b. Highlight-clip tags for the child (only `pending` — same
+  //     filter as article tags above). Surfaced in the family inbox so
+  //     a parent can approve/decline highlight tags on behalf of their
+  //     child. Approved/declined rows drop out of the inbox immediately
+  //     so a child-side decision via /tags/:tagId/(approve|decline)
+  //     clears the parent's row on the next fetch.
   const highlightTagRows = await db
     .select({
       t: highlightTags,
@@ -220,7 +225,7 @@ async function loadChildNotificationItems(
     .where(
       and(
         eq(highlightTags.userId, childId),
-        inArray(highlightTags.status, ["approved", "pending"] as const),
+        eq(highlightTags.status, "pending"),
         gt(highlightTags.createdAt, since),
       ),
     )
@@ -1058,6 +1063,11 @@ async function applyUnsetAction(
   childId: string,
 ): Promise<void> {
   if (kind === "tag") {
+    // The `tag:` key covers both article tags and highlight tags
+    // (see `applyApproveTagAction` below for the same dual update).
+    // Try both tables; only `declined` rows flip back to `pending` so
+    // we don't accidentally resurrect a tag the child themselves had
+    // approved or declined out-of-band.
     await db
       .update(articleTags)
       .set({ status: "pending" })
@@ -1065,6 +1075,15 @@ async function applyUnsetAction(
         and(
           eq(articleTags.id, refId),
           eq(articleTags.status, "declined"),
+        ),
+      );
+    await db
+      .update(highlightTags)
+      .set({ status: "pending" })
+      .where(
+        and(
+          eq(highlightTags.id, refId),
+          eq(highlightTags.status, "declined"),
         ),
       );
     return;

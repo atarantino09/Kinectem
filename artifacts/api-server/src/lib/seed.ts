@@ -442,6 +442,37 @@ async function ensureSamiraDemoNotifications(): Promise<void> {
 
   const pending = basketballEntry;
 
+  // 2) Static (unlinked) notification is inserted FIRST so the
+  //    roster_invite below ends up with a strictly later `createdAt`.
+  //    The bell endpoint orders by `desc(createdAt)`, and the
+  //    `notifications.test.ts` "returns the seeded notification for
+  //    samira" test asserts that `data[0].type === "roster_invite"` —
+  //    i.e. the linked, deep-linkable invite must always be the most
+  //    recent seeded row so it surfaces at the top of the bell.
+  //    The static row's `kind` is intentionally NOT `guardian_expired`
+  //    or `roster_invite_for_child`, since the bell treats those two
+  //    kinds as clickable even without a link.
+  const STATIC_MESSAGE =
+    "Welcome to Kinectem — say hi to your team in the Family tab.";
+  const [existingStatic] = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, samira.id),
+        eq(notifications.message, STATIC_MESSAGE),
+      ),
+    )
+    .limit(1);
+  if (!existingStatic) {
+    await db.insert(notifications).values({
+      userId: samira.id,
+      kind: "system_message",
+      message: STATIC_MESSAGE,
+      link: null,
+    });
+  }
+
   if (pending) {
     const link = `/teams/${pending.teamId}?roster=1&entryId=${pending.id}`;
     const [existingLinked] = await db
@@ -472,30 +503,6 @@ async function ensureSamiraDemoNotifications(): Promise<void> {
         .set({ link })
         .where(eq(notifications.id, existingLinked.id));
     }
-  }
-
-  // 2) Static (unlinked) notification — its `kind` is intentionally NOT
-  //    `guardian_expired` or `roster_invite_for_child`, since the bell
-  //    treats those two kinds as clickable even without a link.
-  const STATIC_MESSAGE =
-    "Welcome to Kinectem — say hi to your team in the Family tab.";
-  const [existingStatic] = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.userId, samira.id),
-        eq(notifications.message, STATIC_MESSAGE),
-      ),
-    )
-    .limit(1);
-  if (!existingStatic) {
-    await db.insert(notifications).values({
-      userId: samira.id,
-      kind: "system_message",
-      message: STATIC_MESSAGE,
-      link: null,
-    });
   }
 }
 
