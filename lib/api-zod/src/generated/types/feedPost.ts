@@ -125,4 +125,11 @@ and highlights; only org posts are not shareable.
    * @nullable
    */
   gameDate?: Date | null;
+  /** True when the requesting user is allowed to edit this
+post (author, co-author, or admin of the team's org).
+Drives the "Edit post" item in the post 3-dot menu.
+Always false for non-article post types since the
+composer only edits articles.
+ */
+  canEdit?: boolean;
 }

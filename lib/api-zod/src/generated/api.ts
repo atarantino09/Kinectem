@@ -1480,7 +1480,7 @@ export const GetPostResponse = zod.object({
     .boolean()
     .optional()
     .describe(
-      "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+      "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
     ),
   tagStatus: zod
     .enum(["approved", "pending"])
@@ -1615,7 +1615,7 @@ export const UpdatePostResponse = zod.object({
     .boolean()
     .optional()
     .describe(
-      "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+      "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
     ),
   tagStatus: zod
     .enum(["approved", "pending"])
@@ -1782,7 +1782,7 @@ export const ListOrgPostsResponse = zod.object({
         .boolean()
         .optional()
         .describe(
-          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -2159,7 +2159,7 @@ export const ListUserPostsResponse = zod.object({
         .boolean()
         .optional()
         .describe(
-          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -3815,6 +3815,12 @@ export const ListFeedResponse = zod.object({
         .describe(
           "For long-form game-recap article cards, the date of the\ngame the recap covers. Null on non-recap article cards\nand on highlight \/ org-post cards. Per task #190 the\nclient allows sharing both recaps (article + gameDate)\nand highlights; only org posts are not shareable.\n",
         ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is allowed to edit this\npost (author, co-author, or admin of the team\'s org).\nDrives the \"Edit post\" item in the post 3-dot menu.\nAlways false for non-article post types since the\ncomposer only edits articles.\n',
+        ),
     }),
   ),
   pagination: zod.object({
@@ -4477,7 +4483,7 @@ export const ListTeamPostsResponse = zod.object({
         .boolean()
         .optional()
         .describe(
-          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -4959,7 +4965,7 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .boolean()
               .optional()
               .describe(
-                "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+                "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
               ),
             tagStatus: zod
               .enum(["approved", "pending"])
@@ -5102,7 +5108,7 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .boolean()
         .optional()
         .describe(
-          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -5235,7 +5241,7 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .boolean()
         .optional()
         .describe(
-          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Only computed on the\n`getPost` (detail) endpoint; list endpoints always return\n`false` here.\n",
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
       tagStatus: zod
         .enum(["approved", "pending"])

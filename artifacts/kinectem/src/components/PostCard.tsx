@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag, Share2, Repeat2 } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag, Pencil, Share2, Repeat2 } from "lucide-react";
 import {
   useAddPostReaction,
   useRemovePostReaction,
@@ -61,11 +61,18 @@ function parseSyntheticPostId(
 export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmShareOpen, setConfirmShareOpen] = useState(false);
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
+  // Only article-backed long-form posts ever pass `canEdit: true` —
+  // the composer at /posts/new only knows how to load and PATCH
+  // articles. Highlights and org posts hide the menu item even if a
+  // future change accidentally flips this flag for them.
+  const canEditPost =
+    post.canEdit === true && reportTarget.contentType === "article";
   const label =
     reportTarget.contentType === "highlight"
       ? "Highlight"
@@ -273,6 +280,18 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {canEditPost && (
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      setLocation(
+                        `/posts/new?editId=${encodeURIComponent(post.id)}`,
+                      )
+                    }
+                    data-testid={`menuitem-edit-${post.id}`}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" /> Edit post
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onSelect={() => setReportOpen(true)}
                   data-testid={`menuitem-report-${post.id}`}

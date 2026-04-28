@@ -27,7 +27,13 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
+import {
+  canCreateRecap,
+  canManageOrganization,
+  computeArticleCanEditMap,
+  isTeamMember,
+  canManageTeam,
+} from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -552,9 +558,17 @@ router.get(
       (k): k is { kind: "article" | "highlight"; refId: string } =>
         k.kind === "article" || k.kind === "highlight",
     );
-    const [stats, shareStats] = await Promise.all([
+    const articleEditRows = limited
+      .filter((row): row is Extract<MergedRow, { kind: "article" }> => row.kind === "article")
+      .map((row) => ({
+        articleId: row.a.id,
+        authorId: row.a.authorId,
+        orgId: row.org.id,
+      }));
+    const [stats, shareStats, canEditMap] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
+      computeArticleCanEditMap(me?.id ?? null, articleEditRows),
     ]);
 
     const posts = limited.map((row) => {
@@ -565,6 +579,7 @@ router.get(
           team: row.team,
           org: row.org,
           author: row.author,
+          canEdit: canEditMap.get(row.a.id) ?? false,
           ...statsFor(stats, "article", row.a.id),
           ...shareStatsFor(shareStats, "article", row.a.id),
           sharedBy,

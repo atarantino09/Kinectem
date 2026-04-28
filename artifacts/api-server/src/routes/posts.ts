@@ -35,7 +35,11 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canCreateRecap, canManageOrganization } from "../lib/permissions";
+import {
+  canCreateRecap,
+  canManageOrganization,
+  computeArticleCanEditMap,
+} from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -127,9 +131,17 @@ router.get(
         ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
       ];
-      const [stats, shareStats] = await Promise.all([
+      const [stats, shareStats, canEditMap] = await Promise.all([
         loadPostStats(me.id, statKeys),
         loadPostShareStats(me.id, statKeys),
+        computeArticleCanEditMap(
+          me.id,
+          ownArts.map((r) => ({
+            articleId: r.a.id,
+            authorId: r.a.authorId,
+            orgId: r.org.id,
+          })),
+        ),
       ]);
       const items = [
         ...ownArts.map((r) =>
@@ -137,6 +149,7 @@ router.get(
             team: r.team,
             org: r.org,
             author: r.author,
+            canEdit: canEditMap.get(r.a.id) ?? false,
             ...statsFor(stats, "article", r.a.id),
             ...shareStatsFor(shareStats, "article", r.a.id),
           }),
@@ -298,9 +311,22 @@ router.get(
       (k): k is { kind: "article" | "highlight"; refId: string } =>
         k.kind === "article" || k.kind === "highlight",
     );
-    const [stats, shareStats] = await Promise.all([
+    const articleEditRows = [
+      ...arts.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        orgId: r.org.id,
+      })),
+      ...sharedArticleRows.map((r) => ({
+        articleId: r.a.id,
+        authorId: r.a.authorId,
+        orgId: r.org.id,
+      })),
+    ];
+    const [stats, shareStats, canEditMap] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
+      computeArticleCanEditMap(me?.id ?? null, articleEditRows),
     ]);
 
     const seenIds = new Set<string>([
@@ -314,6 +340,7 @@ router.get(
           team: r.team,
           org: r.org,
           author: r.author,
+          canEdit: canEditMap.get(r.a.id) ?? false,
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
         }),
@@ -350,6 +377,7 @@ router.get(
             team: row.team,
             org: row.org,
             author: row.author,
+            canEdit: canEditMap.get(row.a.id) ?? false,
             ...statsFor(stats, "article", row.a.id),
             ...shareStatsFor(shareStats, "article", row.a.id),
             sharedBy,

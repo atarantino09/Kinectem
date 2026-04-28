@@ -1,4 +1,11 @@
-import { db, organizationAdmins, rosterEntries, teams, type teams as TeamsT } from "@workspace/db";
+import {
+  db,
+  articleAuthors,
+  organizationAdmins,
+  rosterEntries,
+  teams,
+  type teams as TeamsT,
+} from "@workspace/db";
 import { and, eq, inArray, or } from "drizzle-orm";
 
 type Team = typeof TeamsT.$inferSelect;
@@ -144,6 +151,59 @@ export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
     )
     .limit(1);
   return Boolean(rosterRow);
+}
+
+// Batched "can the viewer edit this article?" check for list endpoints.
+//
+// The single-post GET handler computes the same author / co-author /
+// org-admin check inline; this helper exists so list endpoints (feed,
+// team posts, profile posts, org posts) can answer the same question
+// for many articles in two extra queries instead of three per row. A
+// null viewerId (anonymous request) always resolves to false.
+export async function computeArticleCanEditMap(
+  viewerId: string | null,
+  rows: Array<{ articleId: string; authorId: string | null; orgId: string }>,
+): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  for (const r of rows) result.set(r.articleId, false);
+  if (!viewerId || rows.length === 0) return result;
+
+  const articleIds = Array.from(new Set(rows.map((r) => r.articleId)));
+  const orgIds = Array.from(new Set(rows.map((r) => r.orgId)));
+
+  const [coAuthorRows, adminRows] = await Promise.all([
+    db
+      .select({ articleId: articleAuthors.articleId })
+      .from(articleAuthors)
+      .where(
+        and(
+          eq(articleAuthors.userId, viewerId),
+          inArray(articleAuthors.articleId, articleIds),
+        ),
+      ),
+    db
+      .select({ orgId: organizationAdmins.organizationId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.userId, viewerId),
+          inArray(organizationAdmins.organizationId, orgIds),
+          inArray(organizationAdmins.role, [...MANAGE_ROLES]),
+        ),
+      ),
+  ]);
+  const coAuthorSet = new Set(coAuthorRows.map((r) => r.articleId));
+  const adminOrgSet = new Set(adminRows.map((r) => r.orgId));
+
+  for (const r of rows) {
+    const isAuthor = r.authorId === viewerId;
+    const isCoAuthor = coAuthorSet.has(r.articleId);
+    const isOrgAdmin = adminOrgSet.has(r.orgId);
+    if (isAuthor || isCoAuthor || isOrgAdmin) {
+      result.set(r.articleId, true);
+    }
+  }
+  return result;
 }
 
 export async function isOrgMember(userId: string, organizationId: string): Promise<boolean> {

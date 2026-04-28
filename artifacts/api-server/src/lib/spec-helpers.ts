@@ -426,8 +426,9 @@ interface PostExtras {
   hasReacted?: boolean;
   commentCount?: number;
   recentReactorName?: string | null;
-  // Set by GET /posts/:postId only — list endpoints leave this off
-  // since the Edit affordance only matters on the post detail page.
+  // Set per-viewer by GET /posts/:postId and the post-list endpoints
+  // (feed, team posts, profile posts, org posts) so the 3-dot menu's
+  // "Edit post" item can be rendered everywhere a post card appears.
   canEdit?: boolean;
   shareCount?: number;
   hasShared?: boolean;
@@ -592,9 +593,10 @@ function basePost(p: {
     hasReacted: p.extras.hasReacted ?? false,
     commentCount: p.extras.commentCount ?? 0,
     recentReactorName: p.extras.recentReactorName ?? null,
-    // Default false; GET /posts/:postId computes this per-viewer.
-    // List endpoints omit it (always false) — the Edit button is
-    // only rendered on the detail page.
+    // Default false. GET /posts/:postId and the post-list endpoints
+    // (feed, team posts, profile posts, org posts) compute this
+    // per-viewer so the 3-dot menu's "Edit post" item can be
+    // rendered everywhere a post card appears.
     canEdit: p.extras.canEdit ?? false,
     shareCount: p.extras.shareCount ?? 0,
     hasShared: p.extras.hasShared ?? false,

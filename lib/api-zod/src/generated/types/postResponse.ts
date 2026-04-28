@@ -134,9 +134,12 @@ saved draft.
   gameDate?: Date | null;
   /** True when the requesting user is the author, a co-author,
 or an org admin of the team that owns the post — i.e.
-allowed to PATCH this post. Only computed on the
-`getPost` (detail) endpoint; list endpoints always return
-`false` here.
+allowed to PATCH this post. Computed on the `getPost`
+(detail) endpoint and on every list endpoint that returns
+posts (feed, team posts, profile posts, org posts) so the
+client can render the Edit affordance inline. Always
+`false` for non-article post types (highlights, org
+posts) since the composer only edits articles.
  */
   canEdit?: boolean;
   /**

@@ -21,7 +21,11 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canManageOrganization, getOrgRole } from "../lib/permissions";
+import {
+  canManageOrganization,
+  computeArticleCanEditMap,
+  getOrgRole,
+} from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -555,9 +559,19 @@ router.get(
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
-    const shareStats = await loadPostShareStats(me?.id ?? null, [
-      ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
-      ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+    const [shareStats, canEditMap] = await Promise.all([
+      loadPostShareStats(me?.id ?? null, [
+        ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+        ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ]),
+      computeArticleCanEditMap(
+        me?.id ?? null,
+        rows.map((r) => ({
+          articleId: r.a.id,
+          authorId: r.a.authorId,
+          orgId: r.org.id,
+        })),
+      ),
     ]);
 
     const articleData = rows.map((r) =>
@@ -565,6 +579,7 @@ router.get(
         team: r.team,
         org: r.org,
         author: r.author,
+        canEdit: canEditMap.get(r.a.id) ?? false,
         ...shareStatsFor(shareStats, "article", r.a.id),
       }),
     );
@@ -610,16 +625,26 @@ router.get(
         .limit(20),
     ]);
 
-    const stats = await loadPostStats(me?.id ?? null, [
-      ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
-      ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+    const [stats, shareStats, canEditMap] = await Promise.all([
+      loadPostStats(me?.id ?? null, [
+        ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+        ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+      ]),
+      // Task #190 — Articles surface share state on org-page cards too
+      // (org_post is non-shareable, so it stays at the default 0/false).
+      loadPostShareStats(
+        me?.id ?? null,
+        articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ),
+      computeArticleCanEditMap(
+        me?.id ?? null,
+        articleRows.map((r) => ({
+          articleId: r.a.id,
+          authorId: r.a.authorId,
+          orgId: r.org.id,
+        })),
+      ),
     ]);
-    // Task #190 — Articles surface share state on org-page cards too
-    // (org_post is non-shareable, so it stays at the default 0/false).
-    const shareStats = await loadPostShareStats(
-      me?.id ?? null,
-      articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
-    );
 
     const data = [
       ...articleRows.map((r) =>
@@ -627,6 +652,7 @@ router.get(
           team: r.team,
           org: r.org,
           author: r.author,
+          canEdit: canEditMap.get(r.a.id) ?? false,
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
         }),
