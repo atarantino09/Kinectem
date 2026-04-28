@@ -21,6 +21,7 @@ interface Team {
   sport?: string | null;
   level?: string | null;
   avatarUrl?: string | null;
+  bannerUrl?: string | null;
   isFollowing?: boolean;
   followerCount?: number;
   organization: {
@@ -56,56 +57,71 @@ export function TeamHeaderCard({
   onEdit,
   onOpenFollowers,
 }: TeamHeaderCardProps) {
-  const logoUrl =
-    team.avatarUrl ||
-    (team.organization as { avatarUrl?: string | null })?.avatarUrl ||
-    "";
+  // The foreground square ALWAYS shows the org's logo so every team in
+  // the same organization carries identical top-of-page branding. The
+  // team's own `bannerUrl` is shown as the hero background instead.
+  const orgLogoUrl = team.organization.avatarUrl ?? "";
+  const bannerUrl = team.bannerUrl ?? "";
   return (
-    <Card className="rounded-xl border border-border shadow-sm">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
-          <Link href={`/organizations/${team.organization.id}`}>
-            <Badge
-              variant="outline"
-              className="bg-muted text-muted-foreground border-border font-bold px-2 py-0.5 text-xs uppercase tracking-wider cursor-pointer hover:bg-muted/80"
-            >
-              {team.organization.name}
-            </Badge>
-          </Link>
-          {team.currentSeason && (
-            <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-none font-bold">
-              {team.currentSeason.name}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-start gap-6 mb-3">
-          <div className="shrink-0">
+    <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+      {/* Hero background: team-specific photo if set, otherwise the
+          existing brand gradient as the empty-state. */}
+      <div className="relative h-44 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+        {bannerUrl && (
+          <img
+            src={bannerUrl}
+            alt={`${team.name} background`}
+            className="absolute inset-0 w-full h-full object-cover"
+            data-testid="img-team-banner"
+          />
+        )}
+        {team.currentSeason && (
+          <Badge
+            className="absolute top-3 right-3 bg-background/90 text-primary hover:bg-background border-none font-bold shadow-sm"
+            data-testid="badge-current-season"
+          >
+            {team.currentSeason.name}
+          </Badge>
+        )}
+      </div>
+      <CardContent className="p-6 pt-0">
+        {/* Avatar block: org logo, overlapping the bottom of the banner.
+            Org name sits directly under the logo as a link to the org. */}
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 -mt-16">
+          <div className="shrink-0 flex flex-col items-center sm:items-start">
             <AvatarLightbox
-              avatarUrl={logoUrl || null}
-              displayName={team.name}
-              ariaLabel={`View ${team.name}'s logo`}
+              avatarUrl={orgLogoUrl || null}
+              displayName={team.organization.name}
+              ariaLabel={`View ${team.organization.name}'s logo`}
               triggerClassName="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               triggerTestId="btn-open-team-logo-lightbox"
               dialogTestId="dialog-team-logo-lightbox"
               imageTestId="img-team-logo-lightbox"
             >
-              <div className="w-36 h-36 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-border overflow-hidden flex items-center justify-center">
-                {logoUrl ? (
+              <div className="w-32 h-32 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border-4 border-background shadow-md overflow-hidden flex items-center justify-center">
+                {orgLogoUrl ? (
                   <img
-                    src={logoUrl}
-                    alt={team.name}
+                    src={orgLogoUrl}
+                    alt={team.organization.name}
                     className="w-full h-full object-cover"
                     data-testid="img-team-photo"
                   />
                 ) : (
-                  <span className="text-5xl font-black text-primary">
-                    {team.name.slice(0, 2).toUpperCase()}
+                  <span className="text-4xl font-black text-primary">
+                    {team.organization.name.slice(0, 2).toUpperCase()}
                   </span>
                 )}
               </div>
             </AvatarLightbox>
+            <Link
+              href={`/organizations/${team.organization.id}`}
+              className="mt-2 font-bold text-sm text-muted-foreground hover:text-primary uppercase tracking-wider text-center sm:text-left max-w-[8rem] block leading-tight cursor-pointer"
+              data-testid="link-team-org"
+            >
+              {team.organization.name}
+            </Link>
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 sm:pb-2">
             <div className="flex items-start gap-3 flex-wrap">
               <h1 className="text-5xl font-black tracking-tight leading-[1.05]">
                 {team.name}
@@ -131,7 +147,7 @@ export function TeamHeaderCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap mt-4">
           {team.sport && (
             <div className="font-bold text-foreground flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-md text-sm">
               <Trophy className="w-4 h-4 text-amber-500" />

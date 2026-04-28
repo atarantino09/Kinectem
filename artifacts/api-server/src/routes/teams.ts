@@ -91,6 +91,10 @@ router.post(
           sport: req.body?.sport ?? undefined,
           level: req.body?.level ?? undefined,
           season: req.body?.season?.name ?? undefined,
+          bannerUrl:
+            typeof req.body?.bannerUrl === "string"
+              ? req.body.bannerUrl
+              : undefined,
         })
         .returning();
       await tx.insert(rosterEntries).values({
@@ -173,6 +177,7 @@ router.patch(
     if (typeof body.description === "string") patch.description = body.description;
     if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
     if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
+    else if (body.bannerUrl === null) patch.bannerUrl = null;
     if (Object.keys(patch).length === 0) {
       return apiError(res, 400, "no updatable fields");
     }

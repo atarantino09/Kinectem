@@ -82,6 +82,11 @@ export interface TeamResponse {
   /** @nullable */
   avatarUrl?: string | null;
   /**
+   * The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
+   * @nullable
+   */
+  bannerUrl?: string | null;
+  /**
    * The team's current active season, or null if none.
    * @nullable
    */

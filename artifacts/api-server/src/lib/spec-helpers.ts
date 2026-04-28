@@ -318,6 +318,7 @@ export function toTeam(
     sport: t.sport ?? null,
     level: t.level ?? null,
     avatarUrl: t.logoUrl ?? null,
+    bannerUrl: t.bannerUrl ?? null,
     currentSeason: t.season
       ? {
           id: t.id,

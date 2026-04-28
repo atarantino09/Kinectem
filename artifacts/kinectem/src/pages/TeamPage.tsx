@@ -213,9 +213,9 @@ export default function TeamPage() {
           description: team.description,
           sport: team.sport,
           level: team.level,
-          avatarUrl: team.avatarUrl,
+          bannerUrl: team.bannerUrl,
         }}
-        canManageLogo={isAdmin}
+        canManagePhoto={isAdmin}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

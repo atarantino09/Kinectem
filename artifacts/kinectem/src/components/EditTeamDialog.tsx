@@ -46,17 +46,18 @@ type TeamLike = {
   description?: string | null;
   sport?: string | null;
   level?: string | null;
-  avatarUrl?: string | null;
+  bannerUrl?: string | null;
 };
 
 export function EditTeamDialog({
   team,
-  canManageLogo = false,
+  canManagePhoto = false,
   open,
   onOpenChange,
 }: {
   team: TeamLike;
-  canManageLogo?: boolean;
+  /** Same admin gate that previously controlled "Manage logo". */
+  canManagePhoto?: boolean;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -78,8 +79,8 @@ export function EditTeamDialog({
       setLevel(team.level ?? "");
     }
     // Only re-seed the form when the dialog transitions to open, or when
-    // a different team is being edited. Refetches caused by in-dialog logo
-    // changes must not wipe the user's unsaved text edits.
+    // a different team is being edited. Refetches caused by in-dialog
+    // photo changes must not wipe the user's unsaved text edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, team.id]);
 
@@ -91,12 +92,12 @@ export function EditTeamDialog({
       await customFetch(`/api/v1/teams/${team.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logoUrl: null }),
+        body: JSON.stringify({ bannerUrl: null }),
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
-      toast({ title: "Logo removed" });
+      toast({ title: "Team photo removed" });
     } catch {
-      toast({ title: "Failed to remove logo", variant: "destructive" });
+      toast({ title: "Failed to remove team photo", variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -120,12 +121,12 @@ export function EditTeamDialog({
       await customFetch(`/api/v1/teams/${team.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logoUrl: dataUrl }),
+        body: JSON.stringify({ bannerUrl: dataUrl }),
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
-      toast({ title: "Logo updated" });
+      toast({ title: "Team photo updated" });
     } catch {
-      toast({ title: "Failed to upload logo", variant: "destructive" });
+      toast({ title: "Failed to upload team photo", variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -168,26 +169,32 @@ export function EditTeamDialog({
               Edit team
             </DialogTitle>
             <DialogDescription>
-              Update your team's name, sport, level, and description.
+              Update your team's name, sport, level, description, and
+              background photo.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            {canManageLogo && (
+            {canManagePhoto && (
               <div className="space-y-1.5">
-                <Label className="font-bold">Logo</Label>
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 bg-muted rounded-xl border border-border flex items-center justify-center overflow-hidden shrink-0">
-                    {team.avatarUrl ? (
+                <Label className="font-bold">Team photo</Label>
+                <p className="text-xs text-muted-foreground">
+                  Shows behind the org logo on this team's page. The logo
+                  itself always comes from your organization.
+                </p>
+                <div className="space-y-2">
+                  <div className="w-full h-28 bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center">
+                    {team.bannerUrl ? (
                       <img
-                        src={team.avatarUrl}
-                        alt={`${team.name} logo`}
+                        src={team.bannerUrl}
+                        alt={`${team.name} background`}
                         className="w-full h-full object-cover"
+                        data-testid="img-team-photo-preview"
                       />
                     ) : (
-                      <div className="text-xl font-black text-primary tracking-tighter">
-                        {team.name.slice(0, 2).toUpperCase()}
-                      </div>
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                        No team photo yet
+                      </span>
                     )}
                   </div>
                   <input
@@ -196,7 +203,7 @@ export function EditTeamDialog({
                     accept="image/*"
                     className="hidden"
                     onChange={onPhotoChange}
-                    data-testid="input-team-logo"
+                    data-testid="input-team-photo"
                   />
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -206,15 +213,15 @@ export function EditTeamDialog({
                       className="font-bold rounded-full"
                       onClick={onPickPhoto}
                       disabled={uploading}
-                      data-testid="btn-upload-team-logo"
+                      data-testid="btn-upload-team-photo"
                     >
                       {uploading
                         ? "Working..."
-                        : team.avatarUrl
-                          ? "Change logo"
-                          : "Upload logo"}
+                        : team.bannerUrl
+                          ? "Change team photo"
+                          : "Upload team photo"}
                     </Button>
-                    {team.avatarUrl && (
+                    {team.bannerUrl && (
                       <Button
                         type="button"
                         size="sm"
@@ -222,9 +229,9 @@ export function EditTeamDialog({
                         className="font-bold rounded-full"
                         onClick={onRemovePhoto}
                         disabled={uploading}
-                        data-testid="btn-remove-team-logo"
+                        data-testid="btn-remove-team-photo"
                       >
-                        Remove logo
+                        Remove team photo
                       </Button>
                     )}
                   </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,6 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import {
+  shrinkImageToDataUrl,
+  IMAGE_UPLOAD_MAX_BYTES,
+} from "@/lib/shrinkImage";
 
 function slugify(s: string) {
   return s
@@ -65,6 +69,11 @@ export function CreateTeamDialog({
   const [sport, setSport] = useState<string>("");
   const [league, setLeague] = useState<string>("");
   const [seasonName, setSeasonName] = useState("");
+  // Pre-shrunk team background photo as a data URL. Stays local until
+  // the form is submitted so creation is a single round-trip.
+  const [bannerDataUrl, setBannerDataUrl] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const createTeam = useCreateTeam();
 
@@ -76,11 +85,37 @@ export function CreateTeamDialog({
     setSport("");
     setLeague("");
     setSeasonName("");
+    setBannerDataUrl(null);
   };
 
   const onNameChange = (v: string) => {
     setName(v);
     if (!slugDirty) setSlug(slugify(v));
+  };
+
+  const onPickPhoto = () => fileInputRef.current?.click();
+
+  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please pick an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+      return;
+    }
+    setPhotoBusy(true);
+    try {
+      const dataUrl = await shrinkImageToDataUrl(file);
+      setBannerDataUrl(dataUrl);
+    } catch {
+      toast({ title: "Failed to read team photo", variant: "destructive" });
+    } finally {
+      setPhotoBusy(false);
+    }
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -100,6 +135,7 @@ export function CreateTeamDialog({
           description: description.trim() || undefined,
           sport: sport || undefined,
           level: league.trim() || undefined,
+          bannerUrl: bannerDataUrl ?? undefined,
           season: { name: finalSeason },
         },
       });
@@ -205,6 +241,66 @@ export function CreateTeamDialog({
                 rows={2}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="font-bold">Team photo (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Shows behind your org's logo on the team page.
+              </p>
+              <div className="space-y-2">
+                <div className="w-full h-24 bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center">
+                  {bannerDataUrl ? (
+                    <img
+                      src={bannerDataUrl}
+                      alt="Team photo preview"
+                      className="w-full h-full object-cover"
+                      data-testid="img-create-team-photo-preview"
+                    />
+                  ) : (
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      No team photo yet
+                    </span>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onPhotoChange}
+                  data-testid="input-create-team-photo"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    onClick={onPickPhoto}
+                    disabled={photoBusy}
+                    data-testid="btn-upload-create-team-photo"
+                  >
+                    {photoBusy
+                      ? "Working..."
+                      : bannerDataUrl
+                        ? "Change team photo"
+                        : "Upload team photo"}
+                  </Button>
+                  {bannerDataUrl && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="font-bold rounded-full"
+                      onClick={() => setBannerDataUrl(null)}
+                      disabled={photoBusy}
+                      data-testid="btn-remove-create-team-photo"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -218,7 +314,7 @@ export function CreateTeamDialog({
             <Button
               type="submit"
               variant="brand"
-              disabled={createTeam.isPending}
+              disabled={createTeam.isPending || photoBusy}
               data-testid="btn-create-team"
             >
               {createTeam.isPending ? "Creating..." : "Create team"}

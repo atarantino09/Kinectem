@@ -71,4 +71,9 @@ export interface UpdateTeamRequest {
   description?: string;
   sport?: string;
   level?: string;
+  /**
+   * The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.
+   * @nullable
+   */
+  bannerUrl?: string | null;
 }

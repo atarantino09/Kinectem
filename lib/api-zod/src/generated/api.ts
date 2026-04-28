@@ -2792,6 +2792,12 @@ export const CreateTeamBody = zod.object({
   description: zod.string().optional(),
   sport: zod.string().optional(),
   level: zod.string().optional(),
+  bannerUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional team background photo to set at creation time. May be a data URL or a CDN URL.",
+    ),
   season: zod.object({
     name: zod.string(),
     startDate: zod.coerce.date().optional(),
@@ -2845,6 +2851,13 @@ export const ListOrgTeamsResponse = zod.object({
       sport: zod.string().nullish(),
       level: zod.string().nullish(),
       avatarUrl: zod.string().url().nullish(),
+      bannerUrl: zod
+        .string()
+        .url()
+        .nullish()
+        .describe(
+          "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+        ),
       currentSeason: zod
         .object({
           id: zod.string().uuid().optional(),
@@ -2893,6 +2906,13 @@ export const GetTeamByIdResponse = zod.object({
   sport: zod.string().nullish(),
   level: zod.string().nullish(),
   avatarUrl: zod.string().url().nullish(),
+  bannerUrl: zod
+    .string()
+    .url()
+    .nullish()
+    .describe(
+      "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
   currentSeason: zod
     .object({
       id: zod.string().uuid().optional(),
@@ -2922,6 +2942,12 @@ export const UpdateTeamBody = zod.object({
   description: zod.string().optional(),
   sport: zod.string().optional(),
   level: zod.string().optional(),
+  bannerUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.",
+    ),
 });
 
 export const updateTeamResponseFollowerCountMin = 0;
@@ -2939,6 +2965,13 @@ export const UpdateTeamResponse = zod.object({
   sport: zod.string().nullish(),
   level: zod.string().nullish(),
   avatarUrl: zod.string().url().nullish(),
+  bannerUrl: zod
+    .string()
+    .url()
+    .nullish()
+    .describe(
+      "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
   currentSeason: zod
     .object({
       id: zod.string().uuid().optional(),
@@ -3691,6 +3724,13 @@ export const ListFollowSuggestionsResponse = zod.object({
       sport: zod.string().nullish(),
       level: zod.string().nullish(),
       avatarUrl: zod.string().url().nullish(),
+      bannerUrl: zod
+        .string()
+        .url()
+        .nullish()
+        .describe(
+          "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+        ),
       currentSeason: zod
         .object({
           id: zod.string().uuid().optional(),
@@ -4333,6 +4373,13 @@ export const SetTeamAvatarResponse = zod.object({
   sport: zod.string().nullish(),
   level: zod.string().nullish(),
   avatarUrl: zod.string().url().nullish(),
+  bannerUrl: zod
+    .string()
+    .url()
+    .nullish()
+    .describe(
+      "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
   currentSeason: zod
     .object({
       id: zod.string().uuid().optional(),

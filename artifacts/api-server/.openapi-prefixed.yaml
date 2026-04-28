@@ -7684,6 +7684,11 @@ components:
           format: uri
           nullable: true
           example: https://images.unsplash.com/photo-1526232761682-d26e03ac148e?w=600&h=600&fit=crop
+        bannerUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
         currentSeason:
           type: object
           nullable: true
@@ -7748,6 +7753,10 @@ components:
         level:
           type: string
           example: Travel
+        bannerUrl:
+          type: string
+          nullable: true
+          description: Optional team background photo to set at creation time. May be a data URL or a CDN URL.
         season:
           type: object
           required:
@@ -7779,6 +7788,10 @@ components:
         level:
           type: string
           example: U18
+        bannerUrl:
+          type: string
+          nullable: true
+          description: The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.
     PaginatedTeams:
       type: object
       required:

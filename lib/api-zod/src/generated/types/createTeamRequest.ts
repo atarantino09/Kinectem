@@ -78,5 +78,10 @@ export interface CreateTeamRequest {
   description?: string;
   sport?: string;
   level?: string;
+  /**
+   * Optional team background photo to set at creation time. May be a data URL or a CDN URL.
+   * @nullable
+   */
+  bannerUrl?: string | null;
   season: CreateTeamRequestSeason;
 }

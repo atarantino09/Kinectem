@@ -1302,6 +1302,11 @@ export interface TeamResponse {
   /** @nullable */
   avatarUrl?: string | null;
   /**
+   * The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
+   * @nullable
+   */
+  bannerUrl?: string | null;
+  /**
    * The team's current active season, or null if none.
    * @nullable
    */
@@ -1330,6 +1335,11 @@ export interface CreateTeamRequest {
   description?: string;
   sport?: string;
   level?: string;
+  /**
+   * Optional team background photo to set at creation time. May be a data URL or a CDN URL.
+   * @nullable
+   */
+  bannerUrl?: string | null;
   season: CreateTeamRequestSeason;
 }
 
@@ -1338,6 +1348,11 @@ export interface UpdateTeamRequest {
   description?: string;
   sport?: string;
   level?: string;
+  /**
+   * The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.
+   * @nullable
+   */
+  bannerUrl?: string | null;
 }
 
 export interface PaginatedTeams {

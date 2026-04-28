@@ -7779,6 +7779,11 @@ components:
           type: string
           format: uri
           nullable: true
+        bannerUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
         currentSeason:
           type: object
           nullable: true
@@ -7838,6 +7843,10 @@ components:
           type: string
         level:
           type: string
+        bannerUrl:
+          type: string
+          nullable: true
+          description: Optional team background photo to set at creation time. May be a data URL or a CDN URL.
         season:
           type: object
           required:
@@ -7865,6 +7874,10 @@ components:
           type: string
         level:
           type: string
+        bannerUrl:
+          type: string
+          nullable: true
+          description: The team's background photo. Pass null to clear it. May be a data URL or a CDN URL.
 
     PaginatedTeams:
       type: object
