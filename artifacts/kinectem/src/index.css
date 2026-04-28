@@ -117,7 +117,7 @@
   --brand-purple: 262 83% 58%;
   --brand-blue: 217 91% 60%;
   --brand-gradient: linear-gradient(135deg, hsl(var(--brand-purple)) 0%, hsl(var(--brand-blue)) 100%);
-  --brand-gradient-cover: linear-gradient(135deg, hsl(262 75% 80%) 0%, hsl(217 88% 78%) 100%);
+  --brand-gradient-cover: linear-gradient(135deg, hsl(262 80% 68%) 0%, hsl(217 90% 68%) 100%);
   --brand-gradient-dark: linear-gradient(135deg, hsl(262 60% 20%) 0%, hsl(222 47% 11%) 55%, hsl(217 60% 22%) 100%);
 
   --app-font-sans: 'Inter', sans-serif;
