@@ -107,6 +107,53 @@ describe("organizations", () => {
     expect(ok.status).toBe(201);
     expect(ok.body.zipCode).toBe("07090-1234");
   });
+
+  it("PATCH applies the same city/state/zipCode rules on edit (task #237)", async () => {
+    const { agent } = await loginAs((u) => u.role === "admin");
+    const created = await agent.post("/api/v1/organizations").send({
+      name: "Editable Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090",
+    });
+    expect(created.status).toBe(201);
+    const orgId = created.body.id;
+
+    // Empty city is rejected on edit.
+    const emptyCity = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ city: "   " });
+    expect(emptyCity.status).toBe(400);
+
+    // Bogus state code is rejected.
+    const badState = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ state: "ZZ" });
+    expect(badState.status).toBe(400);
+
+    // Non-numeric zip is rejected.
+    const badZip = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ zipCode: "abcde" });
+    expect(badZip.status).toBe(400);
+
+    // A valid combined update writes through and the response keeps zipCode.
+    const ok = await agent.patch(`/api/v1/organizations/${orgId}`).send({
+      city: "Cranford",
+      state: "ny", // also tests case-insensitive normalization
+      zipCode: "07016-1234",
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.city).toBe("Cranford");
+    expect(ok.body.state).toBe("NY");
+    expect(ok.body.zipCode).toBe("07016-1234");
+
+    // GET reflects the saved values too.
+    const fetched = await agent.get(`/api/v1/organizations/${orgId}`);
+    expect(fetched.body.city).toBe("Cranford");
+    expect(fetched.body.state).toBe("NY");
+    expect(fetched.body.zipCode).toBe("07016-1234");
+  });
 });
 
 describe("organization member roles (task #208)", () => {

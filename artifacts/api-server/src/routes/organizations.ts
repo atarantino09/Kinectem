@@ -212,8 +212,38 @@ router.patch(
     if (typeof body.name === "string") patch.name = body.name;
     if (typeof body.description === "string") patch.description = body.description;
     if (typeof body.website === "string") patch.website = body.website;
-    if (typeof body.city === "string") patch.city = body.city;
-    if (typeof body.state === "string") patch.state = body.state;
+    if (typeof body.city === "string") {
+      const trimmedCity = body.city.trim();
+      if (!trimmedCity) return apiError(res, 400, "city must not be empty");
+      patch.city = trimmedCity;
+    }
+    // Task #237 — when callers send city/state/zipCode on edit, hold them
+    // to the same rules as create: state must be a known 2-letter US code
+    // and zipCode must look like 12345 or 12345-6789.
+    if (typeof body.state === "string") {
+      const stateRaw = body.state.trim().toUpperCase();
+      if (!stateRaw) return apiError(res, 400, "state must not be empty");
+      if (!US_STATE_CODES.has(stateRaw)) {
+        return apiError(
+          res,
+          400,
+          "state must be a 2-letter US state code (e.g. NJ)",
+        );
+      }
+      patch.state = stateRaw;
+    }
+    if (typeof body.zipCode === "string") {
+      const zipCode = body.zipCode.trim();
+      if (!zipCode) return apiError(res, 400, "zipCode must not be empty");
+      if (!US_ZIP_PATTERN.test(zipCode)) {
+        return apiError(
+          res,
+          400,
+          "zipCode must be a US zip (5 digits or 5+4 like 12345-6789)",
+        );
+      }
+      patch.zipCode = zipCode;
+    }
     if (typeof body.logoUrl === "string") {
       patch.logoUrl = body.logoUrl === "" ? null : body.logoUrl;
     } else if (body.logoUrl === null) {

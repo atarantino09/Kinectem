@@ -575,12 +575,79 @@ export interface CreateOrganizationRequest {
   logoUrl?: string | null;
 }
 
+/**
+ * Two-letter US state postal code (50 states + DC).
+ */
+export type UpdateOrganizationRequestState =
+  (typeof UpdateOrganizationRequestState)[keyof typeof UpdateOrganizationRequestState];
+
+export const UpdateOrganizationRequestState = {
+  AL: "AL",
+  AK: "AK",
+  AZ: "AZ",
+  AR: "AR",
+  CA: "CA",
+  CO: "CO",
+  CT: "CT",
+  DE: "DE",
+  DC: "DC",
+  FL: "FL",
+  GA: "GA",
+  HI: "HI",
+  ID: "ID",
+  IL: "IL",
+  IN: "IN",
+  IA: "IA",
+  KS: "KS",
+  KY: "KY",
+  LA: "LA",
+  ME: "ME",
+  MD: "MD",
+  MA: "MA",
+  MI: "MI",
+  MN: "MN",
+  MS: "MS",
+  MO: "MO",
+  MT: "MT",
+  NE: "NE",
+  NV: "NV",
+  NH: "NH",
+  NJ: "NJ",
+  NM: "NM",
+  NY: "NY",
+  NC: "NC",
+  ND: "ND",
+  OH: "OH",
+  OK: "OK",
+  OR: "OR",
+  PA: "PA",
+  RI: "RI",
+  SC: "SC",
+  SD: "SD",
+  TN: "TN",
+  TX: "TX",
+  UT: "UT",
+  VT: "VT",
+  VA: "VA",
+  WA: "WA",
+  WV: "WV",
+  WI: "WI",
+  WY: "WY",
+} as const;
+
 export interface UpdateOrganizationRequest {
   name?: string;
   description?: string;
   website?: string;
+  /** @minLength 1 */
   city?: string;
-  state?: string;
+  /** Two-letter US state postal code (50 states + DC). */
+  state?: UpdateOrganizationRequestState;
+  /**
+   * US zip code; either 5 digits or ZIP+4 (e.g. 12345 or 12345-6789).
+   * @pattern ^\d{5}(-\d{4})?$
+   */
+  zipCode?: string;
   /** @nullable */
   logoUrl?: string | null;
 }

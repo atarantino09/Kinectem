@@ -412,6 +412,7 @@ export * from "./updateEmailPreferenceRequest";
 export * from "./updateMemberRoleRequest";
 export * from "./updateMemberRoleRequestRole";
 export * from "./updateOrganizationRequest";
+export * from "./updateOrganizationRequestState";
 export * from "./updatePhoneRequest";
 export * from "./updatePhoneRequestType";
 export * from "./updatePostRequest";

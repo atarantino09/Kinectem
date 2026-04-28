@@ -973,12 +973,78 @@ export const UpdateOrganizationParams = zod.object({
   orgId: zod.coerce.string().uuid(),
 });
 
+export const updateOrganizationBodyZipCodeRegExp = new RegExp(
+  "^\\d{5}(-\\d{4})?$",
+);
+
 export const UpdateOrganizationBody = zod.object({
   name: zod.string().optional(),
   description: zod.string().optional(),
   website: zod.string().url().optional(),
-  city: zod.string().optional(),
-  state: zod.string().optional(),
+  city: zod.string().min(1).optional(),
+  state: zod
+    .enum([
+      "AL",
+      "AK",
+      "AZ",
+      "AR",
+      "CA",
+      "CO",
+      "CT",
+      "DE",
+      "DC",
+      "FL",
+      "GA",
+      "HI",
+      "ID",
+      "IL",
+      "IN",
+      "IA",
+      "KS",
+      "KY",
+      "LA",
+      "ME",
+      "MD",
+      "MA",
+      "MI",
+      "MN",
+      "MS",
+      "MO",
+      "MT",
+      "NE",
+      "NV",
+      "NH",
+      "NJ",
+      "NM",
+      "NY",
+      "NC",
+      "ND",
+      "OH",
+      "OK",
+      "OR",
+      "PA",
+      "RI",
+      "SC",
+      "SD",
+      "TN",
+      "TX",
+      "UT",
+      "VT",
+      "VA",
+      "WA",
+      "WV",
+      "WI",
+      "WY",
+    ])
+    .optional()
+    .describe("Two-letter US state postal code (50 states + DC)."),
+  zipCode: zod
+    .string()
+    .regex(updateOrganizationBodyZipCodeRegExp)
+    .optional()
+    .describe(
+      "US zip code; either 5 digits or ZIP+4 (e.g. 12345 or 12345-6789).",
+    ),
   logoUrl: zod.string().nullish(),
 });
 

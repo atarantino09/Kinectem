@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   getGetOrganizationByIdQueryKey,
+  type UpdateOrganizationRequestState,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -16,12 +17,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
+import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 
 type OrgLike = {
   id: string;
@@ -30,6 +39,7 @@ type OrgLike = {
   website?: string | null;
   city?: string | null;
   state?: string | null;
+  zipCode?: string | null;
   logoUrl?: string | null;
   role?: string | null;
 };
@@ -50,6 +60,13 @@ export function EditOrgDialog({
   const [website, setWebsite] = useState(organization.website ?? "");
   const [city, setCity] = useState(organization.city ?? "");
   const [state, setState] = useState(organization.state ?? "");
+  const [zipCode, setZipCode] = useState(organization.zipCode ?? "");
+  const [errors, setErrors] = useState<{
+    name?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  }>({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -64,6 +81,8 @@ export function EditOrgDialog({
       setWebsite(organization.website ?? "");
       setCity(organization.city ?? "");
       setState(organization.state ?? "");
+      setZipCode(organization.zipCode ?? "");
+      setErrors({});
     }
     // Only re-seed the form when the dialog transitions to open, or when
     // a different org is being edited. Refetches caused by in-dialog logo
@@ -125,18 +144,41 @@ export function EditOrgDialog({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast({ title: "Name is required", variant: "destructive" });
+    const trimmedName = name.trim();
+    const trimmedCity = city.trim();
+    const trimmedZip = zipCode.trim();
+    // Task #237 — keep parity with CreateOrgDialog: city/state/zip are
+    // required and zip must look like 12345 or 12345-6789. The server
+    // enforces the same rules, so any drift between the two is a bug.
+    const nextErrors: typeof errors = {};
+    if (!trimmedName) nextErrors.name = "Name is required";
+    if (!trimmedCity) nextErrors.city = "City is required";
+    if (!state) nextErrors.state = "State is required";
+    if (!trimmedZip) {
+      nextErrors.zipCode = "Zip code is required";
+    } else if (!US_ZIP_PATTERN.test(trimmedZip)) {
+      nextErrors.zipCode = "Enter a US zip (12345 or 12345-6789)";
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      const first =
+        nextErrors.name ??
+        nextErrors.city ??
+        nextErrors.state ??
+        nextErrors.zipCode ??
+        "Please fix the highlighted fields";
+      toast({ title: first, variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
       const trimmedWebsite = website.trim();
       const payload: Record<string, string> = {
-        name: name.trim(),
+        name: trimmedName,
         description,
-        city,
-        state,
+        city: trimmedCity,
+        state: state as UpdateOrganizationRequestState,
+        zipCode: trimmedZip,
       };
       if (trimmedWebsite) payload.website = trimmedWebsite;
       await customFetch(`/api/v1/organizations/${organization.id}`, {
@@ -239,6 +281,14 @@ export function EditOrgDialog({
                 autoFocus
                 data-testid="input-edit-org-name"
               />
+              {errors.name && (
+                <p
+                  className="text-xs font-medium text-destructive"
+                  data-testid="error-edit-org-name"
+                >
+                  {errors.name}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-org-desc" className="font-bold">
@@ -264,10 +314,13 @@ export function EditOrgDialog({
                 data-testid="input-edit-org-website"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-city" className="font-bold">
                   City
+                  <span className="text-destructive ml-0.5" aria-hidden>
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="edit-org-city"
@@ -275,17 +328,75 @@ export function EditOrgDialog({
                   onChange={(e) => setCity(e.target.value)}
                   data-testid="input-edit-org-city"
                 />
+                {errors.city && (
+                  <p
+                    className="text-xs font-medium text-destructive"
+                    data-testid="error-edit-org-city"
+                  >
+                    {errors.city}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-state" className="font-bold">
                   State
+                  <span className="text-destructive ml-0.5" aria-hidden>
+                    *
+                  </span>
+                </Label>
+                <Select value={state} onValueChange={setState}>
+                  <SelectTrigger
+                    id="edit-org-state"
+                    data-testid="input-edit-org-state"
+                    aria-label="State"
+                  >
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {US_STATES.map((s) => (
+                      <SelectItem
+                        key={s.code}
+                        value={s.code}
+                        data-testid={`option-edit-org-state-${s.code}`}
+                      >
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.state && (
+                  <p
+                    className="text-xs font-medium text-destructive"
+                    data-testid="error-edit-org-state"
+                  >
+                    {errors.state}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-org-zip" className="font-bold">
+                  Zip
+                  <span className="text-destructive ml-0.5" aria-hidden>
+                    *
+                  </span>
                 </Label>
                 <Input
-                  id="edit-org-state"
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  data-testid="input-edit-org-state"
+                  id="edit-org-zip"
+                  value={zipCode}
+                  onChange={(e) => setZipCode(e.target.value)}
+                  placeholder="07090"
+                  inputMode="numeric"
+                  maxLength={10}
+                  data-testid="input-edit-org-zip"
                 />
+                {errors.zipCode && (
+                  <p
+                    className="text-xs font-medium text-destructive"
+                    data-testid="error-edit-org-zip"
+                  >
+                    {errors.zipCode}
+                  </p>
+                )}
               </div>
             </div>
           </div>
