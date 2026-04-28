@@ -7171,6 +7171,12 @@ components:
           nullable: true
           description: Signed S3 URL resolved at read time for org/team avatars.
           example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
+        orgAvatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.
     PostAssetResponse:
       type: object
       required:

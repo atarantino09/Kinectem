@@ -567,6 +567,10 @@ function basePost(p: {
         slug: slugify(team.name),
         orgSlug: slugify(p.extras.org.name),
         avatarUrl: team.logoUrl ?? null,
+        // Team posts carry the parent org's logo so PostCard can show
+        // the org logo as the team's avatar. Null when the parent org
+        // also has no logo set.
+        orgAvatarUrl: p.extras.org.logoUrl ?? null,
       }
     : {
         type: "organization" as const,
@@ -575,6 +579,7 @@ function basePost(p: {
         slug: slugify(p.extras.org.name),
         orgSlug: null,
         avatarUrl: p.extras.org.logoUrl ?? null,
+        orgAvatarUrl: null,
       };
   return {
     id: p.id,

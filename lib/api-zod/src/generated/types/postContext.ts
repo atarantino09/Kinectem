@@ -87,4 +87,10 @@ export interface PostContext {
    * @nullable
    */
   avatarUrl?: string | null;
+  /**
+   * Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.
+
+   * @nullable
+   */
+  orgAvatarUrl?: string | null;
 }

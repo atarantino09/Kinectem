@@ -1422,6 +1422,13 @@ export const GetPostResponse = zod.object({
       .url()
       .nullish()
       .describe("Signed S3 URL resolved at read time for org\/team avatars."),
+    orgAvatarUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
+      ),
   }),
   assets: zod.array(
     zod.object({
@@ -1557,6 +1564,13 @@ export const UpdatePostResponse = zod.object({
       .url()
       .nullish()
       .describe("Signed S3 URL resolved at read time for org\/team avatars."),
+    orgAvatarUrl: zod
+      .string()
+      .url()
+      .nullish()
+      .describe(
+        "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
+      ),
   }),
   assets: zod.array(
     zod.object({
@@ -1719,6 +1733,13 @@ export const ListOrgPostsResponse = zod.object({
           .nullish()
           .describe(
             "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+        orgAvatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
           ),
       }),
       assets: zod.array(
@@ -2096,6 +2117,13 @@ export const ListUserPostsResponse = zod.object({
           .nullish()
           .describe(
             "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+        orgAvatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
           ),
       }),
       assets: zod.array(
@@ -4427,6 +4455,13 @@ export const ListTeamPostsResponse = zod.object({
           .describe(
             "Signed S3 URL resolved at read time for org\/team avatars.",
           ),
+        orgAvatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
+          ),
       }),
       assets: zod.array(
         zod.object({
@@ -4910,6 +4945,13 @@ export const ListOrgPostApprovalsResponse = zod.object({
                 .describe(
                   "Signed S3 URL resolved at read time for org\/team avatars.",
                 ),
+              orgAvatarUrl: zod
+                .string()
+                .url()
+                .nullish()
+                .describe(
+                  "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
+                ),
             }),
             assets: zod.array(
               zod.object({
@@ -5053,6 +5095,13 @@ export const ApproveOrgPostApprovalResponse = zod.object({
           .describe(
             "Signed S3 URL resolved at read time for org\/team avatars.",
           ),
+        orgAvatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
+          ),
       }),
       assets: zod.array(
         zod.object({
@@ -5185,6 +5234,13 @@ export const DeclineOrgPostApprovalResponse = zod.object({
           .nullish()
           .describe(
             "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+        orgAvatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
           ),
       }),
       assets: zod.array(

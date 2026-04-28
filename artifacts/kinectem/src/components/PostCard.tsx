@@ -225,22 +225,38 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
         )}
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
           <div className="flex items-center gap-3 min-w-0">
-            <AvatarLightbox
-              avatarUrl={post.context.avatarUrl}
-              displayName={post.context.name ?? post.context.type}
-              triggerClassName="shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              triggerTestId={`btn-open-post-avatar-lightbox-${post.id}`}
-              dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
-              imageTestId={`img-post-avatar-lightbox-${post.id}`}
-            >
-              <TeamAvatar
-                avatarUrl={post.context.avatarUrl}
-                displayName={post.context.name ?? post.context.type}
-                size="lg"
-                className={`shrink-0 ${post.context.avatarUrl ? "cursor-pointer" : ""}`}
-                fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-              />
-            </AvatarLightbox>
+            {(() => {
+              // For team-context posts, the avatar slot shows the parent
+              // organization's logo instead of the team's own logo so it
+              // never renders as a blank initials tile when only the team
+              // is missing a logo. If the parent org has no logo either,
+              // we intentionally fall straight through to the team-name
+              // initials (the existing TeamAvatar fallback) — we do NOT
+              // use the team's own logoUrl in this branch. Non-team
+              // contexts keep their existing avatar source.
+              const displayedAvatarUrl =
+                post.context.type === "team"
+                  ? post.context.orgAvatarUrl ?? null
+                  : post.context.avatarUrl;
+              return (
+                <AvatarLightbox
+                  avatarUrl={displayedAvatarUrl}
+                  displayName={post.context.name ?? post.context.type}
+                  triggerClassName="shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  triggerTestId={`btn-open-post-avatar-lightbox-${post.id}`}
+                  dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
+                  imageTestId={`img-post-avatar-lightbox-${post.id}`}
+                >
+                  <TeamAvatar
+                    avatarUrl={displayedAvatarUrl}
+                    displayName={post.context.name ?? post.context.type}
+                    size="lg"
+                    className={`shrink-0 ${displayedAvatarUrl ? "cursor-pointer" : ""}`}
+                    fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                  />
+                </AvatarLightbox>
+              );
+            })()}
             <div className="min-w-0">
               <Link href={getContextHref(post.context)}>
                 <p className="font-bold text-sm truncate hover:underline">
