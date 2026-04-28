@@ -187,13 +187,20 @@ export default function UserProfilePage() {
           data-testid={`card-team-${t.teamId}`}
         >
           <CardContent className="p-4 flex items-center gap-3">
-            <TeamAvatar
-              avatarUrl={t.teamAvatarUrl}
-              displayName={t.teamName}
-              size="lg"
-              rounded="full"
-              fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-            />
+            {/* Banner-style thumbnail mirroring the team-page hero and the
+                follow-suggestions rail. Uses the team's editable
+                `bannerUrl` (cover-cropped) and falls back to the same
+                soft primary gradient when no team photo is set. */}
+            <div className="relative w-16 h-12 rounded-md overflow-hidden border border-border shrink-0 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+              {t.teamBannerUrl && (
+                <img
+                  src={t.teamBannerUrl}
+                  alt={`${t.teamName} background`}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  data-testid={`img-profile-team-banner-${t.teamId}`}
+                />
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2 min-w-0">
                 <p className="font-bold text-sm truncate">{t.teamName}</p>

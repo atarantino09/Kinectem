@@ -602,6 +602,13 @@ export const ListUserTeamsResponse = zod.object({
       teamName: zod.string(),
       teamSlug: zod.string(),
       teamAvatarUrl: zod.string().url().nullish(),
+      teamBannerUrl: zod
+        .string()
+        .url()
+        .nullish()
+        .describe(
+          "The team's editable background photo (cover-cropped on the team page hero). Used by clients to render a small banner-style thumbnail next to the team name on profile and similar lists. Null when no team photo has been uploaded.\n",
+        ),
       organization: zod.object({
         id: zod.string().uuid(),
         name: zod.string(),

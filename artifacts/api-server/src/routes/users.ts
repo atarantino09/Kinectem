@@ -678,6 +678,7 @@ router.get(
       teamName: r.t.name,
       teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
       teamAvatarUrl: r.t.logoUrl ?? null,
+      teamBannerUrl: r.t.bannerUrl ?? null,
       organization: { id: r.org.id, name: r.org.name, slug: r.org.name.toLowerCase().replace(/\s+/g, "-") },
       role: r.r.role === "coach" ? "admin" : ("member" as const),
       position: r.r.role === "player" ? "player" : "coach",

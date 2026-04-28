@@ -6192,6 +6192,15 @@ components:
           type: string
           format: uri
           nullable: true
+        teamBannerUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: >
+            The team's editable background photo (cover-cropped on the
+            team page hero). Used by clients to render a small banner-style
+            thumbnail next to the team name on profile and similar lists.
+            Null when no team photo has been uploaded.
         organization:
           $ref: '#/components/schemas/TeamOrganizationEmbed'
         role:

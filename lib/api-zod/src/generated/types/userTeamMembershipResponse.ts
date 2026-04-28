@@ -77,6 +77,12 @@ export interface UserTeamMembershipResponse {
   teamSlug: string;
   /** @nullable */
   teamAvatarUrl?: string | null;
+  /**
+   * The team's editable background photo (cover-cropped on the team page hero). Used by clients to render a small banner-style thumbnail next to the team name on profile and similar lists. Null when no team photo has been uploaded.
+
+   * @nullable
+   */
+  teamBannerUrl?: string | null;
   organization: TeamOrganizationEmbed;
   role: UserTeamMembershipResponseRole;
   position: UserTeamMembershipResponsePosition;
