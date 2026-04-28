@@ -130,7 +130,7 @@ export default function UserProfilePage() {
     <div className="space-y-6">
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
-        <div className="h-24 brand-gradient relative">
+        <div className="h-24 brand-gradient-cover relative">
           {user.coverPhotoUrl && (
             <img
               src={user.coverPhotoUrl}
