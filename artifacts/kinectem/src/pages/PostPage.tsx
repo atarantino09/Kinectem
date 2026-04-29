@@ -29,6 +29,7 @@ import { linkify } from "@/lib/linkify";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { VideoEmbed } from "@/components/VideoEmbed";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -128,6 +129,7 @@ export default function PostPage() {
   const Icon = isShort ? Play : FileText;
   const label = isShort ? "Highlight" : "Game Recap";
   const images = post.assets?.filter((a) => a.fileType?.startsWith("image/")) ?? [];
+  const videoAsset = post.assets?.find((a) => a.fileType?.startsWith("video/"));
 
   return (
     <article className="max-w-3xl mx-auto space-y-6">
@@ -402,6 +404,13 @@ export default function PostPage() {
             </p>
           ))}
         </div>
+      )}
+
+      {videoAsset?.url && (
+        <VideoEmbed
+          url={videoAsset.url}
+          className="rounded-xl overflow-hidden border border-border bg-black aspect-video"
+        />
       )}
 
       {/* Photos render after the body in the order the API returns them,

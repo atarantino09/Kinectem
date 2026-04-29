@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, Video, MoreVertical, Flag, Pencil, Share2, Repeat2 } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2 } from "lucide-react";
+import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
   useAddPostReaction,
   useRemovePostReaction,
@@ -91,6 +92,11 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const videoAsset = (post.assets ?? []).find((a) =>
     a.fileType?.startsWith("video/"),
   );
+  // True only when we can render an inline iframe player. For
+  // unknown providers we still surface the URL, but as a clickable
+  // link below the body rather than as a tall blank player area.
+  const hasEmbeddableVideo =
+    !!videoAsset?.url && getEmbedSrc(videoAsset.url) !== null;
 
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
@@ -354,7 +360,15 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
         )}
 
         <div>
-          {isShort && firstImage?.url && (
+          {isShort && hasEmbeddableVideo && videoAsset?.url && (
+            <div className="brand-gradient-dark p-3">
+              <VideoEmbed
+                url={videoAsset.url}
+                className="rounded-lg overflow-hidden border border-border bg-black aspect-video"
+              />
+            </div>
+          )}
+          {isShort && !hasEmbeddableVideo && firstImage?.url && (
             <Link href={`/posts/${post.id}`}>
               <div className="h-72 brand-gradient-dark relative flex items-center justify-center group cursor-pointer">
                 <img
@@ -411,6 +425,13 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               />
             )}
             {!isShort && videoAsset?.url && (
+              <VideoEmbed url={videoAsset.url} />
+            )}
+            {/* Highlights with an unsupported video provider show
+                the URL as a clickable fallback link in the body so
+                it isn't silently hidden. Embeddable highlights
+                already render their player in the header above. */}
+            {isShort && !hasEmbeddableVideo && videoAsset?.url && (
               <VideoEmbed url={videoAsset.url} />
             )}
           </div>
@@ -473,68 +494,6 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   );
 }
 
-function getYouTubeId(url: string): string | null {
-  try {
-    const u = new URL(url);
-    if (u.hostname === "youtu.be") return u.pathname.slice(1) || null;
-    if (u.hostname.endsWith("youtube.com")) {
-      if (u.pathname === "/watch") return u.searchParams.get("v");
-      if (u.pathname.startsWith("/embed/")) return u.pathname.split("/")[2] ?? null;
-      if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/")[2] ?? null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function getVimeoId(url: string): string | null {
-  try {
-    const u = new URL(url);
-    if (!u.hostname.endsWith("vimeo.com")) return null;
-    const id = u.pathname.split("/").filter(Boolean)[0];
-    return /^\d+$/.test(id ?? "") ? id : null;
-  } catch {
-    return null;
-  }
-}
-
-function VideoEmbed({ url }: { url: string }) {
-  const ytId = getYouTubeId(url);
-  const vimeoId = getVimeoId(url);
-  const embedSrc = ytId
-    ? `https://www.youtube.com/embed/${ytId}`
-    : vimeoId
-      ? `https://player.vimeo.com/video/${vimeoId}`
-      : null;
-
-  if (embedSrc) {
-    return (
-      <div className="mt-3 rounded-lg overflow-hidden border border-border bg-black aspect-video">
-        <iframe
-          src={embedSrc}
-          title="Video highlight"
-          className="w-full h-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-muted text-sm font-bold text-primary"
-    >
-      <Video className="w-4 h-4" />
-      <span className="truncate">{url}</span>
-    </a>
-  );
-}
 
 function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
   const [expanded, setExpanded] = useState(false);
