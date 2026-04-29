@@ -4,7 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useCreatePost,
+  useGetLoggedInUser,
   getListFeedQueryKey,
+  getListTeamPostsQueryKey,
+  getListUserPostsQueryKey,
   type CreatePostRequest,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +34,12 @@ type DraftPayload = {
     fileType?: string | null;
     displayOrder?: number;
   }> | null;
+  // Captured from the loaded payload so the submit handler knows
+  // which author + team lists to invalidate after saving — the
+  // composer can edit posts authored by someone else (co-authors,
+  // org admins) so we can't assume `author.id === me.id`.
+  author?: { id?: string | null } | null;
+  context?: { type?: string | null; id?: string | null } | null;
 };
 
 // Today's local calendar date in YYYY-MM-DD form, the shape an
@@ -62,8 +71,54 @@ export function useNewPostForm({
   const { toast } = useToast();
   const qc = useQueryClient();
   const createPost = useCreatePost();
-  const invalidateFeed = () =>
-    qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+  const { data: me } = useGetLoggedInUser();
+  // Author + team captured from the post we loaded (when editing
+  // a draft or a published post). Kept separate from `initialTeamId`
+  // because edits don't carry a team query param and the post may be
+  // authored by someone else (co-author / org-admin edits).
+  const [loadedAuthorId, setLoadedAuthorId] = useState<string | null>(null);
+  const [loadedTeamId, setLoadedTeamId] = useState<string | null>(null);
+
+  // Refresh every list the new or updated post should appear in so
+  // the destination page (feed, profile, team page) renders against
+  // fresh data on first paint instead of briefly flashing the stale
+  // list. Awaited by the submit handler before navigating.
+  //
+  // `refetchType: "all"` is critical here: by default, invalidate
+  // only refetches *active* (mounted) queries. The destination page
+  // hasn't mounted yet when we call this, so without it the team-posts
+  // / user-posts queries would just be marked stale and the user could
+  // still briefly see the cached pre-publish list before the on-mount
+  // refetch lands. Forcing inactive refetches and awaiting them means
+  // the cache is hot when the new page mounts.
+  const invalidateAffectedLists = async (opts: {
+    authorId?: string | null;
+    teamId?: string | null;
+  }) => {
+    const promises: Promise<unknown>[] = [
+      qc.invalidateQueries({
+        queryKey: getListFeedQueryKey(),
+        refetchType: "all",
+      }),
+    ];
+    if (opts.authorId) {
+      promises.push(
+        qc.invalidateQueries({
+          queryKey: getListUserPostsQueryKey(opts.authorId),
+          refetchType: "all",
+        }),
+      );
+    }
+    if (opts.teamId) {
+      promises.push(
+        qc.invalidateQueries({
+          queryKey: getListTeamPostsQueryKey(opts.teamId),
+          refetchType: "all",
+        }),
+      );
+    }
+    await Promise.all(promises);
+  };
 
   const [postType, setPostType] = useState<"short" | "long">(initialType);
   const [title, setTitle] = useState("");
@@ -160,6 +215,13 @@ export function useNewPostForm({
         // saving / re-submitting would silently fan out tags).
         setTagRoster(hasDate);
         setPostType("long");
+        // Remember who owns the post and which team (if any) it
+        // belongs to. The submit handler below uses these to refresh
+        // the right user-posts and team-posts lists after saving.
+        setLoadedAuthorId(d.author?.id ?? null);
+        setLoadedTeamId(
+          d.context?.type === "team" && d.context.id ? d.context.id : null,
+        );
       })
       .catch(() => {
         toast({
@@ -249,7 +311,17 @@ export function useNewPostForm({
         // the auto-tag fan-out, which is the whole reason this
         // path exists.
         await patchAt(editId);
-        invalidateFeed();
+        // Refresh the home feed plus the author's profile posts and
+        // (when the post belongs to a team) the team's posts list,
+        // so the destination page renders the updated post on first
+        // paint. Awaited before navigating to avoid a stale flash.
+        await invalidateAffectedLists({
+          authorId: loadedAuthorId,
+          teamId: loadedTeamId,
+        });
+        // Drop the cached single-post detail so a navigation back to
+        // /posts/:id refetches the freshly-edited title/body/photos.
+        qc.removeQueries({ queryKey: ["post", editId] });
         toast({ title: "Saved" });
         // Return to wherever the editor was launched from when a
         // safe internal `from` path was supplied (e.g. the feed,
@@ -263,14 +335,30 @@ export function useNewPostForm({
         await customFetch(`/api/v1/posts/${draftId}/publish`, {
           method: "POST",
         });
-        invalidateFeed();
+        // The just-published post will appear on the home feed, the
+        // author's profile, and (when team-scoped) the team page.
+        // Prefer ids captured from the loaded draft, then fall back
+        // to the current user / form team for drafts that were
+        // created in this same session (no initial draft load).
+        await invalidateAffectedLists({
+          authorId: loadedAuthorId ?? me?.id ?? null,
+          teamId: loadedTeamId ?? initialTeamId ?? null,
+        });
         toast({ title: "Published!" });
         setLocation(
           initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`,
         );
       } else {
         const result = await createPost.mutateAsync({ data: buildPayload() });
-        invalidateFeed();
+        // The create response is a full PostResponse, so we know
+        // exactly which author + team lists need to refetch.
+        await invalidateAffectedLists({
+          authorId: result.author?.id ?? me?.id ?? null,
+          teamId:
+            result.context?.type === "team" && result.context.id
+              ? result.context.id
+              : initialTeamId,
+        });
         toast({ title: "Posted!" });
         setLocation(
           initialTeamId ? `/teams/${initialTeamId}` : `/posts/${result.id}`,

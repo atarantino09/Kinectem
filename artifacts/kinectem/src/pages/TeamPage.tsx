@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetTeamById,
   useListTeamMembers,
+  useListTeamPosts,
   useListRosterInvites,
   useGetOrganizationById,
   useGetLoggedInUser,
@@ -11,7 +12,6 @@ import {
   useUnfollowTeam,
   getGetTeamByIdQueryKey,
   getListFeedQueryKey,
-  customFetch,
   queryOpts,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,8 +20,6 @@ import { InviteRosterDialog } from "@/components/InviteRosterDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
-import type { PostResponse } from "@workspace/api-client-react";
 import {
   TeamHeaderCard,
   type TeamPanel,
@@ -99,10 +97,12 @@ export default function TeamPage() {
     query: queryOpts({ enabled: !!teamId && canManage }),
   });
 
-  const { data: postsResp } = useQuery<{ data: PostResponse[] }>({
-    queryKey: ["team-posts", teamId],
-    queryFn: () => customFetch(`/api/v1/teams/${teamId}/posts`),
-    enabled: !!teamId,
+  // Use the generated hook so the new-post composer can target this
+  // exact query key (`getListTeamPostsQueryKey(teamId)`) when it
+  // refreshes the list after a publish/edit, instead of relying on
+  // an ad-hoc key the composer doesn't know about.
+  const { data: postsResp } = useListTeamPosts(teamId, undefined, {
+    query: queryOpts({ enabled: !!teamId }),
   });
 
   const onToggleFollow = async () => {
