@@ -211,7 +211,20 @@ export default function PostPage() {
         </Card>
       )}
 
-      {post.body && (
+      {post.body && !isShort && (
+        <Card className="rounded-xl border border-border">
+          <CardContent className="p-5">
+            <div className="prose prose-slate max-w-none">
+              {post.body.split("\n").map((para, i) => (
+                <p key={i} className="text-base leading-relaxed">
+                  {para}
+                </p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {post.body && isShort && (
         <div className="prose prose-slate max-w-none">
           {post.body.split("\n").map((para, i) => (
             <p key={i} className="text-base leading-relaxed">
