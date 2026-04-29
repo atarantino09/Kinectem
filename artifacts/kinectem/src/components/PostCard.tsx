@@ -69,12 +69,13 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
-  // Only article-backed long-form posts ever pass `canEdit: true` —
-  // the composer at /posts/new only knows how to load and PATCH
-  // articles. Highlights and org posts hide the menu item even if a
-  // future change accidentally flips this flag for them.
-  const canEditPost =
-    post.canEdit === true && reportTarget.contentType === "article";
+  // The composer at /posts/new is kind-aware: it loads and PATCHes
+  // recap articles, highlights, and org_post Updates. The server
+  // populates `canEdit` per-viewer for all three kinds (author /
+  // co-author / org-admin for articles, uploader for highlights,
+  // author or org-admin for Updates), so the menu item just mirrors
+  // that flag — no client-side kind gate.
+  const canEditPost = post.canEdit === true;
   const label =
     reportTarget.contentType === "highlight"
       ? "Highlight"
