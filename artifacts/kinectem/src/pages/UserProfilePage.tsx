@@ -17,6 +17,7 @@ import {
   type PrivateUserResponse,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { linkify } from "@/lib/linkify";
 import { useIsLg } from "@/hooks/use-mobile";
 import {
   Select,
@@ -421,8 +422,8 @@ export default function UserProfilePage() {
         {(user.bio || user.website) && (
           <div className="px-6 pb-6 space-y-2">
             {user.bio && (
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                {user.bio}
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl whitespace-pre-wrap">
+                {linkify(user.bio)}
               </p>
             )}
             {user.website && (

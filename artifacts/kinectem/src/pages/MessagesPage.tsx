@@ -45,6 +45,7 @@ import {
   X,
 } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
+import { linkify } from "@/lib/linkify";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 
@@ -421,7 +422,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                             : "bg-slate-100 text-foreground"
                         }`}
                       >
-                        {m.body}
+                        {linkify(m.body)}
                       </div>
                     )}
                     {isMine && (

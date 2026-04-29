@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { linkify } from "@/lib/linkify";
 
 export function TeamDescription({
   description,
@@ -40,7 +41,7 @@ export function TeamDescription({
         className="text-sm text-muted-foreground leading-relaxed line-clamp-5 whitespace-pre-wrap"
         data-testid="text-team-description"
       >
-        {description}
+        {linkify(description)}
       </p>
       {overflow && (
         <button
@@ -60,7 +61,7 @@ export function TeamDescription({
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-            {description}
+            {linkify(description)}
           </p>
         </DialogContent>
       </Dialog>
