@@ -1,6 +1,8 @@
 import { useSearch } from "wouter";
+import { useMemo } from "react";
 import {
   useGetLoggedInUser,
+  useListTeamMembers,
   useListUserOrganizations,
   queryOpts,
 } from "@workspace/api-client-react";
@@ -48,6 +50,34 @@ export default function NewPostPage() {
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
     query: queryOpts({ enabled: !!me?.id && !initialTeamId }),
   });
+
+  // Roster for the highlight composer's Tag Players picker
+  // (task #313). Only fetched when this is a highlight scoped
+  // to a team — recap and unscoped highlights skip the request
+  // entirely. We pass the API filters as a hint, but the server
+  // currently ignores `status` and `position` here, so we also
+  // filter the response client-side: pending invitees can't
+  // accept tags yet (their account may not even be confirmed),
+  // and coaches / admins shouldn't appear in a "tag the kids
+  // who are in the clip" picker.
+  const rosterTeamId = form.isShort ? (form.highlightTeamId ?? "") : "";
+  const rosterEnabled = !!rosterTeamId;
+  const { data: rosterData, isLoading: rosterLoading } = useListTeamMembers(
+    rosterTeamId,
+    { status: "active", position: "player", limit: 100 },
+    { query: queryOpts({ enabled: rosterEnabled }) },
+  );
+  const rosterMembers = useMemo(
+    () =>
+      (rosterData?.data ?? [])
+        .filter((m) => m.status === "active" && m.position === "player")
+        .map((m) => ({
+          userId: m.userId,
+          displayName: m.displayName,
+          avatarUrl: m.avatarUrl ?? null,
+        })),
+    [rosterData],
+  );
 
   const heading = form.isShort ? "New Highlight" : "New Game Recap";
   const Icon = form.isShort ? Play : FileText;
@@ -138,6 +168,11 @@ export default function NewPostPage() {
               isEditingPublished={form.isEditingPublished}
               loadedKind={form.loadedKind}
               canDelete={form.canDelete}
+              rosterTagTeamId={rosterTeamId || null}
+              rosterMembers={rosterMembers}
+              rosterLoading={rosterLoading}
+              taggedUserIds={form.taggedUserIds}
+              onTaggedUserIdsChange={form.setTaggedUserIds}
               saving={form.saving}
               publishing={form.publishing}
               onSaveDraft={form.onSaveDraft}

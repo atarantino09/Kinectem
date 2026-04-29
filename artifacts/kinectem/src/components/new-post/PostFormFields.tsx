@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/select";
 import { FileText, Info, Play, Save } from "lucide-react";
 import { MediaSection } from "./MediaSection";
+import {
+  RosterTagPicker,
+  type RosterPickerMember,
+} from "./RosterTagPicker";
 
 interface PostFormFieldsProps {
   postType: "short" | "long";
@@ -44,6 +48,16 @@ interface PostFormFieldsProps {
   // the in-editor Delete affordance and don't need the note). Defaults
   // to false so co-authors / coaches / org admins still see the note.
   canDelete?: boolean;
+  // Highlight composer only — roster picker state. Pass `members:
+  // []` and `loading: true` while the parent fetches the roster.
+  // The picker hides itself when there's no team scope (`teamId`
+  // is null) so highlights posted from /new without a team don't
+  // surface a useless dropdown.
+  rosterTagTeamId?: string | null;
+  rosterMembers?: RosterPickerMember[];
+  rosterLoading?: boolean;
+  taggedUserIds?: string[];
+  onTaggedUserIdsChange?: (next: string[]) => void;
   saving: boolean;
   publishing: boolean;
   onSaveDraft: () => void;
@@ -73,6 +87,11 @@ export function PostFormFields({
   isEditingPublished,
   loadedKind = null,
   canDelete = false,
+  rosterTagTeamId = null,
+  rosterMembers = [],
+  rosterLoading = false,
+  taggedUserIds = [],
+  onTaggedUserIdsChange,
   saving,
   publishing,
   onSaveDraft,
@@ -234,6 +253,21 @@ export function PostFormFields({
             </SelectContent>
           </Select>
         </div>
+      )}
+
+      {isShort && rosterTagTeamId && onTaggedUserIdsChange && (
+        // Highlight composer only — let the author hand-pick which
+        // rostered players this clip should tag (task #313). Hidden
+        // when there's no team scope (the picker has no roster to
+        // show) and on the recap path entirely (recap uses the
+        // existing `tag-roster` checkbox below to fan out to the
+        // whole roster instead).
+        <RosterTagPicker
+          members={rosterMembers}
+          selectedUserIds={taggedUserIds}
+          onSelectionChange={onTaggedUserIdsChange}
+          loading={rosterLoading}
+        />
       )}
 
       {!isShort && !isOrgPost && (

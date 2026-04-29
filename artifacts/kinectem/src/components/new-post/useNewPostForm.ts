@@ -4,10 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useCreatePost,
+  useCreatePostTags,
   useDeletePost,
   useGetLoggedInUser,
   getListFeedQueryKey,
   getListOrgPostsQueryKey,
+  getListPostTagsQueryKey,
   getListTeamPostsQueryKey,
   getListUserPostsQueryKey,
   type CreatePostRequest,
@@ -80,6 +82,7 @@ export function useNewPostForm({
   const { toast } = useToast();
   const qc = useQueryClient();
   const createPost = useCreatePost();
+  const createPostTags = useCreatePostTags();
   const deletePost = useDeletePost();
   const { data: me } = useGetLoggedInUser();
   // Author + team captured from the post we loaded (when editing
@@ -164,6 +167,15 @@ export function useNewPostForm({
   // still tags every rostered player. Unchecking sends `gameDate:
   // null` and skips the fan-out.
   const [tagRoster, setTagRoster] = useState<boolean>(true);
+  // Highlight composer only — list of roster userIds the author
+  // hand-picks via the Tag Players dropdown. Submitted as manual
+  // tags after the highlight is created (task #313). Reset when
+  // the team changes so a stale selection from a previous team
+  // can't leak into the new roster.
+  const [taggedUserIds, setTaggedUserIds] = useState<string[]>([]);
+  useEffect(() => {
+    setTaggedUserIds([]);
+  }, [initialTeamId]);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
   const editId = initialEditId;
   const isEditingPublished = !!editId;
@@ -434,6 +446,43 @@ export function useNewPostForm({
         );
       } else {
         const result = await createPost.mutateAsync({ data: buildPayload() });
+        // Highlight composer only — submit any roster players the
+        // author hand-picked via the Tag Players dropdown so each
+        // selected player gets a manual tag (task #313). Run after
+        // the post is created so we have a postId; tag failures
+        // are non-blocking — the post itself is already live.
+        let tagWarning: string | null = null;
+        if (isShort && taggedUserIds.length > 0) {
+          const requested = taggedUserIds.length;
+          try {
+            const tagResp = await createPostTags.mutateAsync({
+              postId: result.id,
+              data: {
+                tags: taggedUserIds.map((id) => ({
+                  taggedEntityType: "user",
+                  taggedEntityId: id,
+                  direction: "lateral",
+                })),
+              },
+            });
+            const persisted = tagResp.tags?.length ?? 0;
+            if (persisted < requested) {
+              const missing = requested - persisted;
+              tagWarning = `Posted, but couldn't tag ${missing} player${
+                missing === 1 ? "" : "s"
+              }.`;
+            }
+            // Drop the cached tags list for this post so the
+            // detail page renders the fresh tag set on first
+            // paint instead of an empty list.
+            await qc.invalidateQueries({
+              queryKey: getListPostTagsQueryKey(result.id),
+              refetchType: "all",
+            });
+          } catch {
+            tagWarning = "Posted, but tagging players failed.";
+          }
+        }
         // The create response is a full PostResponse, so we know
         // exactly which author + team lists need to refetch.
         await invalidateAffectedLists({
@@ -448,6 +497,13 @@ export function useNewPostForm({
               : null,
         });
         toast({ title: "Posted!" });
+        if (tagWarning) {
+          toast({
+            title: tagWarning,
+            description: "You can ask players to tag themselves later.",
+            variant: "destructive",
+          });
+        }
         setLocation(
           initialTeamId ? `/teams/${initialTeamId}` : `/posts/${result.id}`,
         );
@@ -548,6 +604,14 @@ export function useNewPostForm({
     savedAt,
     saving,
     isShort,
+    // Highlight composer only — exposed so the picker can render
+    // the current selection and a setter to update it.
+    taggedUserIds,
+    setTaggedUserIds,
+    // The team scope the highlight composer fetches its roster
+    // against. Re-exported under a stable name so the page layer
+    // doesn't have to know it currently maps 1:1 to `initialTeamId`.
+    highlightTeamId: initialTeamId,
     // Surfaced so the composer can hide article-only fields
     // (gameDate, tagRoster, the org-on-behalf-of selector, the
     // post-type toggle) when the loaded post is a highlight or a
