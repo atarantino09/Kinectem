@@ -1306,6 +1306,40 @@ router.post(
       });
       return;
     }
+    // Resolve the team + org first so the permission gate can read
+    // them, and so the response payload below has the same shape it
+    // had before the gate was added.
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    const [org] = team
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
+    if (!team || !org) return notFound(res);
+    // Task #291 — A team-scoped highlight can only be posted by an
+    // org admin/owner of the team's org or by someone with an
+    // accepted roster entry on this team. Highlights are otherwise
+    // unmoderated (they publish immediately and skip tag fan-out),
+    // so the permission check has to happen here at the edge.
+    const isOrgAdmin = await canManageOrganization(me.id, team.organizationId);
+    if (!isOrgAdmin) {
+      const [rosterRow] = await db
+        .select({ id: rosterEntries.id })
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, me.id),
+            eq(rosterEntries.status, "accepted"),
+          ),
+        )
+        .limit(1);
+      if (!rosterRow) {
+        return apiError(
+          res,
+          403,
+          "Only team members can post highlights to this team.",
+        );
+      }
+    }
     const [h] = await db
       .insert(highlights)
       .values({
@@ -1313,14 +1347,9 @@ router.post(
         uploaderId: me.id,
         title: body.title ?? "Untitled",
         description: body.description ?? undefined,
-        videoUrl: body.assets?.[0]?.url ?? "",
+        videoUrl: body.assets?.[0]?.url ?? body.videoUrl ?? "",
       })
       .returning();
-    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
-    const [org] = team
-      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
-      : [null];
-    if (!team || !org) return notFound(res);
     res.status(201).json(highlightToPost(h, { team, org, author: me }));
   }),
 );

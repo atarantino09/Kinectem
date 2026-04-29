@@ -92,6 +92,19 @@ export default function TeamPage() {
           m.status !== "pending" &&
           COACH_LEVEL_POSITIONS.includes((m.position ?? "").toLowerCase()),
       ));
+  // Broader gate than `canManage`: any accepted roster entry on this
+  // team (player, coach, staff, author, etc.) — used to expose the
+  // "Post Highlight" CTA to ordinary team members. Mirrors the
+  // server-side check on POST /api/v1/posts for `postType=short`,
+  // which requires DB status === "accepted". Note: the API surface
+  // remaps roster statuses to "active" | "pending" — declined entries
+  // come back as "pending" — so checking `status === "active"` here
+  // correctly excludes pending AND declined entries.
+  const isTeamMember =
+    !!me?.id &&
+    allMembersForGate.some(
+      (m) => m.userId === me.id && m.status === "active",
+    );
 
   const { data: invitesResp } = useListRosterInvites(teamId, undefined, {
     query: queryOpts({ enabled: !!teamId && canManage }),
@@ -173,6 +186,7 @@ export default function TeamPage() {
           <TeamPostsSection
             teamId={teamId}
             isAdmin={isAdmin}
+            isTeamMember={isTeamMember}
             posts={recentPosts}
           />
         )}

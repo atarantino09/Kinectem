@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { db, rosterEntries, users } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 
 async function getOrgAndTeam(name = "Varsity Football") {
@@ -1252,5 +1254,141 @@ describe("posts", () => {
     const detail = await likerAgent.get(`/api/v1/posts/${postId}`);
     expect(detail.body.reactionCount).toBe(1);
     expect(detail.body.hasReacted).toBe(true);
+  });
+
+  // ----------------------------------------------------------------
+  // Task #291 — Team-scoped highlight permissions.
+  //
+  // The team-page "Post Highlight" CTA is gated to (a) accepted
+  // roster members of the team and (b) org admins/owners. The
+  // server enforces the same check on `POST /api/v1/posts` for
+  // `postType=short` so a non-member can't bypass the UI gate.
+  // Highlights skip every tag fan-out — they are NEVER auto-tagged
+  // to the roster, regardless of who posts them.
+  // ----------------------------------------------------------------
+
+  it("accepted roster player can post a team-scoped highlight (and it shows up in the team posts list)", async () => {
+    const playerLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await playerLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Player highlight",
+      description: "Posted from the team page by a roster player.",
+      videoUrl: "https://example.com/player-clip.mp4",
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.id.startsWith("highlight-")).toBe(true);
+    expect(create.body.author?.id).toBe(playerLogin.user.id);
+    expect(create.body.context?.type).toBe("team");
+    expect(create.body.context?.id).toBe(team.id);
+
+    const teamPosts = await playerLogin.agent.get(
+      `/api/v1/teams/${team.id}/posts`,
+    );
+    expect(teamPosts.status).toBe(200);
+    expect(
+      teamPosts.body.data.find((p: { id: string }) => p.id === create.body.id),
+    ).toBeDefined();
+  });
+
+  it("org admin can post a team-scoped highlight", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await adminLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Admin highlight",
+      description: "Posted by an org admin who isn't on the roster.",
+      videoUrl: "https://example.com/admin-clip.mp4",
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.id.startsWith("highlight-")).toBe(true);
+  });
+
+  it("non-member, non-admin gets 403 trying to post a team-scoped highlight", async () => {
+    const { team } = await getOrgAndTeam();
+
+    // Brand-new account: never joins the org, never on the roster.
+    const outsiderEmail = `outsider+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: outsiderEmail,
+      password: "test-password-123",
+      firstName: "Out",
+      lastName: "Sider",
+      role: "athlete",
+    });
+    const outsider = request.agent(app);
+    await outsider
+      .post("/api/v1/auth/login")
+      .send({ email: outsiderEmail, password: "test-password-123" });
+
+    const create = await outsider.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Should be blocked",
+      description: "Outsiders cannot post to a team they don't belong to.",
+      videoUrl: "https://example.com/blocked.mp4",
+    });
+    expect(create.status).toBe(403);
+    expect(create.body.error).toMatch(/team members/i);
+  });
+
+  it("a declined roster entry does NOT count as membership (403 like an outsider)", async () => {
+    const { team } = await getOrgAndTeam();
+
+    // daniela is a basketball player in the seed — not on Varsity Football
+    // by default. Create a *declined* roster entry for her on Varsity
+    // Football. The server gate uses status === "accepted", so she must
+    // still be rejected with the same 403 as a complete outsider.
+    const danielaRow = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, "daniela@kinectem.demo"));
+    const danielaId = danielaRow[0]?.id;
+    if (!danielaId) throw new Error("daniela seed user missing");
+
+    await db.insert(rosterEntries).values({
+      teamId: team.id,
+      userId: danielaId,
+      role: "player",
+      position: "player",
+      status: "declined",
+    });
+
+    const danielaLogin = await loginAs(
+      (u) => u.email === "daniela@kinectem.demo",
+    );
+    const create = await danielaLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Declined cannot post",
+      description: "Declined roster entries must not unlock the team CTA.",
+      videoUrl: "https://example.com/declined.mp4",
+    });
+    expect(create.status).toBe(403);
+    expect(create.body.error).toMatch(/team members/i);
+  });
+
+  it("creating a team-scoped highlight does NOT fan out tags to the roster", async () => {
+    const playerLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await playerLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Untagged highlight",
+      description: "Highlights must remain untagged.",
+      videoUrl: "https://example.com/untagged.mp4",
+    });
+    expect(create.status).toBe(201);
+
+    const tags = await playerLogin.agent.get(
+      `/api/v1/posts/${create.body.id}/tags`,
+    );
+    expect(tags.status).toBe(200);
+    expect(tags.body.tags).toEqual([]);
   });
 });
