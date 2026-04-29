@@ -51,12 +51,23 @@ export default function NewPostPage() {
 
   const heading = form.isShort ? "New Highlight" : "New Game Recap";
   const Icon = form.isShort ? Play : FileText;
+  // Centered editor label, kind-aware so highlights and org Updates
+  // don't read "Editing Recap". Defaults to "Editing Recap" for the
+  // pre-task article path (loadedKind === null falls through too,
+  // matching the legacy behavior on the create flow).
+  const editingLabel =
+    form.loadedKind === "highlight"
+      ? "Editing Highlight"
+      : form.loadedKind === "org_post"
+        ? "Editing Update"
+        : "Editing Recap";
 
   return (
     <div className="min-h-screen bg-background">
       <PostHeaderBar
         Icon={Icon}
         heading={heading}
+        editingLabel={editingLabel}
         isShort={form.isShort}
         isEditingPublished={form.isEditingPublished}
         draftId={form.draftId}
@@ -77,8 +88,9 @@ export default function NewPostPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this post?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the post from feeds, your profile, and the
-              team page. This can't be undone from here.
+              This will remove the post from feeds, your profile, and any
+              team or organization page where it appeared. This can't be
+              undone from here.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -124,6 +136,7 @@ export default function NewPostPage() {
               draftId={form.draftId}
               lockedToTeam={form.lockedToTeam}
               isEditingPublished={form.isEditingPublished}
+              loadedKind={form.loadedKind}
               canDelete={form.canDelete}
               saving={form.saving}
               publishing={form.publishing}
@@ -133,7 +146,11 @@ export default function NewPostPage() {
           </CardContent>
         </Card>
 
-        {(form.draftId || form.editId) && (
+        {/* Co-authors are an article-only feature. Drafts are always
+            articles; for published edits, only show when the loaded
+            post is an article (not a highlight or org Update). */}
+        {(form.draftId ||
+          (form.editId && form.loadedKind === "article")) && (
           <CoAuthorsSection
             postId={(form.draftId ?? form.editId)!}
             myId={me?.id ?? ""}

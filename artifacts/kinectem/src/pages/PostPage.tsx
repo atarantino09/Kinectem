@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   getListFeedQueryKey,
+  getListOrgPostsQueryKey,
   getListTeamPostsQueryKey,
   getListUserPostsQueryKey,
   useDeletePost,
@@ -228,7 +229,7 @@ export default function PostPage() {
             {post.isEdited && " • edited"}
           </p>
         </div>
-        {post.canEdit && !isShort && (
+        {post.canEdit && (
           post.canDelete ? (
             // Original author: Edit + chevron dropdown that includes
             // "Delete post". Co-authors / coaches / org admins (who
@@ -301,8 +302,9 @@ export default function PostPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this post?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the post from feeds, your profile, and the
-              team page. This can't be undone from here.
+              This will remove the post from feeds, your profile, and any
+              team or organization page where it appeared. This can't be
+              undone from here.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -319,10 +321,10 @@ export default function PostPage() {
                   // Invalidate every list the deleted post might have
                   // appeared on so the user doesn't see stale copies
                   // when they navigate back: the home feed, the
-                  // post-author's profile posts, and (for team-scoped
-                  // recaps) the team's posts list. We invalidate
-                  // without arguments where supported so any cached
-                  // page/filter variant gets refetched.
+                  // post-author's profile posts, and the team or org
+                  // posts list (whichever scope the post belonged to).
+                  // We invalidate without arguments where supported so
+                  // any cached page/filter variant gets refetched.
                   qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
                   if (post.author?.id) {
                     qc.invalidateQueries({
@@ -334,14 +336,23 @@ export default function PostPage() {
                       queryKey: getListTeamPostsQueryKey(post.context.id),
                     });
                   }
+                  if (post.context?.type === "organization" && post.context.id) {
+                    qc.invalidateQueries({
+                      queryKey: getListOrgPostsQueryKey(post.context.id),
+                    });
+                  }
                   qc.removeQueries({ queryKey: ["post", post.id] });
                   toast({ title: "Post deleted" });
-                  // Land somewhere sensible: the team feed if the
-                  // post belonged to a team, otherwise the home feed.
+                  // Land somewhere sensible: highlights and articles
+                  // bounce back to their team page; org Updates bounce
+                  // back to their organization page; otherwise we drop
+                  // the user on the home feed.
                   setLocation(
                     post.context?.type === "team" && post.context.id
                       ? `/teams/${post.context.id}`
-                      : "/",
+                      : post.context?.type === "organization" && post.context.id
+                        ? `/organizations/${post.context.id}`
+                        : "/",
                   );
                 } catch {
                   toast({

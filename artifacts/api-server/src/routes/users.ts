@@ -619,10 +619,15 @@ router.get(
         }
         return post;
       }
+      // Uploader-only edit/delete affordance for highlights — same
+      // rule the post page enforces.
+      const isUploader = !!me && row.h.uploaderId === me.id;
       return highlightToPost(row.h, {
         team: row.team,
         org: row.org,
         author: row.author,
+        canEdit: isUploader,
+        canDelete: isUploader,
         ...statsFor(stats, "highlight", row.h.id),
         ...shareStatsFor(shareStats, "highlight", row.h.id),
         sharedBy,

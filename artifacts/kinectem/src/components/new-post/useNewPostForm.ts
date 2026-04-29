@@ -7,6 +7,7 @@ import {
   useDeletePost,
   useGetLoggedInUser,
   getListFeedQueryKey,
+  getListOrgPostsQueryKey,
   getListTeamPostsQueryKey,
   getListUserPostsQueryKey,
   type CreatePostRequest,
@@ -89,6 +90,14 @@ export function useNewPostForm({
   // right page and refresh the right per-author / per-team lists.
   const [loadedAuthorId, setLoadedAuthorId] = useState<string | null>(null);
   const [loadedTeamId, setLoadedTeamId] = useState<string | null>(null);
+  // Owning org id (org_post only) for delete navigation and cache
+  // invalidation of the org-page posts list.
+  const [loadedOrgId, setLoadedOrgId] = useState<string | null>(null);
+  // Loaded post kind — drives PATCH body shape and delete navigation.
+  // `null` until a post has been loaded into the editor.
+  const [loadedKind, setLoadedKind] = useState<
+    "article" | "highlight" | "org_post" | null
+  >(null);
 
   // Refresh every list the new or updated post should appear in so
   // the destination page (feed, profile, team page) renders against
@@ -105,6 +114,7 @@ export function useNewPostForm({
   const invalidateAffectedLists = async (opts: {
     authorId?: string | null;
     teamId?: string | null;
+    orgId?: string | null;
   }) => {
     const promises: Promise<unknown>[] = [
       qc.invalidateQueries({
@@ -124,6 +134,14 @@ export function useNewPostForm({
       promises.push(
         qc.invalidateQueries({
           queryKey: getListTeamPostsQueryKey(opts.teamId),
+          refetchType: "all",
+        }),
+      );
+    }
+    if (opts.orgId) {
+      promises.push(
+        qc.invalidateQueries({
+          queryKey: getListOrgPostsQueryKey(opts.orgId),
           refetchType: "all",
         }),
       );
@@ -171,14 +189,34 @@ export function useNewPostForm({
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   };
 
-  const buildPatchBody = () =>
-    JSON.stringify({
+  // PATCH /posts/:postId body — kind-aware shapes match each PATCH
+  // handler in routes/drafts.ts. `null` means draft article.
+  const buildPatchBody = () => {
+    if (loadedKind === "highlight") {
+      return JSON.stringify({
+        title: title.trim() || "Untitled",
+        description: body,
+        videoUrl: videoUrl || null,
+        thumbnailUrl: photos[0] ?? null,
+      });
+    }
+    if (loadedKind === "org_post") {
+      return JSON.stringify({
+        title: title.trim() || "Untitled",
+        body,
+        videoUrl: videoUrl || null,
+        photoUrls: photos,
+        coverImageUrl: photos[0] ?? null,
+      });
+    }
+    return JSON.stringify({
       title: title.trim() || "Untitled",
       body,
       videoUrl: videoUrl || null,
       photoUrls: photos,
       gameDate: gameDateForApi(),
     });
+  };
 
   // Load existing draft OR existing published post (when editing).
   // Both paths read the same /posts/:id payload — the only divergence
@@ -188,8 +226,22 @@ export function useNewPostForm({
     if (!loadId) return;
     customFetch<DraftPayload>(`/api/v1/posts/${loadId}`, { method: "GET" })
       .then((d) => {
+        // Discriminate the loaded post by its prefixed id.
+        const kind: "article" | "highlight" | "org_post" =
+          d.id.startsWith("highlight-")
+            ? "highlight"
+            : d.id.startsWith("orgpost-")
+              ? "org_post"
+              : "article";
+        setLoadedKind(kind);
         setTitle(d.title ?? "");
-        setBody(d.body ?? "");
+        // Reuse the body input for highlight `description` so the
+        // form stays a single text field.
+        setBody(
+          kind === "highlight"
+            ? (d.description ?? "")
+            : (d.body ?? ""),
+        );
         // Pull photos and the video link from `assets` first — that's
         // what the published-post response actually carries — and fall
         // back to the flat fields if the endpoint ever ships them.
@@ -232,15 +284,21 @@ export function useNewPostForm({
         // the coach has to explicitly opt back in (otherwise auto-
         // saving / re-submitting would silently fan out tags).
         setTagRoster(hasDate);
-        setPostType("long");
-        // Remember who owns the post and which team (if any) it
+        // Sync the post-type toggle to the loaded post.
+        setPostType(kind === "highlight" ? "short" : "long");
+        // Remember who owns the post and which team or org it
         // belongs to. The submit handler uses these to refresh the
-        // right user-posts / team-posts lists after saving, and the
-        // Delete flow reuses them to invalidate the same lists and
-        // pick a sensible post-delete destination.
+        // right user-posts / team-posts / org-posts lists after
+        // saving, and the Delete flow reuses them to invalidate the
+        // same lists and pick a sensible post-delete destination.
         setLoadedAuthorId(d.author?.id ?? null);
         setLoadedTeamId(
           d.context?.type === "team" && d.context.id ? d.context.id : null,
+        );
+        setLoadedOrgId(
+          d.context?.type === "organization" && d.context.id
+            ? d.context.id
+            : null,
         );
         // Per-viewer flag from GET /posts/:id — only meaningful on
         // the editId path (already-published article). Drafts won't
@@ -329,19 +387,21 @@ export function useNewPostForm({
     }
     try {
       if (isEditingPublished && editId) {
-        // Editing an already-published recap: PATCH only — do NOT
-        // re-call /publish. The PATCH handler reacts to a gameDate
-        // transition (null <-> non-null) by running or unwinding
-        // the auto-tag fan-out, which is the whole reason this
-        // path exists.
+        // Editing an already-published post: PATCH only — do NOT
+        // re-call /publish. For articles the PATCH handler reacts to
+        // a gameDate transition (null <-> non-null) by running or
+        // unwinding the auto-tag fan-out; highlights and Updates
+        // simply mutate their own row in place.
         await patchAt(editId);
         // Refresh the home feed plus the author's profile posts and
-        // (when the post belongs to a team) the team's posts list,
-        // so the destination page renders the updated post on first
-        // paint. Awaited before navigating to avoid a stale flash.
+        // (depending on the post's scope) the owning team's or org's
+        // posts list, so the destination page renders the updated
+        // post on first paint. Awaited before navigating to avoid a
+        // stale flash.
         await invalidateAffectedLists({
           authorId: loadedAuthorId,
           teamId: loadedTeamId,
+          orgId: loadedOrgId,
         });
         // Drop the cached single-post detail so a navigation back to
         // /posts/:id refetches the freshly-edited title/body/photos.
@@ -382,6 +442,10 @@ export function useNewPostForm({
             result.context?.type === "team" && result.context.id
               ? result.context.id
               : initialTeamId,
+          orgId:
+            result.context?.type === "organization" && result.context.id
+              ? result.context.id
+              : null,
         });
         toast({ title: "Posted!" });
         setLocation(
@@ -437,16 +501,27 @@ export function useNewPostForm({
       await deletePost.mutateAsync({ postId: editId });
       setConfirmDeleteOpen(false);
       // Same lists the save flow refreshes — feed, the original
-      // author's profile-posts, and (when team-scoped) the team's
-      // posts — so the destination page renders without the
-      // just-deleted post on first paint.
+      // author's profile-posts, and the owning team's or org's posts
+      // (whichever scope the post belonged to) — so the destination
+      // page renders without the just-deleted post on first paint.
       await invalidateAffectedLists({
         authorId: loadedAuthorId,
         teamId: loadedTeamId,
+        orgId: loadedOrgId,
       });
       qc.removeQueries({ queryKey: ["post", editId] });
       toast({ title: "Post deleted" });
-      setLocation(loadedTeamId ? `/teams/${loadedTeamId}` : "/");
+      // Land somewhere sensible: team-scoped highlights / articles
+      // bounce back to the team page, org Updates bounce back to
+      // the org page, and anything else falls through to the home
+      // feed.
+      setLocation(
+        loadedTeamId
+          ? `/teams/${loadedTeamId}`
+          : loadedOrgId
+            ? `/organizations/${loadedOrgId}`
+            : "/",
+      );
     } catch {
       toast({
         title: "Couldn't delete post",
@@ -473,6 +548,11 @@ export function useNewPostForm({
     savedAt,
     saving,
     isShort,
+    // Surfaced so the composer can hide article-only fields
+    // (gameDate, tagRoster, the org-on-behalf-of selector, the
+    // post-type toggle) when the loaded post is a highlight or a
+    // standalone org Update. `null` for brand-new composer sessions.
+    loadedKind,
     publishing: createPost.isPending,
     // delete-from-editor surface
     canDelete,

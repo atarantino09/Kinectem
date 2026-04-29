@@ -35,6 +35,9 @@ interface PostFormFieldsProps {
   draftId: string | null;
   lockedToTeam: boolean;
   isEditingPublished: boolean;
+  // Loaded post kind (edit path only). Drives field visibility for
+  // highlight / org_post; null falls back to the article composer.
+  loadedKind?: "article" | "highlight" | "org_post" | null;
   // True only when the viewer is the original author of the loaded
   // article. Used here to suppress the "only the original author can
   // delete" disclaimer for the original author themselves (they have
@@ -68,6 +71,7 @@ export function PostFormFields({
   draftId,
   lockedToTeam,
   isEditingPublished,
+  loadedKind = null,
   canDelete = false,
   saving,
   publishing,
@@ -75,6 +79,9 @@ export function PostFormFields({
   onSubmit,
 }: PostFormFieldsProps) {
   const isShort = postType === "short";
+  // Org Updates use the long form but hide gameDate / tagRoster /
+  // on-behalf-of (which only apply to recap articles).
+  const isOrgPost = loadedKind === "org_post";
   return (
     <form id="new-post-form" onSubmit={onSubmit} className="space-y-5">
       {isEditingPublished && !canDelete && (
@@ -90,12 +97,13 @@ export function PostFormFields({
         >
           <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
           <p className="text-xs text-muted-foreground font-medium">
-            Only the original author can delete a post. Co-authors and
-            coaches can still edit it here.
+            Only the original author can delete a post. Co-authors,
+            coaches, and organization admins can still edit it here.
           </p>
         </div>
       )}
-      {!draftId && !lockedToTeam && (
+      {!draftId && !lockedToTeam && !isEditingPublished && (
+        // Post-type toggle: only when starting from a blank composer.
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
             Post Type
@@ -149,7 +157,7 @@ export function PostFormFields({
         />
       </div>
 
-      {!isShort && (
+      {!isShort && !isOrgPost && (
         <div>
           <Label
             htmlFor="game-date"
@@ -175,24 +183,31 @@ export function PostFormFields({
         </div>
       )}
 
-      {!isShort && (
-        <div>
-          <Label
-            htmlFor="body"
-            className="text-xs font-black uppercase tracking-widest text-muted-foreground"
-          >
-            Recap
-          </Label>
-          <Textarea
-            id="body"
-            value={body}
-            onChange={(e) => onBodyChange(e.target.value)}
-            placeholder="Tell the story of the game..."
-            className="mt-2 min-h-[260px]"
-            data-testid="input-body"
-          />
-        </div>
-      )}
+      <div>
+        <Label
+          htmlFor="body"
+          className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+        >
+          {/* Same input is reused across all three post kinds:
+              recap "Recap", highlight "Description", org "Update". */}
+          {isShort ? "Description" : isOrgPost ? "Update" : "Recap"}
+        </Label>
+        <Textarea
+          id="body"
+          value={body}
+          onChange={(e) => onBodyChange(e.target.value)}
+          placeholder={
+            isShort
+              ? "Add a caption for this clip…"
+              : isOrgPost
+                ? "Share an update with the organization…"
+                : "Tell the story of the game…"
+          }
+          className={`mt-2 ${isShort ? "min-h-[120px]" : "min-h-[260px]"}`}
+          data-testid="input-body"
+        />
+      </div>
+
 
       <MediaSection
         photos={photos}
@@ -201,7 +216,7 @@ export function PostFormFields({
         onVideoUrlChange={onVideoUrlChange}
       />
 
-      {!draftId && !lockedToTeam && myOrgs && myOrgs.data.length > 0 && (
+      {!draftId && !lockedToTeam && !isOrgPost && myOrgs && myOrgs.data.length > 0 && (
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
             Post On Behalf Of
@@ -221,7 +236,7 @@ export function PostFormFields({
         </div>
       )}
 
-      {!isShort && (
+      {!isShort && !isOrgPost && (
         <div className="pt-4 border-t border-border">
           <label
             htmlFor="tag-roster"

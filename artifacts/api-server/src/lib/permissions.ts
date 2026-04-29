@@ -153,6 +153,30 @@ export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
   return Boolean(rosterRow);
 }
 
+// Batched "which of these orgs does the viewer have manage rights on?"
+// lookup. List endpoints that need to know whether the viewer can edit
+// each org's posts (e.g. Updates / org_post canEdit) call this once
+// with every org id in the response and check membership per row.
+// Returns an empty set for an anonymous viewer.
+export async function loadAdminOrgIds(
+  viewerId: string | null,
+  orgIds: string[],
+): Promise<Set<string>> {
+  if (!viewerId || orgIds.length === 0) return new Set();
+  const unique = Array.from(new Set(orgIds));
+  const rows = await db
+    .select({ orgId: organizationAdmins.organizationId })
+    .from(organizationAdmins)
+    .where(
+      and(
+        eq(organizationAdmins.userId, viewerId),
+        inArray(organizationAdmins.organizationId, unique),
+        inArray(organizationAdmins.role, [...MANAGE_ROLES]),
+      ),
+    );
+  return new Set(rows.map((r) => r.orgId));
+}
+
 // Batched "can the viewer edit this article?" check for list endpoints.
 //
 // The single-post GET handler computes the same author / co-author /

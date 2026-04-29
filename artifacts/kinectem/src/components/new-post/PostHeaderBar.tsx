@@ -5,6 +5,10 @@ import type { LucideIcon } from "lucide-react";
 interface PostHeaderBarProps {
   Icon: LucideIcon;
   heading: string;
+  // Centered "Editing X" label override — when set, takes priority
+  // over the legacy `isEditingPublished ? "Editing Recap" : ...`
+  // fallback so highlights and org Updates surface their own labels.
+  editingLabel?: string;
   isShort: boolean;
   isEditingPublished: boolean;
   draftId: string | null;
@@ -14,10 +18,11 @@ interface PostHeaderBarProps {
   onCancel: () => void;
   onSaveDraft: () => void;
   // Optional delete affordance — rendered only when the parent
-  // determines the viewer is the original author of an already-
-  // published article (drafts, brand-new posts, highlights, and
-  // co-authors / coaches / org admins all leave this undefined so
-  // the button never appears).
+  // determines the viewer is allowed to delete the loaded post.
+  // Permissions are decided server-side and surfaced via canDelete:
+  // recap article = original author only; highlight = uploader only;
+  // org Update = author only. Drafts and brand-new posts leave this
+  // undefined so the button never appears.
   canDelete?: boolean;
   onRequestDelete?: () => void;
 }
@@ -25,6 +30,7 @@ interface PostHeaderBarProps {
 export function PostHeaderBar({
   Icon,
   heading,
+  editingLabel,
   isShort,
   isEditingPublished,
   draftId,
@@ -37,12 +43,13 @@ export function PostHeaderBar({
   onRequestDelete,
 }: PostHeaderBarProps) {
   // Only surface the Delete affordance when the viewer is editing an
-  // already-published article AND the server marked them as the
-  // original author. Keeping this check inline (rather than at the
-  // call site) means the header bar stays the single source of truth
-  // for the rule.
+  // already-published post AND the server marked them as eligible to
+  // delete it. Keeping this check inline (rather than at the call
+  // site) means the header bar stays the single source of truth for
+  // the rule. Highlights and org Updates also flow through here now —
+  // permissions are decided server-side via canDelete.
   const showDelete =
-    isEditingPublished && !isShort && canDelete && !!onRequestDelete;
+    isEditingPublished && canDelete && !!onRequestDelete;
   return (
     <header className="border-b border-border bg-card">
       <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
@@ -57,7 +64,7 @@ export function PostHeaderBar({
         <div className="flex items-center gap-2 text-sm font-bold">
           <Icon className="w-4 h-4" />
           {isEditingPublished
-            ? "Editing Recap"
+            ? (editingLabel ?? "Editing Recap")
             : draftId
               ? "Editing Draft"
               : heading}

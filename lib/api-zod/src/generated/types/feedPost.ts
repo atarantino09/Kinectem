@@ -126,18 +126,23 @@ and highlights; only org posts are not shareable.
    */
   gameDate?: Date | null;
   /** True when the requesting user is allowed to edit this
-post (author, co-author, or admin of the team's org).
-Drives the "Edit post" item in the post 3-dot menu.
-Always false for non-article post types since the
-composer only edits articles.
+post. Rules per kind:
+  - article (game recap): author, co-author, or admin
+    of the team's organization.
+  - highlight: original uploader only.
+  - org_post (Update): original author or admin of the
+    post's organization.
+Drives the "Edit" affordance on the post page.
  */
   canEdit?: boolean;
-  /** True when the requesting user is the original author of
-this post (and only the original author — co-authors,
-coaches, and org admins do not get delete access even
-when `canEdit` is true). Drives the "Delete post" item
-in the post 3-dot menu. Always false for non-article
-post types since the composer only deletes articles.
+  /** True when the requesting user is allowed to delete this
+post. Rules per kind:
+  - article (game recap): the original author only —
+    co-authors, coaches, and org admins do NOT get
+    delete access even when `canEdit` is true.
+  - highlight: the original uploader only.
+  - org_post (Update): the original author only.
+Drives the "Delete" affordance on the post page.
  */
   canDelete?: boolean;
 }

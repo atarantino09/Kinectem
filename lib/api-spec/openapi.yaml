@@ -7195,6 +7195,10 @@ components:
           type: string
           maxLength: 50000
           nullable: true
+          description: |
+            Caption / summary text. For highlights this maps to the
+            short-form description; for game-recap articles it maps
+            to the article summary. Ignored for org posts (use `body`).
         body:
           type: string
           maxLength: 50000
@@ -7205,6 +7209,34 @@ components:
             type: string
             format: uuid
           maxItems: 10
+        photoUrls:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+          description: |
+            Inline photo URLs (data: URLs or remote links). Used for
+            game-recap articles and Updates (org posts). Ignored for
+            highlights. Capped at 10 to mirror the create endpoints.
+        videoUrl:
+          type: string
+          nullable: true
+          description: |
+            External video link (e.g. YouTube). Editable on every
+            post kind. Pass null or empty to clear.
+        coverImageUrl:
+          type: string
+          nullable: true
+          description: |
+            Article / org post cover image URL. Defaults to
+            `photoUrls[0]` when `photoUrls` is provided and this
+            field isn't.
+        thumbnailUrl:
+          type: string
+          nullable: true
+          description: |
+            Highlight thumbnail URL. Only meaningful when editing a
+            highlight; ignored for other post kinds.
         gameDate:
           type: string
           format: date-time
@@ -8725,19 +8757,24 @@ components:
           type: boolean
           description: |
             True when the requesting user is allowed to edit this
-            post (author, co-author, or admin of the team's org).
-            Drives the "Edit post" item in the post 3-dot menu.
-            Always false for non-article post types since the
-            composer only edits articles.
+            post. Rules per kind:
+              - article (game recap): author, co-author, or admin
+                of the team's organization.
+              - highlight: original uploader only.
+              - org_post (Update): original author or admin of the
+                post's organization.
+            Drives the "Edit" affordance on the post page.
         canDelete:
           type: boolean
           description: |
-            True when the requesting user is the original author of
-            this post (and only the original author — co-authors,
-            coaches, and org admins do not get delete access even
-            when `canEdit` is true). Drives the "Delete post" item
-            in the post 3-dot menu. Always false for non-article
-            post types since the composer only deletes articles.
+            True when the requesting user is allowed to delete this
+            post. Rules per kind:
+              - article (game recap): the original author only —
+                co-authors, coaches, and org admins do NOT get
+                delete access even when `canEdit` is true.
+              - highlight: the original uploader only.
+              - org_post (Update): the original author only.
+            Drives the "Delete" affordance on the post page.
 
     FeedResponse:
       type: object

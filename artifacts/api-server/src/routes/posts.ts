@@ -40,6 +40,7 @@ import {
   canManageOrganization,
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
+  loadAdminOrgIds,
 } from "../lib/permissions";
 import {
   createSession,
@@ -168,6 +169,8 @@ router.get(
             team: r.team,
             org: r.org,
             author: r.uploader,
+            canEdit: true,
+            canDelete: true,
             ...statsFor(stats, "highlight", r.h.id),
             ...shareStatsFor(shareStats, "highlight", r.h.id),
           }),
@@ -349,11 +352,20 @@ router.get(
         orgId: r.org.id,
       })),
     ];
-    const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
+    // Batched org-admin lookup for `canEdit` on org_post rows.
+    const feedOrgIds = [
+      ...arts.map((r) => r.org.id),
+      ...hls.map((r) => r.org.id),
+      ...orgPostRows.map((r) => r.org.id),
+      ...sharedArticleRows.map((r) => r.org.id),
+      ...sharedHighlightRows.map((r) => r.org.id),
+    ];
+    const [stats, shareStats, canEditMap, authorRoleMap, adminOrgIds] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
       computeArticleCanEditMap(me?.id ?? null, articleEditRows),
       computeArticleAuthorRoleMap(articleRoleRows),
+      loadAdminOrgIds(me?.id ?? null, feedOrgIds),
     ]);
 
     const seenIds = new Set<string>([
@@ -373,22 +385,29 @@ router.get(
           ...shareStatsFor(shareStats, "article", r.a.id),
         }),
       ),
-      ...hls.map((r) =>
-        highlightToPost(r.h, {
+      ...hls.map((r) => {
+        const isUploader = !!me && r.h.uploaderId === me.id;
+        return highlightToPost(r.h, {
           team: r.team,
           org: r.org,
           author: r.uploader,
+          canEdit: isUploader,
+          canDelete: isUploader,
           ...statsFor(stats, "highlight", r.h.id),
           ...shareStatsFor(shareStats, "highlight", r.h.id),
-        }),
-      ),
-      ...orgPostRows.map((r) =>
-        orgPostToPost(r.p, {
+        });
+      }),
+      ...orgPostRows.map((r) => {
+        const isAuthor = !!me && r.p.authorId === me.id;
+        const isOrgAdmin = adminOrgIds.has(r.org.id);
+        return orgPostToPost(r.p, {
           org: r.org,
           author: r.author,
+          canEdit: isAuthor || isOrgAdmin,
+          canDelete: isAuthor,
           ...statsFor(stats, "org_post", r.p.id),
-        }),
-      ),
+        });
+      }),
     ];
 
     for (const sr of shareRows) {
@@ -416,11 +435,14 @@ router.get(
       } else if (sr.s.postKind === "highlight") {
         const row = sharedHighlightById.get(sr.s.postRefId);
         if (!row) continue;
+        const isUploader = !!me && row.h.uploaderId === me.id;
         items.push(
           highlightToPost(row.h, {
             team: row.team,
             org: row.org,
             author: row.uploader,
+            canEdit: isUploader,
+            canDelete: isUploader,
             ...statsFor(stats, "highlight", row.h.id),
             ...shareStatsFor(shareStats, "highlight", row.h.id),
             sharedBy,
@@ -650,11 +672,15 @@ router.get(
         .limit(1);
       if (!row) return notFound(res);
       if (row.p.hiddenAt && !isAdmin) return notFound(res);
-      if (row.p.status !== "published") {
-        const isAuthor = !!me && row.p.authorId === me.id;
-        const isOrgAdmin = !!me && (await canManageOrganization(me.id, row.org.id));
-        if (!isAuthor && !isOrgAdmin) return notFound(res);
+      const isAuthor = !!me && row.p.authorId === me.id;
+      const isOrgAdmin =
+        !!me && (await canManageOrganization(me.id, row.org.id));
+      if (row.p.status !== "published" && !isAuthor && !isOrgAdmin) {
+        return notFound(res);
       }
+      // Author or org admin can edit; only the author can delete.
+      const canEdit = isAuthor || isOrgAdmin;
+      const canDelete = isAuthor;
       const stats = await loadPostStats(me?.id ?? null, [
         { kind: "org_post", refId: row.p.id },
       ]);
@@ -662,6 +688,8 @@ router.get(
         orgPostToPost(row.p, {
           org: row.org,
           author: row.author,
+          canEdit,
+          canDelete,
           ...statsFor(stats, "org_post", row.p.id),
         }),
       );
@@ -677,6 +705,8 @@ router.get(
       .limit(1);
     if (!row) return notFound(res);
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
+    // Uploader-only edit + delete on highlights.
+    const isUploader = !!me && row.h.uploaderId === me.id;
     const [stats, shareStats] = await Promise.all([
       loadPostStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
       loadPostShareStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
@@ -686,6 +716,8 @@ router.get(
         team: row.team,
         org: row.org,
         author: row.uploader,
+        canEdit: isUploader,
+        canDelete: isUploader,
         ...statsFor(stats, "highlight", row.h.id),
         ...shareStatsFor(shareStats, "highlight", row.h.id),
       }),
@@ -693,28 +725,56 @@ router.get(
   }),
 );
 
-// DELETE /posts/:postId — author-initiated post deletion.
-//
-// Authorization is intentionally narrower than the PATCH/edit handler:
-// only the ORIGINAL author of the post can delete it. Co-authors,
-// team coaches, and org admins (who can still edit via PATCH) get a
-// 403 here. The OpenAPI summary describes this as a soft-delete and
-// we follow the existing admin "hide" flow — flipping `hiddenAt` is
-// what every feed/profile/team query already filters on, so the post
-// disappears everywhere it would have been listed without us having
-// to walk the polymorphic comment / reaction / share tables.
-//
-// Short-form (highlight) and org posts are not deletable through this
-// endpoint — only the recap composer surfaces the "Delete post" UI
-// today, which matches `canDelete` being false on those post types.
+// DELETE /posts/:postId — soft-delete via `hiddenAt`.
+// Author-only (article / org_post) or uploader-only (highlight); org
+// admins keep PATCH access but never get the delete affordance.
 router.delete(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
-    if (!parsed || parsed.kind !== "article")
-      return apiError(res, 403, "Only the original author can delete a post");
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "highlight") {
+      const [h] = await db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.id, parsed.id))
+        .limit(1);
+      if (!h) return notFound(res);
+      if (h.uploaderId !== me.id)
+        return apiError(
+          res,
+          403,
+          "Only the original uploader can delete a highlight",
+        );
+      if (h.hiddenAt) return res.status(204).end();
+      await db
+        .update(highlights)
+        .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+        .where(eq(highlights.id, h.id));
+      return res.status(204).end();
+    }
+    if (parsed.kind === "org_post") {
+      const [p] = await db
+        .select()
+        .from(orgPosts)
+        .where(eq(orgPosts.id, parsed.id))
+        .limit(1);
+      if (!p) return notFound(res);
+      if (p.authorId !== me.id)
+        return apiError(
+          res,
+          403,
+          "Only the original author can delete a post",
+        );
+      if (p.hiddenAt) return res.status(204).end();
+      await db
+        .update(orgPosts)
+        .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+        .where(eq(orgPosts.id, p.id));
+      return res.status(204).end();
+    }
     const [a] = await db
       .select()
       .from(articles)

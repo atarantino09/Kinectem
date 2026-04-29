@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
   users,
@@ -7,6 +7,8 @@ import {
   articles,
   articleAuthors,
   articleTags,
+  highlights,
+  orgPosts,
   notifications,
 } from "@workspace/db";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -28,6 +30,8 @@ import {
 import {
   articleToPost,
   articlePostId,
+  highlightToPost,
+  orgPostToPost,
   paginate,
   parsePostId,
   apiError,
@@ -96,13 +100,164 @@ router.get(
   }),
 );
 
+// PATCH /posts/:postId for highlights — uploader-only, returns the
+// same `PostResponse` shape as GET /posts/:postId.
+async function patchHighlight(
+  req: Request,
+  res: Response,
+  me: NonNullable<Request["sessionUser"]>,
+  highlightId: string,
+) {
+  const [h] = await db
+    .select()
+    .from(highlights)
+    .where(eq(highlights.id, highlightId))
+    .limit(1);
+  if (!h) return notFound(res);
+  if (h.hiddenAt) return notFound(res);
+  if (h.uploaderId !== me.id) return apiError(res, 403, "Not the uploader");
+  const body = req.body ?? {};
+  const updates: Record<string, unknown> = {};
+  if (typeof body.title === "string") {
+    const next = body.title.trim();
+    if (next.length === 0)
+      return apiError(res, 400, "title is required");
+    if (next.length > 200)
+      return apiError(res, 400, "title is too long");
+    updates["title"] = next;
+  }
+  if (typeof body.description === "string" || body.description === null) {
+    if (typeof body.description === "string" && body.description.length > 50000)
+      return apiError(res, 400, "description is too long");
+    updates["description"] = body.description ?? null;
+  }
+  if (typeof body.videoUrl === "string" || body.videoUrl === null) {
+    updates["videoUrl"] = body.videoUrl ?? "";
+  }
+  if (typeof body.thumbnailUrl === "string" || body.thumbnailUrl === null) {
+    updates["thumbnailUrl"] = body.thumbnailUrl ?? null;
+  }
+  if (Object.keys(updates).length === 0)
+    return apiError(res, 400, "no changes");
+  const [updated] = await db
+    .update(highlights)
+    .set(updates)
+    .where(eq(highlights.id, h.id))
+    .returning();
+  const [team] = await db
+    .select()
+    .from(teams)
+    .where(eq(teams.id, updated.teamId))
+    .limit(1);
+  const [org] = team
+    ? await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, team.organizationId))
+        .limit(1)
+    : [null];
+  if (!team || !org) return notFound(res);
+  return res.json(
+    highlightToPost(updated, {
+      team,
+      org,
+      author: me,
+      canEdit: true,
+      canDelete: true,
+    }),
+  );
+}
+
+// PATCH /posts/:postId for org-level Updates — author or org admin
+// can edit; only the author can delete (enforced by DELETE).
+async function patchOrgPost(
+  req: Request,
+  res: Response,
+  me: NonNullable<Request["sessionUser"]>,
+  orgPostId: string,
+) {
+  const [p] = await db
+    .select()
+    .from(orgPosts)
+    .where(eq(orgPosts.id, orgPostId))
+    .limit(1);
+  if (!p) return notFound(res);
+  if (p.hiddenAt) return notFound(res);
+  const isAuthor = p.authorId === me.id;
+  const isOrgAdmin = isAuthor
+    ? false
+    : await canManageOrganization(me.id, p.organizationId);
+  if (!isAuthor && !isOrgAdmin) return apiError(res, 403, "Not an author");
+  const body = req.body ?? {};
+  const updates: Record<string, unknown> = {};
+  if (typeof body.title === "string") {
+    const next = body.title.trim();
+    if (next.length === 0)
+      return apiError(res, 400, "title is required");
+    if (next.length > 200)
+      return apiError(res, 400, "title is too long");
+    updates["title"] = next;
+  }
+  if (typeof body.body === "string" || body.body === null) {
+    if (typeof body.body === "string" && body.body.length > 50000)
+      return apiError(res, 400, "body is too long");
+    // org_posts.body is non-nullable; normalize null → empty string.
+    updates["body"] = body.body ?? "";
+  }
+  if (Array.isArray(body.photoUrls)) {
+    const arr = body.photoUrls.filter((u: unknown) => typeof u === "string");
+    if (arr.length > 10) return apiError(res, 400, "too many photos");
+    updates["photoUrls"] = arr.length > 0 ? arr : null;
+    if (!("coverImageUrl" in body)) {
+      updates["coverImageUrl"] = arr[0] ?? null;
+    }
+  }
+  if (typeof body.coverImageUrl === "string" || body.coverImageUrl === null) {
+    updates["coverImageUrl"] = body.coverImageUrl ?? null;
+  }
+  if (typeof body.videoUrl === "string" || body.videoUrl === null) {
+    updates["videoUrl"] = body.videoUrl ?? null;
+  }
+  if (Object.keys(updates).length === 0)
+    return apiError(res, 400, "no changes");
+  updates["updatedAt"] = new Date();
+  const [updated] = await db
+    .update(orgPosts)
+    .set(updates)
+    .where(eq(orgPosts.id, p.id))
+    .returning();
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, updated.organizationId))
+    .limit(1);
+  const [author] = updated.authorId
+    ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
+    : [null];
+  if (!org) return notFound(res);
+  return res.json(
+    orgPostToPost(updated, {
+      org,
+      author,
+      canEdit: true,
+      canDelete: updated.authorId === me.id,
+    }),
+  );
+}
+
 router.patch(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
-    if (!parsed || parsed.kind !== "article") return notFound(res);
+    if (!parsed) return notFound(res);
+    if (parsed.kind === "highlight") {
+      return patchHighlight(req, res, me, parsed.id);
+    }
+    if (parsed.kind === "org_post") {
+      return patchOrgPost(req, res, me, parsed.id);
+    }
     const [a] = await db
       .select()
       .from(articles)

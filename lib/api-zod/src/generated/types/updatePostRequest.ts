@@ -73,6 +73,10 @@ export interface UpdatePostRequest {
    */
   title?: string | null;
   /**
+   * Caption / summary text. For highlights this maps to the
+short-form description; for game-recap articles it maps
+to the article summary. Ignored for org posts (use `body`).
+
    * @maxLength 50000
    * @nullable
    */
@@ -84,6 +88,36 @@ export interface UpdatePostRequest {
   body?: string | null;
   /** @maxItems 10 */
   assetIds?: string[];
+  /**
+   * Inline photo URLs (data: URLs or remote links). Used for
+game-recap articles and Updates (org posts). Ignored for
+highlights. Capped at 10 to mirror the create endpoints.
+
+   * @maxItems 10
+   */
+  photoUrls?: string[];
+  /**
+   * External video link (e.g. YouTube). Editable on every
+post kind. Pass null or empty to clear.
+
+   * @nullable
+   */
+  videoUrl?: string | null;
+  /**
+   * Article / org post cover image URL. Defaults to
+`photoUrls[0]` when `photoUrls` is provided and this
+field isn't.
+
+   * @nullable
+   */
+  coverImageUrl?: string | null;
+  /**
+   * Highlight thumbnail URL. Only meaningful when editing a
+highlight; ignored for other post kinds.
+
+   * @nullable
+   */
+  thumbnailUrl?: string | null;
   /**
    * For long-form posts. Pass an ISO datetime to mark the
 article as a game recap (or update the recap's date);

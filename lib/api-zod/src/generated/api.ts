@@ -1619,14 +1619,47 @@ export const updatePostBodyBodyMax = 50000;
 
 export const updatePostBodyAssetIdsMax = 10;
 
+export const updatePostBodyPhotoUrlsMax = 10;
+
 export const UpdatePostBody = zod.object({
   title: zod.string().max(updatePostBodyTitleMax).nullish(),
-  description: zod.string().max(updatePostBodyDescriptionMax).nullish(),
+  description: zod
+    .string()
+    .max(updatePostBodyDescriptionMax)
+    .nullish()
+    .describe(
+      "Caption \/ summary text. For highlights this maps to the\nshort-form description; for game-recap articles it maps\nto the article summary. Ignored for org posts (use `body`).\n",
+    ),
   body: zod.string().max(updatePostBodyBodyMax).nullish(),
   assetIds: zod
     .array(zod.string().uuid())
     .max(updatePostBodyAssetIdsMax)
     .optional(),
+  photoUrls: zod
+    .array(zod.string())
+    .max(updatePostBodyPhotoUrlsMax)
+    .optional()
+    .describe(
+      "Inline photo URLs (data: URLs or remote links). Used for\ngame-recap articles and Updates (org posts). Ignored for\nhighlights. Capped at 10 to mirror the create endpoints.\n",
+    ),
+  videoUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "External video link (e.g. YouTube). Editable on every\npost kind. Pass null or empty to clear.\n",
+    ),
+  coverImageUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Article \/ org post cover image URL. Defaults to\n`photoUrls[0]` when `photoUrls` is provided and this\nfield isn't.\n",
+    ),
+  thumbnailUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Highlight thumbnail URL. Only meaningful when editing a\nhighlight; ignored for other post kinds.\n",
+    ),
   gameDate: zod.coerce
     .date()
     .nullish()
@@ -4121,13 +4154,13 @@ export const ListFeedResponse = zod.object({
         .boolean()
         .optional()
         .describe(
-          'True when the requesting user is allowed to edit this\npost (author, co-author, or admin of the team\'s org).\nDrives the \"Edit post\" item in the post 3-dot menu.\nAlways false for non-article post types since the\ncomposer only edits articles.\n',
+          "True when the requesting user is allowed to edit this\npost. Rules per kind:\n  - article (game recap): author, co-author, or admin\n    of the team's organization.\n  - highlight: original uploader only.\n  - org_post (Update): original author or admin of the\n    post's organization.\nDrives the \"Edit\" affordance on the post page.\n",
         ),
       canDelete: zod
         .boolean()
         .optional()
         .describe(
-          'True when the requesting user is the original author of\nthis post (and only the original author — co-authors,\ncoaches, and org admins do not get delete access even\nwhen `canEdit` is true). Drives the \"Delete post\" item\nin the post 3-dot menu. Always false for non-article\npost types since the composer only deletes articles.\n',
+          'True when the requesting user is allowed to delete this\npost. Rules per kind:\n  - article (game recap): the original author only —\n    co-authors, coaches, and org admins do NOT get\n    delete access even when `canEdit` is true.\n  - highlight: the original uploader only.\n  - org_post (Update): the original author only.\nDrives the \"Delete\" affordance on the post page.\n',
         ),
     }),
   ),

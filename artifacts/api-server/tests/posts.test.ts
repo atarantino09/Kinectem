@@ -974,11 +974,142 @@ describe("posts", () => {
     expect(adminDetail.body.canDelete).toBe(false);
   });
 
-  it("DELETE /posts/:postId rejects non-article kinds with 403", async () => {
+  it("DELETE /posts/:postId returns 404 for a missing highlight (post #296)", async () => {
     const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
     const fakeShortId = "highlight-00000000-0000-0000-0000-000000000000";
     const res = await agent.delete(`/api/v1/posts/${fakeShortId}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /posts/:postId hides a highlight from the team-page list (post #296)", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+    const before = await agent.get(`/api/v1/teams/${team.id}/posts`);
+    const hl = before.body.data.find((p: { id: string }) => p.id.startsWith("highlight-"));
+    expect(hl).toBeTruthy();
+    const del = await agent.delete(`/api/v1/posts/${hl.id}`);
+    expect(del.status).toBe(204);
+    const after = await agent.get(`/api/v1/teams/${team.id}/posts`);
+    expect(after.body.data.find((p: { id: string }) => p.id === hl.id)).toBeUndefined();
+  });
+
+  it("GET /posts/:postId surfaces the canEdit/canDelete matrix for org_post (post #296)", async () => {
+    const { agent: coachAgent } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { org } = await getOrgAndTeam();
+    const create = await coachAgent.post(`/api/v1/organizations/${org.id}/posts`).send({
+      title: "Matrix subject",
+      body: "Body",
+    });
+    expect(create.status).toBe(201);
+    const orgPostId: string = create.body.id;
+
+    // Author: can edit AND delete.
+    const asAuthor = await coachAgent.get(`/api/v1/posts/${orgPostId}`);
+    expect(asAuthor.status).toBe(200);
+    expect(asAuthor.body.canEdit).toBe(true);
+    expect(asAuthor.body.canDelete).toBe(true);
+
+    // Org admin: can edit, cannot delete.
+    const { agent: adminAgent } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    const asAdmin = await adminAgent.get(`/api/v1/posts/${orgPostId}`);
+    expect(asAdmin.status).toBe(200);
+    expect(asAdmin.body.canEdit).toBe(true);
+    expect(asAdmin.body.canDelete).toBe(false);
+
+    // Non-admin viewer: cannot edit, cannot delete.
+    const { agent: viewerAgent } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const asViewer = await viewerAgent.get(`/api/v1/posts/${orgPostId}`);
+    expect(asViewer.status).toBe(200);
+    expect(asViewer.body.canEdit).toBe(false);
+    expect(asViewer.body.canDelete).toBe(false);
+  });
+
+  it("DELETE /posts/:postId on an already-hidden highlight stays idempotent (post #296)", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+    const list = await agent.get(`/api/v1/teams/${team.id}/posts`);
+    const hl = list.body.data.find((p: { id: string }) =>
+      p.id.startsWith("highlight-"),
+    );
+    expect(hl).toBeTruthy();
+
+    const first = await agent.delete(`/api/v1/posts/${hl.id}`);
+    expect(first.status).toBe(204);
+    const second = await agent.delete(`/api/v1/posts/${hl.id}`);
+    expect(second.status).toBe(204);
+  });
+
+  it("PATCH /posts/:postId rejects a non-uploader editing a highlight (post #296)", async () => {
+    const { agent: coachAgent } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { team } = await getOrgAndTeam();
+    const list = await coachAgent.get(`/api/v1/teams/${team.id}/posts`);
+    const hl = list.body.data.find((p: { id: string }) =>
+      p.id.startsWith("highlight-"),
+    );
+    expect(hl).toBeTruthy();
+
+    const { agent: parentAgent } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const res = await parentAgent
+      .patch(`/api/v1/posts/${hl.id}`)
+      .send({ title: "Tampered" });
     expect(res.status).toBe(403);
+  });
+
+  it("PATCH /posts/:postId lets the org admin edit an org_post but not delete it (post #296)", async () => {
+    const { agent: coachAgent } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { org } = await getOrgAndTeam();
+    const create = await coachAgent.post(`/api/v1/organizations/${org.id}/posts`).send({
+      title: "Original",
+      body: "Body",
+    });
+    expect(create.status).toBe(201);
+    const orgPostId: string = create.body.id;
+
+    const { agent: adminAgent } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    const patch = await adminAgent
+      .patch(`/api/v1/posts/${orgPostId}`)
+      .send({ title: "Edited by admin" });
+    expect(patch.status).toBe(200);
+    expect(patch.body.title).toBe("Edited by admin");
+    expect(patch.body.canEdit).toBe(true);
+    expect(patch.body.canDelete).toBe(false);
+
+    const del = await adminAgent.delete(`/api/v1/posts/${orgPostId}`);
+    expect(del.status).toBe(403);
+
+    const get = await coachAgent.get(`/api/v1/posts/${orgPostId}`);
+    expect(get.body.canDelete).toBe(true);
+  });
+
+  it("DELETE /posts/:postId hides an org_post from the org-page list (post #296)", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await agent.post(`/api/v1/organizations/${org.id}/posts`).send({
+      title: "To be deleted",
+      body: "Soft-delete should hide me from the org page.",
+    });
+    expect(create.status).toBe(201);
+    const orgPostId: string = create.body.id;
+    const before = await agent.get(`/api/v1/organizations/${org.id}/posts`);
+    expect(before.body.data.find((p: { id: string }) => p.id === orgPostId)).toBeTruthy();
+    const del = await agent.delete(`/api/v1/posts/${orgPostId}`);
+    expect(del.status).toBe(204);
+    const after = await agent.get(`/api/v1/organizations/${org.id}/posts`);
+    expect(after.body.data.find((p: { id: string }) => p.id === orgPostId)).toBeUndefined();
   });
 
   it("DELETE /posts/:postId requires authentication", async () => {

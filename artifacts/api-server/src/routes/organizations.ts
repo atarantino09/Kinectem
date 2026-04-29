@@ -585,7 +585,7 @@ router.get(
       .innerJoin(teams, eq(highlights.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
-      .where(eq(highlights.teamId, req.params.teamId))
+      .where(and(eq(highlights.teamId, req.params.teamId), isNull(highlights.hiddenAt)))
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
@@ -622,14 +622,17 @@ router.get(
         ...shareStatsFor(shareStats, "article", r.a.id),
       }),
     );
-    const highlightData = hRows.map((r) =>
-      highlightToPost(r.h, {
+    const highlightData = hRows.map((r) => {
+      const isUploader = !!me && r.h.uploaderId === me.id;
+      return highlightToPost(r.h, {
         team: r.team,
         org: r.org,
         author: r.author,
+        canEdit: isUploader,
+        canDelete: isUploader,
         ...shareStatsFor(shareStats, "highlight", r.h.id),
-      }),
-    );
+      });
+    });
     const merged = [...articleData, ...highlightData].sort((a, b) =>
       a.createdAt < b.createdAt ? 1 : -1,
     );
@@ -659,7 +662,13 @@ router.get(
         .select({ p: orgPosts, author: users })
         .from(orgPosts)
         .leftJoin(users, eq(orgPosts.authorId, users.id))
-        .where(and(eq(orgPosts.organizationId, orgId), eq(orgPosts.status, "published")))
+        .where(
+          and(
+            eq(orgPosts.organizationId, orgId),
+            eq(orgPosts.status, "published"),
+            isNull(orgPosts.hiddenAt),
+          ),
+        )
         .orderBy(desc(orgPosts.createdAt))
         .limit(20),
     ]);
@@ -693,6 +702,10 @@ router.get(
       ),
     ]);
 
+    const isViewerOrgAdmin = me
+      ? await canManageOrganization(me.id, org.id)
+      : false;
+
     const data = [
       ...articleRows.map((r) =>
         articleToPost(r.a, {
@@ -705,13 +718,16 @@ router.get(
           ...shareStatsFor(shareStats, "article", r.a.id),
         }),
       ),
-      ...orgPostRows.map((r) =>
-        orgPostToPost(r.p, {
+      ...orgPostRows.map((r) => {
+        const isAuthor = !!me && r.p.authorId === me.id;
+        return orgPostToPost(r.p, {
           org,
           author: r.author,
+          canEdit: isAuthor || isViewerOrgAdmin,
+          canDelete: isAuthor,
           ...statsFor(stats, "org_post", r.p.id),
-        }),
-      ),
+        });
+      }),
     ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     res.json(paginate(data));
   }),
