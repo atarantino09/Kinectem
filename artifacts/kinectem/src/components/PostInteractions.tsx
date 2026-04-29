@@ -205,8 +205,32 @@ export function PostInteractions({ post }: { post: PostResponse }) {
         )}
       </div>
 
+      <div className="space-y-3">
+        {commentsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading comments…</p>
+        ) : !comments || comments.data.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            Be the first to comment.
+          </p>
+        ) : (
+          comments.data.map((c: CommentResponse) => (
+            <CommentRow
+              key={c.id}
+              comment={c}
+              canDelete={!!me && c.author.id === me.id}
+              onDelete={() =>
+                deleteComment.mutate({ postId: post.id, commentId: c.id })
+              }
+            />
+          ))
+        )}
+      </div>
+
       {me && (
-        <form onSubmit={onSubmitComment} className="flex gap-3">
+        <form
+          onSubmit={onSubmitComment}
+          className="flex gap-3 pt-4 border-t border-border"
+        >
           <UserAvatar
             avatarUrl={me.avatarUrl}
             displayName={`${me.firstName} ${me.lastName}`}
@@ -237,27 +261,6 @@ export function PostInteractions({ post }: { post: PostResponse }) {
           </div>
         </form>
       )}
-
-      <div className="space-y-3">
-        {commentsLoading ? (
-          <p className="text-sm text-muted-foreground">Loading comments…</p>
-        ) : !comments || comments.data.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">
-            Be the first to comment.
-          </p>
-        ) : (
-          comments.data.map((c: CommentResponse) => (
-            <CommentRow
-              key={c.id}
-              comment={c}
-              canDelete={!!me && c.author.id === me.id}
-              onDelete={() =>
-                deleteComment.mutate({ postId: post.id, commentId: c.id })
-              }
-            />
-          ))
-        )}
-      </div>
       <ShareConfirmDialog
         open={confirmShareOpen}
         onOpenChange={setConfirmShareOpen}
