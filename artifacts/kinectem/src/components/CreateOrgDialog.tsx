@@ -33,6 +33,7 @@ import {
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
+import { normalizeWebsite } from "@/lib/normalizeWebsite";
 
 function slugify(s: string) {
   return s
@@ -67,6 +68,7 @@ export function CreateOrgDialog({
     city?: string;
     state?: string;
     zipCode?: string;
+    website?: string;
   }>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -118,6 +120,8 @@ export function CreateOrgDialog({
     const trimmedName = name.trim();
     const trimmedCity = city.trim();
     const trimmedZip = zipCode.trim();
+    const websiteResult = normalizeWebsite(website);
+    const normalizedWebsite = websiteResult.ok ? websiteResult.value : "";
     const nextErrors: typeof errors = {};
     if (!trimmedName || !finalSlug) nextErrors.name = "Name is required";
     if (!trimmedCity) nextErrors.city = "City is required";
@@ -127,6 +131,7 @@ export function CreateOrgDialog({
     } else if (!US_ZIP_PATTERN.test(trimmedZip)) {
       nextErrors.zipCode = "Enter a US zip (12345 or 12345-6789)";
     }
+    if (!websiteResult.ok) nextErrors.website = websiteResult.error;
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       const first =
@@ -134,6 +139,7 @@ export function CreateOrgDialog({
         nextErrors.city ??
         nextErrors.state ??
         nextErrors.zipCode ??
+        nextErrors.website ??
         "Please fix the highlighted fields";
       toast({ title: first, variant: "destructive" });
       return;
@@ -144,7 +150,7 @@ export function CreateOrgDialog({
           name: trimmedName,
           slug: finalSlug,
           description: description.trim() || undefined,
-          website: website.trim() || undefined,
+          website: normalizedWebsite || undefined,
           city: trimmedCity,
           state: state as CreateOrganizationRequestState,
           zipCode: trimmedZip,
@@ -376,11 +382,24 @@ export function CreateOrgDialog({
               </Label>
               <Input
                 id="org-web"
-                type="url"
+                type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://example.com"
+                placeholder="example.com"
+                data-testid="input-org-website"
               />
+              {errors.website && (
+                <p
+                  className="text-xs font-medium text-destructive"
+                  data-testid="error-org-website"
+                >
+                  {errors.website}
+                </p>
+              )}
             </div>
           </div>
 

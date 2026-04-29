@@ -104,6 +104,10 @@ export const organizations = pgTable("organizations", {
   state: text("state"),
   zipCode: text("zip_code"),
   description: text("description"),
+  // Task #290 — Org website. Stored as a normalized URL (always
+  // http:// or https://). Bare domains entered by the user are
+  // promoted to https:// before being persisted.
+  website: text("website"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),

@@ -561,6 +561,10 @@ export interface CreateOrganizationRequest {
    */
   slug: string;
   description?: string;
+  /** Organization website. Bare domains like `example.com` are
+accepted and normalized to a full `https://…` URL by the
+server before being stored.
+ */
   website?: string;
   /** @minLength 1 */
   city: string;
@@ -638,6 +642,10 @@ export const UpdateOrganizationRequestState = {
 export interface UpdateOrganizationRequest {
   name?: string;
   description?: string;
+  /** Organization website. Bare domains like `example.com` are
+accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string clears the field.
+ */
   website?: string;
   /** @minLength 1 */
   city?: string;

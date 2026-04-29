@@ -6468,7 +6468,10 @@ components:
           example: Youth athletic organization developing the next generation of athletes.
         website:
           type: string
-          format: uri
+          description: |
+            Organization website. Bare domains like `example.com` are
+            accepted and normalized to a full `https://…` URL by the
+            server before being stored.
           example: https://kinectem.demo
         city:
           type: string
@@ -6548,7 +6551,10 @@ components:
           example: Competitive travel team focused on player development and teamwork.
         website:
           type: string
-          format: uri
+          description: |
+            Organization website. Bare domains like `example.com` are
+            accepted and normalized to a full `https://…` URL by the
+            server before being stored. An empty string clears the field.
           example: https://kinectem.demo
         city:
           type: string

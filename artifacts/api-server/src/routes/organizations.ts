@@ -55,6 +55,7 @@ import {
   shareStatsFor,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
 
@@ -120,6 +121,14 @@ router.post(
         "zipCode must be a US zip (5 digits or 5+4 like 12345-6789)",
       );
     }
+    // Task #290 — accept bare domains like `example.com` and normalize
+    // to `https://example.com` so the value is always a clickable URL.
+    let websiteValue: string | undefined;
+    if (req.body?.website != null && req.body.website !== "") {
+      const websiteResult = normalizeWebsite(req.body.website);
+      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
+      websiteValue = websiteResult.value || undefined;
+    }
     const [org] = await db
       .insert(organizations)
       .values({
@@ -128,7 +137,7 @@ router.post(
         city,
         state: stateRaw,
         zipCode,
-        website: req.body?.website ?? undefined,
+        website: websiteValue,
         logoUrl: req.body?.logoUrl ?? undefined,
         createdById: me.id,
       })
@@ -216,7 +225,17 @@ router.patch(
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name;
     if (typeof body.description === "string") patch.description = body.description;
-    if (typeof body.website === "string") patch.website = body.website;
+    if (typeof body.website === "string") {
+      // Task #290 — bare domains like `example.com` are accepted and
+      // normalized to a full `https://…` URL. An explicit empty string
+      // clears the field. Whitespace-only or other malformed input is
+      // rejected so a typo can't silently wipe a stored URL.
+      const websiteResult = normalizeWebsite(body.website);
+      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
+      patch.website = websiteResult.value === "" ? null : websiteResult.value;
+    } else if (body.website === null) {
+      patch.website = null;
+    }
     if (typeof body.city === "string") {
       const trimmedCity = body.city.trim();
       if (!trimmedCity) return apiError(res, 400, "city must not be empty");

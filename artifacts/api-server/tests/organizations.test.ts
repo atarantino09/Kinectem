@@ -154,6 +154,60 @@ describe("organizations", () => {
     expect(fetched.body.state).toBe("NY");
     expect(fetched.body.zipCode).toBe("07016-1234");
   });
+
+  it("normalizes a bare-domain website on create and edit (task #290)", async () => {
+    const { agent } = await loginAs((u) => u.role === "admin");
+    // Create with a bare domain — server should prepend https://.
+    const created = await agent.post("/api/v1/organizations").send({
+      name: "Bare Domain Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090",
+      website: "example.com",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.website).toBe("https://example.com");
+    const orgId = created.body.id;
+
+    // PATCH with a www-prefixed bare domain — same treatment.
+    const patched = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ website: "www.example.org" });
+    expect(patched.status).toBe(200);
+    expect(patched.body.website).toBe("https://www.example.org");
+
+    // PATCH with a fully-qualified URL is left as-is.
+    const patchedHttp = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ website: "https://kinectem.com/about" });
+    expect(patchedHttp.status).toBe(200);
+    expect(patchedHttp.body.website).toBe("https://kinectem.com/about");
+
+    // PATCH with an empty string clears the field.
+    const cleared = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ website: "" });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.website ?? null).toBeNull();
+
+    // Obvious garbage is rejected with a 400.
+    const garbage = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ website: "not a url" });
+    expect(garbage.status).toBe(400);
+
+    // Non-http(s) protocols are rejected.
+    const badProto = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ website: "ftp://example.com" });
+    expect(badProto.status).toBe(400);
+
+    // Whitespace-only is rejected (not silently treated as a clear).
+    const spaces = await agent
+      .patch(`/api/v1/organizations/${orgId}`)
+      .send({ website: "   " });
+    expect(spaces.status).toBe(400);
+  });
 });
 
 describe("organization member roles (task #208)", () => {

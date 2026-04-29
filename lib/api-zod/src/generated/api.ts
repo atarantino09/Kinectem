@@ -812,7 +812,12 @@ export const CreateOrganizationBody = zod.object({
     .max(createOrganizationBodySlugMax)
     .regex(createOrganizationBodySlugRegExp),
   description: zod.string().optional(),
-  website: zod.string().url().optional(),
+  website: zod
+    .string()
+    .optional()
+    .describe(
+      "Organization website. Bare domains like `example.com` are\naccepted and normalized to a full `https:\/\/…` URL by the\nserver before being stored.\n",
+    ),
   city: zod.string().min(1),
   state: zod
     .enum([
@@ -980,7 +985,12 @@ export const updateOrganizationBodyZipCodeRegExp = new RegExp(
 export const UpdateOrganizationBody = zod.object({
   name: zod.string().optional(),
   description: zod.string().optional(),
-  website: zod.string().url().optional(),
+  website: zod
+    .string()
+    .optional()
+    .describe(
+      "Organization website. Bare domains like `example.com` are\naccepted and normalized to a full `https:\/\/…` URL by the\nserver before being stored. An empty string clears the field.\n",
+    ),
   city: zod.string().min(1).optional(),
   state: zod
     .enum([

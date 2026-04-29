@@ -243,17 +243,20 @@ export default function OrganizationPage() {
                 </Button>
               </div>
             </div>
-            {organization.description && (
+            {(organization.description || organization.website) && (
               <div className="px-6 pb-6">
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                  {organization.description}
-                </p>
+                {organization.description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                    {organization.description}
+                  </p>
+                )}
                 {organization.website && (
                   <a
                     href={organization.website}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-bold text-primary mt-2 inline-block hover:underline"
+                    data-testid="link-org-website"
                   >
                     {organization.website}
                   </a>

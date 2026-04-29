@@ -6530,7 +6530,10 @@ components:
           type: string
         website:
           type: string
-          format: uri
+          description: |
+            Organization website. Bare domains like `example.com` are
+            accepted and normalized to a full `https://…` URL by the
+            server before being stored.
         city:
           type: string
           minLength: 1
@@ -6607,7 +6610,10 @@ components:
           type: string
         website:
           type: string
-          format: uri
+          description: |
+            Organization website. Bare domains like `example.com` are
+            accepted and normalized to a full `https://…` URL by the
+            server before being stored. An empty string clears the field.
         city:
           type: string
           minLength: 1

@@ -31,6 +31,7 @@ import {
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
+import { normalizeWebsite } from "@/lib/normalizeWebsite";
 
 type OrgLike = {
   id: string;
@@ -66,6 +67,7 @@ export function EditOrgDialog({
     city?: string;
     state?: string;
     zipCode?: string;
+    website?: string;
   }>({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -147,6 +149,8 @@ export function EditOrgDialog({
     const trimmedName = name.trim();
     const trimmedCity = city.trim();
     const trimmedZip = zipCode.trim();
+    const websiteResult = normalizeWebsite(website);
+    const normalizedWebsite = websiteResult.ok ? websiteResult.value : "";
     // Task #237 — keep parity with CreateOrgDialog: city/state/zip are
     // required and zip must look like 12345 or 12345-6789. The server
     // enforces the same rules, so any drift between the two is a bug.
@@ -159,6 +163,7 @@ export function EditOrgDialog({
     } else if (!US_ZIP_PATTERN.test(trimmedZip)) {
       nextErrors.zipCode = "Enter a US zip (12345 or 12345-6789)";
     }
+    if (!websiteResult.ok) nextErrors.website = websiteResult.error;
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       const first =
@@ -166,13 +171,13 @@ export function EditOrgDialog({
         nextErrors.city ??
         nextErrors.state ??
         nextErrors.zipCode ??
+        nextErrors.website ??
         "Please fix the highlighted fields";
       toast({ title: first, variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
-      const trimmedWebsite = website.trim();
       const payload: Record<string, string> = {
         name: trimmedName,
         description,
@@ -180,7 +185,9 @@ export function EditOrgDialog({
         state: state as UpdateOrganizationRequestState,
         zipCode: trimmedZip,
       };
-      if (trimmedWebsite) payload.website = trimmedWebsite;
+      // Always include website so the user can clear a previously-set
+      // value by emptying the field (server treats "" as "set to null").
+      payload.website = normalizedWebsite;
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -308,11 +315,24 @@ export function EditOrgDialog({
               </Label>
               <Input
                 id="edit-org-website"
+                type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://example.com"
+                placeholder="example.com"
                 data-testid="input-edit-org-website"
               />
+              {errors.website && (
+                <p
+                  className="text-xs font-medium text-destructive"
+                  data-testid="error-edit-org-website"
+                >
+                  {errors.website}
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">

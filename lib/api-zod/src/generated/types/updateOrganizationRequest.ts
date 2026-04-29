@@ -70,6 +70,10 @@ import type { UpdateOrganizationRequestState } from "./updateOrganizationRequest
 export interface UpdateOrganizationRequest {
   name?: string;
   description?: string;
+  /** Organization website. Bare domains like `example.com` are
+accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string clears the field.
+ */
   website?: string;
   /** @minLength 1 */
   city?: string;

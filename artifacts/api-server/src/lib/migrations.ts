@@ -134,6 +134,15 @@ ALTER TABLE teams
   ADD COLUMN IF NOT EXISTS gender text;
 `;
 
+// Task #290 — Add a website column to organizations. The OpenAPI
+// response and frontend already expected this column, but it had
+// never been added — values sent to the create-org endpoint were
+// silently dropped by drizzle. Nullable, no backfill.
+const TASK_290_ORG_WEBSITE = `
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS website text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -150,6 +159,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-28-task-244-team-gender",
     sql: TASK_244_TEAM_GENDER,
+  },
+  {
+    name: "2026-04-29-task-290-org-website",
+    sql: TASK_290_ORG_WEBSITE,
   },
 ];
 
