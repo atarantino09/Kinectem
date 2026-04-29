@@ -147,6 +147,12 @@ export default function PostPage() {
           {post.title}
         </h1>
       )}
+      {post.title && !isShort && (
+        <hr
+          className="border-t border-border"
+          data-testid="divider-post-title"
+        />
+      )}
 
       <div className="flex items-center gap-3">
         <AvatarLightbox
