@@ -10,6 +10,16 @@ import { CoAuthorsSection } from "@/components/new-post/CoAuthorsSection";
 import { PostHeaderBar } from "@/components/new-post/PostHeaderBar";
 import { PostFormFields } from "@/components/new-post/PostFormFields";
 import { useNewPostForm } from "@/components/new-post/useNewPostForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function NewPostPage() {
   const search = useSearch();
@@ -55,7 +65,40 @@ export default function NewPostPage() {
         savedAt={form.savedAt}
         onCancel={() => form.setLocation(form.cancelTo)}
         onSaveDraft={form.onSaveDraft}
+        canDelete={form.canDelete}
+        onRequestDelete={() => form.setConfirmDeleteOpen(true)}
       />
+
+      <AlertDialog
+        open={form.confirmDeleteOpen}
+        onOpenChange={form.setConfirmDeleteOpen}
+      >
+        <AlertDialogContent data-testid="dialog-delete-post-editor-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the post from feeds, your profile, and the
+              team page. This can't be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-post-editor-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={form.deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                void form.onDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-delete-post-editor-confirm"
+            >
+              {form.deleting ? "Deleting…" : "Delete post"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
         <Card className="rounded-xl border border-border shadow-sm">
@@ -81,6 +124,7 @@ export default function NewPostPage() {
               draftId={form.draftId}
               lockedToTeam={form.lockedToTeam}
               isEditingPublished={form.isEditingPublished}
+              canDelete={form.canDelete}
               saving={form.saving}
               publishing={form.publishing}
               onSaveDraft={form.onSaveDraft}

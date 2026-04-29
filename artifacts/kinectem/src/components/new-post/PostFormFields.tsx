@@ -35,6 +35,12 @@ interface PostFormFieldsProps {
   draftId: string | null;
   lockedToTeam: boolean;
   isEditingPublished: boolean;
+  // True only when the viewer is the original author of the loaded
+  // article. Used here to suppress the "only the original author can
+  // delete" disclaimer for the original author themselves (they have
+  // the in-editor Delete affordance and don't need the note). Defaults
+  // to false so co-authors / coaches / org admins still see the note.
+  canDelete?: boolean;
   saving: boolean;
   publishing: boolean;
   onSaveDraft: () => void;
@@ -62,6 +68,7 @@ export function PostFormFields({
   draftId,
   lockedToTeam,
   isEditingPublished,
+  canDelete = false,
   saving,
   publishing,
   onSaveDraft,
@@ -70,11 +77,13 @@ export function PostFormFields({
   const isShort = postType === "short";
   return (
     <form id="new-post-form" onSubmit={onSubmit} className="space-y-5">
-      {isEditingPublished && (
+      {isEditingPublished && !canDelete && (
         // Co-authors, coaches, and org admins can also land on this
-        // edit screen but only the original author sees a Delete
-        // option on the post page. Spell that out so other authors
-        // aren't confused when they don't see the delete control.
+        // edit screen but only the original author gets the in-editor
+        // Delete affordance. Spell that out so other authors aren't
+        // confused when they don't see the delete control. Skip the
+        // note when `canDelete` is true — the original author has the
+        // Delete button right above and doesn't need this disclaimer.
         <div
           className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"
           data-testid="note-only-author-can-delete"

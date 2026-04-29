@@ -279,6 +279,12 @@ router.patch(
         org,
         author,
         canEdit: true,
+        // Mirror GET /posts/:id: only the original author gets the
+        // delete affordance. Co-authors and org admins (who can also
+        // hit this PATCH endpoint) keep `canDelete: false` so any
+        // client that consumes the PATCH response stays consistent
+        // with the per-viewer rule the read path enforces.
+        canDelete: updated.authorId === me.id,
         authorRole: authorRoleMap.get(updated.id) ?? null,
       }),
     );

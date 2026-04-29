@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useCreatePost,
+  useDeletePost,
   useGetLoggedInUser,
   getListFeedQueryKey,
   getListTeamPostsQueryKey,
@@ -37,9 +38,16 @@ type DraftPayload = {
   // Captured from the loaded payload so the submit handler knows
   // which author + team lists to invalidate after saving — the
   // composer can edit posts authored by someone else (co-authors,
-  // org admins) so we can't assume `author.id === me.id`.
+  // org admins) so we can't assume `author.id === me.id`. The
+  // editor's Delete flow reuses these same fields to land the
+  // user on the right page (team vs. home) and refresh the right
+  // per-author / per-team lists.
   author?: { id?: string | null } | null;
   context?: { type?: string | null; id?: string | null } | null;
+  // Per-viewer flag set by GET /posts/:id — true only when the
+  // requester is the original author. Drives the in-editor Delete
+  // affordance (co-authors / coaches / org admins do not get it).
+  canDelete?: boolean;
 };
 
 // Today's local calendar date in YYYY-MM-DD form, the shape an
@@ -71,11 +79,14 @@ export function useNewPostForm({
   const { toast } = useToast();
   const qc = useQueryClient();
   const createPost = useCreatePost();
+  const deletePost = useDeletePost();
   const { data: me } = useGetLoggedInUser();
   // Author + team captured from the post we loaded (when editing
   // a draft or a published post). Kept separate from `initialTeamId`
   // because edits don't carry a team query param and the post may be
-  // authored by someone else (co-author / org-admin edits).
+  // authored by someone else (co-author / org-admin edits). Also
+  // consumed by the editor's Delete flow to land the user on the
+  // right page and refresh the right per-author / per-team lists.
   const [loadedAuthorId, setLoadedAuthorId] = useState<string | null>(null);
   const [loadedTeamId, setLoadedTeamId] = useState<string | null>(null);
 
@@ -141,6 +152,13 @@ export function useNewPostForm({
   const lockedToTeam = !!initialTeamId;
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
+  // Per-viewer flag captured from the post we loaded into the editor.
+  // True only when the requester is the original author of an
+  // already-published article — drives the editor-header Delete
+  // affordance. Co-authors / coaches / org admins (who get `canEdit`
+  // but not `canDelete`) leave this false.
+  const [canDelete, setCanDelete] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Build the ISO datetime sent to the API. Noon UTC keeps the
   // calendar date stable across timezones. Returning null when the
@@ -216,12 +234,18 @@ export function useNewPostForm({
         setTagRoster(hasDate);
         setPostType("long");
         // Remember who owns the post and which team (if any) it
-        // belongs to. The submit handler below uses these to refresh
-        // the right user-posts and team-posts lists after saving.
+        // belongs to. The submit handler uses these to refresh the
+        // right user-posts / team-posts lists after saving, and the
+        // Delete flow reuses them to invalidate the same lists and
+        // pick a sensible post-delete destination.
         setLoadedAuthorId(d.author?.id ?? null);
         setLoadedTeamId(
           d.context?.type === "team" && d.context.id ? d.context.id : null,
         );
+        // Per-viewer flag from GET /posts/:id — only meaningful on
+        // the editId path (already-published article). Drafts won't
+        // surface canDelete.
+        setCanDelete(!!d.canDelete);
       })
       .catch(() => {
         toast({
@@ -398,6 +422,40 @@ export function useNewPostForm({
     }
   };
 
+  // Delete the article currently loaded in the editor. Mirrors the
+  // post-page delete flow: same mutation, same query-key invalidations
+  // (home feed, original author's profile posts, owning team's posts),
+  // same "Post deleted" toast, and lands the user on the team page
+  // when the recap belonged to a team or the home feed otherwise.
+  // Only callable when `isEditingPublished` is true and the loaded
+  // post reported `canDelete` for this viewer — the UI gates this on
+  // the same flags so the option never renders for drafts, brand-new
+  // posts, highlights, or co-authors / coaches / org admins.
+  const onDelete = async () => {
+    if (!editId || !canDelete) return;
+    try {
+      await deletePost.mutateAsync({ postId: editId });
+      setConfirmDeleteOpen(false);
+      // Same lists the save flow refreshes — feed, the original
+      // author's profile-posts, and (when team-scoped) the team's
+      // posts — so the destination page renders without the
+      // just-deleted post on first paint.
+      await invalidateAffectedLists({
+        authorId: loadedAuthorId,
+        teamId: loadedTeamId,
+      });
+      qc.removeQueries({ queryKey: ["post", editId] });
+      toast({ title: "Post deleted" });
+      setLocation(loadedTeamId ? `/teams/${loadedTeamId}` : "/");
+    } catch {
+      toast({
+        title: "Couldn't delete post",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return {
     // state values
     postType,
@@ -416,6 +474,11 @@ export function useNewPostForm({
     saving,
     isShort,
     publishing: createPost.isPending,
+    // delete-from-editor surface
+    canDelete,
+    confirmDeleteOpen,
+    setConfirmDeleteOpen,
+    deleting: deletePost.isPending,
     // setters
     setPostType,
     setTitle,
@@ -428,6 +491,7 @@ export function useNewPostForm({
     // actions
     onPublish,
     onSaveDraft,
+    onDelete,
     cancelTo: initialTeamId ? `/teams/${initialTeamId}` : "/",
     setLocation,
   };
