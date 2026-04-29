@@ -24,6 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
+import { linkify } from "@/lib/linkify";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
@@ -363,7 +364,7 @@ export default function PostPage() {
         <Card className="rounded-xl border border-border">
           <CardContent className="p-5">
             <p className="text-base leading-relaxed text-muted-foreground">
-              {post.description}
+              {linkify(post.description)}
             </p>
           </CardContent>
         </Card>
@@ -375,7 +376,7 @@ export default function PostPage() {
             <div className="prose prose-slate max-w-none">
               {post.body.split("\n").map((para, i) => (
                 <p key={i} className="text-base leading-relaxed">
-                  {para}
+                  {linkify(para)}
                 </p>
               ))}
             </div>
@@ -386,7 +387,7 @@ export default function PostPage() {
         <div className="prose prose-slate max-w-none">
           {post.body.split("\n").map((para, i) => (
             <p key={i} className="text-base leading-relaxed">
-              {para}
+              {linkify(para)}
             </p>
           ))}
         </div>

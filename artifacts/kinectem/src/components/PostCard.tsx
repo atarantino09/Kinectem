@@ -18,6 +18,7 @@ import {
   type FeedPost,
 } from "@workspace/api-client-react";
 import { timeAgo } from "@/lib/format";
+import { linkify } from "@/lib/linkify";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -394,7 +395,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               )}
             {post.description && (
               <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-2">
-                {post.description}
+                {linkify(post.description)}
               </p>
             )}
             {!isShort && post.body && (
@@ -613,7 +614,7 @@ function RecapExcerpt({ body, postId }: { body: string; postId: string }) {
   const visible = expanded || !isLong ? body : body.slice(0, PREVIEW_CHARS).trimEnd() + "…";
   return (
     <div className="text-sm leading-relaxed whitespace-pre-wrap mt-1">
-      {visible}
+      {linkify(visible)}
       {isLong && !expanded && (
         <>
           {" "}
