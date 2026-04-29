@@ -282,6 +282,12 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 >
                   {post.author.displayName}
                 </Link>
+                {post.author.authorRole && (
+                  <span data-testid={`text-post-author-role-${post.id}`}>
+                    {" · "}
+                    {post.author.authorRole}
+                  </span>
+                )}
                 {" • "}
                 {timeAgo(post.createdAt)}
               </p>
