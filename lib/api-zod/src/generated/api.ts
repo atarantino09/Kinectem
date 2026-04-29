@@ -1524,6 +1524,12 @@ export const GetPostResponse = zod.object({
     .describe(
       "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
     ),
+  canDelete: zod
+    .boolean()
+    .optional()
+    .describe(
+      'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
+    ),
   tagStatus: zod
     .enum(["approved", "pending"])
     .nullish()
@@ -1700,6 +1706,12 @@ export const UpdatePostResponse = zod.object({
     .optional()
     .describe(
       "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
+    ),
+  canDelete: zod
+    .boolean()
+    .optional()
+    .describe(
+      'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
     ),
   tagStatus: zod
     .enum(["approved", "pending"])
@@ -1909,6 +1921,12 @@ export const ListOrgPostsResponse = zod.object({
         .optional()
         .describe(
           "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
+        ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -2328,6 +2346,12 @@ export const ListUserPostsResponse = zod.object({
         .optional()
         .describe(
           "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
+        ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
         ),
       tagStatus: zod
         .enum(["approved", "pending"])
@@ -4005,6 +4029,12 @@ export const ListFeedResponse = zod.object({
         .describe(
           'True when the requesting user is allowed to edit this\npost (author, co-author, or admin of the team\'s org).\nDrives the \"Edit post\" item in the post 3-dot menu.\nAlways false for non-article post types since the\ncomposer only edits articles.\n',
         ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post (and only the original author — co-authors,\ncoaches, and org admins do not get delete access even\nwhen `canEdit` is true). Drives the \"Delete post\" item\nin the post 3-dot menu. Always false for non-article\npost types since the composer only deletes articles.\n',
+        ),
     }),
   ),
   pagination: zod.object({
@@ -4712,6 +4742,12 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
+        ),
       tagStatus: zod
         .enum(["approved", "pending"])
         .nullish()
@@ -5237,6 +5273,12 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
               ),
+            canDelete: zod
+              .boolean()
+              .optional()
+              .describe(
+                'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
+              ),
             tagStatus: zod
               .enum(["approved", "pending"])
               .nullish()
@@ -5422,6 +5464,12 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
         ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
+        ),
       tagStatus: zod
         .enum(["approved", "pending"])
         .nullish()
@@ -5596,6 +5644,12 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .optional()
         .describe(
           "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
+        ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
         ),
       tagStatus: zod
         .enum(["approved", "pending"])

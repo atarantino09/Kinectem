@@ -610,6 +610,10 @@ router.get(
         isCoAuthor = !!coRow;
       }
       const canEdit = isAuthor || isCoAuthor || isOrgAdmin;
+      // Deletion is reserved for the original author. Co-authors,
+      // coaches, and org admins who can still edit are intentionally
+      // not given the delete affordance.
+      const canDelete = isAuthor;
       const [stats, shareStats, authorRoleMap] = await Promise.all([
         loadPostStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
         loadPostShareStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
@@ -628,6 +632,7 @@ router.get(
           org: row.org,
           author: row.author,
           canEdit,
+          canDelete,
           authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
           ...shareStatsFor(shareStats, "article", row.a.id),
@@ -685,6 +690,49 @@ router.get(
         ...shareStatsFor(shareStats, "highlight", row.h.id),
       }),
     );
+  }),
+);
+
+// DELETE /posts/:postId — author-initiated post deletion.
+//
+// Authorization is intentionally narrower than the PATCH/edit handler:
+// only the ORIGINAL author of the post can delete it. Co-authors,
+// team coaches, and org admins (who can still edit via PATCH) get a
+// 403 here. The OpenAPI summary describes this as a soft-delete and
+// we follow the existing admin "hide" flow — flipping `hiddenAt` is
+// what every feed/profile/team query already filters on, so the post
+// disappears everywhere it would have been listed without us having
+// to walk the polymorphic comment / reaction / share tables.
+//
+// Short-form (highlight) and org posts are not deletable through this
+// endpoint — only the recap composer surfaces the "Delete post" UI
+// today, which matches `canDelete` being false on those post types.
+router.delete(
+  "/posts/:postId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed || parsed.kind !== "article")
+      return apiError(res, 403, "Only the original author can delete a post");
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    if (!a) return notFound(res);
+    if (a.authorId !== me.id)
+      return apiError(res, 403, "Only the original author can delete a post");
+    if (a.hiddenAt) {
+      // Already removed — treat as idempotent so a stale double-click
+      // doesn't surface a confusing error.
+      return res.status(204).end();
+    }
+    await db
+      .update(articles)
+      .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+      .where(eq(articles.id, a.id));
+    res.status(204).end();
   }),
 );
 

@@ -446,6 +446,12 @@ interface PostExtras {
   // (feed, team posts, profile posts, org posts) so the 3-dot menu's
   // "Edit post" item can be rendered everywhere a post card appears.
   canEdit?: boolean;
+  // Set per-viewer alongside `canEdit`. True only when the requesting
+  // user is the original author of an article-backed post — co-authors,
+  // team coaches, and org admins (who can still edit) do NOT get
+  // delete permission. Drives the "Delete post" item in the 3-dot
+  // menu. Defaults to false; populated for article posts only.
+  canDelete?: boolean;
   shareCount?: number;
   hasShared?: boolean;
   sharedBy?: { id: string; displayName: string; avatarUrl: string | null } | null;
@@ -628,6 +634,11 @@ function basePost(p: {
     // per-viewer so the 3-dot menu's "Edit post" item can be
     // rendered everywhere a post card appears.
     canEdit: p.extras.canEdit ?? false,
+    // Default false. Only set true for article-backed posts where the
+    // viewer is the original author. Co-authors / coaches / org admins
+    // who can still PATCH (`canEdit`) the post intentionally do not
+    // get this — deletion is reserved for the original author.
+    canDelete: p.extras.canDelete ?? false,
     shareCount: p.extras.shareCount ?? 0,
     hasShared: p.extras.hasShared ?? false,
     sharedBy: p.extras.sharedBy ?? null,

@@ -844,4 +844,93 @@ describe("posts", () => {
     const unshare = await request(app).delete(`/api/v1/posts/${fakeId}/share`);
     expect(unshare.status).toBe(401);
   });
+
+  // ----------------------------------------------------------------
+  // Task #270 — DELETE /posts/:postId author-only soft delete.
+  // ----------------------------------------------------------------
+
+  it("DELETE /posts/:postId removes the author's recap from feeds and detail", async () => {
+    const { agent: coachAgent, user: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { org } = await getOrgAndTeam();
+
+    const create = await coachAgent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Recap to delete",
+      body: "Body",
+      gameDate: new Date().toISOString(),
+    });
+    expect(create.status).toBe(201);
+    const articleId: string = create.body.id;
+
+    // Author sees `canDelete: true` on their own published recap.
+    const detail = await coachAgent.get(`/api/v1/posts/${articleId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.canDelete).toBe(true);
+    expect(detail.body.author.id).toBe(coach.id);
+
+    // Delete returns 204; second call is idempotent (also 204).
+    const del = await coachAgent.delete(`/api/v1/posts/${articleId}`);
+    expect(del.status).toBe(204);
+    const delAgain = await coachAgent.delete(`/api/v1/posts/${articleId}`);
+    expect(delAgain.status).toBe(204);
+
+    // Detail is now 404 (soft-deleted via hiddenAt — the GET handler
+    // looks up via the same query that excludes hidden articles).
+    const after = await coachAgent.get(`/api/v1/posts/${articleId}`);
+    expect(after.status).toBe(404);
+
+    // Feed no longer surfaces it.
+    const feed = await coachAgent.get("/api/v1/feed");
+    expect(feed.status).toBe(200);
+    const stillThere = (feed.body.data ?? []).find(
+      (p: { id: string }) => p.id === articleId,
+    );
+    expect(stillThere).toBeUndefined();
+  });
+
+  it("DELETE /posts/:postId returns 403 when the caller is not the original author", async () => {
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Other-author guard",
+      body: "Body",
+    });
+    expect(create.status).toBe(201);
+    const articleId: string = create.body.id;
+
+    // A different user (org admin) cannot delete the coach's recap
+    // even though they can edit/hide it through the admin flow.
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const del = await adminLogin.agent.delete(`/api/v1/posts/${articleId}`);
+    expect(del.status).toBe(403);
+
+    // Recap is still reachable.
+    const detail = await coachLogin.agent.get(`/api/v1/posts/${articleId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.canDelete).toBe(true);
+    // Admin sees it but cannot delete it.
+    const adminDetail = await adminLogin.agent.get(
+      `/api/v1/posts/${articleId}`,
+    );
+    expect(adminDetail.status).toBe(200);
+    expect(adminDetail.body.canDelete).toBe(false);
+  });
+
+  it("DELETE /posts/:postId rejects non-article kinds with 403", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const fakeShortId = "highlight-00000000-0000-0000-0000-000000000000";
+    const res = await agent.delete(`/api/v1/posts/${fakeShortId}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("DELETE /posts/:postId requires authentication", async () => {
+    const fakeId = "article-00000000-0000-0000-0000-000000000000";
+    const res = await request(app).delete(`/api/v1/posts/${fakeId}`);
+    expect(res.status).toBe(401);
+  });
 });

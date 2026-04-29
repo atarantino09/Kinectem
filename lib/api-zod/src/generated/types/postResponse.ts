@@ -142,6 +142,16 @@ client can render the Edit affordance inline. Always
 posts) since the composer only edits articles.
  */
   canEdit?: boolean;
+  /** True when the requesting user is the original author of
+this post — and only the original author. Co-authors,
+team coaches, and org admins (who can still PATCH the
+post via `canEdit`) are NOT allowed to delete it, so
+`canDelete` will be false for them. Drives the "Delete
+post" item in the post 3-dot menu. Always `false` for
+non-article post types since the composer only deletes
+articles.
+ */
+  canDelete?: boolean;
   /**
    * Only set on `listUserPosts` results, and only when the
 article was surfaced via the user's own `article_tags` row

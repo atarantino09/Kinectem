@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Play, Save } from "lucide-react";
+import { FileText, Info, Play, Save } from "lucide-react";
 import { MediaSection } from "./MediaSection";
 
 interface PostFormFieldsProps {
@@ -70,6 +70,22 @@ export function PostFormFields({
   const isShort = postType === "short";
   return (
     <form id="new-post-form" onSubmit={onSubmit} className="space-y-5">
+      {isEditingPublished && (
+        // Co-authors, coaches, and org admins can also land on this
+        // edit screen but only the original author sees a Delete
+        // option on the post page. Spell that out so other authors
+        // aren't confused when they don't see the delete control.
+        <div
+          className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"
+          data-testid="note-only-author-can-delete"
+        >
+          <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground font-medium">
+            Only the original author can delete a post. Co-authors and
+            coaches can still edit it here.
+          </p>
+        </div>
+      )}
       {!draftId && !lockedToTeam && (
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">

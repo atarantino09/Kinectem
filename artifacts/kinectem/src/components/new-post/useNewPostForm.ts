@@ -17,6 +17,19 @@ type DraftPayload = {
   gameDate?: string | null;
   videoUrl?: string | null;
   photoUrls?: string[] | null;
+  // The published `GET /posts/:id` response surfaces photos and the
+  // video link via the `assets` array (image/* + video/*) rather than
+  // top-level `photoUrls` / `videoUrl`. Keep the optional fields above
+  // for forward-compat with any draft endpoint that ships them flat,
+  // but the load path below also extracts from `assets` so editing a
+  // recap correctly pre-fills every originally attached photo and the
+  // existing cover stays in slot 0.
+  assets?: Array<{
+    id?: string;
+    url?: string | null;
+    fileType?: string | null;
+    displayOrder?: number;
+  }> | null;
 };
 
 // Today's local calendar date in YYYY-MM-DD form, the shape an
@@ -101,8 +114,35 @@ export function useNewPostForm({
       .then((d) => {
         setTitle(d.title ?? "");
         setBody(d.body ?? "");
-        setVideoUrl(d.videoUrl ?? "");
-        setPhotos(Array.isArray(d.photoUrls) ? d.photoUrls : []);
+        // Pull photos and the video link from `assets` first — that's
+        // what the published-post response actually carries — and fall
+        // back to the flat fields if the endpoint ever ships them.
+        // Sort by `displayOrder` so the existing cover stays in slot 0
+        // and the rest follow the order chosen at upload.
+        const sortedAssets = Array.isArray(d.assets)
+          ? [...d.assets].sort(
+              (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0),
+            )
+          : [];
+        const imageUrls = sortedAssets
+          .filter(
+            (a) =>
+              typeof a.url === "string" &&
+              a.url.length > 0 &&
+              (a.fileType ?? "").startsWith("image/"),
+          )
+          .map((a) => a.url as string);
+        const videoAsset = sortedAssets.find((a) =>
+          (a.fileType ?? "").startsWith("video/"),
+        );
+        setVideoUrl(
+          d.videoUrl ?? (videoAsset?.url ? String(videoAsset.url) : ""),
+        );
+        setPhotos(
+          Array.isArray(d.photoUrls) && d.photoUrls.length > 0
+            ? d.photoUrls
+            : imageUrls,
+        );
         // Pre-fill the date input. Trim ISO datetime down to
         // YYYY-MM-DD; if the post has no gameDate, fall back to
         // today so the date input has something visible. The

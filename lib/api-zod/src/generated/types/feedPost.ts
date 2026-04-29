@@ -132,4 +132,12 @@ Always false for non-article post types since the
 composer only edits articles.
  */
   canEdit?: boolean;
+  /** True when the requesting user is the original author of
+this post (and only the original author — co-authors,
+coaches, and org admins do not get delete access even
+when `canEdit` is true). Drives the "Delete post" item
+in the post 3-dot menu. Always false for non-article
+post types since the composer only deletes articles.
+ */
+  canDelete?: boolean;
 }

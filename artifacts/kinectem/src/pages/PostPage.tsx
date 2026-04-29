@@ -1,8 +1,12 @@
-import { useParams, Link, useSearch } from "wouter";
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useParams, Link, useSearch, useLocation } from "wouter";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
+  getListFeedQueryKey,
+  getListTeamPostsQueryKey,
+  getListUserPostsQueryKey,
+  useDeletePost,
   type PostResponse,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,15 +14,45 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Play, FileText, Pencil, ArrowLeft, Eye } from "lucide-react";
+import {
+  Play,
+  FileText,
+  Pencil,
+  ArrowLeft,
+  Eye,
+  ChevronDown,
+  Trash2,
+} from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
   const postId = params.postId;
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const deletePost = useDeletePost();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // When the parent jumps in here from the family stream the link carries
   // `?asChild=<id>`. Surface that context so the parent knows why they
   // landed here, and fetch the post through the child-scoped endpoint so
@@ -193,19 +227,132 @@ export default function PostPage() {
           </p>
         </div>
         {post.canEdit && !isShort && (
-          <Link href={`/posts/new?editId=${encodeURIComponent(post.id)}`}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="font-bold rounded-full"
-              data-testid="button-edit-post"
+          post.canDelete ? (
+            // Original author: Edit + chevron dropdown that includes
+            // "Delete post". Co-authors / coaches / org admins (who
+            // get `canEdit` but never `canDelete`) fall through to the
+            // plain Edit button below.
+            <div
+              className="inline-flex rounded-full border border-input overflow-hidden"
+              data-testid="post-author-actions"
             >
-              <Pencil className="w-3.5 h-3.5 mr-1.5" />
-              Edit
-            </Button>
-          </Link>
+              <Link href={`/posts/new?editId=${encodeURIComponent(post.id)}`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="font-bold rounded-none border-0"
+                  data-testid="button-edit-post"
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                  Edit
+                </Button>
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="font-bold rounded-none border-0 border-l border-input px-2"
+                    aria-label="More post actions"
+                    data-testid="button-post-actions-menu"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setConfirmDelete(true);
+                    }}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="menuitem-delete-post"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" />
+                    Delete post
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <Link href={`/posts/new?editId=${encodeURIComponent(post.id)}`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold rounded-full"
+                data-testid="button-edit-post"
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                Edit
+              </Button>
+            </Link>
+          )
         )}
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent data-testid="dialog-delete-post-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the post from feeds, your profile, and the
+              team page. This can't be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-post-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletePost.isPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                try {
+                  await deletePost.mutateAsync({ postId: post.id });
+                  setConfirmDelete(false);
+                  // Invalidate every list the deleted post might have
+                  // appeared on so the user doesn't see stale copies
+                  // when they navigate back: the home feed, the
+                  // post-author's profile posts, and (for team-scoped
+                  // recaps) the team's posts list. We invalidate
+                  // without arguments where supported so any cached
+                  // page/filter variant gets refetched.
+                  qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+                  if (post.author?.id) {
+                    qc.invalidateQueries({
+                      queryKey: getListUserPostsQueryKey(post.author.id),
+                    });
+                  }
+                  if (post.context?.type === "team" && post.context.id) {
+                    qc.invalidateQueries({
+                      queryKey: getListTeamPostsQueryKey(post.context.id),
+                    });
+                  }
+                  qc.removeQueries({ queryKey: ["post", post.id] });
+                  toast({ title: "Post deleted" });
+                  // Land somewhere sensible: the team feed if the
+                  // post belonged to a team, otherwise the home feed.
+                  setLocation(
+                    post.context?.type === "team" && post.context.id
+                      ? `/teams/${post.context.id}`
+                      : "/",
+                  );
+                } catch {
+                  toast({
+                    title: "Couldn't delete post",
+                    description: "Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-delete-post-confirm"
+            >
+              {deletePost.isPending ? "Deleting…" : "Delete post"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {post.description && (
         <Card className="rounded-xl border border-border">
