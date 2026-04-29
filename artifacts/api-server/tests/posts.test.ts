@@ -891,6 +891,59 @@ describe("posts", () => {
     expect(stillThere).toBeUndefined();
   });
 
+  it("DELETE /posts/:postId hides the recap from the team page (task #283)", async () => {
+    // Task #283 — `/teams/:teamId/posts` previously forgot to filter
+    // out soft-deleted articles, so a deleted recap would still appear
+    // on the team page even though the home/profile feeds dropped it.
+    const { agent: coachAgent } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { team, org } = await getOrgAndTeam();
+
+    const create = await coachAgent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: team.id,
+      title: "Team-page recap to delete",
+      body: "Body",
+      gameDate: new Date().toISOString(),
+    });
+    expect(create.status).toBe(201);
+    const articleId: string = create.body.id;
+
+    // Pre-condition: the recap shows up on the team page.
+    const before = await coachAgent.get(`/api/v1/teams/${team.id}/posts`);
+    expect(before.status).toBe(200);
+    expect(
+      (before.body.data ?? []).some((p: { id: string }) => p.id === articleId),
+    ).toBe(true);
+
+    const del = await coachAgent.delete(`/api/v1/posts/${articleId}`);
+    expect(del.status).toBe(204);
+
+    // Author no longer sees the soft-deleted recap on the team page.
+    const afterAuthor = await coachAgent.get(
+      `/api/v1/teams/${team.id}/posts`,
+    );
+    expect(afterAuthor.status).toBe(200);
+    expect(
+      (afterAuthor.body.data ?? []).some(
+        (p: { id: string }) => p.id === articleId,
+      ),
+    ).toBe(false);
+
+    // And neither does an anonymous viewer — there's no "ghost" copy.
+    const afterAnon = await request(app).get(
+      `/api/v1/teams/${team.id}/posts`,
+    );
+    expect(afterAnon.status).toBe(200);
+    expect(
+      (afterAnon.body.data ?? []).some(
+        (p: { id: string }) => p.id === articleId,
+      ),
+    ).toBe(false);
+  });
+
   it("DELETE /posts/:postId returns 403 when the caller is not the original author", async () => {
     const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
     const { org } = await getOrgAndTeam();

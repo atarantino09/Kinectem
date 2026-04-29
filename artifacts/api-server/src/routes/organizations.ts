@@ -16,7 +16,7 @@ import {
   notifications,
   organizationJoinRequests,
 } from "@workspace/db";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -547,7 +547,17 @@ router.get(
       .innerJoin(teams, eq(articles.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.status, "published"), eq(articles.teamId, req.params.teamId)))
+      .where(
+        and(
+          eq(articles.status, "published"),
+          eq(articles.teamId, req.params.teamId),
+          // Soft-deleted recaps must not be served to the team page —
+          // matches the home/profile feed behavior so a deleted
+          // article disappears for everyone (author, teammates,
+          // anonymous viewers) instead of lingering as a "ghost".
+          isNull(articles.hiddenAt),
+        ),
+      )
       .orderBy(desc(articles.createdAt))
       .limit(20);
     const hRows = await db
