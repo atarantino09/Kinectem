@@ -8,6 +8,7 @@ import {
   type CreatePostRequest,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { safeInternalPath } from "@/lib/safePath";
 
 type DraftPayload = {
   id: string;
@@ -47,6 +48,7 @@ interface UseNewPostFormParams {
   initialDraftId: string | null;
   initialEditId: string | null;
   initialTeamId: string | null;
+  initialFrom?: string | null;
 }
 
 export function useNewPostForm({
@@ -54,6 +56,7 @@ export function useNewPostForm({
   initialDraftId,
   initialEditId,
   initialTeamId,
+  initialFrom = null,
 }: UseNewPostFormParams) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -248,7 +251,13 @@ export function useNewPostForm({
         await patchAt(editId);
         invalidateFeed();
         toast({ title: "Saved" });
-        setLocation(`/posts/${editId}`);
+        // Return to wherever the editor was launched from when a
+        // safe internal `from` path was supplied (e.g. the feed,
+        // a profile, a team page). Fall back to the post detail
+        // page when no originating location is available or the
+        // value isn't a same-app relative path.
+        const back = safeInternalPath(initialFrom);
+        setLocation(back ?? `/posts/${editId}`);
       } else if (draftId) {
         await patchAt(draftId);
         await customFetch(`/api/v1/posts/${draftId}/publish`, {

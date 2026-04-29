@@ -59,6 +59,7 @@ export default function PostPage() {
   // viewer-specific stats (their own reactions, draft access) reflect the
   // child rather than the parent.
   const search = useSearch();
+  const [currentPath] = useLocation();
   const asChildId = useMemo(() => {
     const sp = new URLSearchParams(search ?? "");
     const v = sp.get("asChild");
@@ -236,7 +237,9 @@ export default function PostPage() {
               className="inline-flex rounded-full border border-input overflow-hidden"
               data-testid="post-author-actions"
             >
-              <Link href={`/posts/new?editId=${encodeURIComponent(post.id)}`}>
+              <Link
+                href={`/posts/new?editId=${encodeURIComponent(post.id)}&from=${encodeURIComponent(currentPath + (search ? `?${search}` : ""))}`}
+              >
                 <Button
                   variant="outline"
                   size="sm"
@@ -275,7 +278,9 @@ export default function PostPage() {
               </DropdownMenu>
             </div>
           ) : (
-            <Link href={`/posts/new?editId=${encodeURIComponent(post.id)}`}>
+            <Link
+              href={`/posts/new?editId=${encodeURIComponent(post.id)}&from=${encodeURIComponent(currentPath + (search ? `?${search}` : ""))}`}
+            >
               <Button
                 variant="outline"
                 size="sm"

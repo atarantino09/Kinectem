@@ -62,7 +62,7 @@ function parseSyntheticPostId(
 export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const [currentPath, setLocation] = useLocation();
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmShareOpen, setConfirmShareOpen] = useState(false);
   const isShort = post.postType === "short";
@@ -317,7 +317,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                   <DropdownMenuItem
                     onSelect={() =>
                       setLocation(
-                        `/posts/new?editId=${encodeURIComponent(post.id)}`,
+                        `/posts/new?editId=${encodeURIComponent(post.id)}&from=${encodeURIComponent(currentPath + (typeof window !== "undefined" ? window.location.search : ""))}`,
                       )
                     }
                     data-testid={`menuitem-edit-${post.id}`}

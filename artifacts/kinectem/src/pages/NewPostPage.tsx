@@ -24,12 +24,14 @@ export default function NewPostPage() {
   // fact, but it also supports edits to title/body/media/date.
   const initialEditId = params.get("editId");
   const initialTeamId = params.get("teamId");
+  const initialFrom = params.get("from");
 
   const form = useNewPostForm({
     initialType,
     initialDraftId,
     initialEditId,
     initialTeamId,
+    initialFrom,
   });
 
   const { data: me } = useGetLoggedInUser();
