@@ -384,6 +384,14 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 )}
               </div>
             )}
+            {post.title &&
+              !isShort &&
+              reportTarget.contentType === "article" && (
+                <hr
+                  className="border-t border-border mb-2"
+                  data-testid={`divider-post-title-card-${post.id}`}
+                />
+              )}
             {post.description && (
               <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-2">
                 {post.description}
