@@ -1372,6 +1372,95 @@ describe("posts", () => {
     expect(create.body.error).toMatch(/team members/i);
   });
 
+  // ----------------------------------------------------------------
+  // Task #306 — Notify org admins/owners on a member-posted highlight.
+  //
+  // When a non-admin roster member posts a team-scoped highlight,
+  // every owner / admin of the team's organization gets a bell
+  // notification linking to the new highlight. Suppressed when the
+  // poster is themselves an org admin (no point in notifying their
+  // own moderation queue) and self-notifications are excluded.
+  // ----------------------------------------------------------------
+
+  it("non-admin roster player posting a highlight notifies every org admin/owner", async () => {
+    const playerLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await playerLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Roster highlight needs review",
+      description: "Posted by Marcus, a non-admin player.",
+      videoUrl: "https://example.com/marcus-clip.mp4",
+    });
+    expect(create.status).toBe(201);
+    const newHighlightId: string = create.body.id;
+
+    // Sam is the org owner of Westfield (which owns Varsity Football).
+    const ownerLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const ownerInbox = await ownerLogin.agent.get("/api/v1/notifications");
+    const ownerNotif = ownerInbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "team_highlight_created" &&
+        n.data?.link === `/posts/${newHighlightId}`,
+    );
+    expect(ownerNotif).toBeDefined();
+    expect(ownerNotif.title).toContain("Roster highlight needs review");
+    expect(ownerNotif.title).toContain(team.name);
+    expect(ownerNotif.isRead).toBe(false);
+
+    // Coach Davis is registered as an org "admin" on Westfield, so he
+    // should receive the same fan-out (the org-admin role is what
+    // matters here, not his roster coach role).
+    const adminLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const adminInbox = await adminLogin.agent.get("/api/v1/notifications");
+    const adminNotif = adminInbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "team_highlight_created" &&
+        n.data?.link === `/posts/${newHighlightId}`,
+    );
+    expect(adminNotif).toBeDefined();
+  });
+
+  it("does NOT notify admins when the poster is themselves an org admin/owner", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    const create = await adminLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Owner-posted highlight",
+      description: "An owner posting their own highlight should not fan out.",
+      videoUrl: "https://example.com/owner-clip.mp4",
+    });
+    expect(create.status).toBe(201);
+    const newHighlightId: string = create.body.id;
+
+    // Self-check: the owner-poster never receives a notification for
+    // their own highlight.
+    const selfInbox = await adminLogin.agent.get("/api/v1/notifications");
+    const selfNotif = selfInbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "team_highlight_created" &&
+        n.data?.link === `/posts/${newHighlightId}`,
+    );
+    expect(selfNotif).toBeUndefined();
+
+    // Co-admin Coach Davis is also an admin on Westfield. The whole
+    // fan-out is suppressed for admin-posted highlights, so he must
+    // not see one either.
+    const adminPeerLogin = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const peerInbox = await adminPeerLogin.agent.get("/api/v1/notifications");
+    const peerNotif = peerInbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "team_highlight_created" &&
+        n.data?.link === `/posts/${newHighlightId}`,
+    );
+    expect(peerNotif).toBeUndefined();
+  });
+
   it("creating a team-scoped highlight does NOT fan out tags to the roster", async () => {
     const playerLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
     const { team } = await getOrgAndTeam();

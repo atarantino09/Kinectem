@@ -68,6 +68,7 @@ import {
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
 
 const router: IRouter = Router();
 
@@ -1350,6 +1351,21 @@ router.post(
         videoUrl: body.assets?.[0]?.url ?? body.videoUrl ?? "",
       })
       .returning();
+    // Task #306 — Bell-notify org admins/owners when a non-admin
+    // roster member adds a highlight to one of their teams. Org
+    // admins skip this fan-out (the team is already in their own
+    // moderation queue) and the actor is excluded explicitly so
+    // self-notifications never fire.
+    if (!isOrgAdmin) {
+      await notifyAdminsOfTeamHighlight({
+        organizationId: org.id,
+        teamName: team.name,
+        highlightId: h.id,
+        highlightTitle: h.title,
+        actorUserId: me.id,
+        actorDisplayName: displayName(me),
+      });
+    }
     res.status(201).json(highlightToPost(h, { team, org, author: me }));
   }),
 );
