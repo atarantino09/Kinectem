@@ -14,6 +14,7 @@ import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
+import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 
 export function MediaSection({
   photos,
@@ -237,7 +238,32 @@ export function MediaSection({
           className="mt-2"
           data-testid="input-video-url"
         />
+        <VideoUrlPreview url={videoUrl} />
       </div>
+    </div>
+  );
+}
+
+// Live preview for the video URL input. Mirrors what the feed card and
+// post detail page render so the author can confirm the link parses to
+// a real player before publishing. Empty / whitespace-only values are
+// suppressed so the section stays quiet until there's something to
+// preview. URLs that don't resolve to YouTube or Vimeo show the same
+// fallback link the feed uses, with an explicit note that the link
+// won't play inline — that way a typo or an unsupported provider is
+// obvious in the composer instead of after publishing.
+function VideoUrlPreview({ url }: { url: string }) {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  const embeddable = getEmbedSrc(trimmed) !== null;
+  return (
+    <div className="mt-3" data-testid="video-url-preview">
+      <p className="text-[11px] text-muted-foreground font-semibold mb-2">
+        {embeddable
+          ? "Preview"
+          : "We don't recognize this as a YouTube or Vimeo link, so it won't play inline. Readers will see this link instead:"}
+      </p>
+      <VideoEmbed url={trimmed} />
     </div>
   );
 }
