@@ -360,14 +360,6 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
         )}
 
         <div>
-          {isShort && hasEmbeddableVideo && videoAsset?.url && (
-            <div className="brand-gradient-dark p-3">
-              <VideoEmbed
-                url={videoAsset.url}
-                className="rounded-lg overflow-hidden border border-border bg-black aspect-video"
-              />
-            </div>
-          )}
           {isShort && !hasEmbeddableVideo && firstImage?.url && (
             <Link href={`/posts/${post.id}`}>
               <div className="h-72 brand-gradient-dark relative flex items-center justify-center group cursor-pointer">
@@ -427,10 +419,20 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             {!isShort && videoAsset?.url && (
               <VideoEmbed url={videoAsset.url} />
             )}
-            {/* Highlights with an unsupported video provider show
-                the URL as a clickable fallback link in the body so
-                it isn't silently hidden. Embeddable highlights
-                already render their player in the header above. */}
+            {/* Highlights render the video after the title and
+                description so the card matches the new-post form
+                and the post detail page. Embeddable providers
+                (YouTube/Vimeo) get an inline player in a
+                brand-gradient banner; unsupported providers fall
+                back to a clickable link via VideoEmbed's default. */}
+            {isShort && hasEmbeddableVideo && videoAsset?.url && (
+              <div className="brand-gradient-dark p-3 -mx-5 mt-3">
+                <VideoEmbed
+                  url={videoAsset.url}
+                  className="rounded-lg overflow-hidden border border-border bg-black aspect-video"
+                />
+              </div>
+            )}
             {isShort && !hasEmbeddableVideo && videoAsset?.url && (
               <VideoEmbed url={videoAsset.url} />
             )}
