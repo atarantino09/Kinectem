@@ -941,44 +941,50 @@ router.delete(
   }),
 );
 
-router.post(
-  "/posts/:postId/reactions",
-  asyncHandler(async (req, res) => {
-    const me = req.sessionUser;
-    if (!me) return apiError(res, 401, "Not authenticated");
-    const parsed = parsePostId(req.params.postId);
-    if (!parsed) return notFound(res);
-    const inserted = await db
-      .insert(postReactions)
-      .values({
-        postKind: parsed.kind,
-        postRefId: parsed.id,
-        userId: me.id,
-        reactionType: "like",
-      })
-      .onConflictDoNothing()
-      .returning({ userId: postReactions.userId });
-    // Bell-notify the post owner exactly once per fresh like. We
-    // look up the owner per post kind. The notification carries
-    // `actorUserId` so the family dashboard's Remove can revoke
-    // this specific like row, and a `/posts/<postId>` link so the
-    // Remove handler can locate the post unambiguously. Self-likes
-    // and re-likes (no insert happened) skip the bell.
-    if (inserted.length > 0) {
-      const ownerId = await loadPostOwnerId(parsed);
-      if (ownerId && ownerId !== me.id) {
-        await db.insert(notifications).values({
-          userId: ownerId,
-          kind: "like",
-          message: `${displayName(me)} liked your post`,
-          link: `/posts/${req.params.postId}`,
-          actorUserId: me.id,
-        });
-      }
+// Shared handler powering both `PUT /posts/:postId/reactions` (the
+// canonical "add reaction" endpoint per the OpenAPI contract) and the
+// deprecated `POST` alias kept for older clients. The frontend's
+// generated client uses `PUT`, so the `PUT` registration is what
+// actually fixes the heart button; `POST` is kept registered to
+// preserve backwards compatibility with the deprecated alias.
+const addPostReactionHandler = asyncHandler(async (req, res) => {
+  const me = req.sessionUser;
+  if (!me) return apiError(res, 401, "Not authenticated");
+  const parsed = parsePostId(req.params.postId);
+  if (!parsed) return notFound(res);
+  const inserted = await db
+    .insert(postReactions)
+    .values({
+      postKind: parsed.kind,
+      postRefId: parsed.id,
+      userId: me.id,
+      reactionType: "like",
+    })
+    .onConflictDoNothing()
+    .returning({ userId: postReactions.userId });
+  // Bell-notify the post owner exactly once per fresh like. We
+  // look up the owner per post kind. The notification carries
+  // `actorUserId` so the family dashboard's Remove can revoke
+  // this specific like row, and a `/posts/<postId>` link so the
+  // Remove handler can locate the post unambiguously. Self-likes
+  // and re-likes (no insert happened) skip the bell.
+  if (inserted.length > 0) {
+    const ownerId = await loadPostOwnerId(parsed);
+    if (ownerId && ownerId !== me.id) {
+      await db.insert(notifications).values({
+        userId: ownerId,
+        kind: "like",
+        message: `${displayName(me)} liked your post`,
+        link: `/posts/${req.params.postId}`,
+        actorUserId: me.id,
+      });
     }
-    res.status(204).end();
-  }),
-);
+  }
+  res.status(204).end();
+});
+
+router.put("/posts/:postId/reactions", addPostReactionHandler);
+router.post("/posts/:postId/reactions", addPostReactionHandler);
 
 router.delete(
   "/posts/:postId/reactions",

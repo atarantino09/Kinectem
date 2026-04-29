@@ -933,4 +933,140 @@ describe("posts", () => {
     const res = await request(app).delete(`/api/v1/posts/${fakeId}`);
     expect(res.status).toBe(401);
   });
+
+  // ----------------------------------------------------------------
+  // Task #274 — PUT /posts/:postId/reactions canonical "add reaction".
+  // ----------------------------------------------------------------
+
+  it("PUT /posts/:postId/reactions adds a like, is idempotent, and bell-notifies the post owner exactly once (task #274)", async () => {
+    // Task #274 — The OpenAPI contract makes `PUT` the canonical
+    // "add reaction" verb and the generated React client uses it. The
+    // server previously only registered `POST`, so the heart button
+    // 404'd silently. Verify the new `PUT` handler:
+    //   * inserts the like and increments the count
+    //   * is idempotent on a re-like (no dupe row, no dupe notification)
+    //   * sends the post owner a single "liked your post" bell row
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Reaction PUT recap",
+      description: "Used by the PUT-reaction test",
+      body: "Body",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    const likerEmail = `liker+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: likerEmail,
+      password: "test-password-123",
+      firstName: "Like",
+      lastName: "Tester",
+      role: "athlete",
+    });
+    const likerAgent = request.agent(app);
+    await likerAgent
+      .post("/api/v1/auth/login")
+      .send({ email: likerEmail, password: "test-password-123" });
+
+    const like = await likerAgent
+      .put(`/api/v1/posts/${postId}/reactions`)
+      .send({ reactionType: "like" });
+    expect(like.status).toBe(204);
+
+    const detail = await likerAgent.get(`/api/v1/posts/${postId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.reactionCount).toBe(1);
+    expect(detail.body.hasReacted).toBe(true);
+
+    // Idempotent: re-PUT does not double-count and does not create a
+    // second notification row.
+    const again = await likerAgent
+      .put(`/api/v1/posts/${postId}/reactions`)
+      .send({ reactionType: "like" });
+    expect(again.status).toBe(204);
+    const detail2 = await likerAgent.get(`/api/v1/posts/${postId}`);
+    expect(detail2.body.reactionCount).toBe(1);
+
+    const ownerInbox = await coachLogin.agent.get("/api/v1/notifications");
+    expect(ownerInbox.status).toBe(200);
+    const likeNotifs = ownerInbox.body.data.filter(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "like" && n.data?.link === `/posts/${postId}`,
+    );
+    expect(likeNotifs).toHaveLength(1);
+    expect(likeNotifs[0].title).toContain("liked your post");
+
+    // DELETE removes the like and decrements the count.
+    const unlike = await likerAgent.delete(`/api/v1/posts/${postId}/reactions`);
+    expect(unlike.status).toBe(204);
+    const detail3 = await likerAgent.get(`/api/v1/posts/${postId}`);
+    expect(detail3.body.reactionCount).toBe(0);
+    expect(detail3.body.hasReacted).toBe(false);
+  });
+
+  it("PUT /posts/:postId/reactions does not bell-notify the post owner when they like their own post (task #274)", async () => {
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "Self-like recap",
+      body: "Body",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    const like = await coachLogin.agent
+      .put(`/api/v1/posts/${postId}/reactions`)
+      .send({ reactionType: "like" });
+    expect(like.status).toBe(204);
+
+    const inbox = await coachLogin.agent.get("/api/v1/notifications");
+    const selfNotif = inbox.body.data.find(
+      (n: { type: string; data?: { link?: string } | null }) =>
+        n.type === "like" && n.data?.link === `/posts/${postId}`,
+    );
+    expect(selfNotif).toBeUndefined();
+  });
+
+  it("deprecated POST /posts/:postId/reactions alias still works for older clients (task #274)", async () => {
+    // Backwards compatibility check — the OpenAPI spec keeps `POST` as
+    // a deprecated alias and the server must keep honoring it for any
+    // older clients that haven't regenerated against the `PUT` verb.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const create = await coachLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      title: "POST-alias recap",
+      body: "Body",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    const likerEmail = `postaliaslike+${Date.now()}@kinectem.test`;
+    await request(app).post("/api/v1/auth/signup").send({
+      email: likerEmail,
+      password: "test-password-123",
+      firstName: "Alias",
+      lastName: "Liker",
+      role: "athlete",
+    });
+    const likerAgent = request.agent(app);
+    await likerAgent
+      .post("/api/v1/auth/login")
+      .send({ email: likerEmail, password: "test-password-123" });
+
+    const like = await likerAgent
+      .post(`/api/v1/posts/${postId}/reactions`)
+      .send({ reactionType: "like" });
+    expect(like.status).toBe(204);
+
+    const detail = await likerAgent.get(`/api/v1/posts/${postId}`);
+    expect(detail.body.reactionCount).toBe(1);
+    expect(detail.body.hasReacted).toBe(true);
+  });
 });
