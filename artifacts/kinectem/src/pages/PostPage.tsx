@@ -201,25 +201,6 @@ export default function PostPage() {
         )}
       </div>
 
-      {images.length > 0 && (
-        <div className="grid grid-cols-1 gap-3">
-          {images.map((img) => (
-            <div
-              key={img.id}
-              className="rounded-xl overflow-hidden bg-muted aspect-video"
-            >
-              {img.url && (
-                <img
-                  src={img.url}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
       {post.description && (
         <Card className="rounded-xl border border-border">
           <CardContent className="p-5">
@@ -236,6 +217,27 @@ export default function PostPage() {
             <p key={i} className="text-base leading-relaxed">
               {para}
             </p>
+          ))}
+        </div>
+      )}
+
+      {/* Photos render after the body in the order the API returns them,
+          which mirrors the upload order chosen in the new-post form. */}
+      {images.length > 0 && (
+        <div className="grid grid-cols-1 gap-3">
+          {images.map((img) => (
+            <div
+              key={img.id}
+              className="rounded-xl overflow-hidden bg-muted aspect-video"
+            >
+              {img.url && (
+                <img
+                  src={img.url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              )}
+            </div>
           ))}
         </div>
       )}
