@@ -21,6 +21,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Heart, MessageSquare, Trash2, Flag, Share2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
+import { linkify } from "@/lib/linkify";
 import { ReportDialog } from "@/components/ReportDialog";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -272,7 +273,7 @@ export function PostInteractions({ post }: { post: PostResponse }) {
   );
 }
 
-function CommentRow({
+export function CommentRow({
   comment,
   canDelete,
   onDelete,
@@ -300,7 +301,7 @@ function CommentRow({
               </p>
             </div>
             <p className="text-sm mt-1 leading-relaxed whitespace-pre-wrap">
-              {comment.body}
+              {linkify(comment.body)}
             </p>
           </div>
           {canDelete ? (
