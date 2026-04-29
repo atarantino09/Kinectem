@@ -143,6 +143,21 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS website text;
 `;
 
+// Task #293 — Extend the friendly bare-domain website behavior from
+// task #290 (orgs only) to teams and user profiles. Each gets its
+// own nullable website column, normalized server-side via
+// normalizeWebsite() before being persisted. No backfill — existing
+// rows stay null until the user fills the field.
+const TASK_293_TEAM_WEBSITE = `
+ALTER TABLE teams
+  ADD COLUMN IF NOT EXISTS website text;
+`;
+
+const TASK_293_USER_WEBSITE = `
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS website text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -163,6 +178,14 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-29-task-290-org-website",
     sql: TASK_290_ORG_WEBSITE,
+  },
+  {
+    name: "2026-04-29-task-293-team-website",
+    sql: TASK_293_TEAM_WEBSITE,
+  },
+  {
+    name: "2026-04-29-task-293-user-website",
+    sql: TASK_293_USER_WEBSITE,
   },
 ];
 

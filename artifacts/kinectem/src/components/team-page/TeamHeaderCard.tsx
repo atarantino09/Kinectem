@@ -18,6 +18,7 @@ interface Team {
   id: string;
   name: string;
   description?: string | null;
+  website?: string | null;
   sport?: string | null;
   level?: string | null;
   gender?: "boys" | "girls" | "coed" | null;
@@ -150,6 +151,17 @@ export function TeamHeaderCard({
                 description={team.description}
                 teamName={team.name}
               />
+            )}
+            {team.website && (
+              <a
+                href={team.website}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="mt-2 inline-block text-sm font-bold text-primary hover:underline break-all"
+                data-testid="link-team-website"
+              >
+                {team.website.replace(/^https?:\/\//, "")}
+              </a>
             )}
           </div>
         </div>

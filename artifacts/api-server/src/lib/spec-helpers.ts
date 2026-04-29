@@ -205,6 +205,10 @@ export function toPublicUser(
     firstName,
     lastName,
     bio: u.bio ?? null,
+    // Task #293 — Personal website / link surfaced on the public profile.
+    // Always a normalized http(s):// URL when set, since the create/edit
+    // endpoints run input through normalizeWebsite() before storing.
+    website: u.website ?? null,
     avatarUrl: safeAvatarUrl(u.avatarUrl),
     coverPhotoUrl: null as string | null,
     isOwnProfile: opts.isOwnProfile ?? false,
@@ -331,6 +335,10 @@ export function toTeam(
     name: t.name,
     slug: slugify(t.name),
     description: t.description ?? null,
+    // Task #293 — Optional team website / link. Always a normalized
+    // http(s):// URL when set, since the create/edit endpoints run
+    // input through normalizeWebsite() before storing.
+    website: t.website ?? null,
     sport: t.sport ?? null,
     level: t.level ?? null,
     gender: (t.gender as "boys" | "girls" | "coed" | null) ?? null,

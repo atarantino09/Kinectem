@@ -75,6 +75,15 @@ export interface PublicUserResponse {
    * @nullable
    */
   bio?: string | null;
+  /**
+   * Personal website / link surfaced on the public profile.
+Always a full `https://…` URL when set; bare domains submitted
+via `UpdateUserRequest` are normalized server-side before
+being stored. Null when the user has not set one.
+
+   * @nullable
+   */
+  website?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
   /**

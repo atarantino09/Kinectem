@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Loader2, Pencil, X } from "lucide-react";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
+import { normalizeWebsite } from "@/lib/normalizeWebsite";
 
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -82,6 +83,10 @@ export function EditProfileDialog({
   const [firstName, setFirstName] = useState(user.firstName);
   const [lastName, setLastName] = useState(user.lastName);
   const [bio, setBio] = useState(user.bio ?? "");
+  const [website, setWebsite] = useState(user.website ?? "");
+  const [websiteError, setWebsiteError] = useState<string | undefined>(
+    undefined,
+  );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -97,6 +102,8 @@ export function EditProfileDialog({
       setFirstName(user.firstName);
       setLastName(user.lastName);
       setBio(user.bio ?? "");
+      setWebsite(user.website ?? "");
+      setWebsiteError(undefined);
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
     }
@@ -133,6 +140,8 @@ export function EditProfileDialog({
       setFirstName(user.firstName);
       setLastName(user.lastName);
       setBio(user.bio ?? "");
+      setWebsite(user.website ?? "");
+      setWebsiteError(undefined);
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
     }
@@ -184,12 +193,24 @@ export function EditProfileDialog({
   };
 
   const onSave = () => {
+    // Task #293 — Normalize the website client-side using the same helper
+    // the org form uses. Bare domains become `https://example.com`; obvious
+    // garbage is surfaced inline instead of going to the server.
+    const websiteResult = normalizeWebsite(website);
+    if (!websiteResult.ok) {
+      setWebsiteError(websiteResult.error);
+      return;
+    }
+    setWebsiteError(undefined);
     update.mutate({
       userId: user.id,
       data: {
         firstName,
         lastName,
         bio: bio.trim() ? bio : null,
+        // Always include website so the user can clear a previously-set
+        // value by emptying the input. Empty string clears it server-side.
+        website: websiteResult.value,
         avatarUrl,
       },
     });
@@ -320,6 +341,31 @@ export function EditProfileDialog({
               className="resize-none"
               data-testid="input-bio"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="profile-website" className="text-xs font-bold">
+              Website
+            </Label>
+            <Input
+              id="profile-website"
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="example.com"
+              data-testid="input-profile-website"
+            />
+            {websiteError && (
+              <p
+                className="text-xs font-medium text-destructive"
+                data-testid="error-profile-website"
+              >
+                {websiteError}
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>

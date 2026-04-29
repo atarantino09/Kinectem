@@ -76,6 +76,15 @@ export interface TeamResponse {
   slug: string;
   /** @nullable */
   description?: string | null;
+  /**
+   * Optional team website / link surfaced on the team page.
+Always a full `https://…` URL when set; bare domains submitted
+via the create / update endpoints are normalized server-side
+before being stored. Null when the team has not set one.
+
+   * @nullable
+   */
+  website?: string | null;
   /** @nullable */
   sport?: string | null;
   /** @nullable */

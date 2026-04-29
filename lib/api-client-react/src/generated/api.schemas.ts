@@ -89,6 +89,15 @@ export interface PublicUserResponse {
    * @nullable
    */
   bio?: string | null;
+  /**
+   * Personal website / link surfaced on the public profile.
+Always a full `https://…` URL when set; bare domains submitted
+via `UpdateUserRequest` are normalized server-side before
+being stored. Null when the user has not set one.
+
+   * @nullable
+   */
+  website?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
   /**
@@ -146,6 +155,16 @@ export interface UpdateUserRequest {
    * @nullable
    */
   bio?: string | null;
+  /**
+   * Personal website / link. Bare domains like `example.com` are
+accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string or null clears
+the field. Non-http(s) URLs and obvious garbage are rejected
+with a 400.
+
+   * @nullable
+   */
+  website?: string | null;
   /**
    * @maxLength 50
    * @nullable
@@ -1527,6 +1546,15 @@ export interface TeamResponse {
   slug: string;
   /** @nullable */
   description?: string | null;
+  /**
+   * Optional team website / link surfaced on the team page.
+Always a full `https://…` URL when set; bare domains submitted
+via the create / update endpoints are normalized server-side
+before being stored. Null when the team has not set one.
+
+   * @nullable
+   */
+  website?: string | null;
   /** @nullable */
   sport?: string | null;
   /** @nullable */
@@ -1580,6 +1608,13 @@ export interface CreateTeamRequest {
    */
   slug: string;
   description?: string;
+  /** Optional team website / link. Bare domains like `example.com`
+are accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string is treated the
+same as omitting the field. Non-http(s) URLs and obvious
+garbage are rejected with a 400.
+ */
+  website?: string;
   sport?: string;
   level?: string;
   /** @nullable */
@@ -1608,6 +1643,16 @@ export const UpdateTeamRequestGender = {
 export interface UpdateTeamRequest {
   name?: string;
   description?: string;
+  /**
+   * Optional team website / link. Bare domains like `example.com`
+are accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string or null clears
+the field. Non-http(s) URLs and obvious garbage are rejected
+with a 400.
+
+   * @nullable
+   */
+  website?: string | null;
   sport?: string;
   level?: string;
   /** @nullable */

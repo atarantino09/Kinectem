@@ -67,6 +67,7 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
 
@@ -282,6 +283,19 @@ router.patch(
       updates.name = `${body.firstName ?? cur.firstName} ${body.lastName ?? cur.lastName}`.trim();
     }
     if (body.bio !== undefined) updates.bio = body.bio;
+    // Task #293 — Personal website. Mirrors the org-website behavior added
+    // in #290: an explicit `null` clears, an empty string clears, a string
+    // is normalized via normalizeWebsite() (bare domains get a https://
+    // prefix), and obvious garbage is rejected with a 400.
+    if (body.website === null) {
+      updates.website = null;
+    } else if (typeof body.website === "string") {
+      const websiteResult = normalizeWebsite(body.website);
+      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
+      updates.website = websiteResult.value === "" ? null : websiteResult.value;
+    } else if (body.website !== undefined) {
+      return apiError(res, 400, "website must be a string or null");
+    }
     if (body.avatarUrl !== undefined) {
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {
         return apiError(res, 400, "avatarUrl must be a string or null");

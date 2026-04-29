@@ -48,6 +48,7 @@ import {
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import { ensureOrgFollowedForTeam } from "../lib/team-follow";
+import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
 
@@ -86,6 +87,17 @@ router.post(
       }
       gender = g as "boys" | "girls" | "coed";
     }
+    // Task #293 — Optional team website on creation. Same normalization
+    // pattern as the org-website handling added in #290: undefined / null
+    // / empty string leave it null; a string is run through
+    // normalizeWebsite() (bare domains gain a https:// prefix). Obvious
+    // garbage like "not a url" or "ftp://..." → 400.
+    let website: string | null = null;
+    if (req.body?.website != null && req.body.website !== "") {
+      const websiteResult = normalizeWebsite(req.body.website);
+      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
+      website = websiteResult.value || null;
+    }
     // Wrap the team insert and the creator's auto-staff entry in a single
     // transaction so a team is never persisted without its creator on the
     // roster as Admin. We deliberately skip the "you were invited to a
@@ -100,6 +112,7 @@ router.post(
           sport: req.body?.sport ?? undefined,
           level: req.body?.level ?? undefined,
           gender: gender ?? undefined,
+          website: website ?? undefined,
           season: req.body?.season?.name ?? undefined,
           bannerUrl:
             typeof req.body?.bannerUrl === "string"
@@ -185,6 +198,19 @@ router.patch(
     if (typeof body.sport === "string") patch.sport = body.sport;
     if (typeof body.level === "string") patch.level = body.level;
     if (typeof body.description === "string") patch.description = body.description;
+    // Task #293 — Team website. Mirrors the org-website behavior added in
+    // #290: explicit null clears, empty string clears, a string is run
+    // through normalizeWebsite() (bare domains get a https:// prefix),
+    // and obvious garbage is rejected with a 400.
+    if (body.website === null) {
+      patch.website = null;
+    } else if (typeof body.website === "string") {
+      const websiteResult = normalizeWebsite(body.website);
+      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
+      patch.website = websiteResult.value === "" ? null : websiteResult.value;
+    } else if (body.website !== undefined) {
+      return apiError(res, 400, "website must be a string or null");
+    }
     if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
     if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
     else if (body.bannerUrl === null) patch.bannerUrl = null;

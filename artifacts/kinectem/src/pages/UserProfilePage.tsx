@@ -418,11 +418,24 @@ export default function UserProfilePage() {
           title={`${displayName} follows`}
           variant={{ kind: "user-following", userId }}
         />
-        {user.bio && (
-          <div className="px-6 pb-6">
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-              {user.bio}
-            </p>
+        {(user.bio || user.website) && (
+          <div className="px-6 pb-6 space-y-2">
+            {user.bio && (
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                {user.bio}
+              </p>
+            )}
+            {user.website && (
+              <a
+                href={user.website}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-sm font-bold text-primary hover:underline break-all"
+                data-testid="link-user-website"
+              >
+                {user.website.replace(/^https?:\/\//, "")}
+              </a>
+            )}
           </div>
         )}
       </div>

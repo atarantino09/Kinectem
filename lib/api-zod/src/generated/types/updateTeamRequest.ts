@@ -70,6 +70,16 @@ import type { UpdateTeamRequestGender } from "./updateTeamRequestGender";
 export interface UpdateTeamRequest {
   name?: string;
   description?: string;
+  /**
+   * Optional team website / link. Bare domains like `example.com`
+are accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string or null clears
+the field. Non-http(s) URLs and obvious garbage are rejected
+with a 400.
+
+   * @nullable
+   */
+  website?: string | null;
   sport?: string;
   level?: string;
   /** @nullable */

@@ -664,4 +664,81 @@ describe("teams", () => {
       expect(res.status).toBe(404);
     });
   });
+
+  // Task #293 — Extend the bare-domain website normalization from #290
+  // (orgs only) to teams. Mirrors the assertions in
+  // organizations.test.ts so future regressions are caught the same way.
+  it("normalizes a bare-domain website on team create and edit (task #293)", async () => {
+    const { agent } = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeams();
+
+    // Create with a bare domain — server should prepend https://.
+    const created = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({
+        name: "Team Bare Domain",
+        sport: "Soccer",
+        website: "example.com",
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.website).toBe("https://example.com");
+    const teamId = created.body.id;
+
+    // GET reflects the saved value too.
+    const detail = await request(app).get(`/api/v1/teams/${teamId}`);
+    expect(detail.body.website).toBe("https://example.com");
+
+    // PATCH with a www-prefixed bare domain — same treatment.
+    const patched = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: "www.example.org" });
+    expect(patched.status).toBe(200);
+    expect(patched.body.website).toBe("https://www.example.org");
+
+    // PATCH with a fully-qualified URL is left as-is.
+    const patchedHttp = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: "https://kinectem.com/about" });
+    expect(patchedHttp.status).toBe(200);
+    expect(patchedHttp.body.website).toBe("https://kinectem.com/about");
+
+    // PATCH with an empty string clears the field.
+    const cleared = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: "" });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.website ?? null).toBeNull();
+
+    // Explicit null also clears.
+    const nulled = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: null });
+    expect(nulled.status).toBe(200);
+    expect(nulled.body.website ?? null).toBeNull();
+
+    // Obvious garbage is rejected with a 400.
+    const garbage = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: "not a url" });
+    expect(garbage.status).toBe(400);
+
+    // Non-http(s) protocols are rejected.
+    const badProto = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: "ftp://example.com" });
+    expect(badProto.status).toBe(400);
+
+    // Whitespace-only is rejected (not silently treated as a clear).
+    const spaces = await agent
+      .patch(`/api/v1/teams/${teamId}`)
+      .send({ website: "   " });
+    expect(spaces.status).toBe(400);
+
+    // A team created without website stays null.
+    const nowebsite = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "No Website Team", sport: "Soccer" });
+    expect(nowebsite.status).toBe(201);
+    expect(nowebsite.body.website ?? null).toBeNull();
+  });
 });

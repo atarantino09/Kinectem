@@ -77,6 +77,13 @@ export interface CreateTeamRequest {
    */
   slug: string;
   description?: string;
+  /** Optional team website / link. Bare domains like `example.com`
+are accepted and normalized to a full `https://…` URL by the
+server before being stored. An empty string is treated the
+same as omitting the field. Non-http(s) URLs and obvious
+garbage are rejected with a 400.
+ */
+  website?: string;
   sport?: string;
   level?: string;
   /** @nullable */

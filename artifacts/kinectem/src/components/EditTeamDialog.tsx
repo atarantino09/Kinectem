@@ -28,6 +28,7 @@ import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
+import { normalizeWebsite } from "@/lib/normalizeWebsite";
 
 const SPORTS = [
   "Soccer",
@@ -44,6 +45,7 @@ type TeamLike = {
   id: string;
   name: string;
   description?: string | null;
+  website?: string | null;
   sport?: string | null;
   level?: string | null;
   gender?: "boys" | "girls" | "coed" | null;
@@ -66,6 +68,10 @@ export function EditTeamDialog({
   const { toast } = useToast();
   const [name, setName] = useState(team.name);
   const [description, setDescription] = useState(team.description ?? "");
+  const [website, setWebsite] = useState(team.website ?? "");
+  const [websiteError, setWebsiteError] = useState<string | undefined>(
+    undefined,
+  );
   const [sport, setSport] = useState(team.sport ?? "");
   const [gender, setGender] = useState<"boys" | "girls" | "coed" | "">(
     team.gender ?? "",
@@ -79,6 +85,8 @@ export function EditTeamDialog({
     if (open) {
       setName(team.name);
       setDescription(team.description ?? "");
+      setWebsite(team.website ?? "");
+      setWebsiteError(undefined);
       setSport(team.sport ?? "");
       setGender(team.gender ?? "");
       setLevel(team.level ?? "");
@@ -143,6 +151,16 @@ export function EditTeamDialog({
       toast({ title: "Name is required", variant: "destructive" });
       return;
     }
+    // Task #293 — Normalize the website client-side using the same helper
+    // the org form uses. Bare domains become `https://example.com`; obvious
+    // garbage is surfaced inline instead of going to the server.
+    const websiteResult = normalizeWebsite(website);
+    if (!websiteResult.ok) {
+      setWebsiteError(websiteResult.error);
+      toast({ title: websiteResult.error, variant: "destructive" });
+      return;
+    }
+    setWebsiteError(undefined);
     setSaving(true);
     try {
       await customFetch(`/api/v1/teams/${team.id}`, {
@@ -151,6 +169,9 @@ export function EditTeamDialog({
         body: JSON.stringify({
           name: name.trim(),
           description,
+          // Always include website so a user can clear a previously-set
+          // value by emptying the input. Empty string clears it server-side.
+          website: websiteResult.value,
           sport,
           level,
           gender: gender || null,
@@ -317,6 +338,31 @@ export function EditTeamDialog({
                 rows={3}
                 data-testid="input-edit-team-description"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-team-website" className="font-bold">
+                Website
+              </Label>
+              <Input
+                id="edit-team-website"
+                type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="example.com"
+                data-testid="input-edit-team-website"
+              />
+              {websiteError && (
+                <p
+                  className="text-xs font-medium text-destructive"
+                  data-testid="error-edit-team-website"
+                >
+                  {websiteError}
+                </p>
+              )}
             </div>
           </div>
 

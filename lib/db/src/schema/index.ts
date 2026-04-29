@@ -54,6 +54,10 @@ export const users = pgTable("users", {
   location: text("location"),
   avatarUrl: text("avatar_url"),
   bio: text("bio"),
+  // Task #293 — Personal website / link on a user profile. Stored as a
+  // normalized URL (always http:// or https://). Bare domains entered
+  // by the user are promoted to https:// before being persisted.
+  website: text("website"),
   dateOfBirth: timestamp("date_of_birth"),
   parentId: uuid("parent_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   guardianEmail: text("guardian_email"),
@@ -156,6 +160,10 @@ export const teams = pgTable("teams", {
   level: text("level"),
   gender: text("gender"),
   description: text("description"),
+  // Task #293 — Optional team website / link. Stored as a normalized
+  // URL (always http:// or https://). Bare domains entered by the user
+  // are promoted to https:// before being persisted.
+  website: text("website"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

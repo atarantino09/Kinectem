@@ -6026,6 +6026,14 @@ components:
           type: string
           nullable: true
           maxLength: 1000
+        website:
+          type: string
+          nullable: true
+          description: |
+            Personal website / link surfaced on the public profile.
+            Always a full `https://…` URL when set; bare domains submitted
+            via `UpdateUserRequest` are normalized server-side before
+            being stored. Null when the user has not set one.
         avatarUrl:
           type: string
           format: uri
@@ -6101,6 +6109,15 @@ components:
           type: string
           nullable: true
           maxLength: 1000
+        website:
+          type: string
+          nullable: true
+          description: |
+            Personal website / link. Bare domains like `example.com` are
+            accepted and normalized to a full `https://…` URL by the
+            server before being stored. An empty string or null clears
+            the field. Non-http(s) URLs and obvious garbage are rejected
+            with a 400.
         level:
           type: string
           nullable: true
@@ -7962,6 +7979,14 @@ components:
         description:
           type: string
           nullable: true
+        website:
+          type: string
+          nullable: true
+          description: |
+            Optional team website / link surfaced on the team page.
+            Always a full `https://…` URL when set; bare domains submitted
+            via the create / update endpoints are normalized server-side
+            before being stored. Null when the team has not set one.
         sport:
           type: string
           nullable: true
@@ -8039,6 +8064,14 @@ components:
           pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
         description:
           type: string
+        website:
+          type: string
+          description: |
+            Optional team website / link. Bare domains like `example.com`
+            are accepted and normalized to a full `https://…` URL by the
+            server before being stored. An empty string is treated the
+            same as omitting the field. Non-http(s) URLs and obvious
+            garbage are rejected with a 400.
         sport:
           type: string
         level:
@@ -8077,6 +8110,15 @@ components:
           type: string
         description:
           type: string
+        website:
+          type: string
+          nullable: true
+          description: |
+            Optional team website / link. Bare domains like `example.com`
+            are accepted and normalized to a full `https://…` URL by the
+            server before being stored. An empty string or null clears
+            the field. Non-http(s) URLs and obvious garbage are rejected
+            with a 400.
         sport:
           type: string
         level:
