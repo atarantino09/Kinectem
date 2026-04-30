@@ -1,6 +1,6 @@
 import { db, articleTags, articles, notifications, rosterEntries, users } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
-import { articlePostId } from "./spec-helpers";
+import { articlePostId, highlightPostId } from "./spec-helpers";
 
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
@@ -120,6 +120,68 @@ export async function notifyNewlyTaggedInRecap(args: {
       userId,
       kind: "post_tag",
       message: `You were tagged in "${title}"`,
+      link,
+      actorUserId: args.actorUserId,
+    })),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Highlight tag fan-out notification (task #320)
+// ---------------------------------------------------------------------------
+// Mirrors `notifyNewlyTaggedInRecap` for the highlight-tag insert path
+// in POST /posts/:postId/tags. Differences vs. the recap helper:
+//   * Self-tags are silently dropped — when the post author tags
+//     themselves we don't ping them about their own action. The recap
+//     fan-out doesn't need this filter since the auto-tag covers
+//     accepted players only and the author (a coach/admin) typically
+//     isn't on the player roster.
+//   * Pending tags get a "review tag" prompt rather than the plain
+//     "you were tagged" line so the player knows the bell row needs
+//     a decision before the tag goes live (mirrors the consent prompt
+//     parents see for their child's pending tags).
+// Throttle window and notification kind/link match the recap path so
+// dedupe rules in the bell UI carry over.
+export async function notifyNewlyTaggedInHighlight(args: {
+  tags: { userId: string; status: "pending" | "approved" }[];
+  highlightId: string;
+  highlightTitle: string | null;
+  actorUserId: string | null;
+}): Promise<void> {
+  // Drop self-tags before any DB work so the post author proposing
+  // themselves is a complete no-op (no row, no throttle entry).
+  const candidates = args.tags.filter(
+    (t) => !args.actorUserId || t.userId !== args.actorUserId,
+  );
+  if (candidates.length === 0) return;
+  const link = `/posts/${highlightPostId(args.highlightId)}`;
+  const since = new Date(Date.now() - TAG_NOTIF_THROTTLE_MS);
+  const recent = await db
+    .select({ userId: notifications.userId })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.kind, "post_tag"),
+        eq(notifications.link, link),
+        inArray(
+          notifications.userId,
+          candidates.map((t) => t.userId),
+        ),
+        gt(notifications.createdAt, since),
+      ),
+    );
+  const skip = new Set(recent.map((r) => r.userId));
+  const target = candidates.filter((t) => !skip.has(t.userId));
+  if (target.length === 0) return;
+  const title = args.highlightTitle?.trim() ? args.highlightTitle.trim() : "Untitled";
+  await db.insert(notifications).values(
+    target.map((t) => ({
+      userId: t.userId,
+      kind: "post_tag",
+      message:
+        t.status === "pending"
+          ? `Please review a tag on you in "${title}"`
+          : `You were tagged in "${title}"`,
       link,
       actorUserId: args.actorUserId,
     })),

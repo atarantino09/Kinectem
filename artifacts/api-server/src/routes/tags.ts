@@ -37,7 +37,12 @@ import {
   type PostStats,
   type StatsKind,
 } from "../lib/post-stats";
-import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import {
+  applyArticleTagFanout,
+  notifyNewlyTaggedInRecap,
+  notifyNewlyTaggedInHighlight,
+  TAG_NOTIF_THROTTLE_MS,
+} from "../lib/article-tagging";
 
 const router: IRouter = Router();
 
@@ -151,6 +156,9 @@ router.post(
     // the permission check and the consent lookup.
     let teamId: string;
     let isAuthor: boolean;
+    // Cached so the highlight branch can pass the post title into the
+    // notification helper without re-fetching the row after insert.
+    let highlightTitle: string | null = null;
     if (parsed.kind === "article") {
       const [a] = await db
         .select()
@@ -169,6 +177,7 @@ router.post(
       if (!h) return notFound(res);
       teamId = h.teamId;
       isAuthor = h.uploaderId === me.id;
+      highlightTitle = h.title ?? null;
     }
     const [team] = await db
       .select()
@@ -324,6 +333,21 @@ router.post(
           .onConflictDoNothing()
           .returning()
       : [];
+    // Bell-notify each newly-tagged player so they don't have to discover
+    // the tag by accident. Mirrors the recap fan-out's notify step (task
+    // #320). Self-tags are dropped inside the helper, and pending tags
+    // get a "review" prompt instead of the plain "you were tagged" line.
+    if (inserted.length > 0) {
+      await notifyNewlyTaggedInHighlight({
+        tags: inserted.map((t) => ({
+          userId: t.userId,
+          status: t.status as "pending" | "approved",
+        })),
+        highlightId: parsed.id,
+        highlightTitle,
+        actorUserId: me.id,
+      });
+    }
     return res.status(201).json({
       tags: inserted.map((t) => ({
         id: t.id,
