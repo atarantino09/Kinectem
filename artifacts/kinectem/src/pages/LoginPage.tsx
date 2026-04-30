@@ -75,7 +75,7 @@ export default function LoginPage() {
   const heading = HEADINGS[mode];
 
   return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-white text-slate-900">
+    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 text-slate-900">
       <AuthAside />
       <main className="flex items-center justify-center p-8 md:p-12">
         <div className="w-full max-w-sm space-y-6">

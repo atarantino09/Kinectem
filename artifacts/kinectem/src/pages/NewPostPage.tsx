@@ -102,7 +102,7 @@ export default function NewPostPage() {
         : "Editing Recap";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <PostHeaderBar
         Icon={Icon}
         heading={heading}

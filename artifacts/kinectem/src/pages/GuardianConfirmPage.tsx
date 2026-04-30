@@ -60,7 +60,7 @@ export default function GuardianConfirmPage() {
   const showForm = state.kind === "ready" || state.kind === "error" || state.kind === "submitting";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 via-white to-blue-50 p-6">
+    <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md space-y-6">
         <div className="flex items-center justify-center gap-2">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-white flex items-center justify-center">

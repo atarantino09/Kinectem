@@ -113,7 +113,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     : "";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen text-foreground">
       <MasqueradeBanner />
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">

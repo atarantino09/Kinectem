@@ -122,7 +122,7 @@ export default function InviteAcceptPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl mx-auto p-6 space-y-4">
+      <div className="min-h-screen max-w-xl mx-auto p-6 space-y-4">
         <Skeleton className="h-32 rounded-xl" />
         <Skeleton className="h-48 rounded-xl" />
       </div>
@@ -131,7 +131,7 @@ export default function InviteAcceptPage() {
 
   if (error || !envelope) {
     return (
-      <div className="max-w-xl mx-auto p-6">
+      <div className="min-h-screen max-w-xl mx-auto p-6">
         <Card className="rounded-xl border-border">
           <CardContent className="p-6 text-center space-y-2">
             <h1 className="text-xl font-black tracking-tight">
@@ -152,7 +152,7 @@ export default function InviteAcceptPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6 space-y-4">
+    <div className="min-h-screen max-w-xl mx-auto p-6 space-y-4">
       <InviteHeaderCard
         organizationName={envelope.organization.name}
         teamName={envelope.team.name}
