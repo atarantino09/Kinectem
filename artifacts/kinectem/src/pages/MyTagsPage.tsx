@@ -3,12 +3,13 @@ import { Link } from "wouter";
 import {
   customFetch,
   useGetLoggedInUser,
+  useListPendingTags,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { Tag, Trash2, ShieldCheck } from "lucide-react";
+import { Tag, Trash2, ShieldCheck, Inbox, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type TagItem = {
@@ -24,6 +25,8 @@ type TagItem = {
 export default function MyTagsPage() {
   const { toast } = useToast();
   const { data: me } = useGetLoggedInUser();
+  const { data: pendingResp } = useListPendingTags();
+  const pendingCount = pendingResp?.data?.length ?? 0;
   const [tags, setTags] = useState<TagItem[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [requireConsent, setRequireConsent] = useState<boolean>(false);
@@ -127,7 +130,7 @@ export default function MyTagsPage() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   New tags will go to a pending queue you can approve or
-                  decline.
+                  remove.
                 </p>
               </div>
               <Switch
@@ -139,6 +142,29 @@ export default function MyTagsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {pendingCount > 0 && (
+        <Link href="/tags/pending">
+          <Card
+            className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 shadow-sm cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors"
+            data-testid="card-pending-tags-banner"
+          >
+            <CardContent className="p-5 flex items-center gap-3">
+              <Inbox className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0" />
+              <div className="flex-1">
+                <p className="font-bold text-sm text-amber-900 dark:text-amber-100">
+                  {pendingCount} tag{pendingCount === 1 ? "" : "s"} waiting
+                  for your review
+                </p>
+                <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mt-0.5">
+                  Approve to make them visible, or remove to keep them hidden.
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {selected.size > 0 && (
         <div className="sticky top-16 z-10 bg-card border border-border rounded-xl shadow-sm p-3 flex items-center justify-between">

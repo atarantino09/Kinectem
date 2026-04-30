@@ -81,6 +81,14 @@ export default function PostPage() {
           : `/api/v1/posts/${postId}`,
       ),
     enabled: !!postId,
+    // Always refetch on mount so navigating back here from a flow that
+    // mutates server-side state (e.g. approving / removing a pending
+    // tag from /tags/pending) shows the latest state, even if the
+    // cache eviction in the mutating flow didn't fire for any reason
+    // (closure issue, browser BFCache restoring React state, etc).
+    // The post-detail endpoint is cheap and this is a single fetch
+    // per page load, not per render.
+    refetchOnMount: "always",
   });
   const post = postQuery.data;
   const isLoading = postQuery.isLoading;
