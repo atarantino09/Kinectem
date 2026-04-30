@@ -295,6 +295,161 @@ describe("highlight tag notifications (task #320)", () => {
     expect(tylerNotifs).toHaveLength(1);
   });
 
+  it("notifies the gating parent so they can review the tag from their bell (task #323)", async () => {
+    // Samira is Lisa's child in the seed. With Lisa requiring consent the
+    // tag lands as `pending` — Samira can't approve it herself, so Lisa
+    // (the actual decision-maker) needs her own bell row pointing at the
+    // post in "view as your child" mode rather than only seeing the prompt
+    // if she happens to open the family inbox.
+    const { teamId } = await getFootballTeam();
+    const { agent: uploader } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+    const marcusId = await findUserId("marcus@kinectem.demo");
+    await ensureRosterPlayer(teamId, samiraId);
+    await setRequireTagConsent(lisaId, true);
+
+    const create = await uploader.post("/api/v1/posts").send({
+      postType: "short",
+      teamId,
+      title: "Parent prompt clip",
+      description: "Tag of a minor — parent should be pinged too.",
+      videoUrl: "https://example.com/parent-prompt.mp4",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    const tagRes = await uploader.post(`/api/v1/posts/${postId}/tags`).send({
+      tags: [{ taggedEntityType: "user", taggedEntityId: samiraId }],
+    });
+    expect(tagRes.status).toBe(201);
+    expect(tagRes.body.tags[0].status).toBe("pending");
+
+    // Lisa's bell carries a child-scoped link (`?asChild=<childId>`) that
+    // lands the family-inbox view of the post so she can approve/decline.
+    const parentLink = `/posts/${postId}?asChild=${samiraId}`;
+    const lisaNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, parentLink),
+        ),
+      );
+    expect(lisaNotifs).toHaveLength(1);
+    expect(lisaNotifs[0].message).toBe(
+      'Please review a tag on Samira in "Parent prompt clip"',
+    );
+    expect(lisaNotifs[0].actorUserId).toBe(marcusId);
+
+    // Samira still gets her own prompt at the un-scoped link — the parent
+    // row is in addition to the child row, not a replacement.
+    const samiraNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, samiraId),
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, `/posts/${postId}`),
+        ),
+      );
+    expect(samiraNotifs).toHaveLength(1);
+  });
+
+  it("does not ping the parent when the parent is the one tagging their child (task #323)", async () => {
+    // Lisa tagging Samira herself is a self-tag at the family level — the
+    // parent already knows about the action they just took, so no bell row
+    // for Lisa even though Samira's tag still lands as `pending`.
+    const { teamId } = await getFootballTeam();
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+    await ensureRosterPlayer(teamId, samiraId);
+    await setRequireTagConsent(lisaId, true);
+
+    const fakeHighlightId = "00000000-0000-4000-8000-000000000323";
+    const link = `/posts/highlight-${fakeHighlightId}`;
+    const parentLink = `${link}?asChild=${samiraId}`;
+
+    await notifyNewlyTaggedInHighlight({
+      tags: [{ userId: samiraId, status: "pending" }],
+      highlightId: fakeHighlightId,
+      highlightTitle: "Parent self-tag",
+      actorUserId: lisaId,
+    });
+
+    const lisaNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, parentLink),
+        ),
+      );
+    expect(lisaNotifs).toHaveLength(0);
+
+    // Samira still gets her review prompt — only the parent fan-out is
+    // suppressed when the parent is the actor.
+    const samiraNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, samiraId),
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, link),
+        ),
+      );
+    expect(samiraNotifs).toHaveLength(1);
+  });
+
+  it("does not duplicate the parent bell row when the same tag is re-sent (task #323)", async () => {
+    // Re-running the helper for the same (parent, child, post) tuple inside
+    // the throttle window must not write a second parent row, mirroring
+    // the player-side dedupe.
+    const { teamId } = await getFootballTeam();
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+    const marcusId = await findUserId("marcus@kinectem.demo");
+    await ensureRosterPlayer(teamId, samiraId);
+    await setRequireTagConsent(lisaId, true);
+
+    const fakeHighlightId = "00000000-0000-4000-8000-000000000324";
+    const link = `/posts/highlight-${fakeHighlightId}`;
+    const parentLink = `${link}?asChild=${samiraId}`;
+
+    await notifyNewlyTaggedInHighlight({
+      tags: [{ userId: samiraId, status: "pending" }],
+      highlightId: fakeHighlightId,
+      highlightTitle: "Re-tag minor",
+      actorUserId: marcusId,
+    });
+    await notifyNewlyTaggedInHighlight({
+      tags: [{ userId: samiraId, status: "pending" }],
+      highlightId: fakeHighlightId,
+      highlightTitle: "Re-tag minor",
+      actorUserId: marcusId,
+    });
+
+    const lisaNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, lisaId),
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, parentLink),
+        ),
+      );
+    expect(lisaNotifs).toHaveLength(1);
+  });
+
   it("suppresses a second notification within the throttle window", async () => {
     // Directly exercise the time-window throttle: pre-seed a recent
     // post_tag bell row for the same (user, link) and call the helper

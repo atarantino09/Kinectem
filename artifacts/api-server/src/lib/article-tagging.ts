@@ -229,6 +229,12 @@ export async function notifyNewlyTaggedInRecap(args: {
 //     "you were tagged" line so the player knows the bell row needs
 //     a decision before the tag goes live (mirrors the consent prompt
 //     parents see for their child's pending tags).
+//   * For pending tags on a minor whose linked guardian gates consent
+//     (`requireTagConsent = true`), the parent ALSO gets a bell row
+//     pointing at the post page in "view as your child" mode — the
+//     child can't actually approve the tag themselves, so without
+//     this fan-out the parent only ever sees the prompt if they
+//     happen to open the family inbox (task #323).
 // Throttle window and notification kind/link match the recap path so
 // dedupe rules in the bell UI carry over.
 export async function notifyNewlyTaggedInHighlight(args: {
@@ -261,24 +267,28 @@ export async function notifyNewlyTaggedInHighlight(args: {
     );
   const skip = new Set(recent.map((r) => r.userId));
   const target = candidates.filter((t) => !skip.has(t.userId));
-  if (target.length === 0) return;
   const title = args.highlightTitle?.trim() ? args.highlightTitle.trim() : "Untitled";
-  await db.insert(notifications).values(
-    target.map((t) => ({
-      userId: t.userId,
-      kind: "post_tag",
-      message:
-        t.status === "pending"
-          ? `Please review a tag on you in "${title}"`
-          : `You were tagged in "${title}"`,
-      link,
-      actorUserId: args.actorUserId,
-    })),
-  );
-  // Mirror the bell channel into email so out-of-app players still find
-  // out (task #324). statusByUser carries the pending/approved decision
+  if (target.length > 0) {
+    await db.insert(notifications).values(
+      target.map((t) => ({
+        userId: t.userId,
+        kind: "post_tag",
+        message:
+          t.status === "pending"
+            ? `Please review a tag on you in "${title}"`
+            : `You were tagged in "${title}"`,
+        link,
+        actorUserId: args.actorUserId,
+      })),
+    );
+  }
+
+  // Mirror the player bell channel into email so out-of-app players still
+  // find out (task #324). statusByUser carries the pending/approved decision
   // straight from the caller — for highlights we already have it on the
-  // inserted tag row, no extra lookup needed.
+  // inserted tag row, no extra lookup needed. Done before the guardian
+  // fan-out below so the early-returns in the parent path don't short-
+  // circuit the email channel for tag batches that have no pending rows.
   const statusByUser = new Map<string, "pending" | "approved">(
     target.map((t) => [t.userId, t.status]),
   );
@@ -289,4 +299,89 @@ export async function notifyNewlyTaggedInHighlight(args: {
     postLink: link,
     actorUserId: args.actorUserId,
   });
+
+  // ---- Guardian fan-out for pending consent (task #323) --------------------
+  // Only `pending` tags need a parent prompt; `approved` rows are not awaiting
+  // anyone's review. Look up each pending-target's parent and surface the
+  // prompt in the parent's bell so they can act from the family inbox even
+  // if they never open it. Throttle/dedupe runs separately because the link
+  // carries `?asChild=` (so it can't collide with the player's own bell row).
+  const pendingChildIds = candidates
+    .filter((t) => t.status === "pending")
+    .map((t) => t.userId);
+  if (pendingChildIds.length === 0) return;
+
+  const childRows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      parentId: users.parentId,
+    })
+    .from(users)
+    .where(inArray(users.id, pendingChildIds));
+  const withParent = childRows.filter(
+    (c): c is typeof c & { parentId: string } => !!c.parentId,
+  );
+  if (withParent.length === 0) return;
+
+  const parentIds = Array.from(new Set(withParent.map((c) => c.parentId)));
+  const parents = await db
+    .select({ id: users.id, requireTagConsent: users.requireTagConsent })
+    .from(users)
+    .where(inArray(users.id, parentIds));
+  const gatingParents = new Set(
+    parents.filter((p) => !!p.requireTagConsent).map((p) => p.id),
+  );
+  // Drop self-tags by the parent (a parent tagging their own child is the
+  // actor — they don't need a prompt to review their own action) and any
+  // child whose parent doesn't gate consent (the child can decide alone).
+  const guardianTargets = withParent
+    .filter((c) => gatingParents.has(c.parentId))
+    .filter((c) => !args.actorUserId || c.parentId !== args.actorUserId)
+    .map((c) => ({
+      parentId: c.parentId,
+      childId: c.id,
+      childFirst:
+        (c.name?.trim().split(/\s+/)[0] ?? "").length > 0
+          ? c.name!.trim().split(/\s+/)[0]
+          : "your child",
+    }));
+  if (guardianTargets.length === 0) return;
+
+  // Each (parent, child) pair has its own link so dedupe is per-child even
+  // when one parent has multiple kids tagged on the same post.
+  const guardianLinks = guardianTargets.map(
+    (g) => `${link}?asChild=${g.childId}`,
+  );
+  const recentParents = await db
+    .select({ userId: notifications.userId, link: notifications.link })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.kind, "post_tag"),
+        inArray(notifications.link, guardianLinks),
+        inArray(
+          notifications.userId,
+          guardianTargets.map((g) => g.parentId),
+        ),
+        gt(notifications.createdAt, since),
+      ),
+    );
+  const parentSkip = new Set(
+    recentParents.map((r) => `${r.userId}|${r.link ?? ""}`),
+  );
+  const parentInserts = guardianTargets
+    .filter(
+      (g) => !parentSkip.has(`${g.parentId}|${link}?asChild=${g.childId}`),
+    )
+    .map((g) => ({
+      userId: g.parentId,
+      kind: "post_tag",
+      message: `Please review a tag on ${g.childFirst} in "${title}"`,
+      link: `${link}?asChild=${g.childId}`,
+      actorUserId: args.actorUserId,
+    }));
+  if (parentInserts.length > 0) {
+    await db.insert(notifications).values(parentInserts);
+  }
 }
