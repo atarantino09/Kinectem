@@ -476,6 +476,13 @@ interface PostExtras {
   // highlight posts; other paths leave it undefined and the response
   // omits the field.
   taggedUsers?: PostTaggedUserView[];
+  // Task #344 — The viewer's own tag row on this post (article or
+  // highlight), surfaced so the 3-dot menu can render "Remove me from
+  // this post". Only set when the viewer has an `approved` or
+  // `pending` tag on this post; declined / removed tags and
+  // unauthenticated viewers leave this undefined and the response
+  // ships null. Org-post paths never populate it.
+  currentUserTag?: CurrentUserTagView | null;
 }
 
 export interface PostTaggedUserView {
@@ -483,6 +490,12 @@ export interface PostTaggedUserView {
   displayName: string;
   avatarUrl: string | null;
   tagStatus: "approved" | "pending";
+}
+
+export interface CurrentUserTagView {
+  id: string;
+  kind: "article" | "highlight";
+  status: "approved" | "pending";
 }
 
 export function articleToPost(a: ArticleRow, extras: PostExtras) {
@@ -672,6 +685,11 @@ function basePost(p: {
     ...(p.extras.taggedUsers !== undefined
       ? { taggedUsers: p.extras.taggedUsers }
       : {}),
+    // Task #344 — Surface the viewer's own tag row when one exists
+    // so PostCard can render "Remove me from this post" without an
+    // extra round-trip. Article and highlight routes both populate
+    // this; org-post routes never do (no tag concept).
+    currentUserTag: p.extras.currentUserTag ?? null,
   };
 }
 

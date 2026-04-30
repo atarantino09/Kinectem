@@ -884,6 +884,61 @@ pending entries in this list.
   tagStatus: PostTaggedUserTagStatus;
 }
 
+/**
+ * Which tag table the row lives in — chooses between
+the article-tags and highlight-tags DELETE endpoints.
+
+ */
+export type CurrentUserTagKind =
+  (typeof CurrentUserTagKind)[keyof typeof CurrentUserTagKind];
+
+export const CurrentUserTagKind = {
+  article: "article",
+  highlight: "highlight",
+} as const;
+
+/**
+ * Status of the viewer's own tag row. Declined and
+removed tags are never surfaced; the field is null
+instead.
+
+ */
+export type CurrentUserTagStatus =
+  (typeof CurrentUserTagStatus)[keyof typeof CurrentUserTagStatus];
+
+export const CurrentUserTagStatus = {
+  approved: "approved",
+  pending: "pending",
+} as const;
+
+/**
+ * The requesting viewer's own tag on this post, when one
+exists with status `approved` or `pending`. Drives the
+"Remove me from this post" affordance in the post 3-dot
+menu so a tagged user can untag themselves without going
+to the Manage Tags page. Null / omitted when the viewer
+is not tagged on the post, or their tag was already
+declined / removed. Org-post (Update) cards never set
+this since they have no tag concept.
+
+ */
+export interface CurrentUserTag {
+  /** The `article_tags.id` or `highlight_tags.id` row the
+viewer can DELETE through `/article-tags/:id` or
+`/highlight-tags/:id` to remove themselves.
+ */
+  id: string;
+  /** Which tag table the row lives in — chooses between
+the article-tags and highlight-tags DELETE endpoints.
+ */
+  kind: CurrentUserTagKind;
+  /** Status of the viewer's own tag row. Declined and
+removed tags are never surfaced; the field is null
+instead.
+ */
+  status: CurrentUserTagStatus;
+}
+
 export interface PostResponse {
   id: string;
   postType: PostResponsePostType;
@@ -984,6 +1039,14 @@ posts; other post kinds omit this field. The list is
 stable per highlight in the order tags were created.
  */
   taggedUsers?: PostTaggedUser[];
+  /** The requesting viewer's own tag on this post, when one
+exists with status approved or pending. Used to render
+the "Remove me from this post" 3-dot menu item. Null
+for guests, for users who aren't tagged, for declined /
+removed tags, and for org_post cards (which have no
+tag concept).
+ */
+  currentUserTag?: CurrentUserTag | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2223,6 +2286,14 @@ post. Rules per kind:
 Drives the "Delete" affordance on the post page.
  */
   canDelete?: boolean;
+  /** The requesting viewer's own tag on this post, when one
+exists with status approved or pending. Used to render
+the "Remove me from this post" 3-dot menu item on feed
+cards. Null for guests, for users who aren't tagged,
+for declined / removed tags, and for org_post cards
+(which have no tag concept).
+ */
+  currentUserTag?: CurrentUserTag | null;
 }
 
 export interface FeedResponse {

@@ -65,6 +65,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { CurrentUserTag } from "./currentUserTag";
 import type { PostAssetResponse } from "./postAssetResponse";
 import type { PostAuthor } from "./postAuthor";
 import type { PostContext } from "./postContext";
@@ -172,6 +173,14 @@ posts; other post kinds omit this field. The list is
 stable per highlight in the order tags were created.
  */
   taggedUsers?: PostTaggedUser[];
+  /** The requesting viewer's own tag on this post, when one
+exists with status approved or pending. Used to render
+the "Remove me from this post" 3-dot menu item. Null
+for guests, for users who aren't tagged, for declined /
+removed tags, and for org_post cards (which have no
+tag concept).
+ */
+  currentUserTag?: CurrentUserTag | null;
   createdAt: Date;
   updatedAt: Date;
 }

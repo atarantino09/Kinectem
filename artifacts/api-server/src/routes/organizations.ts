@@ -56,6 +56,7 @@ import {
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
+import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
@@ -590,7 +591,7 @@ router.get(
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
-    const [shareStats, canEditMap, authorRoleMap, highlightTagViews] =
+    const [shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
         loadPostShareStats(me?.id ?? null, [
           ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
@@ -616,6 +617,10 @@ router.get(
           me?.id ?? null,
           hRows.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
         ),
+        loadCurrentUserTags(me?.id ?? null, {
+          articleIds: rows.map((r) => r.a.id),
+          highlightIds: hRows.map((r) => r.h.id),
+        }),
       ]);
 
     const articleData = rows.map((r) =>
@@ -626,6 +631,8 @@ router.get(
         canEdit: canEditMap.get(r.a.id) ?? false,
         authorRole: authorRoleMap.get(r.a.id) ?? null,
         ...shareStatsFor(shareStats, "article", r.a.id),
+        currentUserTag:
+          currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
       }),
     );
     const highlightData = hRows.map((r) => {
@@ -638,6 +645,8 @@ router.get(
         canDelete: isUploader,
         ...shareStatsFor(shareStats, "highlight", r.h.id),
         taggedUsers: highlightTagViews.get(r.h.id) ?? [],
+        currentUserTag:
+          currentUserTags.highlightTagByHighlightId.get(r.h.id) ?? null,
       });
     });
     const merged = [...articleData, ...highlightData].sort((a, b) =>
@@ -680,7 +689,7 @@ router.get(
         .limit(20),
     ]);
 
-    const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
+    const [stats, shareStats, canEditMap, authorRoleMap, currentUserTags] = await Promise.all([
       loadPostStats(me?.id ?? null, [
         ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
@@ -707,6 +716,10 @@ router.get(
           orgId: r.org.id,
         })),
       ),
+      loadCurrentUserTags(me?.id ?? null, {
+        articleIds: articleRows.map((r) => r.a.id),
+        highlightIds: [],
+      }),
     ]);
 
     const isViewerOrgAdmin = me
@@ -723,6 +736,8 @@ router.get(
           authorRole: authorRoleMap.get(r.a.id) ?? null,
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
+          currentUserTag:
+            currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
         }),
       ),
       ...orgPostRows.map((r) => {

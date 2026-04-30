@@ -7316,6 +7316,47 @@ components:
             tagged player themselves; other viewers never see
             pending entries in this list.
 
+    CurrentUserTag:
+      type: object
+      required:
+        - id
+        - kind
+        - status
+      description: |
+        The requesting viewer's own tag on this post, when one
+        exists with status `approved` or `pending`. Drives the
+        "Remove me from this post" affordance in the post 3-dot
+        menu so a tagged user can untag themselves without going
+        to the Manage Tags page. Null / omitted when the viewer
+        is not tagged on the post, or their tag was already
+        declined / removed. Org-post (Update) cards never set
+        this since they have no tag concept.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            The `article_tags.id` or `highlight_tags.id` row the
+            viewer can DELETE through `/article-tags/:id` or
+            `/highlight-tags/:id` to remove themselves.
+        kind:
+          type: string
+          enum:
+            - article
+            - highlight
+          description: |
+            Which tag table the row lives in — chooses between
+            the article-tags and highlight-tags DELETE endpoints.
+        status:
+          type: string
+          enum:
+            - approved
+            - pending
+          description: |
+            Status of the viewer's own tag row. Declined and
+            removed tags are never surfaced; the field is null
+            instead.
+
     PostContext:
       type: object
       required:
@@ -7526,6 +7567,17 @@ components:
             stable per highlight in the order tags were created.
           items:
             $ref: '#/components/schemas/PostTaggedUser'
+        currentUserTag:
+          nullable: true
+          description: |
+            The requesting viewer's own tag on this post, when one
+            exists with status approved or pending. Used to render
+            the "Remove me from this post" 3-dot menu item. Null
+            for guests, for users who aren't tagged, for declined /
+            removed tags, and for org_post cards (which have no
+            tag concept).
+          allOf:
+            - $ref: '#/components/schemas/CurrentUserTag'
         createdAt:
           type: string
           format: date-time
@@ -8814,6 +8866,17 @@ components:
               - highlight: the original uploader only.
               - org_post (Update): the original author only.
             Drives the "Delete" affordance on the post page.
+        currentUserTag:
+          nullable: true
+          description: |
+            The requesting viewer's own tag on this post, when one
+            exists with status approved or pending. Used to render
+            the "Remove me from this post" 3-dot menu item on feed
+            cards. Null for guests, for users who aren't tagged,
+            for declined / removed tags, and for org_post cards
+            (which have no tag concept).
+          allOf:
+            - $ref: '#/components/schemas/CurrentUserTag'
 
     FeedResponse:
       type: object

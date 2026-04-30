@@ -1617,6 +1617,32 @@ export const GetPostResponse = zod.object({
     .describe(
       "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
     ),
+  currentUserTag: zod
+    .object({
+      id: zod
+        .string()
+        .uuid()
+        .describe(
+          "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+        ),
+      kind: zod
+        .enum(["article", "highlight"])
+        .describe(
+          "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+        ),
+      status: zod
+        .enum(["approved", "pending"])
+        .describe(
+          "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+        ),
+    })
+    .describe(
+      'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+    )
+    .nullish()
+    .describe(
+      "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -1850,6 +1876,32 @@ export const UpdatePostResponse = zod.object({
     .describe(
       "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
     ),
+  currentUserTag: zod
+    .object({
+      id: zod
+        .string()
+        .uuid()
+        .describe(
+          "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+        ),
+      kind: zod
+        .enum(["article", "highlight"])
+        .describe(
+          "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+        ),
+      status: zod
+        .enum(["approved", "pending"])
+        .describe(
+          "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+        ),
+    })
+    .describe(
+      'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+    )
+    .nullish()
+    .describe(
+      "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -2081,6 +2133,32 @@ export const ListOrgPostsResponse = zod.object({
         .optional()
         .describe(
           "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+        ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -2523,6 +2601,32 @@ export const ListUserPostsResponse = zod.object({
         .optional()
         .describe(
           "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+        ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -4230,6 +4334,32 @@ export const ListFeedResponse = zod.object({
         .describe(
           'True when the requesting user is allowed to delete this\npost. Rules per kind:\n  - article (game recap): the original author only —\n    co-authors, coaches, and org admins do NOT get\n    delete access even when `canEdit` is true.\n  - highlight: the original uploader only.\n  - org_post (Update): the original author only.\nDrives the \"Delete\" affordance on the post page.\n',
         ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item on feed\ncards. Null for guests, for users who aren't tagged,\nfor declined \/ removed tags, and for org_post cards\n(which have no tag concept).\n",
+        ),
     }),
   ),
   pagination: zod.object({
@@ -4978,6 +5108,32 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
         ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -5532,6 +5688,32 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
               ),
+            currentUserTag: zod
+              .object({
+                id: zod
+                  .string()
+                  .uuid()
+                  .describe(
+                    "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+                  ),
+                kind: zod
+                  .enum(["article", "highlight"])
+                  .describe(
+                    "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+                  ),
+                status: zod
+                  .enum(["approved", "pending"])
+                  .describe(
+                    "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+                  ),
+              })
+              .describe(
+                'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+              )
+              .nullish()
+              .describe(
+                "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
+              ),
             createdAt: zod.coerce.date(),
             updatedAt: zod.coerce.date(),
           })
@@ -5740,6 +5922,32 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
         ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -5937,6 +6145,32 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .optional()
         .describe(
           "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+        ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),

@@ -5,15 +5,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2 } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus } from "lucide-react";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
+  customFetch,
   useAddPostReaction,
   useRemovePostReaction,
   useSharePost,
   useUnsharePost,
   getListFeedQueryKey,
-  getListUserPostsQueryKey,
   getGetPostQueryKey,
   type PostResponse,
   type FeedPost,
@@ -26,6 +26,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
@@ -68,6 +78,8 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const [currentPath, setLocation] = useLocation();
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmShareOpen, setConfirmShareOpen] = useState(false);
+  const [untagOpen, setUntagOpen] = useState(false);
+  const [untagging, setUntagging] = useState(false);
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
@@ -340,6 +352,21 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 >
                   <Flag className="w-4 h-4 mr-2" /> Report post
                 </DropdownMenuItem>
+                {/* Task #344 — A tagged player can untag themselves from a
+                    post directly from its three-dot menu. The server only
+                    populates `currentUserTag` when the viewer has an
+                    approved or pending tag on this article/highlight, so
+                    the menu item naturally hides for everyone else. Org
+                    Updates have no tag concept and never expose this. */}
+                {post.currentUserTag && (
+                  <DropdownMenuItem
+                    onSelect={() => setUntagOpen(true)}
+                    data-testid={`menuitem-untag-${post.id}`}
+                  >
+                    <UserMinus className="w-4 h-4 mr-2" /> Remove me from this
+                    post
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -350,6 +377,81 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           contentType={reportTarget.contentType}
           contentId={reportTarget.contentId}
         />
+        {post.currentUserTag && (
+          <AlertDialog open={untagOpen} onOpenChange={setUntagOpen}>
+            <AlertDialogContent data-testid={`dialog-untag-${post.id}`}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove yourself from this post?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You'll no longer appear as tagged on this{" "}
+                  {post.currentUserTag.kind === "highlight"
+                    ? "highlight"
+                    : "game recap"}
+                  . The author and other viewers won't be notified, and you can
+                  always be re-tagged later.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={untagging}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={untagging}
+                  data-testid={`btn-confirm-untag-${post.id}`}
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    if (!post.currentUserTag) return;
+                    setUntagging(true);
+                    const path =
+                      post.currentUserTag.kind === "article"
+                        ? `/api/v1/article-tags/${post.currentUserTag.id}`
+                        : `/api/v1/highlight-tags/${post.currentUserTag.id}`;
+                    try {
+                      await customFetch(path, { method: "DELETE" });
+                      toast({ title: "Removed from this post" });
+                      // Refresh every surface that may show this post as
+                      // tagging the viewer: the various feed variants, the
+                      // user's own profile post list, and the canonical
+                      // GET /posts/:id detail. The "My Tags" page and the
+                      // pending-tags badge are plain customFetch calls
+                      // keyed by URL, so invalidate by path.
+                      await Promise.all([
+                        qc.invalidateQueries({ queryKey: getListFeedQueryKey() }),
+                        // Invalidate ALL user-post lists, not just the
+                        // author's. The viewer is most likely browsing
+                        // their own /users/<viewerId>/posts (their
+                        // tagged feed) or another teammate's profile,
+                        // and the active query key won't match the
+                        // author id. Mirror the predicate-based
+                        // invalidation already used by share actions.
+                        qc.invalidateQueries({
+                          predicate: (q) =>
+                            Array.isArray(q.queryKey) &&
+                            typeof q.queryKey[0] === "string" &&
+                            q.queryKey[0].startsWith("/api/v1/users/") &&
+                            q.queryKey[0].endsWith("/posts"),
+                        }),
+                        qc.invalidateQueries({
+                          queryKey: getGetPostQueryKey(post.id),
+                        }),
+                        qc.invalidateQueries({ queryKey: ["/api/v1/users/me/tags"] }),
+                        qc.invalidateQueries({ queryKey: ["/api/v1/tags/pending"] }),
+                      ]);
+                      setUntagOpen(false);
+                    } catch {
+                      toast({
+                        title: "Couldn't remove tag",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setUntagging(false);
+                    }
+                  }}
+                >
+                  {untagging ? "Removing…" : "Remove me"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
         {isShareable && (
           <ShareConfirmDialog
             open={confirmShareOpen}

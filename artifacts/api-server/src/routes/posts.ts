@@ -69,6 +69,7 @@ import {
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
+import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
 
 const router: IRouter = Router();
@@ -141,7 +142,7 @@ router.get(
         teamId: r.team.id,
         orgId: r.org.id,
       }));
-      const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews] = await Promise.all([
+      const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] = await Promise.all([
         loadPostStats(me.id, statKeys),
         loadPostShareStats(me.id, statKeys),
         computeArticleCanEditMap(
@@ -157,6 +158,10 @@ router.get(
           me.id,
           ownHls.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
         ),
+        loadCurrentUserTags(me.id, {
+          articleIds: ownArts.map((r) => r.a.id),
+          highlightIds: ownHls.map((r) => r.h.id),
+        }),
       ]);
       const items = [
         ...ownArts.map((r) =>
@@ -168,6 +173,7 @@ router.get(
             authorRole: authorRoleMap.get(r.a.id) ?? null,
             ...statsFor(stats, "article", r.a.id),
             ...shareStatsFor(shareStats, "article", r.a.id),
+            currentUserTag: currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
           }),
         ),
         ...ownHls.map((r) =>
@@ -180,6 +186,7 @@ router.get(
             ...statsFor(stats, "highlight", r.h.id),
             ...shareStatsFor(shareStats, "highlight", r.h.id),
             taggedUsers: highlightTagViews.get(r.h.id) ?? [],
+            currentUserTag: currentUserTags.highlightTagByHighlightId.get(r.h.id) ?? null,
           }),
         ),
       ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -367,7 +374,7 @@ router.get(
       ...sharedArticleRows.map((r) => r.org.id),
       ...sharedHighlightRows.map((r) => r.org.id),
     ];
-    const [stats, shareStats, canEditMap, authorRoleMap, adminOrgIds, highlightTagViews] = await Promise.all([
+    const [stats, shareStats, canEditMap, authorRoleMap, adminOrgIds, highlightTagViews, currentUserTags] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
       computeArticleCanEditMap(me?.id ?? null, articleEditRows),
@@ -383,6 +390,16 @@ router.get(
           })),
         ],
       ),
+      loadCurrentUserTags(me?.id ?? null, {
+        articleIds: [
+          ...arts.map((r) => r.a.id),
+          ...sharedArticleRows.map((r) => r.a.id),
+        ],
+        highlightIds: [
+          ...hls.map((r) => r.h.id),
+          ...sharedHighlightRows.map((r) => r.h.id),
+        ],
+      }),
     ]);
 
     const seenIds = new Set<string>([
@@ -400,6 +417,7 @@ router.get(
           authorRole: authorRoleMap.get(r.a.id) ?? null,
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
+          currentUserTag: currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
         }),
       ),
       ...hls.map((r) => {
@@ -413,6 +431,7 @@ router.get(
           ...statsFor(stats, "highlight", r.h.id),
           ...shareStatsFor(shareStats, "highlight", r.h.id),
           taggedUsers: highlightTagViews.get(r.h.id) ?? [],
+          currentUserTag: currentUserTags.highlightTagByHighlightId.get(r.h.id) ?? null,
         });
       }),
       ...orgPostRows.map((r) => {
@@ -448,6 +467,8 @@ router.get(
             ...shareStatsFor(shareStats, "article", row.a.id),
             sharedBy,
             sharedAt,
+            currentUserTag:
+              currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
           }),
         );
       } else if (sr.s.postKind === "highlight") {
@@ -466,6 +487,8 @@ router.get(
             taggedUsers: highlightTagViews.get(row.h.id) ?? [],
             sharedBy,
             sharedAt,
+            currentUserTag:
+              currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
           }),
         );
       }
@@ -655,7 +678,7 @@ router.get(
       // coaches, and org admins who can still edit are intentionally
       // not given the delete affordance.
       const canDelete = isAuthor;
-      const [stats, shareStats, authorRoleMap] = await Promise.all([
+      const [stats, shareStats, authorRoleMap, currentUserTags] = await Promise.all([
         loadPostStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
         loadPostShareStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
         computeArticleAuthorRoleMap([
@@ -666,6 +689,10 @@ router.get(
             orgId: row.org.id,
           },
         ]),
+        loadCurrentUserTags(me?.id ?? null, {
+          articleIds: [row.a.id],
+          highlightIds: [],
+        }),
       ]);
       res.json(
         articleToPost(row.a, {
@@ -677,6 +704,8 @@ router.get(
           authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
           ...shareStatsFor(shareStats, "article", row.a.id),
+          currentUserTag:
+            currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
         }),
       );
       return;
@@ -726,12 +755,16 @@ router.get(
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
     // Uploader-only edit + delete on highlights.
     const isUploader = !!me && row.h.uploaderId === me.id;
-    const [stats, shareStats, tagViews] = await Promise.all([
+    const [stats, shareStats, tagViews, currentUserTags] = await Promise.all([
       loadPostStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
       loadPostShareStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
       loadHighlightTagViews(me?.id ?? null, [
         { id: row.h.id, uploaderId: row.h.uploaderId },
       ]),
+      loadCurrentUserTags(me?.id ?? null, {
+        articleIds: [],
+        highlightIds: [row.h.id],
+      }),
     ]);
     res.json(
       highlightToPost(row.h, {
@@ -743,6 +776,8 @@ router.get(
         ...statsFor(stats, "highlight", row.h.id),
         ...shareStatsFor(shareStats, "highlight", row.h.id),
         taggedUsers: tagViews.get(row.h.id) ?? [],
+        currentUserTag:
+          currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
       }),
     );
   }),

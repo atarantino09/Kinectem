@@ -65,6 +65,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { CurrentUserTag } from "./currentUserTag";
 import type { FeedAuthor } from "./feedAuthor";
 import type { FeedContext } from "./feedContext";
 import type { FeedPostAsset } from "./feedPostAsset";
@@ -145,4 +146,12 @@ post. Rules per kind:
 Drives the "Delete" affordance on the post page.
  */
   canDelete?: boolean;
+  /** The requesting viewer's own tag on this post, when one
+exists with status approved or pending. Used to render
+the "Remove me from this post" 3-dot menu item on feed
+cards. Null for guests, for users who aren't tagged,
+for declined / removed tags, and for org_post cards
+(which have no tag concept).
+ */
+  currentUserTag?: CurrentUserTag | null;
 }

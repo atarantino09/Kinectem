@@ -59,6 +59,7 @@ import {
   toPostAuthor,
 } from "../lib/spec-helpers";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
+import { loadCurrentUserTags } from "../lib/current-user-tag";
 import {
   loadPostStats,
   statsFor,
@@ -651,7 +652,7 @@ router.get(
     const highlightRows = limited.filter(
       (row): row is Extract<MergedRow, { kind: "highlight" }> => row.kind === "highlight",
     );
-    const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews] =
+    const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
         loadPostStats(me?.id ?? null, statKeys),
         loadPostShareStats(me?.id ?? null, shareStatKeys),
@@ -664,6 +665,10 @@ router.get(
             uploaderId: row.h.uploaderId,
           })),
         ),
+        loadCurrentUserTags(me?.id ?? null, {
+          articleIds: articleRows.map((row) => row.a.id),
+          highlightIds: highlightRows.map((row) => row.h.id),
+        }),
       ]);
 
     const posts = limited.map((row) => {
@@ -680,6 +685,8 @@ router.get(
           ...shareStatsFor(shareStats, "article", row.a.id),
           sharedBy,
           sharedAt,
+          currentUserTag:
+            currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
         });
         if (row.tagStatus === "pending") {
           return { ...post, tagStatus: "pending" as const };
@@ -700,6 +707,8 @@ router.get(
         taggedUsers: highlightTagViews.get(row.h.id) ?? [],
         sharedBy,
         sharedAt,
+        currentUserTag:
+          currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
       });
       // Mirror the article path: when the only reason this highlight
       // is on the profile is a pending tag on the viewed user, surface
