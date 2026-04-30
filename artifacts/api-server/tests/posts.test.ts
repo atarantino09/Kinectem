@@ -1480,4 +1480,73 @@ describe("posts", () => {
     expect(tags.status).toBe(200);
     expect(tags.body.tags).toEqual([]);
   });
+
+  // ----------------------------------------------------------------
+  // Task #319 — Manual tagging of roster players from the highlight
+  // composer must actually persist. The earlier eligibility gate
+  // filtered roster rows by `position = "player"`, but `position`
+  // stores the football position (e.g. "WR", "QB") and is null for
+  // coaches. The "is this a player?" decision lives on `role`. The
+  // bug silently dropped every valid tag, so the composer's
+  // "tagged players" UI showed nothing on every newly-published
+  // highlight. This test pins the contract: tagging real player-role
+  // roster members succeeds, and coach-role roster members are still
+  // rejected from the player-tag set.
+  // ----------------------------------------------------------------
+  it("highlight composer tags persist for player-role roster members and skip coaches", async () => {
+    const authorLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    // Marcus authors a highlight he can tag himself on (he's the
+    // post author and a player on the same team).
+    const create = await authorLogin.agent.post("/api/v1/posts").send({
+      postType: "short",
+      teamId: team.id,
+      title: "Tagged highlight",
+      description: "Composer manual-tag flow.",
+      videoUrl: "https://example.com/tagged.mp4",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    // Look up the seed users we want to tag: jordan & tyler are
+    // accepted players on Varsity Football, coachDavis is the head
+    // coach (role="coach", position="Head Coach").
+    const targets = await db
+      .select({ id: users.id, email: users.email })
+      .from(users);
+    const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+    const jordanId = byEmail.get("jordan@kinectem.demo");
+    const tylerId = byEmail.get("tyler@kinectem.demo");
+    const coachId = byEmail.get("coach@kinectem.demo");
+    if (!jordanId || !tylerId || !coachId) throw new Error("seed users missing");
+
+    const tagRes = await authorLogin.agent
+      .post(`/api/v1/posts/${postId}/tags`)
+      .send({
+        tags: [
+          { taggedEntityType: "user", taggedEntityId: jordanId },
+          { taggedEntityType: "user", taggedEntityId: tylerId },
+          { taggedEntityType: "user", taggedEntityId: coachId },
+        ],
+      });
+    expect(tagRes.status).toBe(201);
+    const persistedIds: string[] = (tagRes.body.tags ?? []).map(
+      (t: { taggedEntityId: string }) => t.taggedEntityId,
+    );
+    expect(persistedIds).toEqual(
+      expect.arrayContaining([jordanId, tylerId]),
+    );
+    expect(persistedIds).not.toContain(coachId);
+
+    // Reading back the tag list should show the same player tags so
+    // the highlight detail/card UI can render them.
+    const list = await authorLogin.agent.get(`/api/v1/posts/${postId}/tags`);
+    expect(list.status).toBe(200);
+    const listedIds: string[] = (list.body.tags ?? []).map(
+      (t: { taggedEntityId: string }) => t.taggedEntityId,
+    );
+    expect(listedIds).toEqual(expect.arrayContaining([jordanId, tylerId]));
+    expect(listedIds).not.toContain(coachId);
+  });
 });

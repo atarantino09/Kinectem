@@ -186,15 +186,19 @@ router.post(
       return res.status(201).json({ tags: [] });
     }
 
-    // Roster eligibility gate (task #313 hardening): a manual user
-    // tag is only valid for accepted player-position roster members
-    // of the post's team. Coaches/admins, pending invitees, and
-    // anyone not on the roster are silently dropped from the
-    // request — the composer's player picker already filters to the
-    // same set, so the only way to hit this branch is a hand-rolled
-    // request. Mirrors the recap auto-fanout's eligibility rules
-    // (only rosters players get tagged) and prevents an author or
-    // org admin from spraying tags at unrelated users.
+    // Roster eligibility gate (task #313 hardening, fixed in #319):
+    // a manual user tag is only valid for accepted player-role
+    // roster members of the post's team. The "is this a player?"
+    // decision lives on `role` (player/coach/admin), NOT on
+    // `position` — `position` stores the football position
+    // (e.g. "WR", "QB") and is null for coaches, so filtering by
+    // `position === "player"` silently rejected every valid tag
+    // (#319). Coaches/admins, pending invitees, and anyone not on
+    // the roster are silently dropped — the composer's player picker
+    // already filters to the same set, so the only way to hit this
+    // branch is a hand-rolled request. Mirrors the recap auto-fanout's
+    // eligibility rules (see article-tagging.ts) and prevents an
+    // author or org admin from spraying tags at unrelated users.
     const eligibleRows = await db
       .select({ userId: rosterEntries.userId })
       .from(rosterEntries)
@@ -202,7 +206,7 @@ router.post(
         and(
           eq(rosterEntries.teamId, teamId),
           eq(rosterEntries.status, "accepted"),
-          eq(rosterEntries.position, "player"),
+          eq(rosterEntries.role, "player"),
           inArray(rosterEntries.userId, uniqueUserIds),
         ),
       );
