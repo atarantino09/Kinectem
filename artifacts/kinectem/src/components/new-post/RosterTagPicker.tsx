@@ -98,7 +98,18 @@ export function RosterTagPicker({
       <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
         Tag Players
       </Label>
-      <DropdownMenu>
+      {/* `modal={false}` is intentional: with the default `modal={true}`,
+          Radix mounts a dismissable layer that swallows the first
+          outside click after the menu opens (or even briefly after it
+          closes), forcing users to click the Post button twice to
+          publish a highlight. Disabling modal mode lets the close-on-
+          outside-click pass the same click through to the underlying
+          target so Post fires on the first click. The menu still
+          closes on outside click and on Escape, and still closes
+          after a player row is toggled. Scope this to the picker
+          rather than changing the shared dropdown-menu default so
+          other dropdowns elsewhere in the app are unaffected. */}
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger
           asChild
           disabled={isDisabled}
