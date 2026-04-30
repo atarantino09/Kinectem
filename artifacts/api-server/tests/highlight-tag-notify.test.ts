@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
+  articleTags,
   db,
   highlightTags,
   notifications,
@@ -124,6 +125,12 @@ describe("highlight tag notifications (task #320)", () => {
     expect(tagRes.body.tags).toHaveLength(1);
 
     // Jordan must have exactly one bell row pointing at the post.
+    // Task #329: every manual highlight tag is now created as pending,
+    // regardless of the tagged user's `requireTagConsent` flag — so
+    // the message Jordan receives is the "Please review" prompt rather
+    // than the older "You were tagged" wording. The bell row count and
+    // actor remain the same; only the wording reflects the new
+    // approval-required contract.
     const jordanNotifs = await db
       .select()
       .from(notifications)
@@ -137,7 +144,7 @@ describe("highlight tag notifications (task #320)", () => {
     expect(jordanNotifs).toHaveLength(1);
     expect(jordanNotifs[0].read).toBe(false);
     expect(jordanNotifs[0].message).toBe(
-      'You were tagged in "Game-winning catch"',
+      'Please review a tag on you in "Game-winning catch"',
     );
     expect(jordanNotifs[0].actorUserId).toBe(marcusId);
   });
@@ -531,5 +538,164 @@ describe("highlight tag notifications (task #320)", () => {
     const messages = jordanAfter.map((n) => n.message).sort();
     expect(messages).toContain('You were tagged in "First clip"');
     expect(messages).toContain('You were tagged in "Third clip"');
+  });
+});
+
+// Task #329: Manual highlight tags now require explicit player approval
+// before the tagged highlight surfaces on the player's public profile.
+// The per-user `requireTagConsent` flag no longer governs the highlight
+// path — every fresh tag lands as `pending` and only flips to `approved`
+// when the tagged player (or guardian, via #323's parent fan-out) acts.
+// Article tagging is unchanged: that path still respects the consent
+// flag (this scope-protects the recap auto-fanout).
+describe("manual highlight tags require player approval (task #329)", () => {
+  beforeEach(async () => {
+    // Force consent OFF for everyone the tests touch so we can prove
+    // the new contract holds even when the legacy "no consent needed"
+    // path would have produced approved.
+    for (const email of [
+      "lisa@kinectem.demo",
+      "samira@kinectem.demo",
+      "marcus@kinectem.demo",
+      "jordan@kinectem.demo",
+      "tyler@kinectem.demo",
+    ]) {
+      await db
+        .update(users)
+        .set({ requireTagConsent: false })
+        .where(eq(users.email, email));
+    }
+  });
+
+  it("creates the highlight tag as pending even when the player does not require consent", async () => {
+    const { teamId } = await getFootballTeam();
+    const { agent: uploader } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    await ensureRosterPlayer(teamId, jordanId);
+
+    const create = await uploader.post("/api/v1/posts").send({
+      postType: "short",
+      teamId,
+      title: "Approval-required highlight",
+      description: "Tagging Jordan; should still be pending.",
+      videoUrl: "https://example.com/approval.mp4",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    const tagRes = await uploader.post(`/api/v1/posts/${postId}/tags`).send({
+      tags: [{ taggedEntityType: "user", taggedEntityId: jordanId }],
+    });
+    expect(tagRes.status).toBe(201);
+    expect(tagRes.body.tags).toHaveLength(1);
+    // The response carries the persisted status — must be pending.
+    expect(tagRes.body.tags[0].status).toBe("pending");
+
+    // Belt-and-suspenders: re-read the row from the DB so we're not
+    // just trusting the response shape.
+    const tagRow = await db
+      .select({ status: highlightTags.status })
+      .from(highlightTags)
+      .where(eq(highlightTags.id, tagRes.body.tags[0].id));
+    expect(tagRow).toHaveLength(1);
+    expect(tagRow[0].status).toBe("pending");
+
+    // Jordan gets the "Please review" prompt rather than the older
+    // "You were tagged" wording — proves the helper saw status=pending.
+    const jordanNotifs = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, jordanId),
+          eq(notifications.kind, "post_tag"),
+          eq(notifications.link, `/posts/${postId}`),
+        ),
+      );
+    expect(jordanNotifs).toHaveLength(1);
+    expect(jordanNotifs[0].message).toBe(
+      'Please review a tag on you in "Approval-required highlight"',
+    );
+  });
+
+  it("flips the pending highlight tag to approved when the player calls /tags/:tagId/approve", async () => {
+    const { teamId } = await getFootballTeam();
+    const { agent: uploader } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    await ensureRosterPlayer(teamId, jordanId);
+
+    const create = await uploader.post("/api/v1/posts").send({
+      postType: "short",
+      teamId,
+      title: "Approve-flow highlight",
+      videoUrl: "https://example.com/approve-flow.mp4",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+
+    const tagRes = await uploader.post(`/api/v1/posts/${postId}/tags`).send({
+      tags: [{ taggedEntityType: "user", taggedEntityId: jordanId }],
+    });
+    expect(tagRes.status).toBe(201);
+    const tagId: string = tagRes.body.tags[0].id;
+    expect(tagRes.body.tags[0].status).toBe("pending");
+
+    // Jordan flips it via the existing (polymorphic) approve endpoint.
+    const { agent: jordan } = await loginAs(
+      (u) => u.email === "jordan@kinectem.demo",
+    );
+    const approve = await jordan.post(`/api/v1/tags/${tagId}/approve`);
+    expect(approve.status).toBe(200);
+    expect(approve.body.status).toBe("approved");
+
+    const after = await db
+      .select({ status: highlightTags.status })
+      .from(highlightTags)
+      .where(eq(highlightTags.id, tagId));
+    expect(after).toHaveLength(1);
+    expect(after[0].status).toBe("approved");
+  });
+
+  it("leaves the article-tag path unchanged: a manual article tag still lands as approved when the user does not require consent", async () => {
+    // Scope-protects the recap auto-fanout: Task #329 only changes the
+    // highlight branch. The same call shape against an article post
+    // (created via /posts with postType: "long") must still respect
+    // the legacy consent default — i.e. land as `approved` for a user
+    // who doesn't require consent. Coach is the recap author (players
+    // can't post recaps), and coach also issues the tag.
+    const { teamId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const jordanId = await findUserId("jordan@kinectem.demo");
+    await ensureRosterPlayer(teamId, jordanId);
+
+    const create = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      teamId,
+      title: "Recap article",
+      body: "Body text for the recap article so it passes validation.",
+    });
+    expect(create.status).toBe(201);
+    const postId: string = create.body.id;
+    expect(postId.startsWith("article-")).toBe(true);
+
+    const tagRes = await coach.post(`/api/v1/posts/${postId}/tags`).send({
+      tags: [{ taggedEntityType: "user", taggedEntityId: jordanId }],
+    });
+    expect(tagRes.status).toBe(201);
+    expect(tagRes.body.tags).toHaveLength(1);
+    expect(tagRes.body.tags[0].status).toBe("approved");
+
+    const tagRow = await db
+      .select({ status: articleTags.status })
+      .from(articleTags)
+      .where(eq(articleTags.id, tagRes.body.tags[0].id));
+    expect(tagRow).toHaveLength(1);
+    expect(tagRow[0].status).toBe("approved");
   });
 });

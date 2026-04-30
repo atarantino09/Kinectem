@@ -225,32 +225,35 @@ router.post(
       return res.status(201).json({ tags: [] });
     }
 
-    // Resolve consent for each target: a user requires consent
-    // either because their own `requireTagConsent` is true, or
-    // because they're a minor whose linked guardian has it set.
-    const userRows = await db
-      .select({
-        id: users.id,
-        requireTagConsent: users.requireTagConsent,
-        parentId: users.parentId,
-      })
-      .from(users)
-      .where(inArray(users.id, eligibleUserIds));
-    const parentIds = Array.from(
-      new Set(
-        userRows.map((u) => u.parentId).filter((p): p is string => !!p),
-      ),
-    );
-    const parentConsent = new Map<string, boolean>();
-    if (parentIds.length > 0) {
-      const parents = await db
-        .select({ id: users.id, flag: users.requireTagConsent })
-        .from(users)
-        .where(inArray(users.id, parentIds));
-      for (const p of parents) parentConsent.set(p.id, !!p.flag);
-    }
-
     if (parsed.kind === "article") {
+      // Resolve consent for each target: a user requires consent
+      // either because their own `requireTagConsent` is true, or
+      // because they're a minor whose linked guardian has it set.
+      // Task #329: this lookup is article-only — the highlight branch
+      // below now hard-codes status:"pending" and no longer reads
+      // either flag, so we skip the join on the highlight path.
+      const userRows = await db
+        .select({
+          id: users.id,
+          requireTagConsent: users.requireTagConsent,
+          parentId: users.parentId,
+        })
+        .from(users)
+        .where(inArray(users.id, eligibleUserIds));
+      const parentIds = Array.from(
+        new Set(
+          userRows.map((u) => u.parentId).filter((p): p is string => !!p),
+        ),
+      );
+      const parentConsent = new Map<string, boolean>();
+      if (parentIds.length > 0) {
+        const parents = await db
+          .select({ id: users.id, flag: users.requireTagConsent })
+          .from(users)
+          .where(inArray(users.id, parentIds));
+        for (const p of parents) parentConsent.set(p.id, !!p.flag);
+      }
+
       // Skip rows for users who are already tagged so the response
       // only carries the freshly-inserted tags. Matches the recap
       // fanout's "ON CONFLICT DO NOTHING" behavior.
@@ -304,28 +307,32 @@ router.post(
     }
 
     // Highlight branch.
+    //
+    // Task #329: All manual highlight tags require explicit approval
+    // by the tagged player before the highlight surfaces on their
+    // public profile. This is enforced by hard-coding the inserted
+    // status to "pending" regardless of the tagged user's (or
+    // parent's) `requireTagConsent` preference — that flag still
+    // governs the article-tag path above, but for highlights the
+    // approval gate is now unconditional. The tagged player flips
+    // the row to "approved" via POST /tags/:tagId/approve (the same
+    // endpoint that has always served the consent-required path),
+    // and the bell helper below already uses the "Please review a
+    // tag on you" wording for pending rows.
     const existing = await db
       .select({ userId: highlightTags.userId })
       .from(highlightTags)
       .where(eq(highlightTags.highlightId, parsed.id));
     const skip = new Set(existing.map((r) => r.userId));
-    const toInsert = userRows
-      .filter((u) => !skip.has(u.id))
-      .map((u) => {
-        const parentRequires = u.parentId
-          ? !!parentConsent.get(u.parentId)
-          : false;
-        const requires = !!u.requireTagConsent || parentRequires;
-        return {
-          highlightId: parsed.id,
-          userId: u.id,
-          taggerUserId: me.id,
-          status: (requires ? "pending" : "approved") as
-            | "pending"
-            | "approved",
-          source: "manual" as const,
-        };
-      });
+    const toInsert = eligibleUserIds
+      .filter((id) => !skip.has(id))
+      .map((id) => ({
+        highlightId: parsed.id,
+        userId: id,
+        taggerUserId: me.id,
+        status: "pending" as const,
+        source: "manual" as const,
+      }));
     const inserted = toInsert.length
       ? await db
           .insert(highlightTags)
