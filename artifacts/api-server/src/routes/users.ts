@@ -12,6 +12,7 @@ import {
   articleTags,
   assets,
   highlights,
+  highlightTags,
   postShares,
 } from "@workspace/db";
 import {
@@ -447,6 +448,39 @@ router.get(
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .where(and(...highlightConds));
 
+    // 3b) Highlights the user is tagged in. Mirrors the article tag
+    //     visibility rules from block #2: strangers see only `approved`
+    //     tags; self / real parent / real admin also see `pending`.
+    //     Declined / removed tags never surface (the tagged player
+    //     pulled or rejected the tag, so it must drop off their
+    //     profile feed for everyone). Hidden highlights are filtered
+    //     out the same way as uploaded ones.
+    const highlightTagConds = [
+      eq(highlightTags.userId, u.id),
+      canSeePending
+        ? inArray(highlightTags.status, ["approved", "pending"] as const)
+        : eq(highlightTags.status, "approved"),
+    ];
+    const taggedHighlights = await db
+      .select({
+        h: highlights,
+        team: teams,
+        org: organizations,
+        author: users,
+        tagStatus: highlightTags.status,
+      })
+      .from(highlightTags)
+      .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(
+        and(
+          and(...highlightTagConds),
+          ...(isAdmin ? [] : [isNull(highlights.hiddenAt)]),
+        ),
+      );
+
     // 4) Re-shares the user has posted. Each share row is joined
     //    against its underlying post; rows whose target has gone
     //    away (deleted, hidden to non-admins, or no longer a valid
@@ -504,6 +538,12 @@ router.get(
       team: typeof teams.$inferSelect;
       org: typeof organizations.$inferSelect;
       author: typeof users.$inferSelect | null;
+      // Set when this row only made it onto the profile because the
+      // user was tagged in someone else's highlight (block 3b). The
+      // serializer surfaces it as a top-level `tagStatus` so the
+      // client can render the same "Pending tag" affordance it shows
+      // for tagged-in articles.
+      tagStatus?: "approved" | "pending";
       sharedAt?: Date;
     };
     type MergedRow = ArticleRow | HighlightRow;
@@ -530,6 +570,21 @@ router.get(
     }
     for (const row of uploadedHighlights) {
       seen.set(`highlight-${row.h.id}`, { kind: "highlight", ...row });
+    }
+    for (const row of taggedHighlights) {
+      const key = `highlight-${row.h.id}`;
+      // Uploader entry already won — don't double-render and don't
+      // overwrite the uploader's empty tagStatus with one from the
+      // tag join.
+      if (seen.has(key)) continue;
+      seen.set(key, {
+        kind: "highlight",
+        h: row.h,
+        team: row.team,
+        org: row.org,
+        author: row.author,
+        tagStatus: row.tagStatus as "approved" | "pending",
+      });
     }
     const shareByKey = new Map<string, Date>();
     for (const s of shares) {
@@ -634,7 +689,7 @@ router.get(
       // Uploader-only edit/delete affordance for highlights — same
       // rule the post page enforces.
       const isUploader = !!me && row.h.uploaderId === me.id;
-      return highlightToPost(row.h, {
+      const post = highlightToPost(row.h, {
         team: row.team,
         org: row.org,
         author: row.author,
@@ -646,6 +701,15 @@ router.get(
         sharedBy,
         sharedAt,
       });
+      // Mirror the article path: when the only reason this highlight
+      // is on the profile is a pending tag on the viewed user, surface
+      // `tagStatus: "pending"` so the client can show a "Pending tag"
+      // affordance. Approved tags don't need the annotation — they
+      // show normally.
+      if (row.tagStatus === "pending") {
+        return { ...post, tagStatus: "pending" as const };
+      }
+      return post;
     });
     res.json(paginate(posts));
   }),

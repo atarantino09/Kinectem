@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { db, rosterEntries, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, highlightTags, rosterEntries, users } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 
 async function getOrgAndTeam(name = "Varsity Football") {
@@ -1548,5 +1548,451 @@ describe("posts", () => {
     );
     expect(listedIds).toEqual(expect.arrayContaining([jordanId, tylerId]));
     expect(listedIds).not.toContain(coachId);
+  });
+
+  // ----------------------------------------------------------------
+  // Task #328 — Highlights a user is tagged in must surface on that
+  // user's profile Posts tab, mirroring the existing tagged-articles
+  // behavior. Visibility for pending tags follows the recap rules:
+  // strangers see only `approved`; the user themselves / their parent
+  // / a real admin also see `pending` (with a `tagStatus: "pending"`
+  // annotation). Declined or removed tags drop off the feed for
+  // everyone. Uploader-and-also-tagged collapses into a single card.
+  // ----------------------------------------------------------------
+  describe("profile shows tagged highlights (task #328)", () => {
+    it("surfaces an approved tagged highlight on the tagged player's profile", async () => {
+      const authorLogin = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { team } = await getOrgAndTeam();
+
+      const targets = await db
+        .select({ id: users.id, email: users.email })
+        .from(users);
+      const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+      const jordanId = byEmail.get("jordan@kinectem.demo");
+      if (!jordanId) throw new Error("seed user jordan missing");
+      // Jordan must not require consent so the new tag lands as
+      // approved under the current rules. (Task #329 will flip the
+      // default to pending; this test pins the visibility logic, not
+      // the default-status logic.)
+      await db
+        .update(users)
+        .set({ requireTagConsent: false })
+        .where(eq(users.id, jordanId));
+
+      const create = await authorLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        teamId: team.id,
+        title: "Tag-on-profile test",
+        description: "Approved tag for Jordan.",
+        videoUrl: "https://example.com/profile-tag.mp4",
+      });
+      expect(create.status).toBe(201);
+      const postId: string = create.body.id;
+
+      const tagRes = await authorLogin.agent
+        .post(`/api/v1/posts/${postId}/tags`)
+        .send({
+          tags: [{ taggedEntityType: "user", taggedEntityId: jordanId }],
+        });
+      expect(tagRes.status).toBe(201);
+      expect(tagRes.body.tags).toHaveLength(1);
+      const tagId: string = tagRes.body.tags[0].id;
+      // Belt-and-suspenders: force the tag to approved so the test
+      // exercises the visibility filter regardless of the per-user
+      // consent default.
+      await db
+        .update(highlightTags)
+        .set({ status: "approved" })
+        .where(eq(highlightTags.id, tagId));
+
+      // A logged-in stranger viewing Jordan's profile must now see
+      // the highlight even though Jordan didn't upload it.
+      const strangerLogin = await loginAs(
+        (u) => u.email === "tyler@kinectem.demo",
+      );
+      const profile = await strangerLogin.agent.get(
+        `/api/v1/users/${jordanId}/posts`,
+      );
+      expect(profile.status).toBe(200);
+      const ids: string[] = profile.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(ids).toContain(postId);
+    });
+
+    it("hides a pending tagged highlight from strangers but shows it to the player themselves with tagStatus pending", async () => {
+      const authorLogin = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { team } = await getOrgAndTeam();
+
+      const targets = await db
+        .select({ id: users.id, email: users.email })
+        .from(users);
+      const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+      const samiraId = byEmail.get("samira@kinectem.demo");
+      const lisaId = byEmail.get("lisa@kinectem.demo");
+      if (!samiraId || !lisaId) throw new Error("seed users missing");
+      // Samira's parent (Lisa) requires consent → her tag lands pending.
+      await db
+        .update(users)
+        .set({ requireTagConsent: true })
+        .where(eq(users.id, lisaId));
+      await db
+        .update(users)
+        .set({ requireTagConsent: false })
+        .where(eq(users.id, samiraId));
+
+      // Samira must be on the football roster as a player so she's a
+      // valid tag target. The seed has her on a different team, so we
+      // ensure her presence here.
+      const existing = await db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, team.id),
+            eq(rosterEntries.userId, samiraId),
+          ),
+        )
+        .limit(1);
+      if (existing.length === 0) {
+        await db.insert(rosterEntries).values({
+          teamId: team.id,
+          userId: samiraId,
+          role: "player",
+          status: "accepted",
+          position: "player",
+        });
+      } else {
+        await db
+          .update(rosterEntries)
+          .set({ status: "accepted", role: "player", position: "player" })
+          .where(
+            and(
+              eq(rosterEntries.teamId, team.id),
+              eq(rosterEntries.userId, samiraId),
+            ),
+          );
+      }
+
+      const create = await authorLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        teamId: team.id,
+        title: "Pending-tag profile test",
+        description: "Pending tag for Samira.",
+        videoUrl: "https://example.com/pending-tag.mp4",
+      });
+      expect(create.status).toBe(201);
+      const postId: string = create.body.id;
+
+      const tagRes = await authorLogin.agent
+        .post(`/api/v1/posts/${postId}/tags`)
+        .send({
+          tags: [{ taggedEntityType: "user", taggedEntityId: samiraId }],
+        });
+      expect(tagRes.status).toBe(201);
+      expect(tagRes.body.tags).toHaveLength(1);
+      // Belt-and-suspenders: force the tag to pending in case the
+      // consent path didn't trigger for any reason.
+      await db
+        .update(highlightTags)
+        .set({ status: "pending" })
+        .where(eq(highlightTags.id, tagRes.body.tags[0].id));
+
+      // Stranger sees no tagged highlight on Samira's profile.
+      const strangerLogin = await loginAs(
+        (u) => u.email === "tyler@kinectem.demo",
+      );
+      const strangerView = await strangerLogin.agent.get(
+        `/api/v1/users/${samiraId}/posts`,
+      );
+      expect(strangerView.status).toBe(200);
+      const strangerIds: string[] = strangerView.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(strangerIds).not.toContain(postId);
+
+      // Samira viewing herself sees the pending tag with the
+      // tagStatus annotation.
+      const selfLogin = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const selfView = await selfLogin.agent.get(
+        `/api/v1/users/${samiraId}/posts`,
+      );
+      expect(selfView.status).toBe(200);
+      const selfMatch = selfView.body.data.find(
+        (p: { id: string }) => p.id === postId,
+      );
+      expect(selfMatch).toBeDefined();
+      expect(selfMatch.tagStatus).toBe("pending");
+
+      // Lisa (the linked parent) also sees the pending tag.
+      const parentLogin = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const parentView = await parentLogin.agent.get(
+        `/api/v1/users/${samiraId}/posts`,
+      );
+      expect(parentView.status).toBe(200);
+      const parentIds: string[] = parentView.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(parentIds).toContain(postId);
+
+      // Reset consent flag so subsequent tests start clean.
+      await db
+        .update(users)
+        .set({ requireTagConsent: false })
+        .where(eq(users.id, lisaId));
+    });
+
+    it("collapses a duplicate when the uploader is also tagged in their own highlight", async () => {
+      // Marcus uploads a highlight and tags himself; the highlight
+      // must appear exactly once on his own profile (uploader entry
+      // wins, no double card from the tag join).
+      const authorLogin = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { team } = await getOrgAndTeam();
+
+      const targets = await db
+        .select({ id: users.id, email: users.email })
+        .from(users);
+      const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+      const marcusId = byEmail.get("marcus@kinectem.demo");
+      if (!marcusId) throw new Error("seed user marcus missing");
+
+      const create = await authorLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        teamId: team.id,
+        title: "Self-tag dedupe test",
+        description: "Uploader-and-tagged should not duplicate.",
+        videoUrl: "https://example.com/dedupe.mp4",
+      });
+      expect(create.status).toBe(201);
+      const postId: string = create.body.id;
+
+      const tagRes = await authorLogin.agent
+        .post(`/api/v1/posts/${postId}/tags`)
+        .send({
+          tags: [{ taggedEntityType: "user", taggedEntityId: marcusId }],
+        });
+      expect(tagRes.status).toBe(201);
+      // Force approved so the visibility filter doesn't drop it
+      // even if the default flips later.
+      await db
+        .update(highlightTags)
+        .set({ status: "approved" })
+        .where(eq(highlightTags.id, tagRes.body.tags[0].id));
+
+      const profile = await authorLogin.agent.get(
+        `/api/v1/users/${marcusId}/posts`,
+      );
+      expect(profile.status).toBe(200);
+      const matches = profile.body.data.filter(
+        (p: { id: string }) => p.id === postId,
+      );
+      expect(matches).toHaveLength(1);
+      // The uploader entry must win, so no `tagStatus` annotation.
+      expect(matches[0].tagStatus).toBeUndefined();
+    });
+
+    it("shows a pending tagged highlight to a real (non-masquerading) admin", async () => {
+      const authorLogin = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { team } = await getOrgAndTeam();
+
+      const targets = await db
+        .select({ id: users.id, email: users.email })
+        .from(users);
+      const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+      const jordanId = byEmail.get("jordan@kinectem.demo");
+      if (!jordanId) throw new Error("seed user jordan missing");
+
+      const create = await authorLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        teamId: team.id,
+        title: "Admin sees pending tag",
+        description: "Pending tag visible to admin viewers.",
+        videoUrl: "https://example.com/admin-pending.mp4",
+      });
+      expect(create.status).toBe(201);
+      const postId: string = create.body.id;
+
+      const tagRes = await authorLogin.agent
+        .post(`/api/v1/posts/${postId}/tags`)
+        .send({
+          tags: [{ taggedEntityType: "user", taggedEntityId: jordanId }],
+        });
+      expect(tagRes.status).toBe(201);
+      await db
+        .update(highlightTags)
+        .set({ status: "pending" })
+        .where(eq(highlightTags.id, tagRes.body.tags[0].id));
+
+      // Admin (andrew@kinectem.com) is the seeded real admin and is not
+      // masquerading; they must see Jordan's pending tagged highlight.
+      const adminLogin = await loginAs(
+        (u) => u.email === "andrew@kinectem.com",
+      );
+      const adminView = await adminLogin.agent.get(
+        `/api/v1/users/${jordanId}/posts`,
+      );
+      expect(adminView.status).toBe(200);
+      const match = adminView.body.data.find(
+        (p: { id: string }) => p.id === postId,
+      );
+      expect(match).toBeDefined();
+      expect(match.tagStatus).toBe("pending");
+    });
+
+    it("drops a removed tagged highlight from the player's profile for everyone", async () => {
+      const authorLogin = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { team } = await getOrgAndTeam();
+
+      const targets = await db
+        .select({ id: users.id, email: users.email })
+        .from(users);
+      const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+      const jordanId = byEmail.get("jordan@kinectem.demo");
+      if (!jordanId) throw new Error("seed user jordan missing");
+
+      const create = await authorLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        teamId: team.id,
+        title: "Removed tag drops",
+        description: "Removed tag must not surface anywhere.",
+        videoUrl: "https://example.com/removed.mp4",
+      });
+      expect(create.status).toBe(201);
+      const postId: string = create.body.id;
+
+      const tagRes = await authorLogin.agent
+        .post(`/api/v1/posts/${postId}/tags`)
+        .send({
+          tags: [{ taggedEntityType: "user", taggedEntityId: jordanId }],
+        });
+      expect(tagRes.status).toBe(201);
+      const tagId: string = tagRes.body.tags[0].id;
+      // Status `removed` means the author / admin pulled the tag back
+      // — it must drop off the tagged player's profile feed for every
+      // viewer, including the player themselves.
+      await db
+        .update(highlightTags)
+        .set({ status: "removed" })
+        .where(eq(highlightTags.id, tagId));
+
+      const strangerLogin = await loginAs(
+        (u) => u.email === "tyler@kinectem.demo",
+      );
+      const strangerView = await strangerLogin.agent.get(
+        `/api/v1/users/${jordanId}/posts`,
+      );
+      const strangerIds: string[] = strangerView.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(strangerIds).not.toContain(postId);
+
+      const selfLogin = await loginAs(
+        (u) => u.email === "jordan@kinectem.demo",
+      );
+      const selfView = await selfLogin.agent.get(
+        `/api/v1/users/${jordanId}/posts`,
+      );
+      const selfIds: string[] = selfView.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(selfIds).not.toContain(postId);
+    });
+
+    it("drops a declined tagged highlight from the player's profile for everyone", async () => {
+      const authorLogin = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { team } = await getOrgAndTeam();
+
+      const targets = await db
+        .select({ id: users.id, email: users.email })
+        .from(users);
+      const byEmail = new Map(targets.map((t) => [t.email, t.id]));
+      const tylerId = byEmail.get("tyler@kinectem.demo");
+      if (!tylerId) throw new Error("seed user tyler missing");
+      await db
+        .update(users)
+        .set({ requireTagConsent: false })
+        .where(eq(users.id, tylerId));
+
+      const create = await authorLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        teamId: team.id,
+        title: "Decline-drops test",
+        description: "Declined tag must drop off the feed.",
+        videoUrl: "https://example.com/decline.mp4",
+      });
+      expect(create.status).toBe(201);
+      const postId: string = create.body.id;
+
+      const tagRes = await authorLogin.agent
+        .post(`/api/v1/posts/${postId}/tags`)
+        .send({
+          tags: [{ taggedEntityType: "user", taggedEntityId: tylerId }],
+        });
+      expect(tagRes.status).toBe(201);
+      const tagId: string = tagRes.body.tags[0].id;
+      await db
+        .update(highlightTags)
+        .set({ status: "approved" })
+        .where(eq(highlightTags.id, tagId));
+
+      // Pre-condition: stranger sees the highlight on Tyler's profile.
+      const strangerLogin = await loginAs(
+        (u) => u.email === "jordan@kinectem.demo",
+      );
+      const before = await strangerLogin.agent.get(
+        `/api/v1/users/${tylerId}/posts`,
+      );
+      expect(before.status).toBe(200);
+      const beforeIds: string[] = before.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(beforeIds).toContain(postId);
+
+      // Tyler declines the tag.
+      await db
+        .update(highlightTags)
+        .set({ status: "declined" })
+        .where(eq(highlightTags.id, tagId));
+
+      // Stranger no longer sees it.
+      const after = await strangerLogin.agent.get(
+        `/api/v1/users/${tylerId}/posts`,
+      );
+      expect(after.status).toBe(200);
+      const afterIds: string[] = after.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(afterIds).not.toContain(postId);
+
+      // Tyler himself also doesn't see it on his own profile —
+      // declined means dropped for everyone.
+      const selfLogin = await loginAs(
+        (u) => u.email === "tyler@kinectem.demo",
+      );
+      const selfView = await selfLogin.agent.get(
+        `/api/v1/users/${tylerId}/posts`,
+      );
+      expect(selfView.status).toBe(200);
+      const selfIds: string[] = selfView.body.data.map(
+        (p: { id: string }) => p.id,
+      );
+      expect(selfIds).not.toContain(postId);
+    });
   });
 });
