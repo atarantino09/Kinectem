@@ -51,16 +51,25 @@ export default function NewPostPage() {
     query: queryOpts({ enabled: !!me?.id && !initialTeamId }),
   });
 
-  // Roster for the highlight composer's Tag Players picker
-  // (task #313). Only fetched when this is a highlight scoped
-  // to a team — recap and unscoped highlights skip the request
-  // entirely. We pass the API filters as a hint, but the server
-  // currently ignores `status` and `position` here, so we also
-  // filter the response client-side: pending invitees can't
-  // accept tags yet (their account may not even be confirmed),
-  // and coaches / admins shouldn't appear in a "tag the kids
-  // who are in the clip" picker.
-  const rosterTeamId = form.isShort ? (form.highlightTeamId ?? "") : "";
+  // Roster for the per-player Tag Players picker. Originally added
+  // for the highlight composer (task #313); task #322 extends the
+  // same picker to the edit-post screen for both recaps and
+  // highlights so the author can fine-tune who is tagged after
+  // publishing. We fetch when:
+  //   - this is a brand-new highlight scoped to a team, OR
+  //   - we're editing a published recap (article) or highlight that
+  //     has a known team scope.
+  // Recap creates and unscoped highlights still skip the request.
+  // We pass `status` / `position` as hints; the server currently
+  // ignores them, so we also filter the response client-side:
+  // pending invitees can't accept tags yet (their account may not
+  // even be confirmed), and coaches / admins shouldn't appear in a
+  // "tag the players who are in the post" picker.
+  const isEditingTaggablePost =
+    form.isEditingPublished &&
+    (form.loadedKind === "article" || form.loadedKind === "highlight");
+  const rosterTeamId =
+    form.isShort || isEditingTaggablePost ? (form.highlightTeamId ?? "") : "";
   const rosterEnabled = !!rosterTeamId;
   const { data: rosterData, isLoading: rosterLoading } = useListTeamMembers(
     rosterTeamId,

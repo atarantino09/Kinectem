@@ -365,6 +365,17 @@ router.post(
   }),
 );
 
+// DELETE /article-tags/:tagId — remove a single tag from a recap.
+// Three roles can delete:
+//   - the tagged user themselves (the original "you can untag yourself"
+//     path that the My Tags page uses).
+//   - the post author (so they can fine-tune who appears on the recap
+//     after publishing — matches the same actor that can ADD tags via
+//     POST /posts/:postId/tags).
+//   - an org admin/owner of the team's owning org (mirrors the add-tag
+//     permission: anyone who can add a tag here can also remove one).
+// Idempotent: a missing tagId still returns 204 so a stale UI that
+// re-issues a delete after the row is gone doesn't surface an error.
 router.delete(
   "/article-tags/:tagId",
   asyncHandler(async (req, res) => {
@@ -376,13 +387,37 @@ router.delete(
       .where(eq(articleTags.id, req.params.tagId))
       .limit(1);
     if (!t) return res.status(204).end();
-    if (t.userId !== me.id)
-      return apiError(res, 403, "Not your tag");
+    let allowed = t.userId === me.id;
+    if (!allowed) {
+      const [a] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, t.articleId))
+        .limit(1);
+      if (a) {
+        if (a.authorId === me.id) {
+          allowed = true;
+        } else {
+          const [team] = await db
+            .select()
+            .from(teams)
+            .where(eq(teams.id, a.teamId))
+            .limit(1);
+          if (team) {
+            allowed = await canManageOrganization(me.id, team.organizationId);
+          }
+        }
+      }
+    }
+    if (!allowed) return apiError(res, 403, "Not your tag");
     await db.delete(articleTags).where(eq(articleTags.id, t.id));
     res.status(204).end();
   }),
 );
 
+// DELETE /highlight-tags/:tagId — same permission model as the
+// article-tags delete above (tagged user, highlight uploader, or an
+// org admin/owner of the team's owning org).
 router.delete(
   "/highlight-tags/:tagId",
   asyncHandler(async (req, res) => {
@@ -394,8 +429,29 @@ router.delete(
       .where(eq(highlightTags.id, req.params.tagId))
       .limit(1);
     if (!t) return res.status(204).end();
-    if (t.userId !== me.id)
-      return apiError(res, 403, "Not your tag");
+    let allowed = t.userId === me.id;
+    if (!allowed) {
+      const [h] = await db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.id, t.highlightId))
+        .limit(1);
+      if (h) {
+        if (h.uploaderId === me.id) {
+          allowed = true;
+        } else {
+          const [team] = await db
+            .select()
+            .from(teams)
+            .where(eq(teams.id, h.teamId))
+            .limit(1);
+          if (team) {
+            allowed = await canManageOrganization(me.id, team.organizationId);
+          }
+        }
+      }
+    }
+    if (!allowed) return apiError(res, 403, "Not your tag");
     await db.delete(highlightTags).where(eq(highlightTags.id, t.id));
     res.status(204).end();
   }),

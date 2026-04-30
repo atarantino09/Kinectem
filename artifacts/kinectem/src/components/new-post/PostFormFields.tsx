@@ -11,7 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Info, Play, Save } from "lucide-react";
+import { FileText, Info, Play, Save, X } from "lucide-react";
+import { UserAvatar } from "@/components/UserAvatar";
 import { MediaSection } from "./MediaSection";
 import {
   RosterTagPicker,
@@ -255,21 +256,6 @@ export function PostFormFields({
         </div>
       )}
 
-      {isShort && rosterTagTeamId && onTaggedUserIdsChange && (
-        // Highlight composer only — let the author hand-pick which
-        // rostered players this clip should tag (task #313). Hidden
-        // when there's no team scope (the picker has no roster to
-        // show) and on the recap path entirely (recap uses the
-        // existing `tag-roster` checkbox below to fan out to the
-        // whole roster instead).
-        <RosterTagPicker
-          members={rosterMembers}
-          selectedUserIds={taggedUserIds}
-          onSelectionChange={onTaggedUserIdsChange}
-          loading={rosterLoading}
-        />
-      )}
-
       {!isShort && !isOrgPost && (
         <div className="pt-4 border-t border-border">
           <label
@@ -296,6 +282,99 @@ export function PostFormFields({
           </label>
         </div>
       )}
+
+      {(() => {
+        // Per-player tag picker. Two paths land here:
+        //   - Brand-new highlight composer (task #313): `isShort`
+        //     with a team scope.
+        //   - Edit-post screen for a published recap or highlight
+        //     (task #322): `isEditingPublished` with the loaded post
+        //     being an article or highlight and a team scope.
+        // The recap CREATE path keeps using only the "Tag every
+        // rostered player" checkbox above; the per-player picker
+        // shows up on edit so the author can fine-tune individuals
+        // alongside the bulk-tag checkbox.
+        const showPicker =
+          !!rosterTagTeamId &&
+          !!onTaggedUserIdsChange &&
+          (isShort ||
+            (isEditingPublished &&
+              (loadedKind === "article" || loadedKind === "highlight")));
+        if (!showPicker) return null;
+        const memberById = new Map(
+          rosterMembers.map((m) => [m.userId, m]),
+        );
+        // Filter currently-tagged ids down to roster members so a
+        // stale tag (player removed from the roster after being
+        // tagged) doesn't render with a missing display name. The
+        // diff on save still respects whatever is in `taggedUserIds`,
+        // so a stale tag isn't accidentally removed just because it
+        // doesn't render.
+        const visibleTagged = taggedUserIds
+          .map((id) => memberById.get(id))
+          .filter((m): m is RosterPickerMember => !!m);
+        const removeOne = (userId: string) => {
+          onTaggedUserIdsChange!(taggedUserIds.filter((id) => id !== userId));
+        };
+        return (
+          <div className="space-y-2">
+            <RosterTagPicker
+              members={rosterMembers}
+              selectedUserIds={taggedUserIds}
+              onSelectionChange={onTaggedUserIdsChange!}
+              loading={rosterLoading}
+            />
+            {/* Inline list of currently tagged players — surfaces
+                the "untag" affordance without making the user open
+                the dropdown. Hidden during the initial roster
+                fetch so it doesn't briefly render an empty state.
+                Empty-state copy when nothing is tagged points the
+                user at the picker above. */}
+            {!rosterLoading && rosterMembers.length > 0 && (
+              <div data-testid="list-tagged-players">
+                {visibleTagged.length === 0 ? (
+                  <p
+                    className="text-[11px] text-muted-foreground font-semibold"
+                    data-testid="empty-tagged-players"
+                  >
+                    No players tagged yet — use the picker above to
+                    add some.
+                  </p>
+                ) : (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {visibleTagged.map((m) => (
+                      <li
+                        key={m.userId}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 border border-border pl-1.5 pr-1 py-0.5 text-xs"
+                        data-testid={`tagged-player-${m.userId}`}
+                      >
+                        <UserAvatar
+                          avatarUrl={m.avatarUrl}
+                          displayName={m.displayName}
+                          size="xs"
+                          fallbackClassName="bg-slate-900 text-primary-foreground"
+                        />
+                        <span className="font-semibold">
+                          {m.displayName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeOne(m.userId)}
+                          className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+                          aria-label={`Remove tag for ${m.displayName}`}
+                          data-testid={`button-remove-tagged-${m.userId}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
         {!isShort && !isEditingPublished && (

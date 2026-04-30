@@ -167,15 +167,29 @@ export function useNewPostForm({
   // still tags every rostered player. Unchecking sends `gameDate:
   // null` and skips the fan-out.
   const [tagRoster, setTagRoster] = useState<boolean>(true);
-  // Highlight composer only — list of roster userIds the author
-  // hand-picks via the Tag Players dropdown. Submitted as manual
-  // tags after the highlight is created (task #313). Reset when
-  // the team changes so a stale selection from a previous team
-  // can't leak into the new roster.
+  // Highlight composer (and edit-post path) — list of roster userIds
+  // the author hand-picks via the Tag Players dropdown. For new
+  // highlights this is submitted as manual tags after the highlight
+  // is created (task #313). For edits to a published recap or
+  // highlight, this is diffed against `originalTaggedById` on save
+  // so newly-checked players get tagged and unchecked players get
+  // their existing tag removed (task #322). Reset when the team
+  // changes so a stale selection from a previous team can't leak
+  // into the new roster.
   const [taggedUserIds, setTaggedUserIds] = useState<string[]>([]);
   useEffect(() => {
     setTaggedUserIds([]);
   }, [initialTeamId]);
+  // Edit-post tag diff baseline (task #322): map of currently-tagged
+  // userId → tagId on the loaded post. Populated from
+  // GET /posts/:postId/tags (user tags only, both approved + pending)
+  // so the save handler can issue DELETE /article-tags/:tagId or
+  // /highlight-tags/:tagId for any player the author un-checks. Empty
+  // for brand-new posts (the create flow uses POST /posts/:postId/tags
+  // with the full picker selection — no diff needed).
+  const [originalTaggedById, setOriginalTaggedById] = useState<
+    Record<string, string>
+  >({});
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
   const editId = initialEditId;
   const isEditingPublished = !!editId;
@@ -228,6 +242,35 @@ export function useNewPostForm({
       photoUrls: photos,
       gameDate: gameDateForApi(),
     });
+  };
+
+  // Pull the post's current user tags from GET /posts/:postId/tags
+  // so the edit-post tag picker can pre-populate its selection and
+  // the save handler has a baseline to diff removals against. Both
+  // approved AND pending tags are surfaced — pending tags still
+  // count as "currently tagged" from the post author's point of
+  // view (the consent flow plays out separately for the player).
+  // Errors are swallowed so a failed tag-list fetch doesn't block
+  // the rest of the editor from loading.
+  const refreshLoadedTags = async (postId: string) => {
+    try {
+      const resp = await customFetch<{
+        tags?: Array<{
+          id: string;
+          taggedEntityType: string;
+          taggedEntityId: string;
+        }>;
+      }>(`/api/v1/posts/${postId}/tags`, { method: "GET" });
+      const map: Record<string, string> = {};
+      for (const t of resp.tags ?? []) {
+        if (t.taggedEntityType !== "user") continue;
+        map[t.taggedEntityId] = t.id;
+      }
+      setOriginalTaggedById(map);
+      setTaggedUserIds(Object.keys(map));
+    } catch {
+      // ignore — picker just starts empty
+    }
   };
 
   // Load existing draft OR existing published post (when editing).
@@ -316,6 +359,14 @@ export function useNewPostForm({
         // the editId path (already-published article). Drafts won't
         // surface canDelete.
         setCanDelete(!!d.canDelete);
+        // Pre-populate the per-player tag picker (task #322). Only
+        // meaningful when editing an already-published recap or
+        // highlight — drafts use the create flow and brand-new posts
+        // have no existing tags. Failures are non-blocking; the
+        // picker just starts with an empty selection.
+        if (initialEditId && (kind === "article" || kind === "highlight")) {
+          void refreshLoadedTags(d.id);
+        }
       })
       .catch(() => {
         toast({
@@ -405,6 +456,91 @@ export function useNewPostForm({
         // unwinding the auto-tag fan-out; highlights and Updates
         // simply mutate their own row in place.
         await patchAt(editId);
+        // Apply per-player tag changes after the PATCH so a transient
+        // PATCH failure doesn't leave the tag set in an inconsistent
+        // state (task #322). Diff the picker's current selection
+        // against `originalTaggedById`: newly-checked players go
+        // through the existing POST /posts/:postId/tags endpoint
+        // (which honors the consent rules), and unchecked players
+        // hit DELETE /article-tags/:tagId or /highlight-tags/:tagId
+        // by tagId. Tag failures are non-blocking — the post itself
+        // already saved, so we surface a soft warning toast and
+        // refresh the picker from the server so the UI reflects the
+        // actual persisted state instead of a stale optimistic one.
+        let tagWarning: string | null = null;
+        if (loadedKind === "article" || loadedKind === "highlight") {
+          const originalIds = new Set(Object.keys(originalTaggedById));
+          const selected = new Set(taggedUserIds);
+          const addedIds = taggedUserIds.filter((id) => !originalIds.has(id));
+          const removedTagIds: string[] = [];
+          for (const [uid, tagId] of Object.entries(originalTaggedById)) {
+            if (!selected.has(uid)) removedTagIds.push(tagId);
+          }
+          let tagFailures = 0;
+          if (addedIds.length > 0) {
+            try {
+              const tagResp = await createPostTags.mutateAsync({
+                postId: editId,
+                data: {
+                  tags: addedIds.map((id) => ({
+                    taggedEntityType: "user",
+                    taggedEntityId: id,
+                    direction: "lateral",
+                  })),
+                },
+              });
+              const persisted = tagResp.tags?.length ?? 0;
+              // POST silently drops users not on the roster; treat
+              // any shortfall the same as a failure for the toast.
+              if (persisted < addedIds.length) {
+                tagFailures += addedIds.length - persisted;
+              }
+            } catch {
+              tagFailures += addedIds.length;
+            }
+          }
+          // DELETEs are issued one-at-a-time so a single failure
+          // doesn't abort the rest of the diff. The endpoint is
+          // idempotent (404 ⇒ 204) so re-issuing on stale state is
+          // safe.
+          const removalKind: "article-tags" | "highlight-tags" =
+            loadedKind === "article" ? "article-tags" : "highlight-tags";
+          for (const tagId of removedTagIds) {
+            try {
+              await customFetch(`/api/v1/${removalKind}/${tagId}`, {
+                method: "DELETE",
+              });
+            } catch {
+              tagFailures += 1;
+            }
+          }
+          if (tagFailures > 0) {
+            tagWarning = "Saved, but couldn't update some tags.";
+          }
+          if (addedIds.length > 0 || removedTagIds.length > 0) {
+            // Refresh the picker baseline so the next save diff is
+            // computed against the actual persisted state, and drop
+            // the cached post-tags list so the detail page renders
+            // the fresh tag set on first paint.
+            await refreshLoadedTags(editId);
+            await qc.invalidateQueries({
+              queryKey: getListPostTagsQueryKey(editId),
+              refetchType: "all",
+            });
+          } else {
+            // Even when the picker didn't change, the recap PATCH
+            // can fan out (or unwind) tags as a side effect of a
+            // gameDate transition or a tagRoster checkbox toggle.
+            // Drop the cached tags list so the detail page picks up
+            // any server-applied changes on first paint. We don't
+            // refresh the in-memory baseline because the user is
+            // navigating away.
+            await qc.invalidateQueries({
+              queryKey: getListPostTagsQueryKey(editId),
+              refetchType: "all",
+            });
+          }
+        }
         // Refresh the home feed plus the author's profile posts and
         // (depending on the post's scope) the owning team's or org's
         // posts list, so the destination page renders the updated
@@ -418,7 +554,16 @@ export function useNewPostForm({
         // Drop the cached single-post detail so a navigation back to
         // /posts/:id refetches the freshly-edited title/body/photos.
         qc.removeQueries({ queryKey: ["post", editId] });
-        toast({ title: "Saved" });
+        if (tagWarning) {
+          toast({
+            title: tagWarning,
+            description:
+              "Open the post to retry — your other changes were saved.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Saved" });
+        }
         // Return to wherever the editor was launched from when a
         // safe internal `from` path was supplied (e.g. the feed,
         // a profile, a team page). Fall back to the post detail
@@ -604,14 +749,18 @@ export function useNewPostForm({
     savedAt,
     saving,
     isShort,
-    // Highlight composer only — exposed so the picker can render
-    // the current selection and a setter to update it.
+    // Highlight composer + edit-post tag picker — exposed so the
+    // picker can render the current selection and a setter to update
+    // it. Pre-populated from the loaded post's tags when editing
+    // a published recap or highlight (task #322).
     taggedUserIds,
     setTaggedUserIds,
     // The team scope the highlight composer fetches its roster
-    // against. Re-exported under a stable name so the page layer
-    // doesn't have to know it currently maps 1:1 to `initialTeamId`.
-    highlightTeamId: initialTeamId,
+    // against. Falls back to the loaded post's team when editing
+    // a published recap or highlight (task #322) so the same picker
+    // can run on the edit-post screen even though the editor URL
+    // doesn't carry a `teamId` query param.
+    highlightTeamId: initialTeamId ?? loadedTeamId,
     // Surfaced so the composer can hide article-only fields
     // (gameDate, tagRoster, the org-on-behalf-of selector, the
     // post-type toggle) when the loaded post is a highlight or a
