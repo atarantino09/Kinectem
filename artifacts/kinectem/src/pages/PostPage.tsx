@@ -30,6 +30,7 @@ import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { VideoEmbed } from "@/components/VideoEmbed";
+import { TaggedPlayers } from "@/components/TaggedPlayers";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -410,6 +411,23 @@ export default function PostPage() {
         <VideoEmbed
           url={videoAsset.url}
           className="rounded-xl overflow-hidden border border-border bg-black aspect-video"
+        />
+      )}
+
+      {/*
+       * Highlight detail page surfaces tagged players directly under
+       * the video so viewers can see who is featured and tap through
+       * to a player profile. The server filters pending tags down to
+       * the post uploader and the tagged player themselves; for
+       * everyone else only approved tags appear here.
+       */}
+      {isShort && (
+        <TaggedPlayers
+          taggedUsers={
+            "taggedUsers" in post ? post.taggedUsers : undefined
+          }
+          postId={post.id}
+          variant="detail"
         />
       )}
 

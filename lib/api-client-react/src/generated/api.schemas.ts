@@ -856,6 +856,34 @@ export const PostResponseTagStatus = {
   pending: "pending",
 } as const;
 
+/**
+ * `approved` for fully-consented tags shown to everyone.
+`pending` is only included for the post author and the
+tagged player themselves; other viewers never see
+pending entries in this list.
+
+ */
+export type PostTaggedUserTagStatus =
+  (typeof PostTaggedUserTagStatus)[keyof typeof PostTaggedUserTagStatus];
+
+export const PostTaggedUserTagStatus = {
+  approved: "approved",
+  pending: "pending",
+} as const;
+
+export interface PostTaggedUser {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** `approved` for fully-consented tags shown to everyone.
+`pending` is only included for the post author and the
+tagged player themselves; other viewers never see
+pending entries in this list.
+ */
+  tagStatus: PostTaggedUserTagStatus;
+}
+
 export interface PostResponse {
   id: string;
   postType: PostResponsePostType;
@@ -947,6 +975,15 @@ posts and approved tags omit this field.
    * @nullable
    */
   tagStatus?: PostResponseTagStatus;
+  /** People tagged on this post that the requesting viewer is
+allowed to see. Approved tags are visible to everyone;
+pending tags are only included for the post author and
+the tagged player themselves (mirroring the recap
+consent rules). Currently populated only for highlight
+posts; other post kinds omit this field. The list is
+stable per highlight in the order tags were created.
+ */
+  taggedUsers?: PostTaggedUser[];
   createdAt: string;
   updatedAt: string;
 }

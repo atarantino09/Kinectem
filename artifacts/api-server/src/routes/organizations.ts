@@ -55,6 +55,7 @@ import {
   shareStatsFor,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
@@ -589,28 +590,33 @@ router.get(
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
-    const [shareStats, canEditMap, authorRoleMap] = await Promise.all([
-      loadPostShareStats(me?.id ?? null, [
-        ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
-        ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
-      ]),
-      computeArticleCanEditMap(
-        me?.id ?? null,
-        rows.map((r) => ({
-          articleId: r.a.id,
-          authorId: r.a.authorId,
-          orgId: r.org.id,
-        })),
-      ),
-      computeArticleAuthorRoleMap(
-        rows.map((r) => ({
-          articleId: r.a.id,
-          authorId: r.a.authorId,
-          teamId: r.team.id,
-          orgId: r.org.id,
-        })),
-      ),
-    ]);
+    const [shareStats, canEditMap, authorRoleMap, highlightTagViews] =
+      await Promise.all([
+        loadPostShareStats(me?.id ?? null, [
+          ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+          ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+        ]),
+        computeArticleCanEditMap(
+          me?.id ?? null,
+          rows.map((r) => ({
+            articleId: r.a.id,
+            authorId: r.a.authorId,
+            orgId: r.org.id,
+          })),
+        ),
+        computeArticleAuthorRoleMap(
+          rows.map((r) => ({
+            articleId: r.a.id,
+            authorId: r.a.authorId,
+            teamId: r.team.id,
+            orgId: r.org.id,
+          })),
+        ),
+        loadHighlightTagViews(
+          me?.id ?? null,
+          hRows.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+        ),
+      ]);
 
     const articleData = rows.map((r) =>
       articleToPost(r.a, {
@@ -631,6 +637,7 @@ router.get(
         canEdit: isUploader,
         canDelete: isUploader,
         ...shareStatsFor(shareStats, "highlight", r.h.id),
+        taggedUsers: highlightTagViews.get(r.h.id) ?? [],
       });
     });
     const merged = [...articleData, ...highlightData].sort((a, b) =>

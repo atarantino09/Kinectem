@@ -42,6 +42,7 @@ import {
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { authorizeChildAccess } from "./parent-inbox";
 import { loadConversationView, loadAssetsForMessages } from "./messages";
 
@@ -236,8 +237,11 @@ router.get(
       .limit(1);
     if (!row) return notFound(res);
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
-    const stats = await loadPostStats(child.id, [
-      { kind: "highlight", refId: row.h.id },
+    const [stats, tagViews] = await Promise.all([
+      loadPostStats(child.id, [{ kind: "highlight", refId: row.h.id }]),
+      loadHighlightTagViews(child.id, [
+        { id: row.h.id, uploaderId: row.h.uploaderId },
+      ]),
     ]);
     res.json(
       highlightToPost(row.h, {
@@ -245,6 +249,7 @@ router.get(
         org: row.org,
         author: row.uploader,
         ...statsFor(stats, "highlight", row.h.id),
+        taggedUsers: tagViews.get(row.h.id) ?? [],
       }),
     );
   }),

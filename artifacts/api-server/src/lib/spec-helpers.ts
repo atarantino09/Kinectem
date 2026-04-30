@@ -469,6 +469,20 @@ interface PostExtras {
   // posts populate it (or pass null when no role applies); highlight /
   // org posts leave it undefined and the response ships null.
   authorRole?: PostAuthorRoleLabel | null;
+  // People tagged on this post that the requesting viewer is allowed
+  // to see. Approved tags are visible to everyone; pending tags are
+  // only included for the post author and the tagged player themselves
+  // (mirroring the recap consent rules). Currently populated only for
+  // highlight posts; other paths leave it undefined and the response
+  // omits the field.
+  taggedUsers?: PostTaggedUserView[];
+}
+
+export interface PostTaggedUserView {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  tagStatus: "approved" | "pending";
 }
 
 export function articleToPost(a: ArticleRow, extras: PostExtras) {
@@ -651,6 +665,13 @@ function basePost(p: {
     hasShared: p.extras.hasShared ?? false,
     sharedBy: p.extras.sharedBy ?? null,
     sharedAt: p.extras.sharedAt ?? null,
+    // Only emit the field when the caller populated it. Highlight
+    // routes pass an array (possibly empty) so the client knows the
+    // tag set was loaded; recap / org-post routes leave it undefined
+    // and the spec-allowed omission keeps payloads quiet.
+    ...(p.extras.taggedUsers !== undefined
+      ? { taggedUsers: p.extras.taggedUsers }
+      : {}),
   };
 }
 

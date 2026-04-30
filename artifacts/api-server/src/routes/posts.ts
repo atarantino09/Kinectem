@@ -68,6 +68,7 @@ import {
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
 
 const router: IRouter = Router();
@@ -140,7 +141,7 @@ router.get(
         teamId: r.team.id,
         orgId: r.org.id,
       }));
-      const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
+      const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews] = await Promise.all([
         loadPostStats(me.id, statKeys),
         loadPostShareStats(me.id, statKeys),
         computeArticleCanEditMap(
@@ -152,6 +153,10 @@ router.get(
           })),
         ),
         computeArticleAuthorRoleMap(articleRoleRows),
+        loadHighlightTagViews(
+          me.id,
+          ownHls.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+        ),
       ]);
       const items = [
         ...ownArts.map((r) =>
@@ -174,6 +179,7 @@ router.get(
             canDelete: true,
             ...statsFor(stats, "highlight", r.h.id),
             ...shareStatsFor(shareStats, "highlight", r.h.id),
+            taggedUsers: highlightTagViews.get(r.h.id) ?? [],
           }),
         ),
       ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -361,12 +367,22 @@ router.get(
       ...sharedArticleRows.map((r) => r.org.id),
       ...sharedHighlightRows.map((r) => r.org.id),
     ];
-    const [stats, shareStats, canEditMap, authorRoleMap, adminOrgIds] = await Promise.all([
+    const [stats, shareStats, canEditMap, authorRoleMap, adminOrgIds, highlightTagViews] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
       computeArticleCanEditMap(me?.id ?? null, articleEditRows),
       computeArticleAuthorRoleMap(articleRoleRows),
       loadAdminOrgIds(me?.id ?? null, feedOrgIds),
+      loadHighlightTagViews(
+        me?.id ?? null,
+        [
+          ...hls.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+          ...sharedHighlightRows.map((r) => ({
+            id: r.h.id,
+            uploaderId: r.h.uploaderId,
+          })),
+        ],
+      ),
     ]);
 
     const seenIds = new Set<string>([
@@ -396,6 +412,7 @@ router.get(
           canDelete: isUploader,
           ...statsFor(stats, "highlight", r.h.id),
           ...shareStatsFor(shareStats, "highlight", r.h.id),
+          taggedUsers: highlightTagViews.get(r.h.id) ?? [],
         });
       }),
       ...orgPostRows.map((r) => {
@@ -446,6 +463,7 @@ router.get(
             canDelete: isUploader,
             ...statsFor(stats, "highlight", row.h.id),
             ...shareStatsFor(shareStats, "highlight", row.h.id),
+            taggedUsers: highlightTagViews.get(row.h.id) ?? [],
             sharedBy,
             sharedAt,
           }),
@@ -708,9 +726,12 @@ router.get(
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
     // Uploader-only edit + delete on highlights.
     const isUploader = !!me && row.h.uploaderId === me.id;
-    const [stats, shareStats] = await Promise.all([
+    const [stats, shareStats, tagViews] = await Promise.all([
       loadPostStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
       loadPostShareStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
+      loadHighlightTagViews(me?.id ?? null, [
+        { id: row.h.id, uploaderId: row.h.uploaderId },
+      ]),
     ]);
     res.json(
       highlightToPost(row.h, {
@@ -721,6 +742,7 @@ router.get(
         canDelete: isUploader,
         ...statsFor(stats, "highlight", row.h.id),
         ...shareStatsFor(shareStats, "highlight", row.h.id),
+        taggedUsers: tagViews.get(row.h.id) ?? [],
       }),
     );
   }),
@@ -1366,7 +1388,19 @@ router.post(
         actorDisplayName: displayName(me),
       });
     }
-    res.status(201).json(highlightToPost(h, { team, org, author: me }));
+    res.status(201).json(
+      highlightToPost(h, {
+        team,
+        org,
+        author: me,
+        // Tags are added by the composer in a follow-up POST
+        // /posts/:postId/tags call, so the freshly-created highlight
+        // never has any rows yet. Surface an empty array so the
+        // client treats this as "loaded with no tags" instead of
+        // "tags not loaded".
+        taggedUsers: [],
+      }),
+    );
   }),
 );
 

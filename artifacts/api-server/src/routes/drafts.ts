@@ -38,6 +38,7 @@ import {
   safeAvatarUrl,
   notFound,
 } from "../lib/spec-helpers";
+import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import {
   loadPostStats,
   statsFor,
@@ -157,6 +158,9 @@ async function patchHighlight(
         .limit(1)
     : [null];
   if (!team || !org) return notFound(res);
+  const tagViews = await loadHighlightTagViews(me.id, [
+    { id: updated.id, uploaderId: updated.uploaderId },
+  ]);
   return res.json(
     highlightToPost(updated, {
       team,
@@ -164,6 +168,7 @@ async function patchHighlight(
       author: me,
       canEdit: true,
       canDelete: true,
+      taggedUsers: tagViews.get(updated.id) ?? [],
     }),
   );
 }

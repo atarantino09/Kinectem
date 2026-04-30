@@ -30,6 +30,7 @@ import { ReportDialog, type ReportContentType } from "@/components/ReportDialog"
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
+import { TaggedPlayers } from "@/components/TaggedPlayers";
 import { useToast } from "@/hooks/use-toast";
 
 function getContextHref(context: {
@@ -438,6 +439,24 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             )}
           </div>
         </div>
+
+        {/*
+         * Highlight cards surface the players tagged on the clip so
+         * viewers can jump straight to a tagged player's profile.
+         * `taggedUsers` is currently only populated for highlights;
+         * other post kinds leave it undefined so the section hides.
+         * Pending tags are pre-filtered server-side to the post
+         * uploader and the tagged player themselves.
+         */}
+        {isShort && (
+          <TaggedPlayers
+            taggedUsers={
+              "taggedUsers" in post ? post.taggedUsers : undefined
+            }
+            postId={post.id}
+            variant="card"
+          />
+        )}
 
         <div className="px-5 py-3 border-t border-border/60 flex items-center gap-2">
           <Button

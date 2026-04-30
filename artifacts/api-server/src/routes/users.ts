@@ -57,6 +57,7 @@ import {
   notFound,
   toPostAuthor,
 } from "../lib/spec-helpers";
+import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import {
   loadPostStats,
   statsFor,
@@ -592,12 +593,23 @@ router.get(
       teamId: row.team.id,
       orgId: row.org.id,
     }));
-    const [stats, shareStats, canEditMap, authorRoleMap] = await Promise.all([
-      loadPostStats(me?.id ?? null, statKeys),
-      loadPostShareStats(me?.id ?? null, shareStatKeys),
-      computeArticleCanEditMap(me?.id ?? null, articleEditRows),
-      computeArticleAuthorRoleMap(articleRoleRows),
-    ]);
+    const highlightRows = limited.filter(
+      (row): row is Extract<MergedRow, { kind: "highlight" }> => row.kind === "highlight",
+    );
+    const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews] =
+      await Promise.all([
+        loadPostStats(me?.id ?? null, statKeys),
+        loadPostShareStats(me?.id ?? null, shareStatKeys),
+        computeArticleCanEditMap(me?.id ?? null, articleEditRows),
+        computeArticleAuthorRoleMap(articleRoleRows),
+        loadHighlightTagViews(
+          me?.id ?? null,
+          highlightRows.map((row) => ({
+            id: row.h.id,
+            uploaderId: row.h.uploaderId,
+          })),
+        ),
+      ]);
 
     const posts = limited.map((row) => {
       const sharedBy = row.sharedAt ? toPostAuthor(u) : undefined;
@@ -630,6 +642,7 @@ router.get(
         canDelete: isUploader,
         ...statsFor(stats, "highlight", row.h.id),
         ...shareStatsFor(shareStats, "highlight", row.h.id),
+        taggedUsers: highlightTagViews.get(row.h.id) ?? [],
         sharedBy,
         sharedAt,
       });

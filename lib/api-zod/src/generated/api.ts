@@ -1600,6 +1600,23 @@ export const GetPostResponse = zod.object({
     .describe(
       'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
     ),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().url().nullish(),
+        tagStatus: zod
+          .enum(["approved", "pending"])
+          .describe(
+            "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -1816,6 +1833,23 @@ export const UpdatePostResponse = zod.object({
     .describe(
       'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
     ),
+  taggedUsers: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().url().nullish(),
+        tagStatus: zod
+          .enum(["approved", "pending"])
+          .describe(
+            "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -2030,6 +2064,23 @@ export const ListOrgPostsResponse = zod.object({
         .nullish()
         .describe(
           'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+        ),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            displayName: zod.string(),
+            avatarUrl: zod.string().url().nullish(),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .describe(
+                "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -2455,6 +2506,23 @@ export const ListUserPostsResponse = zod.object({
         .nullish()
         .describe(
           'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+        ),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            displayName: zod.string(),
+            avatarUrl: zod.string().url().nullish(),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .describe(
+                "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -4893,6 +4961,23 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
         ),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            displayName: zod.string(),
+            avatarUrl: zod.string().url().nullish(),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .describe(
+                "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -5430,6 +5515,23 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
               ),
+            taggedUsers: zod
+              .array(
+                zod.object({
+                  id: zod.string().uuid(),
+                  displayName: zod.string(),
+                  avatarUrl: zod.string().url().nullish(),
+                  tagStatus: zod
+                    .enum(["approved", "pending"])
+                    .describe(
+                      "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+                    ),
+                }),
+              )
+              .optional()
+              .describe(
+                "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+              ),
             createdAt: zod.coerce.date(),
             updatedAt: zod.coerce.date(),
           })
@@ -5621,6 +5723,23 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
         ),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            displayName: zod.string(),
+            avatarUrl: zod.string().url().nullish(),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .describe(
+                "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -5801,6 +5920,23 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .nullish()
         .describe(
           'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+        ),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            displayName: zod.string(),
+            avatarUrl: zod.string().url().nullish(),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .describe(
+                "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
         ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),

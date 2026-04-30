@@ -70,6 +70,7 @@ import type { PostAuthor } from "./postAuthor";
 import type { PostContext } from "./postContext";
 import type { PostResponsePostType } from "./postResponsePostType";
 import type { PostResponseTagStatus } from "./postResponseTagStatus";
+import type { PostTaggedUser } from "./postTaggedUser";
 
 export interface PostResponse {
   id: string;
@@ -162,6 +163,15 @@ posts and approved tags omit this field.
    * @nullable
    */
   tagStatus?: PostResponseTagStatus;
+  /** People tagged on this post that the requesting viewer is
+allowed to see. Approved tags are visible to everyone;
+pending tags are only included for the post author and
+the tagged player themselves (mirroring the recap
+consent rules). Currently populated only for highlight
+posts; other post kinds omit this field. The list is
+stable per highlight in the order tags were created.
+ */
+  taggedUsers?: PostTaggedUser[];
   createdAt: Date;
   updatedAt: Date;
 }

@@ -7289,6 +7289,33 @@ components:
             and org posts always omit it / send null. Null when the
             author no longer holds any of those roles.
 
+    PostTaggedUser:
+      type: object
+      required:
+        - id
+        - displayName
+        - tagStatus
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        tagStatus:
+          type: string
+          enum:
+            - approved
+            - pending
+          description: |
+            `approved` for fully-consented tags shown to everyone.
+            `pending` is only included for the post author and the
+            tagged player themselves; other viewers never see
+            pending entries in this list.
+
     PostContext:
       type: object
       required:
@@ -7487,6 +7514,18 @@ components:
             and the tag is still `pending`. Clients should render a
             small "Pending tag" affordance for these posts. Authored
             posts and approved tags omit this field.
+        taggedUsers:
+          type: array
+          description: |
+            People tagged on this post that the requesting viewer is
+            allowed to see. Approved tags are visible to everyone;
+            pending tags are only included for the post author and
+            the tagged player themselves (mirroring the recap
+            consent rules). Currently populated only for highlight
+            posts; other post kinds omit this field. The list is
+            stable per highlight in the order tags were created.
+          items:
+            $ref: '#/components/schemas/PostTaggedUser'
         createdAt:
           type: string
           format: date-time
