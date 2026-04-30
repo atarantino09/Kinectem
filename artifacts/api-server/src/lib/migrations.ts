@@ -158,6 +158,17 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS website text;
 `;
 
+// Task #349 — Add nullable city + 2-letter US state postal code columns
+// to users. Lets a user put a US location ("Austin, TX") on their
+// profile, rendered in the hero alongside bio + website. Mirrors the
+// shape used by organizations. Nullable, no backfill — existing rows
+// stay NULL on both fields and the hero simply hides the line.
+const TASK_349_USER_CITY_STATE = `
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS city  text,
+  ADD COLUMN IF NOT EXISTS state text;
+`;
+
 // Task #337 — Add prior_status column to parent_child_notification_reads.
 // The family-dashboard Remove action now flips already-`approved`
 // highlight / article tags to `declined`. Without remembering the prior
@@ -201,6 +212,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-30-task-337-parent-decision-prior-status",
     sql: TASK_337_PARENT_DECISION_PRIOR_STATUS,
+  },
+  {
+    name: "2026-04-30-task-349-user-city-state",
+    sql: TASK_349_USER_CITY_STATE,
   },
 ];
 

@@ -98,6 +98,21 @@ being stored. Null when the user has not set one.
    * @nullable
    */
   website?: string | null;
+  /**
+   * Optional free-text city the user is based in (task #349).
+Surfaced on the profile alongside `state`. Null when not set.
+
+   * @nullable
+   */
+  city?: string | null;
+  /**
+   * Optional two-letter US state postal code (50 states + DC) the
+user is based in (task #349). Mirrors the same enum used by
+organizations. Null when not set.
+
+   * @nullable
+   */
+  state?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
   /**
@@ -143,6 +158,71 @@ export type PrivateUserResponse = PublicUserResponse & {
   parentId?: string | null;
 };
 
+/**
+ * Optional two-letter US state postal code (50 states + DC) the
+user is based in (task #349). An empty string or null clears
+the field.
+
+ * @nullable
+ */
+export type UpdateUserRequestState =
+  | (typeof UpdateUserRequestState)[keyof typeof UpdateUserRequestState]
+  | null;
+
+export const UpdateUserRequestState = {
+  AL: "AL",
+  AK: "AK",
+  AZ: "AZ",
+  AR: "AR",
+  CA: "CA",
+  CO: "CO",
+  CT: "CT",
+  DE: "DE",
+  DC: "DC",
+  FL: "FL",
+  GA: "GA",
+  HI: "HI",
+  ID: "ID",
+  IL: "IL",
+  IN: "IN",
+  IA: "IA",
+  KS: "KS",
+  KY: "KY",
+  LA: "LA",
+  ME: "ME",
+  MD: "MD",
+  MA: "MA",
+  MI: "MI",
+  MN: "MN",
+  MS: "MS",
+  MO: "MO",
+  MT: "MT",
+  NE: "NE",
+  NV: "NV",
+  NH: "NH",
+  NJ: "NJ",
+  NM: "NM",
+  NY: "NY",
+  NC: "NC",
+  ND: "ND",
+  OH: "OH",
+  OK: "OK",
+  OR: "OR",
+  PA: "PA",
+  RI: "RI",
+  SC: "SC",
+  SD: "SD",
+  TN: "TN",
+  TX: "TX",
+  UT: "UT",
+  VT: "VT",
+  VA: "VA",
+  WA: "WA",
+  WV: "WV",
+  WI: "WI",
+  WY: "WY",
+} as const;
+
 export interface UpdateUserRequest {
   /** @maxLength 100 */
   firstName?: string;
@@ -165,6 +245,22 @@ with a 400.
    * @nullable
    */
   website?: string | null;
+  /**
+   * Optional free-text city the user is based in (task #349).
+An empty string or null clears the field.
+
+   * @maxLength 100
+   * @nullable
+   */
+  city?: string | null;
+  /**
+   * Optional two-letter US state postal code (50 states + DC) the
+user is based in (task #349). An empty string or null clears
+the field.
+
+   * @nullable
+   */
+  state?: UpdateUserRequestState;
   /**
    * @maxLength 50
    * @nullable

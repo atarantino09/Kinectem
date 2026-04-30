@@ -65,6 +65,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateUserRequestState } from "./updateUserRequestState";
 
 export interface UpdateUserRequest {
   /** @maxLength 100 */
@@ -88,6 +89,22 @@ with a 400.
    * @nullable
    */
   website?: string | null;
+  /**
+   * Optional free-text city the user is based in (task #349).
+An empty string or null clears the field.
+
+   * @maxLength 100
+   * @nullable
+   */
+  city?: string | null;
+  /**
+   * Optional two-letter US state postal code (50 states + DC) the
+user is based in (task #349). An empty string or null clears
+the field.
+
+   * @nullable
+   */
+  state?: UpdateUserRequestState;
   /**
    * @maxLength 50
    * @nullable

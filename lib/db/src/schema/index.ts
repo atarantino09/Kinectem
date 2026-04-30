@@ -58,6 +58,12 @@ export const users = pgTable("users", {
   // normalized URL (always http:// or https://). Bare domains entered
   // by the user are promoted to https:// before being persisted.
   website: text("website"),
+  // Task #349 — Optional city / US state on a user profile. `state` is
+  // stored as a 2-letter postal code (50 states + DC), mirroring the
+  // shape used by organizations. Both columns are nullable; existing
+  // users without a location simply have NULL on both fields.
+  city: text("city"),
+  state: text("state"),
   dateOfBirth: timestamp("date_of_birth"),
   parentId: uuid("parent_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   guardianEmail: text("guardian_email"),

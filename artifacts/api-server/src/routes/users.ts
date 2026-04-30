@@ -74,6 +74,19 @@ import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
 
+// Task #349 — Server-side allow-list for the optional `state` field on a
+// user profile. Mirrors the enum on the OpenAPI spec and the same set
+// `routes/organizations.ts` validates against. Kept local so the user
+// route doesn't need to import from organizations.
+const USER_PROFILE_US_STATE_CODES = new Set([
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL",
+  "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME",
+  "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH",
+  "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+  "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI",
+  "WY",
+]);
+
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
@@ -298,6 +311,39 @@ router.patch(
       updates.website = websiteResult.value === "" ? null : websiteResult.value;
     } else if (body.website !== undefined) {
       return apiError(res, 400, "website must be a string or null");
+    }
+    // Task #349 — Optional city / 2-letter US state postal code on the
+    // profile. Both clear on null or empty string. State is normalized
+    // to uppercase and validated against the same 50-states-plus-DC set
+    // organizations use; mismatches return a 400.
+    if (body.city === null) {
+      updates.city = null;
+    } else if (typeof body.city === "string") {
+      const trimmed = body.city.trim();
+      if (trimmed.length > 100) {
+        return apiError(res, 400, "city must be 100 characters or fewer");
+      }
+      updates.city = trimmed === "" ? null : trimmed;
+    } else if (body.city !== undefined) {
+      return apiError(res, 400, "city must be a string or null");
+    }
+    if (body.state === null) {
+      updates.state = null;
+    } else if (typeof body.state === "string") {
+      const stateRaw = body.state.trim().toUpperCase();
+      if (stateRaw === "") {
+        updates.state = null;
+      } else if (!USER_PROFILE_US_STATE_CODES.has(stateRaw)) {
+        return apiError(
+          res,
+          400,
+          "state must be a 2-letter US state code (e.g. NJ)",
+        );
+      } else {
+        updates.state = stateRaw;
+      }
+    } else if (body.state !== undefined) {
+      return apiError(res, 400, "state must be a string or null");
     }
     if (body.avatarUrl !== undefined) {
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {

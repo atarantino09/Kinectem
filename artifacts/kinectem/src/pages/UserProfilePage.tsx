@@ -424,11 +424,24 @@ export default function UserProfilePage() {
           title={`${displayName} follows`}
           variant={{ kind: "user-following", userId }}
         />
-        {(user.bio || user.website) && (
+        {(user.bio || user.website || user.city || user.state) && (
           <div className="px-6 pb-6 space-y-2">
             {user.bio && (
               <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl whitespace-pre-wrap">
                 {linkify(user.bio)}
+              </p>
+            )}
+            {/* Task #349 — Show "City, ST", just the city, or just the state
+                depending on which fields the user has set. Hidden when both
+                are empty. */}
+            {(user.city || user.state) && (
+              <p
+                className="text-sm font-medium text-muted-foreground"
+                data-testid="text-user-location"
+              >
+                {user.city && user.state
+                  ? `${user.city}, ${user.state}`
+                  : (user.city ?? user.state)}
               </p>
             )}
             {user.website && (

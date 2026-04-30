@@ -209,6 +209,11 @@ export function toPublicUser(
     // Always a normalized http(s):// URL when set, since the create/edit
     // endpoints run input through normalizeWebsite() before storing.
     website: u.website ?? null,
+    // Task #349 — Optional city + 2-letter US state postal code surfaced
+    // on the profile hero. Both nullable; existing rows with no location
+    // simply ship null.
+    city: u.city ?? null,
+    state: u.state ?? null,
     avatarUrl: safeAvatarUrl(u.avatarUrl),
     coverPhotoUrl: null as string | null,
     isOwnProfile: opts.isOwnProfile ?? false,

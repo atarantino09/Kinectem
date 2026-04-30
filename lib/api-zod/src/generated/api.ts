@@ -129,6 +129,18 @@ export const GetUserByIdResponse = zod.union([
         .describe(
           "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
         ),
+      city: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+        ),
+      state: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+        ),
       avatarUrl: zod.string().url().nullish(),
       coverPhotoUrl: zod
         .string()
@@ -180,6 +192,18 @@ export const GetUserByIdResponse = zod.union([
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
       ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+      ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
       .string()
@@ -219,6 +243,8 @@ export const updateUserBodyLastNameMax = 100;
 
 export const updateUserBodyBioMax = 1000;
 
+export const updateUserBodyCityMax = 100;
+
 export const updateUserBodyLevelMax = 50;
 
 export const UpdateUserBody = zod.object({
@@ -234,6 +260,71 @@ export const UpdateUserBody = zod.object({
     .nullish()
     .describe(
       "Personal website \/ link. Bare domains like `example.com` are\naccepted and normalized to a full `https:\/\/…` URL by the\nserver before being stored. An empty string or null clears\nthe field. Non-http(s) URLs and obvious garbage are rejected\nwith a 400.\n",
+    ),
+  city: zod
+    .string()
+    .max(updateUserBodyCityMax)
+    .nullish()
+    .describe(
+      "Optional free-text city the user is based in (task #349).\nAn empty string or null clears the field.\n",
+    ),
+  state: zod
+    .enum([
+      "AL",
+      "AK",
+      "AZ",
+      "AR",
+      "CA",
+      "CO",
+      "CT",
+      "DE",
+      "DC",
+      "FL",
+      "GA",
+      "HI",
+      "ID",
+      "IL",
+      "IN",
+      "IA",
+      "KS",
+      "KY",
+      "LA",
+      "ME",
+      "MD",
+      "MA",
+      "MI",
+      "MN",
+      "MS",
+      "MO",
+      "MT",
+      "NE",
+      "NV",
+      "NH",
+      "NJ",
+      "NM",
+      "NY",
+      "NC",
+      "ND",
+      "OH",
+      "OK",
+      "OR",
+      "PA",
+      "RI",
+      "SC",
+      "SD",
+      "TN",
+      "TX",
+      "UT",
+      "VT",
+      "VA",
+      "WA",
+      "WV",
+      "WI",
+      "WY",
+    ])
+    .nullish()
+    .describe(
+      "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). An empty string or null clears\nthe field.\n",
     ),
   level: zod.string().max(updateUserBodyLevelMax).nullish(),
   avatarUrl: zod
@@ -261,6 +352,18 @@ export const UpdateUserResponse = zod
       .nullish()
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+      ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
       ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -336,6 +439,18 @@ export const SetUserCoverPhotoResponse = zod
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
       ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+      ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
       .string()
@@ -402,6 +517,18 @@ export const DeleteUserCoverPhotoResponse = zod
       .nullish()
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+      ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
       ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -477,6 +604,18 @@ export const SetUserAvatarResponse = zod
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
       ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+      ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
       .string()
@@ -543,6 +682,18 @@ export const DeleteUserAvatarResponse = zod
       .nullish()
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+      ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
       ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -711,6 +862,18 @@ export const GetLoggedInUserResponse = zod
       .nullish()
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+      ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
       ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -4469,6 +4632,18 @@ export const ListFollowSuggestionsResponse = zod.object({
         .describe(
           "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
         ),
+      city: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+        ),
+      state: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+        ),
       avatarUrl: zod.string().url().nullish(),
       coverPhotoUrl: zod
         .string()
@@ -6846,6 +7021,18 @@ export const UpdateAdminUserResponse = zod
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
       ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+      ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
       .string()
@@ -6912,6 +7099,18 @@ export const SoftDeleteAdminUserResponse = zod
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
       ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+      ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
       .string()
@@ -6977,6 +7176,18 @@ export const RestoreAdminUserResponse = zod
       .nullish()
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+      ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
       ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod
@@ -7333,6 +7544,18 @@ export const AuthLoginResponse = zod
       .nullish()
       .describe(
         "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+      ),
+    city: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+      ),
+    state: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
       ),
     avatarUrl: zod.string().url().nullish(),
     coverPhotoUrl: zod

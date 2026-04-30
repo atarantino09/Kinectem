@@ -6034,6 +6034,19 @@ components:
             Always a full `https://…` URL when set; bare domains submitted
             via `UpdateUserRequest` are normalized server-side before
             being stored. Null when the user has not set one.
+        city:
+          type: string
+          nullable: true
+          description: |
+            Optional free-text city the user is based in (task #349).
+            Surfaced on the profile alongside `state`. Null when not set.
+        state:
+          type: string
+          nullable: true
+          description: |
+            Optional two-letter US state postal code (50 states + DC) the
+            user is based in (task #349). Mirrors the same enum used by
+            organizations. Null when not set.
         avatarUrl:
           type: string
           format: uri
@@ -6118,6 +6131,72 @@ components:
             server before being stored. An empty string or null clears
             the field. Non-http(s) URLs and obvious garbage are rejected
             with a 400.
+        city:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: |
+            Optional free-text city the user is based in (task #349).
+            An empty string or null clears the field.
+        state:
+          type: string
+          nullable: true
+          description: |
+            Optional two-letter US state postal code (50 states + DC) the
+            user is based in (task #349). An empty string or null clears
+            the field.
+          enum:
+            - AL
+            - AK
+            - AZ
+            - AR
+            - CA
+            - CO
+            - CT
+            - DE
+            - DC
+            - FL
+            - GA
+            - HI
+            - ID
+            - IL
+            - IN
+            - IA
+            - KS
+            - KY
+            - LA
+            - ME
+            - MD
+            - MA
+            - MI
+            - MN
+            - MS
+            - MO
+            - MT
+            - NE
+            - NV
+            - NH
+            - NJ
+            - NM
+            - NY
+            - NC
+            - ND
+            - OH
+            - OK
+            - OR
+            - PA
+            - RI
+            - SC
+            - SD
+            - TN
+            - TX
+            - UT
+            - VT
+            - VA
+            - WA
+            - WV
+            - WI
+            - WY
         level:
           type: string
           nullable: true

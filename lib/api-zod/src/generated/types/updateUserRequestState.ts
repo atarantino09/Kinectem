@@ -66,53 +66,67 @@ are marked `deprecated: true` in this spec.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface PublicUserResponse {
-  id: string;
-  firstName: string;
-  lastName: string;
-  /**
-   * @maxLength 1000
-   * @nullable
-   */
-  bio?: string | null;
-  /**
-   * Personal website / link surfaced on the public profile.
-Always a full `https://…` URL when set; bare domains submitted
-via `UpdateUserRequest` are normalized server-side before
-being stored. Null when the user has not set one.
+/**
+ * Optional two-letter US state postal code (50 states + DC) the
+user is based in (task #349). An empty string or null clears
+the field.
 
-   * @nullable
-   */
-  website?: string | null;
-  /**
-   * Optional free-text city the user is based in (task #349).
-Surfaced on the profile alongside `state`. Null when not set.
+ * @nullable
+ */
+export type UpdateUserRequestState =
+  | (typeof UpdateUserRequestState)[keyof typeof UpdateUserRequestState]
+  | null;
 
-   * @nullable
-   */
-  city?: string | null;
-  /**
-   * Optional two-letter US state postal code (50 states + DC) the
-user is based in (task #349). Mirrors the same enum used by
-organizations. Null when not set.
-
-   * @nullable
-   */
-  state?: string | null;
-  /** @nullable */
-  avatarUrl?: string | null;
-  /**
-   * Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.
-   * @nullable
-   */
-  coverPhotoUrl?: string | null;
-  isOwnProfile: boolean;
-  isFollowing?: boolean;
-  isConnection?: boolean;
-  /** @minimum 0 */
-  followerCount?: number;
-  /** @minimum 0 */
-  followingCount?: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
+export const UpdateUserRequestState = {
+  AL: "AL",
+  AK: "AK",
+  AZ: "AZ",
+  AR: "AR",
+  CA: "CA",
+  CO: "CO",
+  CT: "CT",
+  DE: "DE",
+  DC: "DC",
+  FL: "FL",
+  GA: "GA",
+  HI: "HI",
+  ID: "ID",
+  IL: "IL",
+  IN: "IN",
+  IA: "IA",
+  KS: "KS",
+  KY: "KY",
+  LA: "LA",
+  ME: "ME",
+  MD: "MD",
+  MA: "MA",
+  MI: "MI",
+  MN: "MN",
+  MS: "MS",
+  MO: "MO",
+  MT: "MT",
+  NE: "NE",
+  NV: "NV",
+  NH: "NH",
+  NJ: "NJ",
+  NM: "NM",
+  NY: "NY",
+  NC: "NC",
+  ND: "ND",
+  OH: "OH",
+  OK: "OK",
+  OR: "OR",
+  PA: "PA",
+  RI: "RI",
+  SC: "SC",
+  SD: "SD",
+  TN: "TN",
+  TX: "TX",
+  UT: "UT",
+  VT: "VT",
+  VA: "VA",
+  WA: "WA",
+  WV: "WV",
+  WI: "WI",
+  WY: "WY",
+} as const;

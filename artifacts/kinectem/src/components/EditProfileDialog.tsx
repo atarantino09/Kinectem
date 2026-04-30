@@ -7,6 +7,7 @@ import {
   requestUpload,
   confirmUpload,
   type PrivateUserResponse,
+  type UpdateUserRequestState,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -22,9 +23,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Camera, Loader2, Pencil, X } from "lucide-react";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
+import { US_STATES } from "@/lib/usStates";
 
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -87,6 +96,10 @@ export function EditProfileDialog({
   const [websiteError, setWebsiteError] = useState<string | undefined>(
     undefined,
   );
+  // Task #349 — Optional city + 2-letter US state postal code surfaced
+  // on the profile hero. Both default to empty when the user has none.
+  const [city, setCity] = useState(user.city ?? "");
+  const [state, setState] = useState(user.state ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -104,6 +117,8 @@ export function EditProfileDialog({
       setBio(user.bio ?? "");
       setWebsite(user.website ?? "");
       setWebsiteError(undefined);
+      setCity(user.city ?? "");
+      setState(user.state ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
     }
@@ -142,6 +157,8 @@ export function EditProfileDialog({
       setBio(user.bio ?? "");
       setWebsite(user.website ?? "");
       setWebsiteError(undefined);
+      setCity(user.city ?? "");
+      setState(user.state ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
     }
@@ -202,6 +219,10 @@ export function EditProfileDialog({
       return;
     }
     setWebsiteError(undefined);
+    // Task #349 — Always include city/state so emptying either field on the
+    // form clears the persisted value. City is trimmed and sent as null when
+    // empty; state is sent as null when no option is selected.
+    const trimmedCity = city.trim();
     update.mutate({
       userId: user.id,
       data: {
@@ -211,6 +232,8 @@ export function EditProfileDialog({
         // Always include website so the user can clear a previously-set
         // value by emptying the input. Empty string clears it server-side.
         website: websiteResult.value,
+        city: trimmedCity ? trimmedCity : null,
+        state: state ? (state as UpdateUserRequestState) : null,
         avatarUrl,
       },
     });
@@ -366,6 +389,56 @@ export function EditProfileDialog({
                 {websiteError}
               </p>
             )}
+          </div>
+          {/* Task #349 — Optional city + US state. Both clear when emptied. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-city" className="text-xs font-bold">
+                City
+              </Label>
+              <Input
+                id="profile-city"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Austin"
+                maxLength={100}
+                data-testid="input-profile-city"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-state" className="text-xs font-bold">
+                State
+              </Label>
+              <Select
+                value={state || "__clear__"}
+                onValueChange={(v) => setState(v === "__clear__" ? "" : v)}
+              >
+                <SelectTrigger
+                  id="profile-state"
+                  data-testid="input-profile-state"
+                  aria-label="State"
+                >
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem
+                    value="__clear__"
+                    data-testid="option-profile-state-clear"
+                  >
+                    None
+                  </SelectItem>
+                  {US_STATES.map((s) => (
+                    <SelectItem
+                      key={s.code}
+                      value={s.code}
+                      data-testid={`option-profile-state-${s.code}`}
+                    >
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
         <DialogFooter>

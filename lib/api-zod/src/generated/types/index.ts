@@ -437,6 +437,7 @@ export * from "./updateTeamRequestGender";
 export * from "./updateTeamSeasonRequest";
 export * from "./updateTeamSeasonRequestStatus";
 export * from "./updateUserRequest";
+export * from "./updateUserRequestState";
 export * from "./updateUserSettingsRequest";
 export * from "./updateUserSportsRequest";
 export * from "./userPrivacySettingsResponse";
