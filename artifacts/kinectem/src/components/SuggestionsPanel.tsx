@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -174,9 +175,12 @@ export function SuggestionsPanel({
                 key={`o-${o.id}`}
                 href={`/organizations/${o.id}`}
                 avatar={
-                  <div className="w-9 h-9 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-[10px] shrink-0">
-                    {getInitials(o.name)}
-                  </div>
+                  <OrgLogoThumb
+                    logoUrl={o.logoUrl}
+                    orgName={o.name}
+                    orgId={o.id}
+                    size="sm"
+                  />
                 }
                 title={o.name}
                 subtitle={o.description ?? undefined}
@@ -233,9 +237,12 @@ export function SuggestionsPanel({
                 key={org.id}
                 href={`/organizations/${org.id}`}
                 avatar={
-                  <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-                    {getInitials(org.name)}
-                  </div>
+                  <OrgLogoThumb
+                    logoUrl={org.logoUrl}
+                    orgName={org.name}
+                    orgId={org.id}
+                    size="md"
+                  />
                 }
                 title={org.name}
                 subtitle={org.description ?? undefined}
@@ -441,6 +448,10 @@ function TeamBannerThumb({
   size: "sm" | "md";
 }) {
   const sizeClass = size === "sm" ? "w-12 h-9" : "w-16 h-10";
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [bannerUrl]);
   return (
     <div
       className={cn(
@@ -448,14 +459,63 @@ function TeamBannerThumb({
         sizeClass,
       )}
     >
-      {bannerUrl && (
+      {bannerUrl && !failed && (
         <img
           src={bannerUrl}
           alt={`${teamName} background`}
+          onError={() => setFailed(true)}
           className="absolute inset-0 w-full h-full object-cover"
           data-testid={`img-suggested-team-banner-${teamId}`}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Square org logo thumbnail for suggestion rows. Renders the uploaded
+ * `logoUrl` when available, falling back to the existing colored-initials
+ * tile (and also falling back if the image fails to load) so the layout
+ * never shifts.
+ */
+function OrgLogoThumb({
+  logoUrl,
+  orgName,
+  orgId,
+  size,
+}: {
+  logoUrl?: string | null;
+  orgName: string;
+  orgId: string;
+  size: "sm" | "md";
+}) {
+  const sizeClass = size === "sm" ? "w-9 h-9 text-[10px]" : "w-10 h-10 text-xs";
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [logoUrl]);
+  if (logoUrl && !failed) {
+    return (
+      <img
+        src={logoUrl}
+        alt={`${orgName} logo`}
+        onError={() => setFailed(true)}
+        data-testid={`img-suggested-org-logo-${orgId}`}
+        className={cn(
+          "rounded-lg object-cover border border-border bg-muted shrink-0",
+          sizeClass,
+        )}
+      />
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black shrink-0",
+        sizeClass,
+      )}
+    >
+      {getInitials(orgName)}
     </div>
   );
 }
