@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useGetLoggedInUser,
-  useListOrganizations,
   useListFeed,
   useListUserOrganizations,
   useListUserTeams,
@@ -13,11 +12,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Badge } from "@/components/ui/badge";
 import { Building2, ChevronRight, Users } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
-import { getInitials } from "@/lib/format";
 
 export default function FeedPage() {
   const [, setLocation] = useLocation();
@@ -37,7 +34,6 @@ export default function FeedPage() {
     }
     return map;
   }, [myTeams]);
-  const { data: orgs } = useListOrganizations();
   const { data: feed, isLoading: feedLoading } = useListFeed();
   const [openOrgId, setOpenOrgId] = useState<string | null>(null);
 
@@ -142,53 +138,29 @@ export default function FeedPage() {
         )}
       </div>
 
-      {/* Right sidebar: suggestions + orgs */}
+      {/* Right sidebar: three single-type "to follow" cards */}
       <aside className="hidden lg:block space-y-4">
         <SuggestionsPanel
           variant="compact"
+          section="users"
           heading="People to follow"
           perSectionLimit={3}
           hideWhenEmpty
         />
-        {orgs && (
-          <Card className="rounded-xl border border-border shadow-sm">
-            <CardContent className="p-4">
-              <div className="mb-3">
-                <span className="brand-pill">Featured Organizations</span>
-              </div>
-              <div className="space-y-3">
-                {orgs.data.slice(0, 5).map((org) => (
-                  <Link key={org.id} href={`/organizations/${org.id}`}>
-                    <div className="flex items-start gap-3 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded">
-                      <FeaturedOrgLogoTile
-                        name={org.name}
-                        logoUrl={org.logoUrl ?? null}
-                      />
-                      <div className="min-w-0">
-                        <p className="font-bold text-sm leading-tight truncate">
-                          {org.name}
-                        </p>
-                        {org.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                            {org.description}
-                          </p>
-                        )}
-                        {org.isMember && (
-                          <Badge
-                            variant="secondary"
-                            className="mt-1 text-[10px] font-bold"
-                          >
-                            Member
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <SuggestionsPanel
+          variant="compact"
+          section="organizations"
+          heading="Organizations to follow"
+          perSectionLimit={3}
+          hideWhenEmpty
+        />
+        <SuggestionsPanel
+          variant="compact"
+          section="teams"
+          heading="Teams to follow"
+          perSectionLimit={3}
+          hideWhenEmpty
+        />
       </aside>
     </div>
   );
@@ -288,34 +260,6 @@ function OrgRow({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function FeaturedOrgLogoTile({
-  name,
-  logoUrl,
-}: {
-  name: string;
-  logoUrl: string | null;
-}) {
-  const [logoFailed, setLogoFailed] = useState(false);
-  useEffect(() => {
-    setLogoFailed(false);
-  }, [logoUrl]);
-  if (logoUrl && !logoFailed) {
-    return (
-      <img
-        src={logoUrl}
-        alt=""
-        onError={() => setLogoFailed(true)}
-        className="w-9 h-9 rounded-lg object-cover bg-muted shrink-0"
-      />
-    );
-  }
-  return (
-    <div className="w-9 h-9 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-      {getInitials(name)}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { getInitials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Variant = "full" | "compact";
+type Section = "users" | "organizations" | "teams";
 
 export interface SuggestionsPanelProps {
   variant?: Variant;
@@ -25,6 +26,12 @@ export interface SuggestionsPanelProps {
   subheading?: string;
   perSectionLimit?: number;
   hideWhenEmpty?: boolean;
+  /**
+   * When set, restricts the (compact) panel to a single suggestion type.
+   * Only takes effect for `variant="compact"`. The `full` variant always
+   * renders all three sections together.
+   */
+  section?: Section;
 }
 
 export function SuggestionsPanel({
@@ -33,6 +40,7 @@ export function SuggestionsPanel({
   subheading,
   perSectionLimit,
   hideWhenEmpty = false,
+  section,
 }: SuggestionsPanelProps = {}) {
   const { data, isLoading } = useListFollowSuggestions();
   const qc = useQueryClient();
@@ -98,11 +106,21 @@ export function SuggestionsPanel({
 
   const limit = (arr: unknown[]) =>
     perSectionLimit ? arr.slice(0, perSectionLimit) : arr;
-  const orgs = limit(data?.organizations ?? []) as NonNullable<
+  // `section` only narrows the compact variant; the full variant always
+  // renders all three sections together (used by the empty-feed state).
+  const activeSection = variant === "compact" ? section : undefined;
+  const showOrgs = !activeSection || activeSection === "organizations";
+  const showTeams = !activeSection || activeSection === "teams";
+  const showUsers = !activeSection || activeSection === "users";
+  const orgs = (
+    showOrgs ? limit(data?.organizations ?? []) : []
+  ) as NonNullable<typeof data>["organizations"];
+  const teams = (showTeams ? limit(data?.teams ?? []) : []) as NonNullable<
     typeof data
-  >["organizations"];
-  const teams = limit(data?.teams ?? []) as NonNullable<typeof data>["teams"];
-  const users = limit(data?.users ?? []) as NonNullable<typeof data>["users"];
+  >["teams"];
+  const users = (showUsers ? limit(data?.users ?? []) : []) as NonNullable<
+    typeof data
+  >["users"];
   const empty = orgs.length === 0 && teams.length === 0 && users.length === 0;
 
   if (empty) {
