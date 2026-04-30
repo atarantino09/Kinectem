@@ -43,6 +43,18 @@ export function useChildNotifications() {
   // Query's natural refetch kicks in.
   const invalidateNotificationsAndChildren = (childId?: string) => {
     qc.invalidateQueries({
+      // `refetchType: "all"` rather than the default "active". The
+      // child profile page (`/users/<childId>`) and its posts feed
+      // are typically NOT mounted while the parent is on /family, so
+      // a default invalidate would only mark them stale and defer
+      // the network call until the parent navigates over there. In
+      // practice that produces a brief flash of the just-removed
+      // post on the child profile while the refetch finishes —
+      // exactly what task #342's "Remove drops the post off the
+      // child's profile feed without a hard refresh" requirement is
+      // trying to avoid. Refetching inactive queries here makes the
+      // cache fresh by the time the user navigates.
+      refetchType: "all",
       predicate: (q) => {
         const k = q.queryKey;
         if (!Array.isArray(k)) return false;

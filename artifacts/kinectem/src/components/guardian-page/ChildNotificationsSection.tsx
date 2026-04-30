@@ -322,11 +322,10 @@ export function ChildNotificationsSection({
       >
         <span className="font-semibold">Approve</span> keeps the item visible
         on {c.firstName}&apos;s account.{" "}
-        <span className="font-semibold">Remove</span> dismisses it from your
-        dashboard and undoes the underlying action where possible (decline
-        tag, hide comment or message, decline roster invite, take down a
-        post {c.firstName} wrote so it no longer shows on their profile or
-        team pages).
+        <span className="font-semibold">Remove</span> undoes the specific
+        thing this notification is about — declines a tag, hides a comment or
+        message, revokes a like or follow, declines a roster invite, or takes
+        down a post {c.firstName} uploaded.
       </p>
       {pendingItems.length === 0 ? (
         <p

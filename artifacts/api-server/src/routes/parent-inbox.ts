@@ -56,6 +56,7 @@ import {
   apiError,
   safeAvatarUrl,
   notFound,
+  type PostKind,
 } from "../lib/spec-helpers";
 import {
   loadPostStats,
@@ -1081,13 +1082,23 @@ router.post(
     }
 
     // Snapshot the underlying source row's status BEFORE we mutate it,
-    // so an Undo can restore it faithfully. Only `tag` items track this
-    // today: a highlight tag that was already `approved` (auto-approved
-    // for a child with `requireTagConsent = false`) must restore back
-    // to `approved` on Undo, not silently demote to `pending`.
+    // so an Undo can restore it faithfully. Two cases need this today:
+    //   * `tag` items — pending tags surfaced as their own row.
+    //   * `notification` items whose underlying notifications.kind is
+    //     `post_tag` — i.e. an auto-approved tag that the loader hides
+    //     from the `tag` strip but still surfaces as a "X tagged Jake
+    //     in 'Y'" row. A Remove on either path declines the underlying
+    //     tag, and Undo on either must restore it to whatever status
+    //     it had at decision time (an auto-approved tag must come back
+    //     as `approved`, not silently demote to `pending`).
     let priorStatus: string | null = null;
     if (underlyingItem?.kind === "tag") {
       priorStatus = await loadTagPriorStatus(refId);
+    } else if (underlyingItem?.kind === "notification") {
+      const parsed = await loadPostTagFromNotification(refId);
+      if (parsed) {
+        priorStatus = await loadChildPostTagPriorStatus(parsed, child.id);
+      }
     }
 
     if (decision === "removed" && underlyingItem) {
@@ -1284,7 +1295,52 @@ async function applyUnsetAction(
       );
     return;
   }
-  // roster + notification: reversal is not reliably possible, so the
+  if (kind === "notification") {
+    // The only `notification` Remove that performs a reversible
+    // mutation is the `post_tag` arm — it declines the underlying
+    // article-tag or highlight-tag for this child. Mirror the `tag`
+    // branch above so an Undo restores the tag to whatever status it
+    // had at decision time (auto-approved → approved, pending →
+    // pending), and only if the row is currently `declined` so we
+    // don't overwrite an out-of-band re-decline by the child or
+    // another parent.
+    //
+    // Like / reaction and follow Removes are NOT reversed here: the
+    // delete already removed the source row, so there is nothing to
+    // restore. The caller still clears the decision row in those
+    // cases so the parent stops seeing the stale "Removed" badge.
+    const parsed = await loadPostTagFromNotification(refId);
+    if (!parsed) return;
+    const restoreTo: "approved" | "pending" =
+      priorStatus === "approved" ? "approved" : "pending";
+    const now = new Date();
+    if (parsed.kind === "article") {
+      await db
+        .update(articleTags)
+        .set({ status: restoreTo, updatedAt: now })
+        .where(
+          and(
+            eq(articleTags.userId, childId),
+            eq(articleTags.articleId, parsed.id),
+            eq(articleTags.status, "declined"),
+          ),
+        );
+    } else if (parsed.kind === "highlight") {
+      await db
+        .update(highlightTags)
+        .set({ status: restoreTo, updatedAt: now })
+        .where(
+          and(
+            eq(highlightTags.userId, childId),
+            eq(highlightTags.highlightId, parsed.id),
+            eq(highlightTags.status, "declined"),
+          ),
+        );
+    }
+    // org_post: no per-user tagging, nothing to restore.
+    return;
+  }
+  // roster: hard-deleted, so reversal is not reliably possible. The
   // caller will simply clear the decision row and the item will come
   // back only if it still surfaces in the live stream.
 }
@@ -1317,6 +1373,71 @@ async function applyApproveTagAction(tagId: string): Promise<void> {
     .where(
       and(eq(highlightTags.id, tagId), eq(highlightTags.status, "pending")),
     );
+}
+
+// Look up a notifications row by id and, if it represents a "tagged
+// in" event (`notifications.kind = "post_tag"`), parse the post id out
+// of its `link` and return it in {kind, id} form. Returns null when
+// the row is missing, the kind doesn't match, or the link isn't a
+// well-formed `/posts/<postId>` URL the post id parser recognises.
+//
+// Used by both the priorStatus snapshot in the decision endpoint and
+// the Undo restore in `applyUnsetAction` so the two paths agree on
+// exactly which `(child, post)` tag row to read or write.
+async function loadPostTagFromNotification(
+  notificationId: string,
+): Promise<{ kind: PostKind; id: string } | null> {
+  const [notif] = await db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.id, notificationId))
+    .limit(1);
+  if (!notif || notif.kind !== "post_tag") return null;
+  const link = notif.link ?? "";
+  const m = link.match(/^\/posts\/([^\/?#]+)/);
+  if (!m) return null;
+  return parsePostId(m[1]);
+}
+
+// Snapshot the status of the underlying article-tag or highlight-tag
+// for a given child + parsed post id. Mirrors `loadTagPriorStatus` but
+// scoped by `(userId = childId, post)` rather than by tag-row id, so
+// the auto-approved-tag path can capture the same prior-status info
+// the pending-tag path already records. Returns null if no matching
+// tag row exists (in which case `applyUnsetAction` will default-restore
+// to `pending`, which is the correct fallback).
+async function loadChildPostTagPriorStatus(
+  parsed: { kind: PostKind; id: string },
+  childId: string,
+): Promise<string | null> {
+  if (parsed.kind === "article") {
+    const [row] = await db
+      .select({ status: articleTags.status })
+      .from(articleTags)
+      .where(
+        and(
+          eq(articleTags.userId, childId),
+          eq(articleTags.articleId, parsed.id),
+        ),
+      )
+      .limit(1);
+    return row ? row.status : null;
+  }
+  if (parsed.kind === "highlight") {
+    const [row] = await db
+      .select({ status: highlightTags.status })
+      .from(highlightTags)
+      .where(
+        and(
+          eq(highlightTags.userId, childId),
+          eq(highlightTags.highlightId, parsed.id),
+        ),
+      )
+      .limit(1);
+    return row ? row.status : null;
+  }
+  // org_post — no per-user tag table to read.
+  return null;
 }
 
 // Snapshot the current status of a tag (article or highlight) so an
@@ -1441,6 +1562,50 @@ async function applyRemoveAction(
       .limit(1);
     if (!notif) return;
     const link = notif.link ?? "";
+
+    // post_tag: decline the underlying article-tag or highlight-tag
+    // for THIS child on the post the notification points at. Mirrors
+    // the `kind=tag` Remove path so an auto-approved tag (the common
+    // case for a child whose linked guardian has set
+    // `requireTagConsent = false`) actually drops off the child's
+    // profile when the parent dismisses the "tagged in" notification.
+    // Without this, the parent-facing Remove just records a verdict
+    // and the post stays on the child's profile feed — exactly the
+    // bug task #342 closes.
+    if (notif.kind === "post_tag") {
+      // Reuse `loadPostTagFromNotification` so the priorStatus snapshot
+      // (decision endpoint), the Undo restore (`applyUnsetAction`), and
+      // this Remove path all read the link the same way — no risk of
+      // them drifting on which `(child, post)` row they target.
+      const parsed = await loadPostTagFromNotification(notif.id);
+      if (parsed) {
+        const now = new Date();
+        if (parsed.kind === "article") {
+          await db
+            .update(articleTags)
+            .set({ status: "declined", updatedAt: now })
+            .where(
+              and(
+                eq(articleTags.userId, childId),
+                eq(articleTags.articleId, parsed.id),
+              ),
+            );
+        } else if (parsed.kind === "highlight") {
+          await db
+            .update(highlightTags)
+            .set({ status: "declined", updatedAt: now })
+            .where(
+              and(
+                eq(highlightTags.userId, childId),
+                eq(highlightTags.highlightId, parsed.id),
+              ),
+            );
+        }
+        // org_post: no per-user tagging table, so nothing to flip;
+        // the parent's verdict row alone suppresses the bell entry.
+      }
+      return;
+    }
 
     // Like/reaction: revoke ONLY this actor's reaction on the specific
     // post the notification points at. We require both an actorUserId

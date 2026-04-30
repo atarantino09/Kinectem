@@ -2382,4 +2382,432 @@ describe("parent inbox: per-child unified notifications", () => {
       expect(hiddenHighlight?.hiddenAt).toBeTruthy();
     });
   });
+
+  describe("Remove on a 'tagged in' notification (post_tag) declines the tag for the child", () => {
+    it("article post_tag notification: Remove flips the child's article tag to declined, drops the article off the child's profile, and leaves the tagger's profile alone", async () => {
+      // Mirrors the auto-approved tag case (the common one for a child
+      // whose linked guardian has set requireTagConsent=false). The
+      // tag loader filters to status=pending only, so the tag itself
+      // doesn't surface as its own row — the parent only sees the
+      // `kind=notification` row whose underlying notifications.kind is
+      // `post_tag`. Remove on that row must decline the tag.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Auto-approved tag article",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "approved",
+        })
+        .returning();
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Auto-approved tag article"',
+          link: `/posts/article-${article.id}`,
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+
+      // Sanity: the article shows on the child's profile feed before
+      // the parent declines it. Use the coach as a non-admin viewer.
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const childBefore = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      const childBeforeIds = (
+        childBefore.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(childBeforeIds).toContain(`article-${article.id}`);
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(tagAfter?.status).toBe("declined");
+
+      // The article disappears from the child's profile (because the
+      // tag is now declined and the child wasn't the author)…
+      const childAfter = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      const childAfterIds = (
+        childAfter.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(childAfterIds).not.toContain(`article-${article.id}`);
+
+      // …but stays on the tagger's profile (the original author owns
+      // the post — un-tagging Jake doesn't take down someone else's
+      // article).
+      const taggerAfter = await coach.get(`/api/v1/users/${coachId}/posts`);
+      const taggerAfterIds = (
+        taggerAfter.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(taggerAfterIds).toContain(`article-${article.id}`);
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("highlight post_tag notification: Remove flips the child's highlight tag to declined and drops the clip off the child's profile", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Auto-approved highlight clip",
+          videoUrl: "https://example.com/auto-clip.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "approved",
+        })
+        .returning();
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Auto-approved highlight clip"',
+          link: `/posts/highlight-${highlight.id}`,
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const childBefore = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      const childBeforeIds = (
+        childBefore.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(childBeforeIds).toContain(`highlight-${highlight.id}`);
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(tagAfter?.status).toBe("declined");
+
+      const childAfter = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      const childAfterIds = (
+        childAfter.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(childAfterIds).not.toContain(`highlight-${highlight.id}`);
+
+      // Uploader's profile still shows the clip — the post itself is
+      // untouched.
+      const uploaderAfter = await coach.get(`/api/v1/users/${coachId}/posts`);
+      const uploaderAfterIds = (
+        uploaderAfter.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(uploaderAfterIds).toContain(`highlight-${highlight.id}`);
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("Undo on a Removed article post_tag notification restores the tag to its priorStatus (auto-approved → approved)", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Undo post_tag notif",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "approved",
+        })
+        .returning();
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Undo post_tag notif"',
+          link: `/posts/article-${article.id}`,
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [declined] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(declined?.status).toBe("declined");
+
+      // priorStatus snapshot was captured on the parent's read row.
+      const [readRow] = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, lisaId),
+            eq(parentChildNotificationReads.childId, samiraId),
+            eq(parentChildNotificationReads.itemKey, itemKey),
+          ),
+        );
+      expect(readRow?.priorStatus).toBe("approved");
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+
+      const [restored] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      // Restores to `approved` (not `pending`) because the snapshot
+      // captured the auto-approved state at decision time.
+      expect(restored?.status).toBe("approved");
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("Undo on a Removed highlight post_tag notification restores the tag to pending when the prior status was pending", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Pending highlight post_tag undo",
+          videoUrl: "https://example.com/pending.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+      // Pending highlight tags ALSO surface as their own `tag:` row,
+      // so when we remove via the `notification:` key the membership
+      // check needs the post_tag notification to exist; we simulate
+      // the "auto-approved" path being missing by addressing the
+      // notification:<id> key directly. The tag is the same row.
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Pending highlight post_tag undo"',
+          link: `/posts/highlight-${highlight.id}`,
+        })
+        .returning();
+      const itemKey = `notification:${notif.id}`;
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+
+      const [restored] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(restored?.status).toBe("pending");
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("non-guardian users still get 403 on the decision endpoint for a post_tag notification", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "403 post_tag",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      await db.insert(articleTags).values({
+        articleId: article.id,
+        userId: samiraId,
+        taggerUserId: coachId,
+        status: "approved",
+      });
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "403 post_tag"',
+          link: `/posts/article-${article.id}`,
+        })
+        .returning();
+      // The coach is NOT Samira's guardian, so authorizeChildAccess
+      // must reject the decision endpoint with 403 — the new post_tag
+      // dispatch arm doesn't loosen that guard.
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const res = await coach
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `notification:${notif.id}`,
+          decision: "removed",
+        });
+      expect(res.status).toBe(403);
+
+      // And the underlying tag must remain approved — the rejected
+      // call must NOT have flipped it.
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(
+          and(
+            eq(articleTags.userId, samiraId),
+            eq(articleTags.articleId, article.id),
+          ),
+        );
+      expect(tagAfter?.status).toBe("approved");
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("Remove on a comment notification does not take down the underlying post (regression: per-notification fidelity, no escalation)", async () => {
+      // Comment items surface as `kind=comment`, NOT `kind=notification`.
+      // Removing one must hide ONLY the comment, leaving the post the
+      // child authored visible on their profile feed. This guards
+      // against a regression where the new post_tag handler might
+      // be over-applied to other notification kinds.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: samiraId,
+          title: "Child-authored, comment removed",
+          body: "child body",
+          status: "published",
+        })
+        .returning();
+      const [comment] = await db
+        .insert(postComments)
+        .values({
+          postKind: "article",
+          postRefId: article.id,
+          authorId: coachId,
+          body: "Nice job!",
+        })
+        .returning();
+      const itemKey = `comment:${comment.id}`;
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+
+      const [hiddenComment] = await db
+        .select()
+        .from(postComments)
+        .where(eq(postComments.id, comment.id));
+      expect(hiddenComment?.hiddenAt).toBeTruthy();
+
+      // The child's authored article must still be visible.
+      const [stillVisible] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, article.id));
+      expect(stillVisible?.hiddenAt).toBeNull();
+
+      // And it still shows up on the child's profile feed for a
+      // non-admin viewer.
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const profile = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      const ids = (profile.body.data as Array<{ id: string }>).map(
+        (p) => p.id,
+      );
+      expect(ids).toContain(`article-${article.id}`);
+    });
+  });
 });
