@@ -5,6 +5,8 @@ import {
   MessageCircle,
   MessageSquare,
   ClipboardList,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +28,10 @@ function removeAriaLabel(item: ChildNotificationItem): string {
       return "Remove and hide this message from your child's view";
     case "roster":
       return "Remove and decline this roster invite";
+    case "authoredArticle":
+      return "Remove and take this article down from your child's page";
+    case "authoredHighlight":
+      return "Remove and take this highlight down from your child's page";
     case "notification":
     default:
       return "Hide from your dashboard";
@@ -62,7 +68,11 @@ function ChildNotificationRow({
           ? MessageSquare
           : item.kind === "roster"
             ? ClipboardList
-            : Bell;
+            : item.kind === "authoredArticle"
+              ? FileText
+              : item.kind === "authoredHighlight"
+                ? ImageIcon
+                : Bell;
   const isApproving =
     decidingItem?.itemKey === item.itemKey &&
     decidingItem.decision === "approved";
@@ -314,7 +324,9 @@ export function ChildNotificationsSection({
         on {c.firstName}&apos;s account.{" "}
         <span className="font-semibold">Remove</span> dismisses it from your
         dashboard and undoes the underlying action where possible (decline
-        tag, hide comment or message, decline roster invite).
+        tag, hide comment or message, decline roster invite, take down a
+        post {c.firstName} wrote so it no longer shows on their profile or
+        team pages).
       </p>
       {pendingItems.length === 0 ? (
         <p

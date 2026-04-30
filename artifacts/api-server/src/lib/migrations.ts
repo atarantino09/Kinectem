@@ -158,6 +158,17 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS website text;
 `;
 
+// Task #337 — Add prior_status column to parent_child_notification_reads.
+// The family-dashboard Remove action now flips already-`approved`
+// highlight / article tags to `declined`. Without remembering the prior
+// status an Undo would silently demote those tags to `pending`. The new
+// column snapshots the underlying source row's status at decision time
+// so Undo can restore it faithfully. Nullable, no backfill.
+const TASK_337_PARENT_DECISION_PRIOR_STATUS = `
+ALTER TABLE parent_child_notification_reads
+  ADD COLUMN IF NOT EXISTS prior_status text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -186,6 +197,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-29-task-293-user-website",
     sql: TASK_293_USER_WEBSITE,
+  },
+  {
+    name: "2026-04-30-task-337-parent-decision-prior-status",
+    sql: TASK_337_PARENT_DECISION_PRIOR_STATUS,
   },
 ];
 

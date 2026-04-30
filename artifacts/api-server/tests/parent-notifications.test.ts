@@ -2048,4 +2048,338 @@ describe("parent inbox: per-child unified notifications", () => {
     const keys = new Set(data.map((d) => d.itemKey));
     expect(keys.has(`comment:${selfComment.id}`)).toBe(false);
   });
+
+  describe("Remove on child-authored posts", () => {
+    it("Remove on an authoredArticle hides the article and an Undo restores it", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: samiraId,
+          title: "Samira's own article",
+          body: "child-written body",
+          status: "published",
+        })
+        .returning();
+      const itemKey = `authoredArticle:${article.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+
+      // Sanity: the authored article surfaces in the family inbox.
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const beforeKeys = (before.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(beforeKeys).toContain(itemKey);
+
+      // Remove takes the article down (sets hiddenAt) and stamps the
+      // parent as the user who hid it.
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [hidden] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, article.id));
+      expect(hidden?.hiddenAt).toBeTruthy();
+      expect(hidden?.hiddenByUserId).toBe(lisaId);
+
+      // Live stream no longer surfaces the now-hidden article.
+      const afterRemove = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const afterRemoveKeys = (
+        afterRemove.body.data as Array<{ itemKey: string }>
+      ).map((d) => d.itemKey);
+      expect(afterRemoveKeys).not.toContain(itemKey);
+
+      // Undo clears the hide so the article is visible on the child's
+      // page again, and the parent's decision row is removed.
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+      const [restored] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, article.id));
+      expect(restored?.hiddenAt).toBeNull();
+      expect(restored?.hiddenByUserId).toBeNull();
+      const reads = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, lisaId),
+            eq(parentChildNotificationReads.childId, samiraId),
+            eq(parentChildNotificationReads.itemKey, itemKey),
+          ),
+        );
+      expect(reads.length).toBe(0);
+    });
+
+    it("Remove on an authoredHighlight hides the clip and an Undo restores it", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: samiraId,
+          title: "Samira's own clip",
+          videoUrl: "https://example.com/samira.mp4",
+        })
+        .returning();
+      const itemKey = `authoredHighlight:${highlight.id}`;
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const beforeKeys = (before.body.data as Array<{ itemKey: string }>).map(
+        (d) => d.itemKey,
+      );
+      expect(beforeKeys).toContain(itemKey);
+
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [hidden] = await db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.id, highlight.id));
+      expect(hidden?.hiddenAt).toBeTruthy();
+      expect(hidden?.hiddenByUserId).toBe(lisaId);
+
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+      const [restored] = await db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.id, highlight.id));
+      expect(restored?.hiddenAt).toBeNull();
+      expect(restored?.hiddenByUserId).toBeNull();
+    });
+
+    it("a parent cannot Remove an authoredArticle that isn't authored by their child (404)", async () => {
+      // Article authored by the coach, NOT by Samira — itemKey must not
+      // be honoured even though the kind prefix is well-formed. The
+      // membership check should reject it as "not in the live stream
+      // and no prior decision row" with a 404.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [foreign] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Not Samira's article",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `authoredArticle:${foreign.id}`,
+          decision: "removed",
+        });
+      expect(res.status).toBe(404);
+      // And critically: the foreign article must NOT have been hidden.
+      const [stillVisible] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, foreign.id));
+      expect(stillVisible?.hiddenAt).toBeNull();
+    });
+
+    it("Undo on a Removed highlight tag that was approved restores it to approved (priorStatus)", async () => {
+      // A child with `requireTagConsent = false` would have an
+      // already-`approved` highlight tag surface in the parent inbox.
+      // If the parent Removes it and then Undoes, the tag must come
+      // back as `approved` — not silently demoted to `pending` — so
+      // the child doesn't have to re-approve their own consent.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Auto-approved highlight",
+          videoUrl: "https://example.com/auto.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "approved",
+        })
+        .returning();
+      const itemKey = `tag:${tag.id}`;
+      // Plant a prior decision row so the membership check passes — the
+      // loader skips non-pending tags, so without this the decision
+      // endpoint would return 404 on the Remove.
+      await db.insert(parentChildNotificationReads).values({
+        parentId: lisaId,
+        childId: samiraId,
+        itemKey,
+        decision: "approved",
+        decidedAt: new Date(),
+      });
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+
+      // Flip from approve → remove. The decision endpoint should
+      // capture the current (`approved`) status before declining.
+      const remove = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "removed" });
+      expect(remove.status).toBe(200);
+      const [declined] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(declined?.status).toBe("declined");
+      const [readRow] = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, lisaId),
+            eq(parentChildNotificationReads.childId, samiraId),
+            eq(parentChildNotificationReads.itemKey, itemKey),
+          ),
+        );
+      expect(readRow?.priorStatus).toBe("approved");
+
+
+      // Undo must restore to `approved`, NOT `pending`.
+      const undo = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undo.status).toBe(200);
+      const [restored] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(restored?.status).toBe("approved");
+    });
+
+    it("after Remove the child's authored article + highlight disappear from non-admin profile feeds but stay visible to admins", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: samiraId,
+          title: "Samira visibility article",
+          body: "child-written body",
+          status: "published",
+        })
+        .returning();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: samiraId,
+          title: "Samira visibility clip",
+          videoUrl: "https://example.com/samira-vis.mp4",
+        })
+        .returning();
+      const articleKey = `authoredArticle:${article.id}`;
+      const highlightKey = `authoredHighlight:${highlight.id}`;
+      // The /users/:id/posts response wraps raw row IDs, so compare on
+      // the wrapped form.
+      const articlePostId = `article-${article.id}`;
+      const highlightPostId = `highlight-${highlight.id}`;
+
+      // A non-admin viewer (coach) can see both posts before the parent
+      // takedown — guarantees the test is exercising the right path.
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const coachBefore = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      expect(coachBefore.status).toBe(200);
+      const coachBeforeIds = (
+        coachBefore.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(coachBeforeIds).toContain(articlePostId);
+      expect(coachBeforeIds).toContain(highlightPostId);
+
+      // Parent removes both authored posts.
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      for (const itemKey of [articleKey, highlightKey]) {
+        const r = await lisa
+          .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+          .send({ itemKey, decision: "removed" });
+        expect(r.status).toBe(200);
+      }
+
+      // Non-admin viewer no longer sees either post on the child's
+      // profile feed (which feeds both the profile page and team-page
+      // post lists, both of which gate on `hiddenAt`).
+      const coachAfter = await coach.get(`/api/v1/users/${samiraId}/posts`);
+      expect(coachAfter.status).toBe(200);
+      const coachAfterIds = (
+        coachAfter.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(coachAfterIds).not.toContain(articlePostId);
+      expect(coachAfterIds).not.toContain(highlightPostId);
+
+      // A real admin still sees both rows on the child's profile feed
+      // so moderation review remains possible. The DB rows themselves
+      // carry `hiddenAt` + `hiddenByUserId`, which we assert directly.
+      const { agent: admin } = await loginAs((u) => u.role === "admin");
+      const adminAfter = await admin.get(`/api/v1/users/${samiraId}/posts`);
+      expect(adminAfter.status).toBe(200);
+      const adminAfterIds = (
+        adminAfter.body.data as Array<{ id: string }>
+      ).map((p) => p.id);
+      expect(adminAfterIds).toContain(articlePostId);
+      expect(adminAfterIds).toContain(highlightPostId);
+      const [hiddenArticle] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, article.id));
+      const [hiddenHighlight] = await db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.id, highlight.id));
+      expect(hiddenArticle?.hiddenAt).toBeTruthy();
+      expect(hiddenHighlight?.hiddenAt).toBeTruthy();
+    });
+  });
 });

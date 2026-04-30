@@ -67,7 +67,7 @@ are marked `deprecated: true` in this spec.
  */
 
 /**
- * Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id.
+ * Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id. `authoredArticle` and `authoredHighlight` represent posts authored / uploaded by the child themselves; Remove on those hides the underlying article / highlight (`hiddenAt = now()`) so it disappears from every public surface.
 
  */
 export type ChildNotificationKind =
@@ -79,4 +79,6 @@ export const ChildNotificationKind = {
   comment: "comment",
   message: "message",
   roster: "roster",
+  authoredArticle: "authoredArticle",
+  authoredHighlight: "authoredHighlight",
 } as const;

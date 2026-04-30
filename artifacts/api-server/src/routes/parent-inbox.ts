@@ -94,7 +94,14 @@ const router: IRouter = Router();
 // own read flags. Auth shape mirrors the pending-team-invites endpoint:
 // real (non-masquerading) parent or real admin.
 
-type ChildItemKind = "notification" | "tag" | "comment" | "message" | "roster";
+type ChildItemKind =
+  | "notification"
+  | "tag"
+  | "comment"
+  | "message"
+  | "roster"
+  | "authoredArticle"
+  | "authoredHighlight";
 type ChildItemDecision = "approved" | "removed";
 
 interface ChildItem {
@@ -396,6 +403,71 @@ async function loadChildNotificationItems(
     }
   }
 
+  // 4b. Articles authored by the child themselves (recent, not already
+  //     hidden). Surfaced so a parent can take down a post their child
+  //     uploaded — Remove flips `articles.hiddenAt = now()`, Approve
+  //     just records the verdict. The link still points at the post
+  //     page so the parent can preview before deciding.
+  const authoredArticleRowsForFeed = await db
+    .select({ a: articles })
+    .from(articles)
+    .where(
+      and(
+        eq(articles.authorId, childId),
+        eq(articles.status, "published"),
+        isNull(articles.hiddenAt),
+        gt(articles.createdAt, since),
+      ),
+    )
+    .orderBy(desc(articles.createdAt))
+    .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  for (const r of authoredArticleRowsForFeed) {
+    const articleTitle = r.a.title ?? "Untitled";
+    items.push({
+      itemKey: `authoredArticle:${r.a.id}`,
+      kind: "authoredArticle",
+      title: `${childFirst} wrote "${articleTitle}"`,
+      body: null,
+      link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
+      isRead: false,
+      decision: null,
+      createdAt: r.a.createdAt.toISOString(),
+      // The "actor" on an authored post is the child themselves; we
+      // intentionally leave it null so the row doesn't render an
+      // avatar that duplicates the child card it sits inside of.
+      actor: null,
+    });
+  }
+
+  // 4c. Highlights uploaded by the child themselves. Mirrors 4b for
+  //     `highlights.uploaderId = childId`.
+  const authoredHighlightRowsForFeed = await db
+    .select({ h: highlights })
+    .from(highlights)
+    .where(
+      and(
+        eq(highlights.uploaderId, childId),
+        isNull(highlights.hiddenAt),
+        gt(highlights.createdAt, since),
+      ),
+    )
+    .orderBy(desc(highlights.createdAt))
+    .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  for (const r of authoredHighlightRowsForFeed) {
+    const highlightTitle = r.h.title ?? "Untitled";
+    items.push({
+      itemKey: `authoredHighlight:${r.h.id}`,
+      kind: "authoredHighlight",
+      title: `${childFirst} posted a highlight: "${highlightTitle}"`,
+      body: null,
+      link: `/posts/${highlightPostId(r.h.id)}?asChild=${childId}`,
+      isRead: false,
+      decision: null,
+      createdAt: r.h.createdAt.toISOString(),
+      actor: null,
+    });
+  }
+
   // 5. Roster events for the child (recent invites + accepted/declined).
   //    These are higher-level than the per-team `roster_invite_for_child`
   //    notification because they cover acceptance/denial too.
@@ -493,6 +565,8 @@ const ALLOWED_DECIDED_KINDS: ReadonlySet<ChildItemKind> = new Set([
   "comment",
   "message",
   "roster",
+  "authoredArticle",
+  "authoredHighlight",
 ]);
 
 async function loadDecidedExtraItems(
@@ -661,6 +735,52 @@ async function loadDecidedExtraItems(
           actor: null,
         };
       }
+    } else if (kind === "authoredArticle") {
+      const [r] = await db
+        .select({ a: articles })
+        .from(articles)
+        .where(eq(articles.id, refId))
+        .limit(1);
+      if (r) {
+        const articleTitle = r.a.title ?? "Untitled";
+        item = {
+          itemKey: row.itemKey,
+          kind: "authoredArticle",
+          title: `${childFirst} wrote "${articleTitle}"`,
+          body:
+            decision === "removed" && r.a.hiddenAt
+              ? "Post is hidden — Undo to restore."
+              : null,
+          link: `/posts/${articlePostId(r.a.id)}?asChild=${childId}`,
+          isRead: true,
+          decision,
+          createdAt: r.a.createdAt.toISOString(),
+          actor: null,
+        };
+      }
+    } else if (kind === "authoredHighlight") {
+      const [r] = await db
+        .select({ h: highlights })
+        .from(highlights)
+        .where(eq(highlights.id, refId))
+        .limit(1);
+      if (r) {
+        const highlightTitle = r.h.title ?? "Untitled";
+        item = {
+          itemKey: row.itemKey,
+          kind: "authoredHighlight",
+          title: `${childFirst} posted a highlight: "${highlightTitle}"`,
+          body:
+            decision === "removed" && r.h.hiddenAt
+              ? "Post is hidden — Undo to restore."
+              : null,
+          link: `/posts/${highlightPostId(r.h.id)}?asChild=${childId}`,
+          isRead: true,
+          decision,
+          createdAt: r.h.createdAt.toISOString(),
+          actor: null,
+        };
+      }
     } else if (kind === "notification") {
       const [n] = await db
         .select()
@@ -792,14 +912,7 @@ router.post(
     // Sanity-check the shape so callers can't poison the table with
     // arbitrary strings — we only accept known kinds.
     const [kind] = itemKey.split(":");
-    const allowed: ChildItemKind[] = [
-      "notification",
-      "tag",
-      "comment",
-      "message",
-      "roster",
-    ];
-    if (!allowed.includes(kind as ChildItemKind)) {
+    if (!ALLOWED_DECIDED_KINDS.has(kind as ChildItemKind)) {
       return apiError(res, 400, "unknown item kind");
     }
     await db
@@ -916,14 +1029,7 @@ router.post(
       );
     }
     const [kind, refId] = itemKey.split(":");
-    const allowed: ChildItemKind[] = [
-      "notification",
-      "tag",
-      "comment",
-      "message",
-      "roster",
-    ];
-    if (!allowed.includes(kind as ChildItemKind)) {
+    if (!ALLOWED_DECIDED_KINDS.has(kind as ChildItemKind)) {
       return apiError(res, 400, "unknown item kind");
     }
     if (!refId) return apiError(res, 400, "missing item reference");
@@ -950,22 +1056,51 @@ router.post(
       if (!prior) {
         return apiError(res, 404, "Notification item not found");
       }
-      // A prior decision exists but the underlying source row is gone;
-      // updating the verdict is harmless and idempotent — there is just
-      // nothing left to act on destructively.
+      // A prior decision exists but the live stream no longer surfaces
+      // the row. This happens whenever a parent flips an old verdict
+      // from the decided-history strip — most notably approve → remove
+      // on a tag that the loader filters to `pending` only. Synthesize
+      // a minimal item so the kind-specific Approve / Remove helpers
+      // still run; each helper guards its own preconditions, so a
+      // truly-deleted underlying row is a harmless no-op.
+      const synthDecision: ChildItemDecision | null =
+        prior.decision === "approved" || prior.decision === "removed"
+          ? prior.decision
+          : null;
+      underlyingItem = {
+        itemKey,
+        kind: kind as ChildItemKind,
+        title: "",
+        body: null,
+        link: null,
+        isRead: true,
+        decision: synthDecision,
+        createdAt: (prior.decidedAt ?? new Date()).toISOString(),
+        actor: null,
+      };
+    }
+
+    // Snapshot the underlying source row's status BEFORE we mutate it,
+    // so an Undo can restore it faithfully. Only `tag` items track this
+    // today: a highlight tag that was already `approved` (auto-approved
+    // for a child with `requireTagConsent = false`) must restore back
+    // to `approved` on Undo, not silently demote to `pending`.
+    let priorStatus: string | null = null;
+    if (underlyingItem?.kind === "tag") {
+      priorStatus = await loadTagPriorStatus(refId);
     }
 
     if (decision === "removed" && underlyingItem) {
-      await applyRemoveAction(underlyingItem, child.id);
+      await applyRemoveAction(underlyingItem, child.id, me.id);
     }
     // Parent approval on a tag item must also flip the underlying tag
     // row from `pending` to `approved`. Without this, the recap article
     // and the child's pending-tags list keep treating the tag as still
     // awaiting consent — even though the parent has already approved
     // it on the child's behalf. Other item kinds (comment, message,
-    // roster, notification) intentionally do not mutate any underlying
-    // row on approve; the decision row alone is enough to drop them
-    // from the feed.
+    // roster, notification, authoredArticle, authoredHighlight)
+    // intentionally do not mutate any underlying row on approve; the
+    // decision row alone is enough to drop them from the feed.
     if (decision === "approved" && underlyingItem?.kind === "tag") {
       await applyApproveTagAction(refId);
     }
@@ -979,6 +1114,7 @@ router.post(
         itemKey,
         decision,
         decidedAt: now,
+        priorStatus,
       })
       .onConflictDoUpdate({
         target: [
@@ -986,7 +1122,15 @@ router.post(
           parentChildNotificationReads.childId,
           parentChildNotificationReads.itemKey,
         ],
-        set: { decision, decidedAt: now },
+        // Only overwrite priorStatus when we actually captured one
+        // (i.e. for tag items). Preserves any prior snapshot from a
+        // previous decision on the same item if the parent flips
+        // from approve → remove (or vice versa) without an Undo.
+        set: {
+          decision,
+          decidedAt: now,
+          ...(priorStatus !== null ? { priorStatus } : {}),
+        },
       });
     res.json({ ok: true, decision });
   }),
@@ -1036,7 +1180,12 @@ router.post(
       return apiError(res, 404, "No decision to revert");
     }
     if (prior.decision === "removed") {
-      await applyUnsetAction(kind as ChildItemKind, refId, child.id);
+      await applyUnsetAction(
+        kind as ChildItemKind,
+        refId,
+        child.id,
+        prior.priorStatus ?? null,
+      );
     }
     await db
       .delete(parentChildNotificationReads)
@@ -1061,16 +1210,26 @@ async function applyUnsetAction(
   kind: ChildItemKind,
   refId: string,
   childId: string,
+  priorStatus: string | null,
 ): Promise<void> {
   if (kind === "tag") {
     // The `tag:` key covers both article tags and highlight tags
     // (see `applyApproveTagAction` below for the same dual update).
-    // Try both tables; only `declined` rows flip back to `pending` so
-    // we don't accidentally resurrect a tag the child themselves had
-    // approved or declined out-of-band.
+    // Try both tables; only `declined` rows flip back so we don't
+    // accidentally resurrect a tag the child themselves had approved
+    // or declined out-of-band.
+    //
+    // Restore to whatever status the tag had at decision time, NOT
+    // unconditionally to `pending`. A highlight tag that was
+    // auto-approved (child with `requireTagConsent = false`) and then
+    // Removed by the parent must come back as `approved`, not as a
+    // fresh pending row that the child has to re-approve.
+    const restoreTo: "approved" | "pending" =
+      priorStatus === "approved" ? "approved" : "pending";
+    const now = new Date();
     await db
       .update(articleTags)
-      .set({ status: "pending" })
+      .set({ status: restoreTo, updatedAt: now })
       .where(
         and(
           eq(articleTags.id, refId),
@@ -1079,7 +1238,7 @@ async function applyUnsetAction(
       );
     await db
       .update(highlightTags)
-      .set({ status: "pending" })
+      .set({ status: restoreTo, updatedAt: now })
       .where(
         and(
           eq(highlightTags.id, refId),
@@ -1103,6 +1262,25 @@ async function applyUnsetAction(
           eq(messageChildHides.messageId, refId),
           eq(messageChildHides.childId, childId),
         ),
+      );
+    return;
+  }
+  if (kind === "authoredArticle") {
+    // Restore the article the parent had taken down. Scoped to articles
+    // the child actually authored so a tampered-with itemKey can't
+    // un-hide arbitrary content.
+    await db
+      .update(articles)
+      .set({ hiddenAt: null, hiddenByUserId: null })
+      .where(and(eq(articles.id, refId), eq(articles.authorId, childId)));
+    return;
+  }
+  if (kind === "authoredHighlight") {
+    await db
+      .update(highlights)
+      .set({ hiddenAt: null, hiddenByUserId: null })
+      .where(
+        and(eq(highlights.id, refId), eq(highlights.uploaderId, childId)),
       );
     return;
   }
@@ -1141,6 +1319,27 @@ async function applyApproveTagAction(tagId: string): Promise<void> {
     );
 }
 
+// Snapshot the current status of a tag (article or highlight) so an
+// Undo can restore it faithfully. Returns the underlying status string
+// (`pending` / `approved` / `declined`) or null if no row exists. The
+// tagId may belong to either table; we probe both and return whichever
+// one matches. A null return is fine — `applyUnsetAction` will then
+// default-restore to `pending`.
+async function loadTagPriorStatus(tagId: string): Promise<string | null> {
+  const [a] = await db
+    .select({ status: articleTags.status })
+    .from(articleTags)
+    .where(eq(articleTags.id, tagId))
+    .limit(1);
+  if (a) return a.status;
+  const [h] = await db
+    .select({ status: highlightTags.status })
+    .from(highlightTags)
+    .where(eq(highlightTags.id, tagId))
+    .limit(1);
+  return h ? h.status : null;
+}
+
 // Dispatch table for the "Remove" action. Each branch is intentionally
 // narrow: it touches only the row identified by the family-stream item
 // (which the caller has already validated belongs to this child) and
@@ -1151,28 +1350,48 @@ async function applyApproveTagAction(tagId: string): Promise<void> {
 async function applyRemoveAction(
   item: ChildItem,
   childId: string,
+  parentId: string,
 ): Promise<void> {
   const refId = item.itemKey.split(":").slice(1).join(":");
   if (item.kind === "tag") {
     // The tagId may belong to either article_tags OR highlight_tags
     // (both flow through the family inbox under the same `tag:` key),
-    // so mirror the dispatch used by `applyApproveTagAction`. The
-    // highlight-tag flip is intentionally scoped to rows currently
-    // `pending` so that an already-`approved` highlight tag isn't
-    // silently revoked from a stale inbox row, matching the
-    // conservative shape of the approve helper.
+    // so mirror the dispatch used by `applyApproveTagAction`. Both
+    // tables are flipped to `declined` regardless of the prior status:
+    // a child whose tags are auto-approved (`requireTagConsent =
+    // false`) would otherwise see Remove silently no-op on a highlight
+    // tag the parent had explicitly asked to take down. The prior
+    // status is captured separately on the parent decision row so an
+    // Undo can restore `approved` faithfully (see applyUnsetAction).
+    const now = new Date();
     await db
       .update(articleTags)
-      .set({ status: "declined" })
+      .set({ status: "declined", updatedAt: now })
       .where(eq(articleTags.id, refId));
     await db
       .update(highlightTags)
-      .set({ status: "declined", updatedAt: new Date() })
+      .set({ status: "declined", updatedAt: now })
+      .where(eq(highlightTags.id, refId));
+    return;
+  }
+  if (item.kind === "authoredArticle") {
+    // Hide the child's own article. Scoped to articles the child
+    // actually authored so a tampered-with itemKey can't take down
+    // arbitrary content. Idempotent: re-Removing a row that's already
+    // hidden refreshes hiddenAt without effect (and admins keep their
+    // existing recovery path through the standard `hiddenAt` column).
+    await db
+      .update(articles)
+      .set({ hiddenAt: new Date(), hiddenByUserId: parentId })
+      .where(and(eq(articles.id, refId), eq(articles.authorId, childId)));
+    return;
+  }
+  if (item.kind === "authoredHighlight") {
+    await db
+      .update(highlights)
+      .set({ hiddenAt: new Date(), hiddenByUserId: parentId })
       .where(
-        and(
-          eq(highlightTags.id, refId),
-          eq(highlightTags.status, "pending"),
-        ),
+        and(eq(highlights.id, refId), eq(highlights.uploaderId, childId)),
       );
     return;
   }

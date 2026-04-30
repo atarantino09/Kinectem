@@ -7366,9 +7366,17 @@ export const ListChildNotificationsResponse = zod.object({
           "Stable key in the form `<kind>:<id>` (e.g. `tag:abc-123`). Used as the identifier when marking the item read.\n",
         ),
       kind: zod
-        .enum(["notification", "tag", "comment", "message", "roster"])
+        .enum([
+          "notification",
+          "tag",
+          "comment",
+          "message",
+          "roster",
+          "authoredArticle",
+          "authoredHighlight",
+        ])
         .describe(
-          "Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id.\n",
+          "Source of the aggregated item. The `itemKey` always begins with this kind followed by a colon and the underlying row's id. `authoredArticle` and `authoredHighlight` represent posts authored \/ uploaded by the child themselves; Remove on those hides the underlying article \/ highlight (`hiddenAt = now()`) so it disappears from every public surface.\n",
         ),
       title: zod.string(),
       body: zod.string().nullable(),

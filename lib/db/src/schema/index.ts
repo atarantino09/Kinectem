@@ -453,6 +453,14 @@ export const parentChildNotificationReads = pgTable(
     // out of the default feed on subsequent fetches.
     decision: text("decision"),
     decidedAt: timestamp("decided_at"),
+    // Snapshot of the underlying source row's status at the moment the
+    // decision was recorded. Today only used by `tag` items: if a
+    // highlight or article tag was already `approved` (auto-approved
+    // for a child with `requireTagConsent = false`, or approved earlier
+    // by the child / parent) when the parent hits Remove, we capture
+    // "approved" here so an Undo can restore it to `approved` instead
+    // of demoting it back to `pending`. Other kinds leave this NULL.
+    priorStatus: text("prior_status"),
   },
   (t) => ({
     uniq: uniqueIndex("pc_notif_reads_parent_child_key_unique").on(

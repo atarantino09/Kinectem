@@ -35,13 +35,28 @@ export function useChildNotifications() {
     null,
   );
 
-  const invalidateNotificationsAndChildren = () => {
+  // Also bust the cached child profile + child posts list so a Remove
+  // / Undo on an authored article or highlight (which flips
+  // `articles.hiddenAt` / `highlights.hiddenAt` server-side) is
+  // reflected immediately on the child's public page — without that
+  // the post would linger in the parent's preview tab until React
+  // Query's natural refetch kicks in.
+  const invalidateNotificationsAndChildren = (childId?: string) => {
     qc.invalidateQueries({
       predicate: (q) => {
         const k = q.queryKey;
         if (!Array.isArray(k)) return false;
         const url = typeof k[0] === "string" ? k[0] : "";
-        return url.includes("/notifications") || url.includes("/children");
+        if (url.includes("/notifications") || url.includes("/children")) {
+          return true;
+        }
+        // /api/v1/users/<childId> and /api/v1/users/<childId>/posts —
+        // both use this exact childId in the path, so a substring match
+        // is enough and won't accidentally bust other users' profiles.
+        if (childId && url.includes(`/users/${childId}`)) {
+          return true;
+        }
+        return false;
       },
     });
   };
@@ -136,7 +151,7 @@ export function useChildNotifications() {
           body: JSON.stringify({ itemKey: item.itemKey }),
         },
       );
-      invalidateNotificationsAndChildren();
+      invalidateNotificationsAndChildren(childId);
       // Re-fetch with the parent's currently-selected toggle so the
       // strip reflects the server's view (the underlying source row may
       // have been restored by the unset action).
@@ -210,14 +225,17 @@ export function useChildNotifications() {
           body: JSON.stringify({ itemKey: item.itemKey, decision }),
         },
       );
-      // The bell across the app cares about this child's unread count;
-      // refetch so it stays honest. Wait for the badge to be visible
-      // long enough to register, THEN refetch (which will exclude the
-      // decided item server-side).
+      // Bust the child profile + child posts caches IMMEDIATELY so a
+      // Remove on an authored post is reflected on the next view of
+      // the child's page, not deferred behind the badge animation.
+      // The notifications/inbox refetch is also deferred below so the
+      // local badge has time to register before the row falls away,
+      // but the user-visible takedown is what matters most for trust.
+      invalidateNotificationsAndChildren(childId);
+      // Wait for the badge to be visible long enough to register, THEN
+      // collapse the local row so the section visually settles even if
+      // the server-side refetch has not landed yet.
       window.setTimeout(() => {
-        invalidateNotificationsAndChildren();
-        // Also clear the locally-marked item so the section collapses
-        // even if the server-side refetch has not landed yet.
         setNotifsByChild((prev) => {
           const cur = prev[childId];
           if (!cur) return prev;
@@ -276,7 +294,7 @@ export function useChildNotifications() {
         `/api/v1/users/me/children/${childId}/notifications/approve-all`,
         { method: "POST" },
       );
-      invalidateNotificationsAndChildren();
+      invalidateNotificationsAndChildren(childId);
     } catch {
       // Restore on failure so the parent can retry.
       setNotifsByChild((prev) => {
