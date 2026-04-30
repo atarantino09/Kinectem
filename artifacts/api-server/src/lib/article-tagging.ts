@@ -1,6 +1,12 @@
 import { db, articleTags, articles, notifications, rosterEntries, users } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { articlePostId, highlightPostId } from "./spec-helpers";
+import {
+  buildPostUrl,
+  isEmailConfigured,
+  sendTagNotificationEmail,
+} from "./email";
+import { logger } from "./logger";
 
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
@@ -89,6 +95,63 @@ export async function applyArticleTagFanout(args: {
 // Throttle window for "you were tagged in <recap>" notifications.
 export const TAG_NOTIF_THROTTLE_MS = 10 * 60 * 1000;
 
+// Shared email fan-out used by both the recap and highlight notify
+// helpers (task #324). The bell-row throttle in the callers acts as the
+// throttle for the email channel too — we only ever email users that
+// just got a fresh bell row inserted, so re-tagging within the throttle
+// window doesn't spam.
+//
+// `statusByUser` lets us pick the right email copy:
+//   * "approved"  → "you were tagged in …"
+//   * "pending"   → "please review and approve a tag on you in …"
+// Self-tags are filtered defensively here as well as upstream so a
+// missed filter at a single call site can't leak a self-ping email.
+async function sendTagEmails(args: {
+  userIds: string[];
+  statusByUser: Map<string, "pending" | "approved">;
+  postTitle: string;
+  postLink: string;
+  actorUserId: string | null;
+}): Promise<void> {
+  if (args.userIds.length === 0) return;
+  // Skip the entire DB roundtrip when SendGrid isn't wired up — keeps
+  // tests quiet (no warn-per-recipient log) and avoids a wasted query
+  // in environments that intentionally disable email.
+  if (!isEmailConfigured()) return;
+  const candidates = args.actorUserId
+    ? args.userIds.filter((u) => u !== args.actorUserId)
+    : args.userIds;
+  if (candidates.length === 0) return;
+  const rows = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(inArray(users.id, candidates));
+  const postUrl = buildPostUrl(args.postLink);
+  await Promise.all(
+    rows
+      .filter((r): r is { id: string; email: string } => !!r.email)
+      .map(async (r) => {
+        const pending =
+          (args.statusByUser.get(r.id) ?? "approved") === "pending";
+        try {
+          await sendTagNotificationEmail(r.email, {
+            postTitle: args.postTitle,
+            postUrl,
+            pending,
+          });
+        } catch (err) {
+          // Email failures must never bubble up and break the request.
+          // The bell row is already written; the email is a best-effort
+          // additional channel. Log and move on.
+          logger.error(
+            { err, userId: r.id },
+            "Failed to send tag notification email",
+          );
+        }
+      }),
+  );
+}
+
 export async function notifyNewlyTaggedInRecap(args: {
   userIds: string[];
   articleId: string;
@@ -115,6 +178,25 @@ export async function notifyNewlyTaggedInRecap(args: {
   const target = args.userIds.filter((u) => !skip.has(u));
   if (target.length === 0) return;
   const title = args.articleTitle?.trim() ? args.articleTitle.trim() : "Untitled";
+  // Look up the per-user tag status so the email channel can pick the
+  // "review and approve" copy for pending tags. Bell wording stays
+  // status-agnostic for recaps to preserve the existing message format
+  // older clients may rely on. (task #324)
+  const statusRows = await db
+    .select({ userId: articleTags.userId, status: articleTags.status })
+    .from(articleTags)
+    .where(
+      and(
+        eq(articleTags.articleId, args.articleId),
+        inArray(articleTags.userId, target),
+      ),
+    );
+  const statusByUser = new Map<string, "pending" | "approved">();
+  for (const r of statusRows) {
+    if (r.status === "pending" || r.status === "approved") {
+      statusByUser.set(r.userId, r.status);
+    }
+  }
   await db.insert(notifications).values(
     target.map((userId) => ({
       userId,
@@ -124,6 +206,13 @@ export async function notifyNewlyTaggedInRecap(args: {
       actorUserId: args.actorUserId,
     })),
   );
+  await sendTagEmails({
+    userIds: target,
+    statusByUser,
+    postTitle: title,
+    postLink: link,
+    actorUserId: args.actorUserId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -186,4 +275,18 @@ export async function notifyNewlyTaggedInHighlight(args: {
       actorUserId: args.actorUserId,
     })),
   );
+  // Mirror the bell channel into email so out-of-app players still find
+  // out (task #324). statusByUser carries the pending/approved decision
+  // straight from the caller — for highlights we already have it on the
+  // inserted tag row, no extra lookup needed.
+  const statusByUser = new Map<string, "pending" | "approved">(
+    target.map((t) => [t.userId, t.status]),
+  );
+  await sendTagEmails({
+    userIds: target.map((t) => t.userId),
+    statusByUser,
+    postTitle: title,
+    postLink: link,
+    actorUserId: args.actorUserId,
+  });
 }

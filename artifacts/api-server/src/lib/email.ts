@@ -82,6 +82,56 @@ export function buildFamilyUrl(): string {
   return `${appBaseUrl()}/family`;
 }
 
+export function buildPostUrl(link: string): string {
+  // Callers store post links as relative paths (e.g. "/posts/article-…").
+  // Stitch them onto the configured app base url so the email lands users
+  // on the same page the bell row would.
+  const path = link.startsWith("/") ? link : `/${link}`;
+  return `${appBaseUrl()}${path}`;
+}
+
+// Sent when a player is newly tagged on a recap or highlight (task #324).
+// Pending tags get a "review and approve" prompt because the consenting
+// user (or their guardian) still has to act before the tag goes live.
+// Approved tags get the "you were tagged" line that mirrors the bell.
+export async function sendTagNotificationEmail(
+  to: string,
+  args: { postTitle: string; postUrl: string; pending: boolean },
+): Promise<void> {
+  const { postTitle, postUrl, pending } = args;
+  if (pending) {
+    await sendEmail({
+      to,
+      subject: `Please review a tag on you in "${postTitle}"`,
+      text: `Someone tagged you in "${postTitle}" on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.
+
+Open the post to approve or remove the tag:
+${postUrl}
+
+If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.`,
+      html: `<p>Someone tagged you in <strong>${postTitle}</strong> on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.</p>
+<p>Open the post to approve or remove the tag:</p>
+<p><a href="${postUrl}">${postUrl}</a></p>
+<p>If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.</p>`,
+    });
+    return;
+  }
+  await sendEmail({
+    to,
+    subject: `You were tagged in "${postTitle}"`,
+    text: `You were tagged in "${postTitle}" on Kinectem.
+
+Open the post to see it:
+${postUrl}
+
+If you'd rather not be tagged, you can remove the tag from the post page.`,
+    html: `<p>You were tagged in <strong>${postTitle}</strong> on Kinectem.</p>
+<p>Open the post to see it:</p>
+<p><a href="${postUrl}">${postUrl}</a></p>
+<p>If you'd rather not be tagged, you can remove the tag from the post page.</p>`,
+  });
+}
+
 export async function sendPasswordResetEmail(
   to: string,
   token: string,
