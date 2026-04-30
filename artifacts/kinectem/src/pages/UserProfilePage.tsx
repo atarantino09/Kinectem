@@ -308,11 +308,16 @@ export default function UserProfilePage() {
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
         <div className="h-24 brand-gradient-cover relative">
-          {user.coverPhotoUrl && (
+          {user.coverPhotoUrl ? (
             <img
               src={user.coverPhotoUrl}
               alt=""
               className="w-full h-full object-cover opacity-90"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="brand-banner-pattern absolute inset-0 pointer-events-none"
             />
           )}
         </div>

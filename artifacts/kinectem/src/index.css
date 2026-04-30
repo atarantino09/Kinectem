@@ -284,6 +284,23 @@
   .brand-gradient { background: var(--brand-gradient); }
   .brand-gradient-cover { background: var(--brand-gradient-cover); }
   .brand-gradient-dark { background: var(--brand-gradient-dark); }
+  /*
+   * Subtle decorative overlay for the brand gradient banner.
+   * Soft blurred orbs + a faint dot grid layered on top of the gradient.
+   * Stays low-opacity so it never competes with the avatar / name / buttons
+   * sitting above it. Designed to be rendered as an absolutely-positioned
+   * div (inset-0, pointer-events-none) on top of a .brand-gradient-cover
+   * surface, behind any user-uploaded cover photo.
+   */
+  .brand-banner-pattern {
+    background-image:
+      radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 42%),
+      radial-gradient(circle at 82% 72%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 38%),
+      radial-gradient(circle at 55% 110%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%),
+      radial-gradient(rgba(255, 255, 255, 0.18) 1px, rgba(255, 255, 255, 0) 1px);
+    background-size: auto, auto, auto, 18px 18px;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  }
   .brand-gradient-text {
     background: var(--brand-gradient);
     -webkit-background-clip: text;
