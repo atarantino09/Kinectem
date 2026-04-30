@@ -18,3 +18,9 @@ id = "3gOUP76w0O5o70dYCaiWi"
 uri = "file://artifacts/kinectem/screenshots/org-created-with-logo.jpg"
 type = "image"
 title = "New Org Created with Logo"
+
+[[outputs]]
+id = "p6eI7MYv0itwqPODHKssh"
+uri = "file://artifacts/kinectem/test-results/recap-composer-single-clic-2d2c0-r-opening-Post-On-Behalf-Of-chromium/test-failed-1.png"
+type = "image"
+title = "Recap composer test failure screenshot"

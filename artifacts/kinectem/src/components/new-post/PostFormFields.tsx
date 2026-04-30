@@ -242,12 +242,19 @@ export function PostFormFields({
             Post On Behalf Of
           </Label>
           <Select value={orgId} onValueChange={onOrgIdChange}>
-            <SelectTrigger className="mt-2">
+            <SelectTrigger
+              className="mt-2"
+              data-testid="select-post-on-behalf-of"
+            >
               <SelectValue placeholder="My profile" />
             </SelectTrigger>
             <SelectContent>
               {myOrgs.data.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
+                <SelectItem
+                  key={org.id}
+                  value={org.id}
+                  data-testid={`option-post-on-behalf-of-${org.id}`}
+                >
                   {org.name}
                 </SelectItem>
               ))}
