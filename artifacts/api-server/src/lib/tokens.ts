@@ -1,7 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, refreshTokens } from "@workspace/db";
-import { generateToken, hashToken } from "./passwords";
+import * as passwords from "./passwords";
+
+const { hashToken } = passwords;
+
+// Drizzle's transaction callback hands back a tx object that exposes the
+// same query-builder surface as the top-level `db`. We type the helper
+// below as accepting either, so callers can compose the insert into a
+// larger transaction without losing atomicity.
+type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 // Task #355 — Bearer-token auth for non-browser clients (mobile app today,
 // third-party developer apps later). Cookie sessions are unchanged; this
@@ -107,14 +115,18 @@ export function verifyAccessToken(token: string): AccessTokenPayload | null {
   return payload;
 }
 
-export async function issueRefreshToken(
+// Inserts a fresh refresh-token row. When called with a transaction
+// handle, the insert is part of that transaction — used by
+// rotateRefreshToken() to revoke + re-issue atomically.
+async function issueRefreshTokenWith(
+  conn: DbOrTx,
   userId: string,
   deviceLabel?: string | null,
 ): Promise<{ token: string; expiresAt: Date }> {
-  const token = generateToken();
+  const token = passwords.generateToken();
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
-  await db.insert(refreshTokens).values({
+  await conn.insert(refreshTokens).values({
     userId,
     tokenHash,
     deviceLabel: deviceLabel ?? null,
@@ -123,17 +135,26 @@ export async function issueRefreshToken(
   return { token, expiresAt };
 }
 
+export async function issueRefreshToken(
+  userId: string,
+  deviceLabel?: string | null,
+): Promise<{ token: string; expiresAt: Date }> {
+  return issueRefreshTokenWith(db, userId, deviceLabel);
+}
+
 // Atomically rotate a refresh token: locks the presented row, marks it
-// revoked, and issues a fresh pair — but only when the presented token is
-// still valid (exists, not revoked, not expired). Reusing a consumed
-// refresh token returns null so the caller can respond 401.
+// revoked, AND inserts the replacement — all in the same transaction.
+// If the insert fails (e.g. a constraint violation or transient DB error)
+// the revocation is rolled back, leaving the presented token still
+// usable. Reusing a consumed refresh token returns null so the caller
+// can respond 401.
 export async function rotateRefreshToken(presentedToken: string): Promise<{
   userId: string;
   refreshToken: string;
   refreshExpiresAt: Date;
 } | null> {
   const tokenHash = hashToken(presentedToken);
-  const accepted = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const [row] = await tx
       .select()
       .from(refreshTokens)
@@ -148,15 +169,17 @@ export async function rotateRefreshToken(presentedToken: string): Promise<{
       .update(refreshTokens)
       .set({ revokedAt: now, lastUsedAt: now })
       .where(eq(refreshTokens.id, row.id));
-    return { userId: row.userId, deviceLabel: row.deviceLabel ?? null };
+    const issued = await issueRefreshTokenWith(
+      tx,
+      row.userId,
+      row.deviceLabel ?? null,
+    );
+    return {
+      userId: row.userId,
+      refreshToken: issued.token,
+      refreshExpiresAt: issued.expiresAt,
+    };
   });
-  if (!accepted) return null;
-  const issued = await issueRefreshToken(accepted.userId, accepted.deviceLabel);
-  return {
-    userId: accepted.userId,
-    refreshToken: issued.token,
-    refreshExpiresAt: issued.expiresAt,
-  };
 }
 
 export async function revokeRefreshToken(presentedToken: string): Promise<void> {

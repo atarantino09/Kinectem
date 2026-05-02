@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, refreshTokens } from "@workspace/db";
 import { app, listSeedUsers, loginAs, request, DEMO_PASSWORD } from "./helpers";
@@ -6,6 +7,19 @@ import {
   signAccessToken,
   signAccessTokenForTests,
 } from "../src/lib/tokens";
+import * as passwords from "../src/lib/passwords";
+
+// Wrap passwords.generateToken so individual tests can stub the next
+// returned value to force a unique-constraint collision (see the
+// atomicity regression test for /auth/refresh). Default behavior is
+// preserved for every other test by delegating to the real impl.
+vi.mock("../src/lib/passwords", async () => {
+  const actual =
+    await vi.importActual<typeof import("../src/lib/passwords")>(
+      "../src/lib/passwords",
+    );
+  return { ...actual, generateToken: vi.fn(actual.generateToken) };
+});
 
 // Task #355 — Bearer-token auth for non-browser clients (mobile app
 // today, third-party developer apps later). These tests verify that the
@@ -218,6 +232,46 @@ describe("token auth (task #355)", () => {
         .post("/api/v1/auth/refresh")
         .send({ refreshToken: refresh });
       expect(res.status).toBe(401);
+    });
+
+    // Atomicity regression guard: if /auth/refresh ever revokes the
+    // presented token outside the same transaction as the replacement
+    // insert, a transient failure during issuance would log the user
+    // out. We force a UNIQUE violation on the insert by pre-seeding a
+    // row with a known token_hash and stubbing generateToken() to
+    // return the value that hashes to it.
+    it("rotation is atomic: a failure during issuance leaves the old token usable", async () => {
+      const seed = await listSeedUsers();
+      const user = seed.find((u) => u.role === "coach" && u.email)!;
+      const issued = await issueTokens(user.email!, DEMO_PASSWORD);
+      expect(issued.status).toBe(200);
+      const rt1 = issued.body.refreshToken as string;
+
+      const collisionToken = "f".repeat(64);
+      const collisionHash = createHash("sha256")
+        .update(collisionToken)
+        .digest("hex");
+      await db.insert(refreshTokens).values({
+        userId: user.id,
+        tokenHash: collisionHash,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      vi.mocked(passwords.generateToken).mockReturnValueOnce(collisionToken);
+
+      const failRes = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({ refreshToken: rt1 });
+      expect(failRes.status).toBeGreaterThanOrEqual(500);
+
+      // The original refresh token must still be usable — the revoke
+      // was rolled back along with the failed insert.
+      const okRes = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({ refreshToken: rt1 });
+      expect(okRes.status).toBe(200);
+      expect(typeof okRes.body.refreshToken).toBe("string");
+      expect(okRes.body.refreshToken).not.toBe(rt1);
     });
   });
 

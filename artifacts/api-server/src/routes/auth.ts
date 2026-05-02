@@ -20,7 +20,6 @@ import {
   issueRefreshToken,
   rotateRefreshToken,
   revokeRefreshToken,
-  ACCESS_TOKEN_TTL_MS,
 } from "../lib/tokens";
 import { toPrivateUser, splitName, apiError, safeAvatarUrl } from "../lib/spec-helpers";
 import {
@@ -524,10 +523,6 @@ router.post(
     res.status(204).end();
   }),
 );
-
-// Suppress an unused-import warning for ACCESS_TOKEN_TTL_MS — it's exported
-// for clients that want to compute a refresh schedule from the spec.
-void ACCESS_TOKEN_TTL_MS;
 
 router.get(
   "/auth/users",
