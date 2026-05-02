@@ -24,3 +24,21 @@ id = "p6eI7MYv0itwqPODHKssh"
 uri = "file://artifacts/kinectem/test-results/recap-composer-single-clic-2d2c0-r-opening-Post-On-Behalf-Of-chromium/test-failed-1.png"
 type = "image"
 title = "Recap composer test failure screenshot"
+
+[[outputs]]
+id = "0uYJMmUwVdJFrizLSezoR"
+uri = "file://exports/kinectem-sdk/kinectem-sdk-0.1.0.tar.gz"
+type = "unspecified"
+title = "@kinectem/sdk v0.1.0 — installable npm tarball"
+
+[[outputs]]
+id = "_cW_8uRurtf_pBF4pUfUq"
+uri = "file://exports/kinectem-sdk/README.md"
+type = "text"
+title = "SDK README — install + usage"
+
+[[outputs]]
+id = "XxcSva6mMe7f-9jntVHqx"
+uri = "file://exports/kinectem-sdk/openapi.json"
+type = "unspecified"
+title = "Kinectem OpenAPI spec (JSON, 153 endpoints)"

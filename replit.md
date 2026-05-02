@@ -14,6 +14,13 @@ integrations, `POST /auth/api-keys` mints long-lived **API keys** (task
 tokens by the `kk_` prefix and resolved against the `api_keys` table by
 sha256 hash. Plaintext is shown exactly once at create time.
 
+A standalone, exportable client SDK lives at `exports/kinectem-sdk/`
+(outside the pnpm workspace so it can be packed and dropped into a
+separate mobile project). Source in `src/`, ESM build emits to `dist/`
+via `tsc`. Bundles a JSON copy of the public OpenAPI spec at
+`openapi.json` for end-to-end type generation downstream. Build + pack
+with `cd exports/kinectem-sdk && npm install --no-save typescript && npm pack`.
+
 The OpenAPI spec is the **single source of truth** — see `API_CONVENTIONS.md`
 for the contract every endpoint follows (errors are `{ error, code }`,
 lists are `{ data, pagination: { nextCursor, hasMore, totalCount } }`,
