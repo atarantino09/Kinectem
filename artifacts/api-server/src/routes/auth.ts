@@ -1,7 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, users, passwordResets } from "@workspace/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { db, users, passwordResets, apiKeys } from "@workspace/db";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
+import {
+  generateApiKey,
+  ALLOWED_API_KEY_SCOPES,
+  type ApiKeyScope,
+} from "../lib/api-keys";
+import { requireAuth } from "../middlewares/auth";
 import {
   rateLimit,
   ipKey,
@@ -551,6 +557,143 @@ router.post(
       body && typeof body.refreshToken === "string" ? body.refreshToken : null;
     if (refreshTokenStr) {
       await revokeRefreshToken(refreshTokenStr);
+    }
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// API keys (task #358) — long-lived credentials for third-party developer
+// integrations. Created by an authenticated user; presented as
+// `Authorization: Bearer <key>` (the `kk_` prefix tells loadSession to
+// look the key up in the api_keys table). The plaintext token is shown
+// to the caller exactly once at create time and never persisted server-
+// side; only the sha256 hash is stored.
+// ---------------------------------------------------------------------------
+const ApiKeyCreateBody = z.object({
+  name: z.string().trim().min(1, "Name is required").max(80),
+  scopes: z
+    .array(z.enum(ALLOWED_API_KEY_SCOPES as unknown as [ApiKeyScope, ...ApiKeyScope[]]))
+    .max(ALLOWED_API_KEY_SCOPES.length)
+    .optional(),
+});
+
+const apiKeyCreateLimiter = rateLimit({
+  name: "auth-api-key-create",
+  windowMs: ONE_HOUR,
+  max: 20,
+  keys: (req) => [
+    `user:${req.sessionUser?.id ?? "anon"}`,
+    ipKey(req),
+  ],
+  message:
+    "Too many API key create attempts. Please wait a while before trying again.",
+});
+
+type ApiKeyRow = typeof apiKeys.$inferSelect;
+
+function toApiKey(row: ApiKeyRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    prefix: row.prefix,
+    scopes: row.scopes ?? [],
+    createdAt: row.createdAt.toISOString(),
+    lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
+    revokedAt: row.revokedAt ? row.revokedAt.toISOString() : null,
+  };
+}
+
+router.post(
+  "/auth/api-keys",
+  requireAuth,
+  apiKeyCreateLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = ApiKeyCreateBody.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      apiError(res, 400, issue?.message ?? "Invalid request body.", {
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+    const body = parsed.data;
+    const userId = req.sessionUser!.id;
+    // Cap per-user active keys so a runaway script can't fill the table.
+    // Revoked keys don't count toward the cap.
+    const existing = await db
+      .select({ id: apiKeys.id })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.userId, userId), isNull(apiKeys.revokedAt)));
+    if (existing.length >= 25) {
+      apiError(
+        res,
+        409,
+        "You have reached the maximum number of active API keys (25). Revoke an old key before creating a new one.",
+        { code: "CONFLICT" },
+      );
+      return;
+    }
+
+    const generated = generateApiKey();
+    const [created] = await db
+      .insert(apiKeys)
+      .values({
+        userId,
+        name: body.name,
+        tokenHash: generated.tokenHash,
+        prefix: generated.prefix,
+        scopes: body.scopes ?? [],
+      })
+      .returning();
+    res.status(201).json({
+      ...toApiKey(created),
+      // The plaintext key is returned exactly once and never again.
+      // Surface it prominently so the client can show its "copy now"
+      // affordance.
+      token: generated.plaintext,
+    });
+  }),
+);
+
+router.get(
+  "/auth/api-keys",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.sessionUser!.id;
+    const rows = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.userId, userId))
+      .orderBy(asc(apiKeys.revokedAt), asc(apiKeys.createdAt));
+    res.json({ data: rows.map(toApiKey) });
+  }),
+);
+
+router.delete(
+  "/auth/api-keys/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.sessionUser!.id;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) {
+      apiError(res, 400, "Invalid API key id.");
+      return;
+    }
+    const [row] = await db
+      .select()
+      .from(apiKeys)
+      .where(and(eq(apiKeys.id, id.data), eq(apiKeys.userId, userId)))
+      .limit(1);
+    if (!row) {
+      apiError(res, 404, "API key not found.");
+      return;
+    }
+    if (!row.revokedAt) {
+      await db
+        .update(apiKeys)
+        .set({ revokedAt: new Date() })
+        .where(eq(apiKeys.id, row.id));
     }
     res.status(204).end();
   }),

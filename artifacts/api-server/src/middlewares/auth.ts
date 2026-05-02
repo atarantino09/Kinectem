@@ -1,8 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
-import { db, sessions, users } from "@workspace/db";
+import { db, sessions, users, apiKeys } from "@workspace/db";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { SESSION_COOKIE, type SessionUser, type SessionRow } from "../lib/auth";
 import { extractBearerToken, verifyAccessToken } from "../lib/tokens";
+import { looksLikeApiKey } from "../lib/api-keys";
+import { hashToken } from "../lib/passwords";
 
 // Attach session/user/realUser/isMasquerading on the Request based on the
 // session cookie. If no cookie session is found, fall back to an
@@ -57,22 +59,53 @@ export async function loadSession(req: Request, _res: Response, next: NextFuncti
   // request never overrides a valid cookie login).
   const bearer = extractBearerToken(req.headers["authorization"]);
   if (bearer) {
-    const payload = verifyAccessToken(bearer);
-    if (payload) {
+    if (looksLikeApiKey(bearer)) {
+      // Task #358 — Long-lived developer API key. Distinguished from
+      // signed access tokens by the `kk_` prefix; looked up by hash in
+      // the `api_keys` table. Revoked keys are treated as anonymous.
       try {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(and(eq(users.id, payload.sub), isNull(users.deletedAt)))
+        const tokenHash = hashToken(bearer);
+        const [row] = await db
+          .select({ key: apiKeys, user: users })
+          .from(apiKeys)
+          .innerJoin(users, eq(apiKeys.userId, users.id))
+          .where(and(eq(apiKeys.tokenHash, tokenHash), isNull(apiKeys.revokedAt)))
           .limit(1);
-        if (user) {
-          req.realUser = user;
-          req.sessionUser = user;
-          // No sessionRow / no masquerade for bearer auth — masquerade is
-          // an admin browser tool, not a token-grant primitive.
+        if (row && !row.user.deletedAt) {
+          req.realUser = row.user;
+          req.sessionUser = row.user;
+          // Best-effort lastUsedAt update; we don't await so a stalled
+          // write never delays the request. The next read after this
+          // request will see the new value.
+          db
+            .update(apiKeys)
+            .set({ lastUsedAt: new Date() })
+            .where(eq(apiKeys.id, row.key.id))
+            .catch(() => {
+              /* ignore */
+            });
         }
       } catch {
         /* ignore */
+      }
+    } else {
+      const payload = verifyAccessToken(bearer);
+      if (payload) {
+        try {
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(and(eq(users.id, payload.sub), isNull(users.deletedAt)))
+            .limit(1);
+          if (user) {
+            req.realUser = user;
+            req.sessionUser = user;
+            // No sessionRow / no masquerade for bearer auth — masquerade is
+            // an admin browser tool, not a token-grant primitive.
+          }
+        } catch {
+          /* ignore */
+        }
       }
     }
   }

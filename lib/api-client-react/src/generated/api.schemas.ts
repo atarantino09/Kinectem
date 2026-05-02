@@ -3282,6 +3282,36 @@ export interface AdminAnalyticsResponse {
   top: AdminAnalyticsResponseTop;
 }
 
+export interface ApiKey {
+  id: string;
+  /** Owner-supplied human label. */
+  name: string;
+  /** Short leading slice of the plaintext key (e.g. `kk_a1b2c3d4`),
+safe to display in listings as a recognizable fingerprint.
+ */
+  prefix: string;
+  scopes: string[];
+  createdAt: string;
+  /**
+   * Timestamp of the most recent successful authentication with this key.
+   * @nullable
+   */
+  lastUsedAt: string | null;
+  /**
+   * When set, the key has been revoked and will be rejected on use.
+   * @nullable
+   */
+  revokedAt: string | null;
+}
+
+export type ApiKeyWithToken = ApiKey & {
+  /** Plaintext API key. Returned exactly once at create time
+and never again — clients must surface it immediately
+and persist it somewhere safe.
+ */
+  token: string;
+};
+
 /**
  * Validation error — malformed body, invalid params, or constraint violation
  */
@@ -4108,6 +4138,33 @@ export type AuthGuardianResendBody = {
 export type AuthGuardianResend200 = {
   ok: boolean;
   guardianEmail: string;
+};
+
+export type ListApiKeys200 = {
+  data: ApiKey[];
+};
+
+export type CreateApiKeyBodyScopesItem =
+  (typeof CreateApiKeyBodyScopesItem)[keyof typeof CreateApiKeyBodyScopesItem];
+
+export const CreateApiKeyBodyScopesItem = {
+  read: "read",
+  write: "write",
+} as const;
+
+export type CreateApiKeyBody = {
+  /**
+   * Human label so the owner can tell keys apart later.
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /** Optional scope labels (`read`, `write`). The current
+server treats every non-revoked key as full-access on
+the owner's behalf; the array is stored so future
+scope-aware authorization has labels to enforce.
+ */
+  scopes?: CreateApiKeyBodyScopesItem[];
 };
 
 export type ListSeedUsers200ItemRole =

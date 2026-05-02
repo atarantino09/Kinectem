@@ -219,13 +219,29 @@ curl -b cookies.txt 'https://api.kinectem.example/api/v1/users/me'`,
         <code>FORBIDDEN</code>) instead.
       </Callout>
 
-      <h2>API keys (coming soon)</h2>
-      <Callout variant="soon" title="Reserved, not implemented">
-        A long-lived <strong>API key</strong> scheme is reserved in the spec
-        for forward compatibility. The current server rejects the{" "}
-        <code>X-API-Key</code> header. Building a server-to-server
-        integration today? Use the bearer-token flow with a dedicated
-        service account; we'll provide a migration path when keys ship.
+      <h2>API keys</h2>
+      <p>
+        For long-running server-to-server integrations, mint a{" "}
+        <strong>long-lived API key</strong> from the developer portal at{" "}
+        <a href="/dev-portal/api-keys">
+          <code>/dev-portal/api-keys</code>
+        </a>
+        . API keys begin with the literal prefix <code>kk_</code> and are sent
+        the same way as a short-lived access token —{" "}
+        <code>Authorization: Bearer kk_…</code>. The server uses the prefix to
+        route the credential to the API-key table instead of trying to verify
+        it as a signed access-token envelope.
+      </p>
+      <CodeBlock
+        language="bash"
+        code={`# Create a key from the dev portal, then:
+curl 'https://api.kinectem.example/api/v1/users/me' \\
+  -H "Authorization: Bearer kk_a1b2c3d4e5f6…"`}
+      />
+      <Callout variant="warn" title="Plaintext is shown only once">
+        The full key is returned only by <code>POST /auth/api-keys</code> at
+        creation time. The server stores only its sha256 hash, so a lost key
+        cannot be recovered — revoke it and create a replacement.
       </Callout>
 
       <h2>OAuth (coming soon)</h2>

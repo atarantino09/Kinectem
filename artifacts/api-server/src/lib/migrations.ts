@@ -189,6 +189,28 @@ CREATE INDEX IF NOT EXISTS refresh_tokens_user_id_idx
   ON refresh_tokens(user_id);
 `;
 
+// Task #358 — Self-serve API keys for third-party developers. Stores
+// only the sha256 hash of the issued plaintext key alongside a short
+// `prefix` (the first ~12 characters of the key) so the dev portal can
+// render a recognizable fingerprint without ever holding the secret.
+// Idempotent — safe to re-run on a schema that already has the table.
+const TASK_358_API_KEYS = `
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         text NOT NULL,
+  token_hash   text NOT NULL UNIQUE,
+  prefix       text NOT NULL,
+  scopes       text[] NOT NULL DEFAULT '{}',
+  created_at   timestamp NOT NULL DEFAULT now(),
+  last_used_at timestamp,
+  revoked_at   timestamp
+);
+
+CREATE INDEX IF NOT EXISTS api_keys_user_id_idx
+  ON api_keys(user_id);
+`;
+
 // Task #337 — Add prior_status column to parent_child_notification_reads.
 // The family-dashboard Remove action now flips already-`approved`
 // highlight / article tags to `declined`. Without remembering the prior
@@ -240,6 +262,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-02-task-355-refresh-tokens",
     sql: TASK_355_REFRESH_TOKENS,
+  },
+  {
+    name: "2026-05-02-task-358-api-keys",
+    sql: TASK_358_API_KEYS,
   },
 ];
 

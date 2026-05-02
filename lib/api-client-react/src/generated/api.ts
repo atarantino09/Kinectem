@@ -105,6 +105,7 @@ import type {
   AdminCreateUserRequest,
   AdminOkResponse,
   AdminUpdateUserRequest,
+  ApiKeyWithToken,
   ApproveAllChildNotifications200,
   ApproveJoinRequestBody,
   AssetResponse,
@@ -132,6 +133,7 @@ import type {
   ConsentRequestResponse,
   ConversationListItem,
   CreateAddressRequest,
+  CreateApiKeyBody,
   CreateCommentRequest,
   CreateConsentRequest,
   CreateConversationRequest,
@@ -187,6 +189,7 @@ import type {
   ListAdminReportsParams,
   ListAdminUsers200,
   ListAdminUsersParams,
+  ListApiKeys200,
   ListChildConversationMessages200,
   ListChildNotificationsParams,
   ListChildPendingTeamInvites200,
@@ -18715,6 +18718,291 @@ export const useAuthGuardianResend = <
   TContext
 > => {
   return useMutation(getAuthGuardianResendMutationOptions(options));
+};
+
+/**
+ * Returns every API key (active and revoked) owned by the
+authenticated user. The plaintext token is **never** returned —
+only the short `prefix` is surfaced so the dev portal can render
+a recognizable fingerprint. Sorted with active keys first, then
+revoked keys, each group ordered by creation time ascending.
+
+ * @summary List the calling user's API keys
+ */
+export const getListApiKeysUrl = () => {
+  return `/api/v1/auth/api-keys`;
+};
+
+export const listApiKeys = async (
+  options?: RequestInit,
+): Promise<ListApiKeys200> => {
+  return customFetch<ListApiKeys200>(getListApiKeysUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListApiKeysQueryKey = () => {
+  return [`/api/v1/auth/api-keys`] as const;
+};
+
+export const getListApiKeysQueryOptions = <
+  TData = Awaited<ReturnType<typeof listApiKeys>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listApiKeys>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListApiKeysQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listApiKeys>>> = ({
+    signal,
+  }) => listApiKeys({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listApiKeys>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListApiKeysQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listApiKeys>>
+>;
+export type ListApiKeysQueryError = ErrorType<UnauthorizedResponse>;
+
+/**
+ * @summary List the calling user's API keys
+ */
+
+export function useListApiKeys<
+  TData = Awaited<ReturnType<typeof listApiKeys>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listApiKeys>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListApiKeysQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Issues a fresh long-lived API key on behalf of the authenticated
+user. The plaintext `token` is included in the response **exactly
+once** and is never recoverable afterward — clients must surface
+it immediately and store it somewhere safe.
+
+Each user may hold up to 25 active (non-revoked) keys at a time;
+creating beyond that returns `409 CONFLICT`.
+
+ * @summary Create a new API key
+ */
+export const getCreateApiKeyUrl = () => {
+  return `/api/v1/auth/api-keys`;
+};
+
+export const createApiKey = async (
+  createApiKeyBody: CreateApiKeyBody,
+  options?: RequestInit,
+): Promise<ApiKeyWithToken> => {
+  return customFetch<ApiKeyWithToken>(getCreateApiKeyUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createApiKeyBody),
+  });
+};
+
+export const getCreateApiKeyMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ConflictResponse
+    | TooManyRequestsResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createApiKey>>,
+    TError,
+    { data: BodyType<CreateApiKeyBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createApiKey>>,
+  TError,
+  { data: BodyType<CreateApiKeyBody> },
+  TContext
+> => {
+  const mutationKey = ["createApiKey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createApiKey>>,
+    { data: BodyType<CreateApiKeyBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createApiKey(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateApiKeyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createApiKey>>
+>;
+export type CreateApiKeyMutationBody = BodyType<CreateApiKeyBody>;
+export type CreateApiKeyMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ConflictResponse
+  | TooManyRequestsResponse
+>;
+
+/**
+ * @summary Create a new API key
+ */
+export const useCreateApiKey = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ConflictResponse
+    | TooManyRequestsResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createApiKey>>,
+    TError,
+    { data: BodyType<CreateApiKeyBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createApiKey>>,
+  TError,
+  { data: BodyType<CreateApiKeyBody> },
+  TContext
+> => {
+  return useMutation(getCreateApiKeyMutationOptions(options));
+};
+
+/**
+ * Marks the API key as revoked. Subsequent requests presenting the
+revoked key are treated as unauthenticated. Already-revoked keys
+are a no-op (still `204`). Users can only revoke keys they own;
+another user's id returns `404`.
+
+ * @summary Revoke an API key
+ */
+export const getRevokeApiKeyUrl = (id: string) => {
+  return `/api/v1/auth/api-keys/${id}`;
+};
+
+export const revokeApiKey = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRevokeApiKeyUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRevokeApiKeyMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeApiKey>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeApiKey>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["revokeApiKey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeApiKey>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return revokeApiKey(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevokeApiKeyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeApiKey>>
+>;
+
+export type RevokeApiKeyMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Revoke an API key
+ */
+export const useRevokeApiKey = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeApiKey>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revokeApiKey>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRevokeApiKeyMutationOptions(options));
 };
 
 /**

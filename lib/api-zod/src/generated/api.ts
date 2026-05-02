@@ -7876,6 +7876,82 @@ export const AuthGuardianResendResponse = zod.object({
 });
 
 /**
+ * Returns every API key (active and revoked) owned by the
+authenticated user. The plaintext token is **never** returned —
+only the short `prefix` is surfaced so the dev portal can render
+a recognizable fingerprint. Sorted with active keys first, then
+revoked keys, each group ordered by creation time ascending.
+
+ * @summary List the calling user's API keys
+ */
+export const ListApiKeysResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      name: zod.string().describe("Owner-supplied human label."),
+      prefix: zod
+        .string()
+        .describe(
+          "Short leading slice of the plaintext key (e.g. `kk_a1b2c3d4`),\nsafe to display in listings as a recognizable fingerprint.\n",
+        ),
+      scopes: zod.array(zod.string()),
+      createdAt: zod.coerce.date(),
+      lastUsedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "Timestamp of the most recent successful authentication with this key.",
+        ),
+      revokedAt: zod.coerce
+        .date()
+        .nullable()
+        .describe(
+          "When set, the key has been revoked and will be rejected on use.",
+        ),
+    }),
+  ),
+});
+
+/**
+ * Issues a fresh long-lived API key on behalf of the authenticated
+user. The plaintext `token` is included in the response **exactly
+once** and is never recoverable afterward — clients must surface
+it immediately and store it somewhere safe.
+
+Each user may hold up to 25 active (non-revoked) keys at a time;
+creating beyond that returns `409 CONFLICT`.
+
+ * @summary Create a new API key
+ */
+export const createApiKeyBodyNameMax = 80;
+
+export const CreateApiKeyBody = zod.object({
+  name: zod
+    .string()
+    .min(1)
+    .max(createApiKeyBodyNameMax)
+    .describe("Human label so the owner can tell keys apart later."),
+  scopes: zod
+    .array(zod.enum(["read", "write"]))
+    .optional()
+    .describe(
+      "Optional scope labels (`read`, `write`). The current\nserver treats every non-revoked key as full-access on\nthe owner's behalf; the array is stored so future\nscope-aware authorization has labels to enforce.\n",
+    ),
+});
+
+/**
+ * Marks the API key as revoked. Subsequent requests presenting the
+revoked key are treated as unauthenticated. Already-revoked keys
+are a no-op (still `204`). Users can only revoke keys they own;
+another user's id returns `404`.
+
+ * @summary Revoke an API key
+ */
+export const RevokeApiKeyParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+/**
  * **Development helper**. Returns up to 100 user records that
 existing seed/test fixtures can pick from to log in. This
 endpoint will be removed before any external launch — do not

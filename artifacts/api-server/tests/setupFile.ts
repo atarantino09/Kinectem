@@ -23,6 +23,7 @@ const ALL_TABLES = [
   "organizations",
   "message_assets",
   "assets",
+  "api_keys",
   "refresh_tokens",
   "sessions",
   "users",

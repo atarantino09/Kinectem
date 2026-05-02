@@ -22,6 +22,7 @@ const NAV_SECTIONS: { title: string; items: { label: string; href: string }[] }[
     items: [
       { label: "API reference", href: "/reference" },
       { label: "Code samples", href: "/code-samples" },
+      { label: "API keys", href: "/api-keys" },
     ],
   },
   {

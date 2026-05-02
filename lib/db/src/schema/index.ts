@@ -125,6 +125,30 @@ export const refreshTokens = pgTable("refresh_tokens", {
   lastUsedAt: timestamp("last_used_at"),
 });
 
+// Task #358 — Long-lived API keys for third-party developer integrations.
+// Plaintext keys are issued exactly once at create time and never stored
+// (only their sha256 hash). Keys are presented as
+// `Authorization: Bearer <key>` and distinguished from short-lived access
+// tokens by the leading `kk_` prefix. The `prefix` column stores the
+// first ~12 characters so the dev portal can render a recognizable
+// fingerprint (e.g. "kk_live_a1b2…") on the listing page without ever
+// touching the secret tail.
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  // Free-form scope labels (e.g. "read", "write"). Stored so a future
+  // scope-aware authorization layer has the data it needs; the current
+  // server treats every non-revoked key as full-access on the owner's
+  // behalf, identical to a bearer access token.
+  scopes: text("scopes").array().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  revokedAt: timestamp("revoked_at"),
+});
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),

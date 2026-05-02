@@ -7,6 +7,12 @@ social platform. The Express API server in `artifacts/api-server` is the
 real backend (Postgres + Drizzle), wrapped by `express-openapi-validator`
 against `lib/api-spec/openapi.yaml`. Auth is a server-issued cookie session
 named `kinectem_session` (set by `POST /auth/login` / `/auth/signup`).
+For mobile/external clients, `POST /auth/token` issues short-lived bearer
+access + refresh tokens (task #355). For server-to-server developer
+integrations, `POST /auth/api-keys` mints long-lived **API keys** (task
+#358) — sent as `Authorization: Bearer kk_…`, distinguished from access
+tokens by the `kk_` prefix and resolved against the `api_keys` table by
+sha256 hash. Plaintext is shown exactly once at create time.
 
 The OpenAPI spec is the **single source of truth** — see `API_CONVENTIONS.md`
 for the contract every endpoint follows (errors are `{ error, code }`,
@@ -50,7 +56,10 @@ schemas are generated from the spec.
   React + Vite + Tailwind, distinct cream/terracotta visual identity (separate
   from kinectem's purple-blue). Pages: Overview, Getting Started, Authentication,
   Conventions, API Reference (Scalar via `@scalar/api-reference-react`), Code
-  Samples, Changelog. The OpenAPI spec is the source of truth: a `predev`/
+  Samples, **API Keys** (self-serve key management UI at `/dev-portal/api-keys`,
+  task #358 — uses generated React Query hooks + cookie session, with an
+  inline email/password sign-in form for visitors who aren't already logged
+  in to Kinectem), Changelog. The OpenAPI spec is the source of truth: a `predev`/
   `prebuild` script (`scripts/copy-spec.mjs`) copies
   `lib/api-spec/openapi.yaml` into `public/openapi.yaml` so Scalar fetches it
   at runtime. Code samples and conventions content is hand-authored to mirror

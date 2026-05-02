@@ -3706,7 +3706,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Hey, you free this weekend for an extra session?
+                    example: Want to grab some film review tomorrow?
         "201":
           description: Guardian link created in pending status
           content:
@@ -4119,7 +4119,7 @@ paths:
                         format: uuid
                       reason:
                         type: string
-                        example: Spam or off-topic
+                        example: Inappropriate language
                       note:
                         type: string
                         nullable: true
@@ -4765,7 +4765,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: coach@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -4817,15 +4817,15 @@ paths:
                 firstName:
                   type: string
                   minLength: 1
-                  example: Quinn
+                  example: Avery
                 lastName:
                   type: string
                   minLength: 1
-                  example: Rivera
+                  example: Bennett
                 email:
                   type: string
                   format: email
-                  example: marcus@kinectem.demo
+                  example: jordan@kinectem.demo
                 password:
                   type: string
                   minLength: 8
@@ -4927,7 +4927,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: coach@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5014,7 +5014,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: coach@kinectem.demo
+                  example: maya@kinectem.demo
       responses:
         "200":
           description: Reset email sent if the address is registered.
@@ -5030,7 +5030,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Hey, you free this weekend for an extra session?
+                    example: Want to grab some film review tomorrow?
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/password-reset/complete:
@@ -5134,7 +5134,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: marcus@kinectem.demo
+                  example: jordan@kinectem.demo
                 password:
                   type: string
       responses:
@@ -5157,6 +5157,116 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/api-keys:
+    get:
+      operationId: listApiKeys
+      summary: List the calling user's API keys
+      description: |
+        Returns every API key (active and revoked) owned by the
+        authenticated user. The plaintext token is **never** returned —
+        only the short `prefix` is surfaced so the dev portal can render
+        a recognizable fingerprint. Sorted with active keys first, then
+        revoked keys, each group ordered by creation time ascending.
+      tags:
+        - Auth
+      responses:
+        "200":
+          description: List of API keys owned by the calling user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createApiKey
+      summary: Create a new API key
+      description: |
+        Issues a fresh long-lived API key on behalf of the authenticated
+        user. The plaintext `token` is included in the response **exactly
+        once** and is never recoverable afterward — clients must surface
+        it immediately and store it somewhere safe.
+
+        Each user may hold up to 25 active (non-revoked) keys at a time;
+        creating beyond that returns `409 CONFLICT`.
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: Human label so the owner can tell keys apart later.
+                  example: Lincoln High Football
+                scopes:
+                  type: array
+                  description: |
+                    Optional scope labels (`read`, `write`). The current
+                    server treats every non-revoked key as full-access on
+                    the owner's behalf; the array is stored so future
+                    scope-aware authorization has labels to enforce.
+                  items:
+                    type: string
+                    enum:
+                      - read
+                      - write
+      responses:
+        "201":
+          description: API key created. The plaintext `token` is shown only here.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyWithToken"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/auth/api-keys/{id}:
+    delete:
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      description: |
+        Marks the API key as revoked. Subsequent requests presenting the
+        revoked key are treated as unauthenticated. Already-revoked keys
+        are a no-op (still `204`). Users can only revoke keys they own;
+        another user's id returns `404`.
+      tags:
+        - Auth
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Key revoked (or was already revoked).
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/auth/users:
     get:
       operationId: listSeedUsers
@@ -5190,10 +5300,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Lisa
+                      example: Aaron
                     lastName:
                       type: string
-                      example: Silva
+                      example: Hayes
                     role:
                       type: string
                       enum:
@@ -5204,19 +5314,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: maya@kinectem.demo
+                      example: jordan@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Soccer
+                      example: Track & Field
                     position:
                       type: string
                       nullable: true
-                      example: Midfielder
+                      example: Sprinter
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -10491,6 +10601,59 @@ components:
                     example: coach@kinectem.demo
                   count:
                     type: integer
+    ApiKey:
+      type: object
+      required:
+        - id
+        - name
+        - prefix
+        - scopes
+        - createdAt
+        - lastUsedAt
+        - revokedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Owner-supplied human label.
+          example: Cardinal Track & Field
+        prefix:
+          type: string
+          description: |
+            Short leading slice of the plaintext key (e.g. `kk_a1b2c3d4`),
+            safe to display in listings as a recognizable fingerprint.
+        scopes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the most recent successful authentication with this key.
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When set, the key has been revoked and will be rejected on use.
+    ApiKeyWithToken:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required:
+            - token
+          properties:
+            token:
+              type: string
+              description: |
+                Plaintext API key. Returned exactly once at create time
+                and never again — clients must surface it immediately
+                and persist it somewhere safe.
     AdminDayCount:
       type: object
       required:
@@ -10575,14 +10738,20 @@ components:
         envelopes with a 15-minute expiry; on `401` with code
         `AUTH_REQUIRED`, swap the refresh token for a new pair.
     apiKey:
-      type: apiKey
-      in: header
-      name: X-API-Key
+      type: http
+      scheme: bearer
       description: |
-        **Planned, not yet implemented.** Long-lived API key for
-        server-to-server integrations. Listed here so that clients can
-        anticipate the future shape; the server currently rejects this
-        header with `401`.
+        Long-lived **API key** for third-party developer integrations.
+        Created and revoked from the developer portal at
+        `/dev-portal/api-keys` (or via `POST /auth/api-keys`). Send it
+        the same way as a short-lived access token —
+        `Authorization: Bearer <key>`. Keys begin with the literal
+        prefix `kk_` so the server can route them to the API-key table
+        without trying to verify them as access-token envelopes.
+
+        The plaintext key is shown to the caller exactly once at create
+        time and never again — store it somewhere safe immediately.
+        Only the sha256 hash of the key is persisted server-side.
   parameters:
     UserId:
       name: userId
