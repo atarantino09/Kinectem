@@ -2,7 +2,12 @@ import { Router, type IRouter } from "express";
 import { db, users, passwordResets } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
-import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
+import {
+  rateLimit,
+  ipKey,
+  emailKey,
+  refreshTokenKey,
+} from "../middlewares/rate-limit";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { logger } from "../lib/logger";
@@ -68,6 +73,7 @@ const GuardianResendBody = z.object({
 // confirmation tokens with the same TTL used here at signup.
 export const GUARDIAN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+const ONE_MINUTE = 60 * 1000;
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 const ONE_HOUR = 60 * 60 * 1000;
 
@@ -107,6 +113,30 @@ const passwordResetCompleteLimiter = rateLimit({
   skipSuccessfulRequests: true,
   message:
     "Too many password reset attempts. Please wait before trying again.",
+});
+
+// /auth/refresh and the bearer-flow body of /auth/logout aren't an immediate
+// brute-force target (refresh tokens are 256 bits of entropy), but leaving
+// them unthrottled lets attackers cheaply spam the rotation logic, generate
+// log noise, or amplify DoS. A generous per-IP burst (well above any normal
+// mobile client's refresh cadence) plus a per-token bucket keeps a leaked
+// token from being replayed from many IPs in parallel.
+const refreshLimiter = rateLimit({
+  name: "auth-refresh",
+  windowMs: ONE_MINUTE,
+  max: 30,
+  keys: (req) => [ipKey(req), refreshTokenKey(req)],
+  message:
+    "Too many refresh attempts. Please wait a moment and try again.",
+});
+
+const logoutLimiter = rateLimit({
+  name: "auth-logout",
+  windowMs: ONE_MINUTE,
+  max: 30,
+  keys: (req) => [ipKey(req), refreshTokenKey(req)],
+  message:
+    "Too many logout attempts. Please wait a moment and try again.",
 });
 
 router.post(
@@ -471,6 +501,7 @@ router.post(
 
 router.post(
   "/auth/refresh",
+  refreshLimiter,
   asyncHandler(async (req, res) => {
     const body = TokenRefreshBody.parse(req.body);
     const rotated = await rotateRefreshToken(body.refreshToken);
@@ -504,6 +535,7 @@ router.post(
 
 router.post(
   "/auth/logout",
+  logoutLimiter,
   asyncHandler(async (req, res) => {
     const token = req.cookies?.[SESSION_COOKIE];
     if (token) await destroySession(token);

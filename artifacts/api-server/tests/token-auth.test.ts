@@ -275,6 +275,48 @@ describe("token auth (task #355)", () => {
     });
   });
 
+  describe("rate limiting", () => {
+    // Per-IP refresh limiter is 30/min; the 31st attempt within the
+    // window must be rejected with 429. We use a junk refresh token so
+    // each request fails fast in the rotation logic but still increments
+    // the limiter bucket.
+    it("returns 429 on /auth/refresh after the per-IP burst is exhausted", async () => {
+      const junk = "0".repeat(64);
+      for (let i = 0; i < 30; i++) {
+        const r = await request(app)
+          .post("/api/v1/auth/refresh")
+          .send({ refreshToken: junk });
+        // All 30 attempts fail auth (token doesn't exist), but they must
+        // not be throttled yet — that's the whole point of the burst.
+        expect(r.status).toBe(401);
+      }
+      const limited = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({ refreshToken: junk });
+      expect(limited.status).toBe(429);
+      expect(limited.body.error).toMatch(/too many/i);
+      expect(limited.headers["retry-after"]).toBeDefined();
+    });
+
+    it("returns 429 on /auth/logout after the per-IP burst is exhausted", async () => {
+      const junk = "1".repeat(64);
+      for (let i = 0; i < 30; i++) {
+        const r = await request(app)
+          .post("/api/v1/auth/logout")
+          .send({ refreshToken: junk });
+        // /auth/logout is best-effort and always 204s, so each call
+        // ticks the limiter without short-circuiting.
+        expect(r.status).toBe(204);
+      }
+      const limited = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({ refreshToken: junk });
+      expect(limited.status).toBe(429);
+      expect(limited.body.error).toMatch(/too many/i);
+      expect(limited.headers["retry-after"]).toBeDefined();
+    });
+  });
+
   describe("POST /auth/logout for bearer clients", () => {
     it("revokes the refresh token passed in the body", async () => {
       const seed = await listSeedUsers();

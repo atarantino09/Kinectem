@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Request, RequestHandler } from "express";
 
 type Bucket = { count: number; resetAt: number };
@@ -89,4 +90,15 @@ export function emailKey(req: Request): string | null {
   const raw = (req.body as { email?: unknown } | undefined)?.email;
   if (typeof raw !== "string" || raw.length === 0) return null;
   return `email:${raw.toLowerCase()}`;
+}
+
+// Bucket repeated attempts against the same refresh token without putting
+// the raw secret into the in-memory rate-limit map. A short hash prefix is
+// enough to keep separate tokens in separate buckets.
+export function refreshTokenKey(req: Request): string | null {
+  const raw = (req.body as { refreshToken?: unknown } | undefined)
+    ?.refreshToken;
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  const digest = createHash("sha256").update(raw).digest("hex").slice(0, 16);
+  return `rt:${digest}`;
 }
