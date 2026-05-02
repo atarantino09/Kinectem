@@ -2,48 +2,81 @@ import type { Request, Response, NextFunction } from "express";
 import { db, sessions, users } from "@workspace/db";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { SESSION_COOKIE, type SessionUser, type SessionRow } from "../lib/auth";
+import { extractBearerToken, verifyAccessToken } from "../lib/tokens";
 
 // Attach session/user/realUser/isMasquerading on the Request based on the
-// session cookie. Soft-deleted users are treated as anonymous. If the session
-// is masquerading and the target user is gone, the masquerade is cleared.
+// session cookie. If no cookie session is found, fall back to an
+// `Authorization: Bearer <access-token>` header (issued by `/auth/token`)
+// so mobile and third-party clients get the same shape every protected
+// route already expects. Soft-deleted users are treated as anonymous. If
+// the session is masquerading and the target user is gone, the masquerade
+// is cleared. Bearer auth has no masquerade and no DB session row.
 export async function loadSession(req: Request, _res: Response, next: NextFunction) {
   const token = req.cookies?.[SESSION_COOKIE];
-  if (!token) return next();
-  try {
-    const [row] = await db
-      .select({ session: sessions, user: users })
-      .from(sessions)
-      .innerJoin(users, eq(sessions.userId, users.id))
-      .where(and(eq(sessions.id, token), gt(sessions.expiresAt, new Date())))
-      .limit(1);
-    if (row) {
-      if (row.user.deletedAt) return next();
-      req.realUser = row.user;
-      req.sessionRow = row.session;
-      const masqueradeId = row.session.masqueradingAsUserId;
-      if (masqueradeId && masqueradeId !== row.user.id) {
-        const [target] = await db
-          .select()
-          .from(users)
-          .where(and(eq(users.id, masqueradeId), isNull(users.deletedAt)))
-          .limit(1);
-        if (target) {
-          req.sessionUser = target;
-          req.isMasquerading = true;
+  if (token) {
+    try {
+      const [row] = await db
+        .select({ session: sessions, user: users })
+        .from(sessions)
+        .innerJoin(users, eq(sessions.userId, users.id))
+        .where(and(eq(sessions.id, token), gt(sessions.expiresAt, new Date())))
+        .limit(1);
+      if (row) {
+        if (row.user.deletedAt) return next();
+        req.realUser = row.user;
+        req.sessionRow = row.session;
+        const masqueradeId = row.session.masqueradingAsUserId;
+        if (masqueradeId && masqueradeId !== row.user.id) {
+          const [target] = await db
+            .select()
+            .from(users)
+            .where(and(eq(users.id, masqueradeId), isNull(users.deletedAt)))
+            .limit(1);
+          if (target) {
+            req.sessionUser = target;
+            req.isMasquerading = true;
+          } else {
+            await db
+              .update(sessions)
+              .set({ masqueradingAsUserId: null })
+              .where(eq(sessions.id, row.session.id));
+            req.sessionUser = row.user;
+          }
         } else {
-          await db
-            .update(sessions)
-            .set({ masqueradingAsUserId: null })
-            .where(eq(sessions.id, row.session.id));
           req.sessionUser = row.user;
         }
-      } else {
-        req.sessionUser = row.user;
+        return next();
+      }
+    } catch {
+      /* fall through to bearer */
+    }
+  }
+
+  // Bearer fallback for non-browser clients. Only consulted when no cookie
+  // session is attached (so a mis-signed Authorization header on a website
+  // request never overrides a valid cookie login).
+  const bearer = extractBearerToken(req.headers["authorization"]);
+  if (bearer) {
+    const payload = verifyAccessToken(bearer);
+    if (payload) {
+      try {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(and(eq(users.id, payload.sub), isNull(users.deletedAt)))
+          .limit(1);
+        if (user) {
+          req.realUser = user;
+          req.sessionUser = user;
+          // No sessionRow / no masquerade for bearer auth — masquerade is
+          // an admin browser tool, not a token-grant primitive.
+        }
+      } catch {
+        /* ignore */
       }
     }
-  } catch {
-    /* ignore */
   }
+
   next();
 }
 

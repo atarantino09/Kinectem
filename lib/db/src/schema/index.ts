@@ -105,6 +105,26 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Task #355 — Refresh tokens for the bearer-token auth flow used by the
+// mobile app and other non-browser clients. Issued by `POST /auth/token`,
+// rotated by `POST /auth/refresh`, and revoked by `POST /auth/logout`.
+// The plaintext token is never stored — only its sha256 hash (same scheme
+// used for password-reset and guardian tokens). Cookie sessions remain
+// the only storage for browser logins; this table is purely additive.
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  // Optional human label the client can pass at issue time (e.g. an
+  // iPhone model or app version) so a future "active sessions" UI can
+  // tell devices apart. Not surfaced anywhere yet.
+  deviceLabel: text("device_label"),
+  issuedAt: timestamp("issued_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  lastUsedAt: timestamp("last_used_at"),
+});
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),

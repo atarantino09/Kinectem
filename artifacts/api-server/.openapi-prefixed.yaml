@@ -49,15 +49,30 @@ info:
     very large or expensive queries.
 
     ### Authentication
-    The current production auth model is a **server-issued cookie
-    session**. `POST /auth/login` (and `POST /auth/signup`) sets an
-    `HttpOnly` cookie named `kinectem_session`; subsequent requests
-    must send this cookie. There is no JWT or bearer token in the
-    current release.
+    The API supports two equivalent auth schemes; every protected endpoint
+    accepts either one.
+
+    - **Cookie session** — used by the website. `POST /auth/login` (and
+      `POST /auth/signup`) sets an `HttpOnly` cookie named
+      `kinectem_session`; subsequent requests must send this cookie.
+    - **Bearer token** — used by the mobile app and any other non-browser
+      client. `POST /auth/token` exchanges email + password for a
+      short-lived **access token** (~15 min) and a long-lived **refresh
+      token** (30 days, single-use, rotates on every refresh). Send the
+      access token as `Authorization: Bearer <access-token>`. Use
+      `POST /auth/refresh` to swap a refresh token for a fresh pair, and
+      `POST /auth/logout` (with the refresh token in the body) to revoke
+      it.
+
+    The full spec is also served, unauthenticated, at
+    `/api/openapi.public.json` so external codegen tools can fetch it
+    without an admin session.
 
     A future release will add a long-lived **API key** scheme for
-    server-to-server callers; it is documented here for forward
-    compatibility but is not yet implemented.
+    server-to-server integrations and a third-party **OAuth 2.0** flow
+    with PKCE for apps acting on behalf of a Kinectem user. The
+    `apiKey` security scheme is reserved here for forward compatibility
+    but is not yet active.
 
     ### Versioning & deprecation
     The base path is `/api/v1`. Backwards-incompatible changes go to
@@ -68,6 +83,7 @@ servers:
     description: Versioned API base path
 security:
   - cookieSession: []
+  - bearerAuth: []
 paths:
   /api/v1/users:
     get:
@@ -77,6 +93,7 @@ paths:
         - Users
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: search
           in: query
@@ -3918,6 +3935,7 @@ paths:
         - Search
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: q
           in: query
@@ -4021,6 +4039,7 @@ paths:
         - Reports
       security:
         - cookieSession: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -4054,6 +4073,7 @@ paths:
         - Reports
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: contentType
           in: query
@@ -4124,6 +4144,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Aggregate analytics for the admin dashboard
@@ -4143,6 +4164,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: q
           in: query
@@ -4214,6 +4236,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -4245,6 +4268,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -4273,6 +4297,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Deactivated
@@ -4298,6 +4323,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Restored user
@@ -4321,6 +4347,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: New temporary password
@@ -4349,6 +4376,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: hidden
           in: query
@@ -4401,6 +4429,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Content hidden
@@ -4425,6 +4454,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Content un-hidden
@@ -4449,6 +4479,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Deleted
@@ -4470,6 +4501,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: status
           in: query
@@ -4517,6 +4549,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -4571,6 +4604,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       parameters:
         - name: adminUserId
           in: query
@@ -4628,6 +4662,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Distinct admins
@@ -4656,6 +4691,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Masquerade started
@@ -4686,6 +4722,7 @@ paths:
         - Admin
       security:
         - cookieSession: []
+        - bearerAuth: []
       responses:
         "200":
           description: Masquerade stopped
@@ -4835,12 +4872,126 @@ paths:
     post:
       operationId: authLogout
       summary: Log out the current session
-      description: Destroys the server-side session and clears the cookie.
+      description: |
+        Destroys the server-side cookie session and clears the cookie.
+        Bearer-token clients should additionally pass the refresh token
+        in the body — when present, the server revokes it so it can no
+        longer be used at `POST /auth/refresh`. Idempotent: callers
+        without either credential still get `204`.
       tags:
         - Auth
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  description: |
+                    Refresh token previously issued by `/auth/token` or
+                    `/auth/refresh`. Optional; only needed by bearer-token
+                    clients that want to revoke their refresh token at
+                    sign-out time.
       responses:
         "204":
           description: Logged out (idempotent).
+  /api/v1/auth/token:
+    post:
+      operationId: authToken
+      summary: Issue a bearer access + refresh token pair
+      description: |
+        Verifies email + password and, on success, issues a short-lived
+        access token (~15 min) and a long-lived refresh token (30 days,
+        single-use, rotated on every refresh). Used by the mobile app
+        and any other non-browser client. The cookie session is **not**
+        set on this endpoint — bearer auth is cookie-free.
+
+        If the account is an under-13 athlete whose guardian has not yet
+        confirmed, returns `403` with `pendingGuardianConfirmation: true`,
+        matching the behavior of `/auth/login`.
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: jordan@kinectem.demo
+                password:
+                  type: string
+                  minLength: 1
+                deviceLabel:
+                  type: string
+                  maxLength: 120
+                  description: |
+                    Optional human label the client can pass so a future
+                    "active sessions" UI can tell devices apart (e.g.
+                    `"iPhone 15 Pro"`).
+      responses:
+        "200":
+          description: Token pair issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenIssueResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |
+            Account is waiting on guardian confirmation. Body includes
+            `pendingGuardianConfirmation: true`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/auth/refresh:
+    post:
+      operationId: authRefresh
+      summary: Rotate a refresh token for a fresh access + refresh pair
+      description: |
+        Exchanges a refresh token for a new access + refresh pair.
+        Refresh tokens **rotate** on every use — the presented token is
+        immediately revoked and replaced. Replaying a consumed refresh
+        token returns `401` (this is the standard mitigation for
+        stolen-token replay; the client should sign the user out and
+        force a fresh login on `401` here).
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+                  minLength: 1
+      responses:
+        "200":
+          description: New token pair issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenRefreshResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/v1/auth/password-reset/request:
     post:
       operationId: authPasswordResetRequest
@@ -4863,7 +5014,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: coach@kinectem.demo
       responses:
         "200":
           description: Reset email sent if the address is registered.
@@ -4879,7 +5030,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Awesome game today. Proud of the effort.
+                    example: Hey, you free this weekend for an extra session?
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/password-reset/complete:
@@ -4983,7 +5134,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: maya@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
       responses:
@@ -5039,10 +5190,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Chris
+                      example: Lisa
                     lastName:
                       type: string
-                      example: Brooks
+                      example: Silva
                     role:
                       type: string
                       enum:
@@ -5053,19 +5204,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: coach@kinectem.demo
+                      example: maya@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Basketball
+                      example: Soccer
                     position:
                       type: string
                       nullable: true
-                      example: Point Guard
+                      example: Midfielder
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -5991,6 +6142,52 @@ components:
         updatedAt:
           type: string
           format: date-time
+    TokenRefreshResponse:
+      type: object
+      required:
+        - tokenType
+        - accessToken
+        - expiresIn
+        - accessTokenExpiresAt
+        - refreshToken
+        - refreshTokenExpiresAt
+      properties:
+        tokenType:
+          type: string
+          enum:
+            - Bearer
+          description: |
+            Always `Bearer`. Send the access token as
+            `Authorization: Bearer <accessToken>`.
+        accessToken:
+          type: string
+          description: Short-lived (~15 min) HMAC-signed access token.
+        expiresIn:
+          type: integer
+          description: Seconds until `accessToken` expires.
+        accessTokenExpiresAt:
+          type: string
+          format: date-time
+          description: Absolute expiry of `accessToken`.
+        refreshToken:
+          type: string
+          description: |
+            Long-lived refresh token. Single-use — rotated on every call
+            to `/auth/refresh`. Replace your stored copy with the new one
+            on each refresh.
+        refreshTokenExpiresAt:
+          type: string
+          format: date-time
+          description: Absolute expiry of `refreshToken` (30 days from issue).
+    TokenIssueResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenRefreshResponse"
+        - type: object
+          required:
+            - user
+          properties:
+            user:
+              $ref: "#/components/schemas/PrivateUserResponse"
     PrivateUserResponse:
       allOf:
         - $ref: "#/components/schemas/PublicUserResponse"
@@ -10366,6 +10563,17 @@ components:
 
         Browsers send this cookie automatically; `fetch` callers must use
         `credentials: "include"`.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Short-lived access token issued by `POST /auth/token` (and
+        rotated by `POST /auth/refresh`). Send as
+        `Authorization: Bearer <access-token>`. Used by the mobile app
+        and any other non-browser client. Tokens are HMAC-signed
+        envelopes with a 15-minute expiry; on `401` with code
+        `AUTH_REQUIRED`, swap the refresh token for a new pair.
     apiKey:
       type: apiKey
       in: header

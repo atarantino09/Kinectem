@@ -48,15 +48,30 @@ parameter to fetch the next page. `totalCount` may be omitted for
 very large or expensive queries.
 
 ### Authentication
-The current production auth model is a **server-issued cookie
-session**. `POST /auth/login` (and `POST /auth/signup`) sets an
-`HttpOnly` cookie named `kinectem_session`; subsequent requests
-must send this cookie. There is no JWT or bearer token in the
-current release.
+The API supports two equivalent auth schemes; every protected endpoint
+accepts either one.
+
+- **Cookie session** — used by the website. `POST /auth/login` (and
+  `POST /auth/signup`) sets an `HttpOnly` cookie named
+  `kinectem_session`; subsequent requests must send this cookie.
+- **Bearer token** — used by the mobile app and any other non-browser
+  client. `POST /auth/token` exchanges email + password for a
+  short-lived **access token** (~15 min) and a long-lived **refresh
+  token** (30 days, single-use, rotates on every refresh). Send the
+  access token as `Authorization: Bearer <access-token>`. Use
+  `POST /auth/refresh` to swap a refresh token for a fresh pair, and
+  `POST /auth/logout` (with the refresh token in the body) to revoke
+  it.
+
+The full spec is also served, unauthenticated, at
+`/api/openapi.public.json` so external codegen tools can fetch it
+without an admin session.
 
 A future release will add a long-lived **API key** scheme for
-server-to-server callers; it is documented here for forward
-compatibility but is not yet implemented.
+server-to-server integrations and a third-party **OAuth 2.0** flow
+with PKCE for apps acting on behalf of a Kinectem user. The
+`apiKey` security scheme is reserved here for forward compatibility
+but is not yet active.
 
 ### Versioning & deprecation
 The base path is `/api/v1`. Backwards-incompatible changes go to
@@ -132,6 +147,38 @@ organizations. Null when not set.
 }
 
 /**
+ * Always `Bearer`. Send the access token as
+`Authorization: Bearer <accessToken>`.
+
+ */
+export type TokenRefreshResponseTokenType =
+  (typeof TokenRefreshResponseTokenType)[keyof typeof TokenRefreshResponseTokenType];
+
+export const TokenRefreshResponseTokenType = {
+  Bearer: "Bearer",
+} as const;
+
+export interface TokenRefreshResponse {
+  /** Always `Bearer`. Send the access token as
+`Authorization: Bearer <accessToken>`.
+ */
+  tokenType: TokenRefreshResponseTokenType;
+  /** Short-lived (~15 min) HMAC-signed access token. */
+  accessToken: string;
+  /** Seconds until `accessToken` expires. */
+  expiresIn: number;
+  /** Absolute expiry of `accessToken`. */
+  accessTokenExpiresAt: string;
+  /** Long-lived refresh token. Single-use — rotated on every call
+to `/auth/refresh`. Replace your stored copy with the new one
+on each refresh.
+ */
+  refreshToken: string;
+  /** Absolute expiry of `refreshToken` (30 days from issue). */
+  refreshTokenExpiresAt: string;
+}
+
+/**
  * The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
  */
 export type PrivateUserResponseRole =
@@ -156,6 +203,10 @@ export type PrivateUserResponse = PublicUserResponse & {
    * @nullable
    */
   parentId?: string | null;
+};
+
+export type TokenIssueResponse = TokenRefreshResponse & {
+  user: PrivateUserResponse;
 };
 
 /**
@@ -3989,6 +4040,34 @@ export type AuthSignupBody = {
 
 export type AuthSignup201 = PrivateUserResponse & {
   pendingGuardianConfirmation?: boolean;
+};
+
+export type AuthLogoutBody = {
+  /** Refresh token previously issued by `/auth/token` or
+`/auth/refresh`. Optional; only needed by bearer-token
+clients that want to revoke their refresh token at
+sign-out time.
+ */
+  refreshToken?: string;
+};
+
+export type AuthTokenBody = {
+  email: string;
+  /** @minLength 1 */
+  password: string;
+  /**
+   * Optional human label the client can pass so a future
+"active sessions" UI can tell devices apart (e.g.
+`"iPhone 15 Pro"`).
+
+   * @maxLength 120
+   */
+  deviceLabel?: string;
+};
+
+export type AuthRefreshBody = {
+  /** @minLength 1 */
+  refreshToken: string;
 };
 
 export type AuthPasswordResetRequestBody = {

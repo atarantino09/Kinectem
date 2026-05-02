@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, users, passwordResets } from "@workspace/db";
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { z } from "zod";
@@ -15,6 +15,13 @@ import {
   clearSessionCookie,
   SESSION_COOKIE,
 } from "../lib/auth";
+import {
+  signAccessToken,
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  ACCESS_TOKEN_TTL_MS,
+} from "../lib/tokens";
 import { toPrivateUser, splitName, apiError, safeAvatarUrl } from "../lib/spec-helpers";
 import {
   loadPostStats,
@@ -374,15 +381,153 @@ router.post(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Bearer-token auth (task #355) — used by the mobile app and any other
+// non-browser client. The cookie flow above is unchanged.
+// ---------------------------------------------------------------------------
+const TokenIssueBody = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+  // Optional human label so a future "active sessions" UI can tell
+  // devices apart. Free-form, capped to keep noisy clients honest.
+  deviceLabel: z.string().max(120).optional(),
+});
+
+const TokenRefreshBody = z.object({
+  refreshToken: z.string().min(1),
+});
+
+function tokenResponse(args: {
+  accessToken: string;
+  accessExpiresAt: Date;
+  refreshToken: string;
+  refreshExpiresAt: Date;
+}) {
+  return {
+    tokenType: "Bearer" as const,
+    accessToken: args.accessToken,
+    expiresIn: Math.max(
+      0,
+      Math.floor((args.accessExpiresAt.getTime() - Date.now()) / 1000),
+    ),
+    accessTokenExpiresAt: args.accessExpiresAt.toISOString(),
+    refreshToken: args.refreshToken,
+    refreshTokenExpiresAt: args.refreshExpiresAt.toISOString(),
+  };
+}
+
+router.post(
+  "/auth/token",
+  // Reuse the existing per-IP+email login limiter so brute-force protection
+  // is the same on the cookie and bearer paths.
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const body = TokenIssueBody.parse(req.body);
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, body.email.toLowerCase()))
+      .limit(1);
+    const ok = user ? await verifyPassword(body.password, user.passwordHash) : false;
+    if (!user || !ok) {
+      apiError(res, 401, "Incorrect email or password.");
+      return;
+    }
+    if (user.deletedAt) {
+      apiError(res, 403, "This account has been deactivated.");
+      return;
+    }
+    if (user.guardianEmail && !user.guardianConfirmedAt) {
+      const expired =
+        !user.guardianConfirmToken ||
+        !user.guardianConfirmTokenExpiresAt ||
+        user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
+      apiError(
+        res,
+        403,
+        "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
+        {
+          extras: {
+            pendingGuardianConfirmation: true,
+            guardianConfirmExpired: expired,
+          },
+        },
+      );
+      return;
+    }
+    const access = signAccessToken(user.id);
+    const refresh = await issueRefreshToken(user.id, body.deviceLabel ?? null);
+    await db.update(users).set({ lastSignInAt: new Date() }).where(eq(users.id, user.id));
+    res.json({
+      ...tokenResponse({
+        accessToken: access.token,
+        accessExpiresAt: access.expiresAt,
+        refreshToken: refresh.token,
+        refreshExpiresAt: refresh.expiresAt,
+      }),
+      user: toPrivateUser(user),
+    });
+  }),
+);
+
+router.post(
+  "/auth/refresh",
+  asyncHandler(async (req, res) => {
+    const body = TokenRefreshBody.parse(req.body);
+    const rotated = await rotateRefreshToken(body.refreshToken);
+    if (!rotated) {
+      apiError(res, 401, "Refresh token is invalid, expired, or already used.");
+      return;
+    }
+    // Confirm the user still exists and isn't soft-deleted before issuing
+    // a fresh access token. Cheap belt-and-suspenders check; the rotation
+    // already succeeded so we don't unwind it on failure here.
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, rotated.userId), isNull(users.deletedAt)))
+      .limit(1);
+    if (!user) {
+      apiError(res, 401, "Refresh token is invalid, expired, or already used.");
+      return;
+    }
+    const access = signAccessToken(rotated.userId);
+    res.json(
+      tokenResponse({
+        accessToken: access.token,
+        accessExpiresAt: access.expiresAt,
+        refreshToken: rotated.refreshToken,
+        refreshExpiresAt: rotated.refreshExpiresAt,
+      }),
+    );
+  }),
+);
+
 router.post(
   "/auth/logout",
   asyncHandler(async (req, res) => {
     const token = req.cookies?.[SESSION_COOKIE];
     if (token) await destroySession(token);
     clearSessionCookie(res);
+    // Bearer clients pass `{ refreshToken }` in the body so we can revoke
+    // it server-side. Cookie-only callers omit the body and continue to
+    // get the same 204 they always have.
+    const body =
+      req.body && typeof req.body === "object"
+        ? (req.body as { refreshToken?: unknown })
+        : undefined;
+    const refreshTokenStr =
+      body && typeof body.refreshToken === "string" ? body.refreshToken : null;
+    if (refreshTokenStr) {
+      await revokeRefreshToken(refreshTokenStr);
+    }
     res.status(204).end();
   }),
 );
+
+// Suppress an unused-import warning for ACCESS_TOKEN_TTL_MS — it's exported
+// for clients that want to compute a refresh schedule from the spec.
+void ACCESS_TOKEN_TTL_MS;
 
 router.get(
   "/auth/users",

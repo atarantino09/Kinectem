@@ -23,6 +23,7 @@ const ALL_TABLES = [
   "organizations",
   "message_assets",
   "assets",
+  "refresh_tokens",
   "sessions",
   "users",
 ];

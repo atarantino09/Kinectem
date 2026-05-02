@@ -169,6 +169,26 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS state text;
 `;
 
+// Task #355 — Refresh tokens for the bearer-token auth flow used by the
+// mobile app and other non-browser clients. Idempotent. Uses pgcrypto's
+// gen_random_uuid() which is already available in this project (every
+// other table uses it via Drizzle's `defaultRandom()`).
+const TASK_355_REFRESH_TOKENS = `
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash    text NOT NULL UNIQUE,
+  device_label  text,
+  issued_at     timestamp NOT NULL DEFAULT now(),
+  expires_at    timestamp NOT NULL,
+  revoked_at    timestamp,
+  last_used_at  timestamp
+);
+
+CREATE INDEX IF NOT EXISTS refresh_tokens_user_id_idx
+  ON refresh_tokens(user_id);
+`;
+
 // Task #337 — Add prior_status column to parent_child_notification_reads.
 // The family-dashboard Remove action now flips already-`approved`
 // highlight / article tags to `declined`. Without remembering the prior
@@ -216,6 +236,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-30-task-349-user-city-state",
     sql: TASK_349_USER_CITY_STATE,
+  },
+  {
+    name: "2026-05-02-task-355-refresh-tokens",
+    sql: TASK_355_REFRESH_TOKENS,
   },
 ];
 

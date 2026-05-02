@@ -197,4 +197,30 @@ router.get("/openapi.json", requireDocsAccess, (_req, res) => {
   res.json(spec.json);
 });
 
+// Task #355 — Public, unauthenticated copy of the spec so that mobile and
+// third-party clients can point their codegen tools at a stable URL
+// (`/api/openapi.public.json` / `.yaml`) without needing an admin session
+// or `DOCS_ACCESS_TOKEN`. The spec describes a public contract — the
+// production gate on `/api/openapi.json` exists to keep the *interactive
+// docs UI* off the open internet, not the spec itself.
+router.get("/openapi.public.json", (_req, res) => {
+  if (!spec) {
+    res.status(503).json({ error: "OpenAPI spec not available" });
+    return;
+  }
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.json(spec.json);
+});
+
+router.get("/openapi.public.yaml", (_req, res) => {
+  if (!spec) {
+    res.status(503).json({ error: "OpenAPI spec not available" });
+    return;
+  }
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.type("application/yaml").send(spec.yaml);
+});
+
 export default router;

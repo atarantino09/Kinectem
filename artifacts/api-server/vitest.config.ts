@@ -23,6 +23,11 @@ export default defineConfig({
       SOURCE_DATABASE_URL: sourceUrl,
       PORT: "0",
       NODE_ENV: "test",
+      // Stable secret for HMAC-signed access tokens during tests so the
+      // token-auth suite doesn't depend on a real secret being injected.
+      SESSION_SECRET:
+        process.env.SESSION_SECRET ??
+        "test-session-secret-do-not-use-in-prod-task-355",
     },
     include: ["tests/**/*.test.ts"],
     pool: "forks",

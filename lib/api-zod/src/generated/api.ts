@@ -48,15 +48,30 @@ parameter to fetch the next page. `totalCount` may be omitted for
 very large or expensive queries.
 
 ### Authentication
-The current production auth model is a **server-issued cookie
-session**. `POST /auth/login` (and `POST /auth/signup`) sets an
-`HttpOnly` cookie named `kinectem_session`; subsequent requests
-must send this cookie. There is no JWT or bearer token in the
-current release.
+The API supports two equivalent auth schemes; every protected endpoint
+accepts either one.
+
+- **Cookie session** — used by the website. `POST /auth/login` (and
+  `POST /auth/signup`) sets an `HttpOnly` cookie named
+  `kinectem_session`; subsequent requests must send this cookie.
+- **Bearer token** — used by the mobile app and any other non-browser
+  client. `POST /auth/token` exchanges email + password for a
+  short-lived **access token** (~15 min) and a long-lived **refresh
+  token** (30 days, single-use, rotates on every refresh). Send the
+  access token as `Authorization: Bearer <access-token>`. Use
+  `POST /auth/refresh` to swap a refresh token for a fresh pair, and
+  `POST /auth/logout` (with the refresh token in the body) to revoke
+  it.
+
+The full spec is also served, unauthenticated, at
+`/api/openapi.public.json` so external codegen tools can fetch it
+without an admin session.
 
 A future release will add a long-lived **API key** scheme for
-server-to-server callers; it is documented here for forward
-compatibility but is not yet implemented.
+server-to-server integrations and a third-party **OAuth 2.0** flow
+with PKCE for apps acting on behalf of a Kinectem user. The
+`apiKey` security scheme is reserved here for forward compatibility
+but is not yet active.
 
 ### Versioning & deprecation
 The base path is `/api/v1`. Backwards-incompatible changes go to
@@ -7620,6 +7635,188 @@ export const AuthSignupBody = zod.object({
   parentId: zod.string().uuid().nullish(),
   guardianEmail: zod.string().email().nullish(),
   guardianConsent: zod.boolean().optional(),
+});
+
+/**
+ * Destroys the server-side cookie session and clears the cookie.
+Bearer-token clients should additionally pass the refresh token
+in the body — when present, the server revokes it so it can no
+longer be used at `POST /auth/refresh`. Idempotent: callers
+without either credential still get `204`.
+
+ * @summary Log out the current session
+ */
+export const AuthLogoutBody = zod.object({
+  refreshToken: zod
+    .string()
+    .optional()
+    .describe(
+      "Refresh token previously issued by `\/auth\/token` or\n`\/auth\/refresh`. Optional; only needed by bearer-token\nclients that want to revoke their refresh token at\nsign-out time.\n",
+    ),
+});
+
+/**
+ * Verifies email + password and, on success, issues a short-lived
+access token (~15 min) and a long-lived refresh token (30 days,
+single-use, rotated on every refresh). Used by the mobile app
+and any other non-browser client. The cookie session is **not**
+set on this endpoint — bearer auth is cookie-free.
+
+If the account is an under-13 athlete whose guardian has not yet
+confirmed, returns `403` with `pendingGuardianConfirmation: true`,
+matching the behavior of `/auth/login`.
+
+ * @summary Issue a bearer access + refresh token pair
+ */
+
+export const authTokenBodyDeviceLabelMax = 120;
+
+export const AuthTokenBody = zod.object({
+  email: zod.string().email(),
+  password: zod.string().min(1),
+  deviceLabel: zod
+    .string()
+    .max(authTokenBodyDeviceLabelMax)
+    .optional()
+    .describe(
+      'Optional human label the client can pass so a future\n\"active sessions\" UI can tell devices apart (e.g.\n`\"iPhone 15 Pro\"`).\n',
+    ),
+});
+
+export const authTokenResponseTwoUserOneBioMax = 1000;
+
+export const authTokenResponseTwoUserOneFollowerCountMin = 0;
+
+export const authTokenResponseTwoUserOneFollowingCountMin = 0;
+
+export const AuthTokenResponse = zod
+  .object({
+    tokenType: zod
+      .enum(["Bearer"])
+      .describe(
+        "Always `Bearer`. Send the access token as\n`Authorization: Bearer <accessToken>`.\n",
+      ),
+    accessToken: zod
+      .string()
+      .describe("Short-lived (~15 min) HMAC-signed access token."),
+    expiresIn: zod.number().describe("Seconds until `accessToken` expires."),
+    accessTokenExpiresAt: zod.coerce
+      .date()
+      .describe("Absolute expiry of `accessToken`."),
+    refreshToken: zod
+      .string()
+      .describe(
+        "Long-lived refresh token. Single-use — rotated on every call\nto `\/auth\/refresh`. Replace your stored copy with the new one\non each refresh.\n",
+      ),
+    refreshTokenExpiresAt: zod.coerce
+      .date()
+      .describe("Absolute expiry of `refreshToken` (30 days from issue)."),
+  })
+  .and(
+    zod.object({
+      user: zod
+        .object({
+          id: zod.string().uuid(),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          bio: zod.string().max(authTokenResponseTwoUserOneBioMax).nullish(),
+          website: zod
+            .string()
+            .nullish()
+            .describe(
+              "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
+            ),
+          city: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optional free-text city the user is based in (task #349).\nSurfaced on the profile alongside `state`. Null when not set.\n",
+            ),
+          state: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optional two-letter US state postal code (50 states + DC) the\nuser is based in (task #349). Mirrors the same enum used by\norganizations. Null when not set.\n",
+            ),
+          avatarUrl: zod.string().url().nullish(),
+          coverPhotoUrl: zod
+            .string()
+            .url()
+            .nullish()
+            .describe(
+              "Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.",
+            ),
+          isOwnProfile: zod.boolean(),
+          isFollowing: zod.boolean().optional(),
+          isConnection: zod.boolean().optional(),
+          followerCount: zod
+            .number()
+            .min(authTokenResponseTwoUserOneFollowerCountMin)
+            .optional(),
+          followingCount: zod
+            .number()
+            .min(authTokenResponseTwoUserOneFollowingCountMin)
+            .optional(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        })
+        .and(
+          zod.object({
+            email: zod.string().email(),
+            dateOfBirth: zod.coerce.date().nullish(),
+            role: zod
+              .enum(["athlete", "coach", "admin", "parent"])
+              .describe(
+                "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+              ),
+            parentId: zod
+              .string()
+              .uuid()
+              .nullish()
+              .describe(
+                "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+              ),
+          }),
+        ),
+    }),
+  );
+
+/**
+ * Exchanges a refresh token for a new access + refresh pair.
+Refresh tokens **rotate** on every use — the presented token is
+immediately revoked and replaced. Replaying a consumed refresh
+token returns `401` (this is the standard mitigation for
+stolen-token replay; the client should sign the user out and
+force a fresh login on `401` here).
+
+ * @summary Rotate a refresh token for a fresh access + refresh pair
+ */
+
+export const AuthRefreshBody = zod.object({
+  refreshToken: zod.string().min(1),
+});
+
+export const AuthRefreshResponse = zod.object({
+  tokenType: zod
+    .enum(["Bearer"])
+    .describe(
+      "Always `Bearer`. Send the access token as\n`Authorization: Bearer <accessToken>`.\n",
+    ),
+  accessToken: zod
+    .string()
+    .describe("Short-lived (~15 min) HMAC-signed access token."),
+  expiresIn: zod.number().describe("Seconds until `accessToken` expires."),
+  accessTokenExpiresAt: zod.coerce
+    .date()
+    .describe("Absolute expiry of `accessToken`."),
+  refreshToken: zod
+    .string()
+    .describe(
+      "Long-lived refresh token. Single-use — rotated on every call\nto `\/auth\/refresh`. Replace your stored copy with the new one\non each refresh.\n",
+    ),
+  refreshTokenExpiresAt: zod.coerce
+    .date()
+    .describe("Absolute expiry of `refreshToken` (30 days from issue)."),
 });
 
 /**

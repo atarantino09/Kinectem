@@ -48,15 +48,30 @@ parameter to fetch the next page. `totalCount` may be omitted for
 very large or expensive queries.
 
 ### Authentication
-The current production auth model is a **server-issued cookie
-session**. `POST /auth/login` (and `POST /auth/signup`) sets an
-`HttpOnly` cookie named `kinectem_session`; subsequent requests
-must send this cookie. There is no JWT or bearer token in the
-current release.
+The API supports two equivalent auth schemes; every protected endpoint
+accepts either one.
+
+- **Cookie session** — used by the website. `POST /auth/login` (and
+  `POST /auth/signup`) sets an `HttpOnly` cookie named
+  `kinectem_session`; subsequent requests must send this cookie.
+- **Bearer token** — used by the mobile app and any other non-browser
+  client. `POST /auth/token` exchanges email + password for a
+  short-lived **access token** (~15 min) and a long-lived **refresh
+  token** (30 days, single-use, rotates on every refresh). Send the
+  access token as `Authorization: Bearer <access-token>`. Use
+  `POST /auth/refresh` to swap a refresh token for a fresh pair, and
+  `POST /auth/logout` (with the refresh token in the body) to revoke
+  it.
+
+The full spec is also served, unauthenticated, at
+`/api/openapi.public.json` so external codegen tools can fetch it
+without an admin session.
 
 A future release will add a long-lived **API key** scheme for
-server-to-server callers; it is documented here for forward
-compatibility but is not yet implemented.
+server-to-server integrations and a third-party **OAuth 2.0** flow
+with PKCE for apps acting on behalf of a Kinectem user. The
+`apiKey` security scheme is reserved here for forward compatibility
+but is not yet active.
 
 ### Versioning & deprecation
 The base path is `/api/v1`. Backwards-incompatible changes go to
@@ -100,12 +115,15 @@ import type {
   AuthGuardianResend200,
   AuthGuardianResendBody,
   AuthLoginBody,
+  AuthLogoutBody,
   AuthPasswordResetComplete200,
   AuthPasswordResetCompleteBody,
   AuthPasswordResetRequest200,
   AuthPasswordResetRequestBody,
+  AuthRefreshBody,
   AuthSignup201,
   AuthSignupBody,
+  AuthTokenBody,
   BadRequestResponse,
   BlockResponse,
   ChildNotificationStreamResponse,
@@ -261,6 +279,8 @@ import type {
   TeamMemberResponse,
   TeamResponse,
   TeamSeasonResponse,
+  TokenIssueResponse,
+  TokenRefreshResponse,
   TooManyRequestsResponse,
   UnauthorizedResponse,
   UnprocessableEntityResponse,
@@ -18049,17 +18069,27 @@ export const useAuthSignup = <
 };
 
 /**
- * Destroys the server-side session and clears the cookie.
+ * Destroys the server-side cookie session and clears the cookie.
+Bearer-token clients should additionally pass the refresh token
+in the body — when present, the server revokes it so it can no
+longer be used at `POST /auth/refresh`. Idempotent: callers
+without either credential still get `204`.
+
  * @summary Log out the current session
  */
 export const getAuthLogoutUrl = () => {
   return `/api/v1/auth/logout`;
 };
 
-export const authLogout = async (options?: RequestInit): Promise<void> => {
+export const authLogout = async (
+  authLogoutBody?: AuthLogoutBody,
+  options?: RequestInit,
+): Promise<void> => {
   return customFetch<void>(getAuthLogoutUrl(), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(authLogoutBody),
   });
 };
 
@@ -18070,14 +18100,14 @@ export const getAuthLogoutMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof authLogout>>,
     TError,
-    void,
+    { data: BodyType<AuthLogoutBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof authLogout>>,
   TError,
-  void,
+  { data: BodyType<AuthLogoutBody> },
   TContext
 > => {
   const mutationKey = ["authLogout"];
@@ -18091,9 +18121,11 @@ export const getAuthLogoutMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof authLogout>>,
-    void
-  > = () => {
-    return authLogout(requestOptions);
+    { data: BodyType<AuthLogoutBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return authLogout(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -18102,7 +18134,7 @@ export const getAuthLogoutMutationOptions = <
 export type AuthLogoutMutationResult = NonNullable<
   Awaited<ReturnType<typeof authLogout>>
 >;
-
+export type AuthLogoutMutationBody = BodyType<AuthLogoutBody>;
 export type AuthLogoutMutationError = ErrorType<unknown>;
 
 /**
@@ -18115,17 +18147,212 @@ export const useAuthLogout = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof authLogout>>,
     TError,
-    void,
+    { data: BodyType<AuthLogoutBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof authLogout>>,
   TError,
-  void,
+  { data: BodyType<AuthLogoutBody> },
   TContext
 > => {
   return useMutation(getAuthLogoutMutationOptions(options));
+};
+
+/**
+ * Verifies email + password and, on success, issues a short-lived
+access token (~15 min) and a long-lived refresh token (30 days,
+single-use, rotated on every refresh). Used by the mobile app
+and any other non-browser client. The cookie session is **not**
+set on this endpoint — bearer auth is cookie-free.
+
+If the account is an under-13 athlete whose guardian has not yet
+confirmed, returns `403` with `pendingGuardianConfirmation: true`,
+matching the behavior of `/auth/login`.
+
+ * @summary Issue a bearer access + refresh token pair
+ */
+export const getAuthTokenUrl = () => {
+  return `/api/v1/auth/token`;
+};
+
+export const authToken = async (
+  authTokenBody: AuthTokenBody,
+  options?: RequestInit,
+): Promise<TokenIssueResponse> => {
+  return customFetch<TokenIssueResponse>(getAuthTokenUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(authTokenBody),
+  });
+};
+
+export const getAuthTokenMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ErrorResponse | TooManyRequestsResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authToken>>,
+    TError,
+    { data: BodyType<AuthTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof authToken>>,
+  TError,
+  { data: BodyType<AuthTokenBody> },
+  TContext
+> => {
+  const mutationKey = ["authToken"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof authToken>>,
+    { data: BodyType<AuthTokenBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return authToken(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AuthTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authToken>>
+>;
+export type AuthTokenMutationBody = BodyType<AuthTokenBody>;
+export type AuthTokenMutationError = ErrorType<
+  UnauthorizedResponse | ErrorResponse | TooManyRequestsResponse
+>;
+
+/**
+ * @summary Issue a bearer access + refresh token pair
+ */
+export const useAuthToken = <
+  TError = ErrorType<
+    UnauthorizedResponse | ErrorResponse | TooManyRequestsResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authToken>>,
+    TError,
+    { data: BodyType<AuthTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof authToken>>,
+  TError,
+  { data: BodyType<AuthTokenBody> },
+  TContext
+> => {
+  return useMutation(getAuthTokenMutationOptions(options));
+};
+
+/**
+ * Exchanges a refresh token for a new access + refresh pair.
+Refresh tokens **rotate** on every use — the presented token is
+immediately revoked and replaced. Replaying a consumed refresh
+token returns `401` (this is the standard mitigation for
+stolen-token replay; the client should sign the user out and
+force a fresh login on `401` here).
+
+ * @summary Rotate a refresh token for a fresh access + refresh pair
+ */
+export const getAuthRefreshUrl = () => {
+  return `/api/v1/auth/refresh`;
+};
+
+export const authRefresh = async (
+  authRefreshBody: AuthRefreshBody,
+  options?: RequestInit,
+): Promise<TokenRefreshResponse> => {
+  return customFetch<TokenRefreshResponse>(getAuthRefreshUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(authRefreshBody),
+  });
+};
+
+export const getAuthRefreshMutationOptions = <
+  TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authRefresh>>,
+    TError,
+    { data: BodyType<AuthRefreshBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof authRefresh>>,
+  TError,
+  { data: BodyType<AuthRefreshBody> },
+  TContext
+> => {
+  const mutationKey = ["authRefresh"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof authRefresh>>,
+    { data: BodyType<AuthRefreshBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return authRefresh(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AuthRefreshMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authRefresh>>
+>;
+export type AuthRefreshMutationBody = BodyType<AuthRefreshBody>;
+export type AuthRefreshMutationError = ErrorType<UnauthorizedResponse>;
+
+/**
+ * @summary Rotate a refresh token for a fresh access + refresh pair
+ */
+export const useAuthRefresh = <
+  TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authRefresh>>,
+    TError,
+    { data: BodyType<AuthRefreshBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof authRefresh>>,
+  TError,
+  { data: BodyType<AuthRefreshBody> },
+  TContext
+> => {
+  return useMutation(getAuthRefreshMutationOptions(options));
 };
 
 /**

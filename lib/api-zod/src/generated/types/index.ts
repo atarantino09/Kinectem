@@ -48,15 +48,30 @@ parameter to fetch the next page. `totalCount` may be omitted for
 very large or expensive queries.
 
 ### Authentication
-The current production auth model is a **server-issued cookie
-session**. `POST /auth/login` (and `POST /auth/signup`) sets an
-`HttpOnly` cookie named `kinectem_session`; subsequent requests
-must send this cookie. There is no JWT or bearer token in the
-current release.
+The API supports two equivalent auth schemes; every protected endpoint
+accepts either one.
+
+- **Cookie session** — used by the website. `POST /auth/login` (and
+  `POST /auth/signup`) sets an `HttpOnly` cookie named
+  `kinectem_session`; subsequent requests must send this cookie.
+- **Bearer token** — used by the mobile app and any other non-browser
+  client. `POST /auth/token` exchanges email + password for a
+  short-lived **access token** (~15 min) and a long-lived **refresh
+  token** (30 days, single-use, rotates on every refresh). Send the
+  access token as `Authorization: Bearer <access-token>`. Use
+  `POST /auth/refresh` to swap a refresh token for a fresh pair, and
+  `POST /auth/logout` (with the refresh token in the body) to revoke
+  it.
+
+The full spec is also served, unauthenticated, at
+`/api/openapi.public.json` so external codegen tools can fetch it
+without an admin session.
 
 A future release will add a long-lived **API key** scheme for
-server-to-server callers; it is documented here for forward
-compatibility but is not yet implemented.
+server-to-server integrations and a third-party **OAuth 2.0** flow
+with PKCE for apps acting on behalf of a Kinectem user. The
+`apiKey` security scheme is reserved here for forward compatibility
+but is not yet active.
 
 ### Versioning & deprecation
 The base path is `/api/v1`. Backwards-incompatible changes go to
@@ -117,13 +132,16 @@ export * from "./authGuardianConfirmBody";
 export * from "./authGuardianResend200";
 export * from "./authGuardianResendBody";
 export * from "./authLoginBody";
+export * from "./authLogoutBody";
 export * from "./authPasswordResetComplete200";
 export * from "./authPasswordResetCompleteBody";
 export * from "./authPasswordResetRequest200";
 export * from "./authPasswordResetRequestBody";
+export * from "./authRefreshBody";
 export * from "./authSignup201";
 export * from "./authSignupBody";
 export * from "./authSignupBodyRole";
+export * from "./authTokenBody";
 export * from "./badRequestResponse";
 export * from "./blockResponse";
 export * from "./childLinkResponse";
@@ -406,6 +424,9 @@ export * from "./teamSearchResultEntityType";
 export * from "./teamSearchSection";
 export * from "./teamSeasonResponse";
 export * from "./teamSeasonResponseStatus";
+export * from "./tokenIssueResponse";
+export * from "./tokenRefreshResponse";
+export * from "./tokenRefreshResponseTokenType";
 export * from "./tooManyRequestsResponse";
 export * from "./unauthorizedResponse";
 export * from "./unprocessableEntityResponse";
