@@ -919,14 +919,12 @@ router.get(
         .select()
         .from(consentAuditLog)
         .where(eq(consentAuditLog.childUserId, auth.childId))
-        .orderBy(desc(consentAuditLog.createdAt))
-        .limit(500),
+        .orderBy(desc(consentAuditLog.createdAt)),
       db
         .select()
         .from(messages)
         .where(eq(messages.senderUserId, auth.childId))
-        .orderBy(desc(messages.createdAt))
-        .limit(500),
+        .orderBy(desc(messages.createdAt)),
       db
         .select({ m: messages })
         .from(messages)
@@ -942,46 +940,38 @@ router.get(
           ),
         )
         .where(sql`${messages.senderUserId} <> ${auth.childId}`)
-        .orderBy(desc(messages.createdAt))
-        .limit(500),
+        .orderBy(desc(messages.createdAt)),
       db
         .select()
         .from(postComments)
         .where(eq(postComments.authorId, auth.childId))
-        .orderBy(desc(postComments.createdAt))
-        .limit(500),
+        .orderBy(desc(postComments.createdAt)),
       db
         .select()
         .from(articles)
         .where(eq(articles.authorId, auth.childId))
-        .orderBy(desc(articles.createdAt))
-        .limit(500),
+        .orderBy(desc(articles.createdAt)),
       db
         .select()
         .from(highlights)
         .where(eq(highlights.uploaderId, auth.childId))
-        .orderBy(desc(highlights.createdAt))
-        .limit(500),
+        .orderBy(desc(highlights.createdAt)),
       db
         .select()
         .from(articleTags)
-        .where(eq(articleTags.userId, auth.childId))
-        .limit(500),
+        .where(eq(articleTags.userId, auth.childId)),
       db
         .select()
         .from(highlightTags)
-        .where(eq(highlightTags.userId, auth.childId))
-        .limit(500),
+        .where(eq(highlightTags.userId, auth.childId)),
       db
         .select()
         .from(userFollowers)
-        .where(eq(userFollowers.followingUserId, auth.childId))
-        .limit(500),
+        .where(eq(userFollowers.followingUserId, auth.childId)),
       db
         .select()
         .from(userFollowers)
-        .where(eq(userFollowers.followerUserId, auth.childId))
-        .limit(500),
+        .where(eq(userFollowers.followerUserId, auth.childId)),
       db
         .select()
         .from(dmAllowlist)
@@ -1020,8 +1010,7 @@ router.get(
             ),
           ),
         )
-        .orderBy(desc(postComments.createdAt))
-        .limit(500),
+        .orderBy(desc(postComments.createdAt)),
     ]);
     void logConsentEvent({
       event: "guardian_data_exported",

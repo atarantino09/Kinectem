@@ -103,7 +103,12 @@ router.get(
       db
         .select({ id: userFollowers.followingUserId })
         .from(userFollowers)
-        .where(eq(userFollowers.followerUserId, me.id)),
+        .where(
+          and(
+            eq(userFollowers.followerUserId, me.id),
+            eq(userFollowers.moderationStatus, "approved"),
+          ),
+        ),
     ]);
     const followedOrgIds = followedOrgRows.map((r) => r.id);
     const followedTeamIds = followedTeamRows.map((r) => r.id);
@@ -547,7 +552,12 @@ router.get(
       db
         .select({ id: userFollowers.followingUserId })
         .from(userFollowers)
-        .where(eq(userFollowers.followerUserId, me.id)),
+        .where(
+          and(
+            eq(userFollowers.followerUserId, me.id),
+            eq(userFollowers.moderationStatus, "approved"),
+          ),
+        ),
     ]);
 
     const excludedOrgIds = new Set<string>([

@@ -826,6 +826,10 @@ export function toComment(
     hasReacted,
     recentReactorName: null as string | null,
     createdAt: c.createdAt.toISOString(),
+    // Task #363 — surface moderation state so the commenter / guardian
+    // UI can render an "awaiting parental review" badge on pending rows.
+    moderationStatus: (c as { moderationStatus?: string | null })
+      .moderationStatus ?? "approved",
   };
 }
 
