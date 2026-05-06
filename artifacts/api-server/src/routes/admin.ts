@@ -17,6 +17,7 @@ import {
   teamFollowers,
   takedownRequests,
   consentAuditLog,
+  notifications,
 } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1196,16 +1197,18 @@ async function decideTakedown(
   req: import("express").Request,
   ref: { kind: "article" | "highlight"; refId: string },
   decision: "approved" | "declined",
-): Promise<{ id: string; childUserId: string }[]> {
+): Promise<
+  { id: string; childUserId: string; requestedByGuardianId: string | null }[]
+> {
   const event =
     decision === "approved"
-      ? "guardian_takedown_approved"
-      : "guardian_takedown_declined";
-  return db.transaction(async (tx) => {
+      ? ("guardian_takedown_approved" as const)
+      : ("guardian_takedown_declined" as const);
+  const transitioned = await db.transaction(async (tx) => {
     // Transition pending rows first; if a concurrent decision already
     // closed them, `transitioned` will be empty and we must not delete
     // the post or write audit rows.
-    const transitioned = await tx
+    const rows = await tx
       .update(takedownRequests)
       .set({
         status: decision,
@@ -1222,8 +1225,9 @@ async function decideTakedown(
       .returning({
         id: takedownRequests.id,
         childUserId: takedownRequests.childUserId,
+        requestedByGuardianId: takedownRequests.requestedByGuardianId,
       });
-    if (transitioned.length > 0 && decision === "approved") {
+    if (rows.length > 0 && decision === "approved") {
       // Hard takedown: delete the post; FKs cascade tags/reactions/etc.
       if (ref.kind === "article") {
         await tx.delete(articles).where(eq(articles.id, ref.refId));
@@ -1231,9 +1235,9 @@ async function decideTakedown(
         await tx.delete(highlights).where(eq(highlights.id, ref.refId));
       }
     }
-    if (transitioned.length > 0) {
+    if (rows.length > 0) {
       await tx.insert(consentAuditLog).values(
-        transitioned.map((r) => ({
+        rows.map((r) => ({
           event,
           childUserId: r.childUserId,
           actorEmail: req.realUser?.email ?? null,
@@ -1246,8 +1250,44 @@ async function decideTakedown(
         })),
       );
     }
-    return transitioned;
+    return rows;
   });
+  // Task #369 — notify each requesting guardian that the moderator
+  // decided their takedown. Done OUTSIDE the transaction on purpose:
+  // a notification insert error (e.g. a stale schema row) must not
+  // abort the moderation action, which has already been committed
+  // and audited above. `requestedByGuardianId` is nullable
+  // (`onDelete: set null`) so we filter unlinked rows before insert
+  // to avoid a NOT NULL violation on `notifications.userId`.
+  const notifyRows = transitioned
+    .filter(
+      (r): r is typeof r & { requestedByGuardianId: string } =>
+        r.requestedByGuardianId !== null,
+    )
+    .map((r) => ({
+      userId: r.requestedByGuardianId,
+      kind:
+        decision === "approved"
+          ? "guardian_takedown_approved"
+          : "guardian_takedown_declined",
+      message:
+        decision === "approved"
+          ? `Your takedown request for a ${ref.kind} was approved and the post was removed.`
+          : `Your takedown request for a ${ref.kind} was declined by a moderator.`,
+      link: `/family?childId=${r.childUserId}`,
+      actorUserId: req.realUser!.id,
+    }));
+  if (notifyRows.length > 0) {
+    try {
+      await db.insert(notifications).values(notifyRows);
+    } catch (err) {
+      req.log.error(
+        { err },
+        "Failed to write guardian takedown-decision notification",
+      );
+    }
+  }
+  return transitioned;
 }
 
 router.post(
