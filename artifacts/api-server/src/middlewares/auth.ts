@@ -15,7 +15,14 @@ import { hashToken } from "../lib/passwords";
 // then turns into a clean 401.
 function isAccountStatusActive(u: { accountStatus?: string | null }): boolean {
   const s = u.accountStatus ?? "active";
-  return s !== "disabled" && s !== "pending_guardian";
+  // Task #363 — `pending_revocation` is a guardian-initiated pause that
+  // takes effect on the child's next request, parallel to `disabled`
+  // and `pending_guardian` (Phase 1 pre-consent).
+  return (
+    s !== "disabled" &&
+    s !== "pending_guardian" &&
+    s !== "pending_revocation"
+  );
 }
 
 // Attach session/user/realUser/isMasquerading on the Request based on the
