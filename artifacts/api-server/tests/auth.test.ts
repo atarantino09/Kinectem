@@ -310,6 +310,125 @@ describe("auth", () => {
     expect(res.status).toBe(400);
   });
 
+  it("guardian-resend-by-email mints a fresh link for an unconfirmed minor and rotates the hash", async () => {
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - 9);
+    const email = `kid-recovery-${Date.now()}@kinectem.test`;
+    const guardianEmail = `parent-recovery-${Date.now()}@kinectem.test`;
+    const password = "supersecret1";
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/v1/auth/age-check")
+      .send({ dateOfBirth: dob.toISOString().slice(0, 10) });
+    const signup = await agent.post("/api/v1/auth/signup").send({
+      firstName: "Tiny",
+      lastName: "Player",
+      role: "athlete",
+      email,
+      password,
+      dateOfBirth: dob.toISOString(),
+      guardianEmail,
+      guardianConsent: true,
+    });
+    expect(signup.status).toBe(201);
+
+    // Note: signup uses the COPPA "email plus" notice email (not the
+    // legacy guardian-confirm email), so the only `/guardian-confirm/`
+    // link this test cares about is the one produced by the recovery
+    // endpoint we're exercising.
+    const [before] = await db
+      .select({ hash: users.guardianConfirmTokenHash })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    expect(before.hash).toBeTruthy();
+
+    const recover = await request(app)
+      .post("/api/v1/auth/guardian-resend-by-email")
+      .send({ guardianEmail });
+    expect(recover.status).toBe(200);
+    expect(recover.body.ok).toBe(true);
+    expect(recover.body.message).toMatch(/fresh link/i);
+
+    const afterMsg = lastEmailTo(guardianEmail);
+    expect(afterMsg).toBeDefined();
+    const newToken = afterMsg!.text.match(/\/guardian-confirm\/([A-Za-z0-9_-]+)/)![1];
+
+    const [after] = await db
+      .select({ hash: users.guardianConfirmTokenHash })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    expect(after.hash).not.toBe(before.hash);
+    const expected = createHash("sha256").update(newToken).digest("hex");
+    expect(after.hash).toBe(expected);
+
+    // The new link works.
+    const ok = await request(app)
+      .post("/api/v1/auth/guardian-confirm")
+      .send({ token: newToken, guardianEmail });
+    expect(ok.status).toBe(200);
+  });
+
+  it("guardian-resend-by-email returns the same generic 200 for an unknown email and sends nothing", async () => {
+    const guardianEmail = `ghost-parent-${Date.now()}@kinectem.test`;
+    const before = sentEmails.length;
+    const res = await request(app)
+      .post("/api/v1/auth/guardian-resend-by-email")
+      .send({ guardianEmail });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.message).toMatch(/fresh link/i);
+    expect(lastEmailTo(guardianEmail)).toBeUndefined();
+    expect(sentEmails.length).toBe(before);
+  });
+
+  it("guardian-resend-by-email is a no-op (but generic 200) once the account is already confirmed", async () => {
+    const dob = new Date();
+    dob.setFullYear(dob.getFullYear() - 10);
+    const email = `kid-already-${Date.now()}@kinectem.test`;
+    const guardianEmail = `parent-already-${Date.now()}@kinectem.test`;
+    const password = "supersecret1";
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/v1/auth/age-check")
+      .send({ dateOfBirth: dob.toISOString().slice(0, 10) });
+    const signup = await agent.post("/api/v1/auth/signup").send({
+      firstName: "Tiny",
+      lastName: "Player",
+      role: "athlete",
+      email,
+      password,
+      dateOfBirth: dob.toISOString(),
+      guardianEmail,
+      guardianConsent: true,
+    });
+    expect(signup.status).toBe(201);
+
+    // Mark the account as already-confirmed directly in the DB
+    // (bypassing the legacy /auth/guardian-confirm flow, which under
+    // the new COPPA email-plus signup no longer receives a token via
+    // email).
+    await db
+      .update(users)
+      .set({
+        guardianConfirmedAt: new Date(),
+        guardianConfirmTokenHash: null,
+        guardianConfirmTokenExpiresAt: null,
+      })
+      .where(eq(users.email, email));
+
+    const before = sentEmails.length;
+    const res = await request(app)
+      .post("/api/v1/auth/guardian-resend-by-email")
+      .send({ guardianEmail });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(sentEmails.length).toBe(before);
+  });
+
   it("rejects guardian-resend without correct athlete credentials", async () => {
     const res = await request(app)
       .post("/api/v1/auth/guardian-resend")

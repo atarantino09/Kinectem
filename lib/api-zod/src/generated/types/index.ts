@@ -135,6 +135,8 @@ export * from "./authGuardianConfirm200";
 export * from "./authGuardianConfirmBody";
 export * from "./authGuardianResend200";
 export * from "./authGuardianResendBody";
+export * from "./authGuardianResendByEmail200";
+export * from "./authGuardianResendByEmailBody";
 export * from "./authLoginBody";
 export * from "./authLogoutBody";
 export * from "./authPasswordResetComplete200";

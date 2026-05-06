@@ -5385,6 +5385,51 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/guardian-resend-by-email:
+    post:
+      operationId: authGuardianResendByEmail
+      summary: Parent-driven recovery — resend a guardian-confirmation email
+      description: |
+        Parent-facing recovery for an expired, used, or otherwise dead
+        guardian-confirmation link. Looks up the under-13 athlete by the
+        guardian email on file and, if found, mints a fresh confirmation
+        token and re-sends the email. Always responds with the same
+        generic 200 to avoid leaking which guardian emails exist.
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - guardianEmail
+              properties:
+                guardianEmail:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Generic acknowledgement (sent whether or not an account exists).
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - message
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Awesome game today. Proud of the effort.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/api-keys:
     get:
       operationId: listApiKeys
@@ -5440,7 +5485,7 @@ paths:
                   minLength: 1
                   maxLength: 80
                   description: Human label so the owner can tell keys apart later.
-                  example: Lincoln High Football
+                  example: Cardinal Track & Field
                 scopes:
                   type: array
                   description: |
@@ -5528,10 +5573,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Aaron
+                      example: Maya
                     lastName:
                       type: string
-                      example: Hayes
+                      example: Reed
                     role:
                       type: string
                       enum:
@@ -5542,19 +5587,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: jordan@kinectem.demo
+                      example: coach@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Track & Field
+                      example: Volleyball
                     position:
                       type: string
                       nullable: true
-                      example: Sprinter
+                      example: Outside Hitter
   /api/v1/health:
     get:
       operationId: healthCheck

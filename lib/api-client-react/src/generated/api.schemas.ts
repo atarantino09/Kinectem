@@ -4215,6 +4215,15 @@ export type AuthGuardianResend200 = {
   guardianEmail: string;
 };
 
+export type AuthGuardianResendByEmailBody = {
+  guardianEmail: string;
+};
+
+export type AuthGuardianResendByEmail200 = {
+  ok: boolean;
+  message: string;
+};
+
 export type ListApiKeys200 = {
   data: ApiKey[];
 };

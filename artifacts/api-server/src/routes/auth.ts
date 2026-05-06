@@ -94,6 +94,11 @@ const GuardianResendBody = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+const GuardianResendByEmailBody = z.object({
+  guardianEmail: z.string().email(),
+});
+const GUARDIAN_RESEND_BY_EMAIL_GENERIC =
+  "If that email is on file for an athlete account waiting on guardian confirmation, a fresh link is on its way.";
 // Exported so /guardians routes (defined in routes/guardians.ts) can issue
 // confirmation tokens with the same TTL used here at signup.
 export const GUARDIAN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -626,6 +631,68 @@ router.post(
       ok: true,
       guardianEmail: user.guardianEmail,
     });
+  }),
+);
+
+// Task #371 — parent-driven recovery for a dead guardian-confirm link.
+// The under-13 child often can't sign in (account is locked behind
+// `pending_guardian`), so the kid-driven `/auth/guardian-resend` above
+// is unreachable for them. This endpoint takes ONLY the guardian's
+// email — when it matches an unconfirmed minor account, we mint a
+// fresh token and re-send the confirmation email. The response is
+// always the same generic 200 to avoid account enumeration.
+router.post(
+  "/auth/guardian-resend-by-email",
+  signupLimiter,
+  asyncHandler(async (req, res) => {
+    const body = GuardianResendByEmailBody.parse(req.body);
+    const guardianEmail = body.guardianEmail.trim().toLowerCase();
+    const generic = { ok: true, message: GUARDIAN_RESEND_BY_EMAIL_GENERIC };
+
+    // Constrain to under-13 accounts still in the pending-guardian
+    // lifecycle. Without `isMinor` + `accountStatus = 'pending_guardian'`
+    // we could mint guardian-confirm tokens for adult records that
+    // happen to have a `guardianEmail` populated (e.g. legacy edge
+    // cases), which would be wrong.
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.guardianEmail, guardianEmail),
+          eq(users.isMinor, true),
+          eq(users.accountStatus, "pending_guardian"),
+          isNull(users.guardianConfirmedAt),
+          isNull(users.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!user || !user.guardianEmail) {
+      res.json(generic);
+      return;
+    }
+
+    const newToken = generateToken();
+    await db
+      .update(users)
+      .set({
+        guardianConfirmTokenHash: hashToken(newToken),
+        guardianConfirmTokenExpiresAt: new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS),
+        guardianExpiredEmailSentAt: null,
+      })
+      .where(eq(users.id, user.id));
+
+    try {
+      await sendGuardianConfirmationEmail(
+        user.guardianEmail,
+        user.name,
+        newToken,
+      );
+    } catch (err) {
+      logger.error({ err }, "Failed to send guardian confirmation email (by-email recovery)");
+    }
+
+    res.json(generic);
   }),
 );
 

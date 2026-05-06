@@ -8127,6 +8127,24 @@ export const AuthGuardianResendResponse = zod.object({
 });
 
 /**
+ * Parent-facing recovery for an expired, used, or otherwise dead
+guardian-confirmation link. Looks up the under-13 athlete by the
+guardian email on file and, if found, mints a fresh confirmation
+token and re-sends the email. Always responds with the same
+generic 200 to avoid leaking which guardian emails exist.
+
+ * @summary Parent-driven recovery — resend a guardian-confirmation email
+ */
+export const AuthGuardianResendByEmailBody = zod.object({
+  guardianEmail: zod.string().email(),
+});
+
+export const AuthGuardianResendByEmailResponse = zod.object({
+  ok: zod.boolean(),
+  message: zod.string(),
+});
+
+/**
  * Returns every API key (active and revoked) owned by the
 authenticated user. The plaintext token is **never** returned —
 only the short `prefix` is surfaced so the dev portal can render

@@ -117,6 +117,8 @@ import type {
   AuthGuardianConfirmBody,
   AuthGuardianResend200,
   AuthGuardianResendBody,
+  AuthGuardianResendByEmail200,
+  AuthGuardianResendByEmailBody,
   AuthLoginBody,
   AuthLogoutBody,
   AuthPasswordResetComplete200,
@@ -19205,6 +19207,104 @@ export const useAuthGuardianResend = <
   TContext
 > => {
   return useMutation(getAuthGuardianResendMutationOptions(options));
+};
+
+/**
+ * Parent-facing recovery for an expired, used, or otherwise dead
+guardian-confirmation link. Looks up the under-13 athlete by the
+guardian email on file and, if found, mints a fresh confirmation
+token and re-sends the email. Always responds with the same
+generic 200 to avoid leaking which guardian emails exist.
+
+ * @summary Parent-driven recovery — resend a guardian-confirmation email
+ */
+export const getAuthGuardianResendByEmailUrl = () => {
+  return `/api/v1/auth/guardian-resend-by-email`;
+};
+
+export const authGuardianResendByEmail = async (
+  authGuardianResendByEmailBody: AuthGuardianResendByEmailBody,
+  options?: RequestInit,
+): Promise<AuthGuardianResendByEmail200> => {
+  return customFetch<AuthGuardianResendByEmail200>(
+    getAuthGuardianResendByEmailUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(authGuardianResendByEmailBody),
+    },
+  );
+};
+
+export const getAuthGuardianResendByEmailMutationOptions = <
+  TError = ErrorType<BadRequestResponse | TooManyRequestsResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authGuardianResendByEmail>>,
+    TError,
+    { data: BodyType<AuthGuardianResendByEmailBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof authGuardianResendByEmail>>,
+  TError,
+  { data: BodyType<AuthGuardianResendByEmailBody> },
+  TContext
+> => {
+  const mutationKey = ["authGuardianResendByEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof authGuardianResendByEmail>>,
+    { data: BodyType<AuthGuardianResendByEmailBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return authGuardianResendByEmail(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AuthGuardianResendByEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authGuardianResendByEmail>>
+>;
+export type AuthGuardianResendByEmailMutationBody =
+  BodyType<AuthGuardianResendByEmailBody>;
+export type AuthGuardianResendByEmailMutationError = ErrorType<
+  BadRequestResponse | TooManyRequestsResponse
+>;
+
+/**
+ * @summary Parent-driven recovery — resend a guardian-confirmation email
+ */
+export const useAuthGuardianResendByEmail = <
+  TError = ErrorType<BadRequestResponse | TooManyRequestsResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authGuardianResendByEmail>>,
+    TError,
+    { data: BodyType<AuthGuardianResendByEmailBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof authGuardianResendByEmail>>,
+  TError,
+  { data: BodyType<AuthGuardianResendByEmailBody> },
+  TContext
+> => {
+  return useMutation(getAuthGuardianResendByEmailMutationOptions(options));
 };
 
 /**

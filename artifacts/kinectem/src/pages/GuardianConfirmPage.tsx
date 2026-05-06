@@ -154,7 +154,113 @@ export default function GuardianConfirmPage() {
             </div>
           )}
         </div>
+
+        {state.kind === "error" && (
+          <RecoveryPanel initialEmail={guardianEmail} />
+        )}
       </div>
+    </div>
+  );
+}
+
+type RecoveryState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "sent" }
+  | { kind: "error"; message: string };
+
+function RecoveryPanel({ initialEmail }: { initialEmail: string }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [state, setState] = useState<RecoveryState>({ kind: "idle" });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setState({ kind: "submitting" });
+    try {
+      await customFetch("/api/v1/auth/guardian-resend-by-email", {
+        method: "POST",
+        body: JSON.stringify({
+          guardianEmail: email.trim().toLowerCase(),
+        }),
+      });
+      setState({ kind: "sent" });
+    } catch (err) {
+      const e = err as { message?: string; body?: { error?: string } };
+      setState({
+        kind: "error",
+        message:
+          e?.body?.error ??
+          e?.message ??
+          "Could not send a fresh link. Please try again in a moment.",
+      });
+    }
+  };
+
+  return (
+    <div
+      className="rounded-2xl bg-white shadow-xl ring-1 ring-slate-200 p-6 space-y-4"
+      data-testid="block-guardian-recovery"
+    >
+      {state.kind === "sent" ? (
+        <div className="text-center space-y-3">
+          <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+          <h2 className="font-black tracking-tight text-lg">Check your email</h2>
+          <p className="text-sm text-slate-500" data-testid="text-guardian-recovery-sent">
+            If that email is on file for an athlete waiting on guardian
+            confirmation, a fresh link is on its way. It can take a minute
+            or two to arrive.
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-3">
+          <h2 className="font-black tracking-tight text-lg">
+            Need a new link?
+          </h2>
+          <p className="text-sm text-slate-500">
+            This link no longer works. Enter the email address the athlete
+            listed for you and we'll send a fresh confirmation link.
+          </p>
+          {state.kind === "error" && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{state.message}</span>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="recovery-email"
+              className="text-xs font-semibold uppercase tracking-wide text-slate-600"
+            >
+              Your email
+            </Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                id="recovery-email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(ev) => setEmail(ev.target.value)}
+                placeholder="parent@email.com"
+                className="rounded-xl h-11 pl-9"
+                data-testid="input-guardian-recovery-email"
+              />
+            </div>
+          </div>
+          <Button
+            type="submit"
+            variant="brandBlock"
+            disabled={state.kind === "submitting"}
+            data-testid="btn-guardian-recovery"
+          >
+            {state.kind === "submitting" && (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            )}
+            Send me a fresh link
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
