@@ -74,6 +74,7 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 - **Avatar Rendering**: Always use `<UserAvatar>` or `<TeamAvatar>` components; do not compose Radix avatars directly to avoid loading state issues.
 - **Admin takedown queue**: Pending guardian takedowns surface at `/admin/moderation` → Takedowns tab and via `GET /admin/takedowns?status=`. Approve/decline runs in a single `db.transaction` with conditional `UPDATE ... WHERE status='pending' RETURNING`; concurrent approve+decline collapses to one winner / one audit row. Decisions are written to `consent_audit_log` (`guardian_takedown_approved|declined`), not `admin_activity_log`.
 - **COPPA notification kinds**: Guardian-side bell uses `child_pending_follow|dm|comment|tag|takedown` linking to `/family?childId=<id>&tab=pending`. Admin-side bell uses `admin_takedown_filed` linking to `/admin/moderation`. The takedown notification is emitted directly in `guardians-coppa.ts` (coppa.ts is locked).
+- **Guardian-confirm tokens hashed at rest**: `users.guardian_confirm_token_hash` stores SHA-256 hex of the raw token; the raw token only ever leaves the server in the parent's email. Use `hashToken()` from `src/lib/passwords.ts` when persisting and when looking up a submitted token. Migration `2026-05-06-task-32-hash-guardian-tokens` enables `pgcrypto` for the one-time backfill.
 
 ## Pointers
 

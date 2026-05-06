@@ -170,7 +170,7 @@ const logoutLimiter = rateLimit({
 // `true` and writes the response when blocked.
 function blockOnAccountStatus(
   res: import("express").Response,
-  user: { accountStatus?: string | null; isMinor?: boolean | null; guardianConfirmTokenExpiresAt?: Date | null; guardianEmail?: string | null; guardianConfirmedAt?: Date | null },
+  user: { accountStatus?: string | null; isMinor?: boolean | null; guardianConfirmTokenExpiresAt?: Date | null; guardianConfirmTokenHash?: string | null; guardianEmail?: string | null; guardianConfirmedAt?: Date | null },
 ): boolean {
   if (user.accountStatus === "disabled") {
     apiError(
@@ -182,7 +182,11 @@ function blockOnAccountStatus(
     return true;
   }
   if (user.accountStatus === "pending_guardian" || (user.guardianEmail && !user.guardianConfirmedAt)) {
+    // Task #32 — treat a missing hash as unusable (functionally expired):
+    // there is no valid token a guardian could submit, so the parent must
+    // request a fresh confirmation link.
     const expired =
+      !user.guardianConfirmTokenHash ||
       !user.guardianConfirmTokenExpiresAt ||
       user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
     apiError(
@@ -223,6 +227,7 @@ router.post(
     if (blockOnAccountStatus(res, user)) return;
     if (user.guardianEmail && !user.guardianConfirmedAt) {
       const expired =
+        !user.guardianConfirmTokenHash ||
         !user.guardianConfirmTokenExpiresAt ||
         user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
       apiError(
