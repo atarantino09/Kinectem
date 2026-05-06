@@ -1,6 +1,7 @@
 import { Router } from "express";
 import adminRouter from "./admin";
 import authRouter from "./auth";
+import consentRouter from "./consent";
 import currentUserRouter from "./current-user";
 import usersRouter from "./users";
 import organizationsRouter from "./organizations";
@@ -30,6 +31,7 @@ router.use("/admin", adminRouter);
 // correctness because the original spec.ts had no overlapping paths
 // across sections; we preserve that by mounting every domain at "/".
 router.use(authRouter);
+router.use(consentRouter);
 router.use(currentUserRouter);
 router.use(usersRouter);
 router.use(organizationsRouter);

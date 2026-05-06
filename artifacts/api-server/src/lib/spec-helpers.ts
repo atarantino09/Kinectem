@@ -252,6 +252,11 @@ export function toPrivateUser(
     email: u.email ?? "",
     dateOfBirth: u.dateOfBirth ? u.dateOfBirth.toISOString().slice(0, 10) : null,
     role: u.role,
+    // Task #359 — surface so the web client can hide UI for blocked
+    // actions the server also enforces. Falsy on legacy rows that
+    // haven't been touched since the migration backfill.
+    isMinor: !!u.isMinor,
+    accountStatus: u.accountStatus ?? "active",
     parentId: u.parentId ?? null,
   };
 }

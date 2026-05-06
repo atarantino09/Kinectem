@@ -29,6 +29,7 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { filterOutMinors } from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -71,11 +72,13 @@ async function listOrgFollowers(req: Request, res: Response) {
       sql`(${organizationFollowers.createdAt}, ${organizationFollowers.userId}) < (${cursor.createdAt.toISOString()}, ${cursor.id})`,
     );
   }
-  const rows = await db
+  const rawRows = await db
     .select({
       id: users.id,
       name: users.name,
       avatarUrl: users.avatarUrl,
+      isMinor: users.isMinor,
+      parentId: users.parentId,
       followedAt: organizationFollowers.createdAt,
     })
     .from(organizationFollowers)
@@ -83,6 +86,9 @@ async function listOrgFollowers(req: Request, res: Response) {
     .where(and(...conds))
     .orderBy(desc(organizationFollowers.createdAt), desc(organizationFollowers.userId))
     .limit(limit + 1);
+  // Hide minors from public follower lists (the viewer-aware filter
+  // still surfaces a minor to themself or their linked guardian).
+  const rows = filterOutMinors(rawRows, req.sessionUser?.id ?? null);
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const nextCursor =
@@ -113,11 +119,13 @@ router.get(
         sql`(${teamFollowers.createdAt}, ${teamFollowers.userId}) < (${cursor.createdAt.toISOString()}, ${cursor.id})`,
       );
     }
-    const rows = await db
+    const rawRows = await db
       .select({
         id: users.id,
         name: users.name,
         avatarUrl: users.avatarUrl,
+        isMinor: users.isMinor,
+        parentId: users.parentId,
         followedAt: teamFollowers.createdAt,
       })
       .from(teamFollowers)
@@ -125,6 +133,7 @@ router.get(
       .where(and(...conds))
       .orderBy(desc(teamFollowers.createdAt), desc(teamFollowers.userId))
       .limit(limit + 1);
+    const rows = filterOutMinors(rawRows, req.sessionUser?.id ?? null);
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor =
@@ -157,11 +166,12 @@ router.get(
         sql`(${userFollowers.createdAt}, ${userFollowers.followerUserId}) < (${cursor.createdAt.toISOString()}, ${cursor.id})`,
       );
     }
-    const rows = await db
+    const rowsRaw = await db
       .select({
         id: users.id,
         name: users.name,
         avatarUrl: users.avatarUrl,
+        isMinor: users.isMinor,
         followedAt: userFollowers.createdAt,
       })
       .from(userFollowers)
@@ -169,6 +179,10 @@ router.get(
       .where(and(...conds))
       .orderBy(desc(userFollowers.createdAt), desc(userFollowers.followerUserId))
       .limit(limit + 1);
+    // Task #359 — minor accounts must not surface in stranger-visible
+    // follower lists. Filter post-query so the cursor pagination plan
+    // is unchanged; the page may now be slightly shorter than `limit`.
+    const rows = filterOutMinors(rowsRaw, req.sessionUser?.id ?? null);
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor =
@@ -197,17 +211,22 @@ router.get(
     if (!userId) return apiError(res, 401, "Not authenticated");
     // Combine followed users + followed organizations, sort by createdAt desc.
     const userConds = [eq(userFollowers.followerUserId, userId)];
-    const userRows = await db
+    const userRowsRaw = await db
       .select({
         id: users.id,
         name: users.name,
         avatarUrl: users.avatarUrl,
+        isMinor: users.isMinor,
+        parentId: users.parentId,
         followedAt: userFollowers.createdAt,
       })
       .from(userFollowers)
       .innerJoin(users, eq(users.id, userFollowers.followingUserId))
       .where(and(...userConds))
       .orderBy(desc(userFollowers.createdAt));
+    // Task #359 — drop minor rows from the followed-user list; viewer
+    // is allowed to see themselves and their own children through it.
+    const userRows = filterOutMinors(userRowsRaw, req.sessionUser?.id ?? null);
     const orgConds = [eq(organizationFollowers.userId, req.params.userId)];
     const orgRows = await db
       .select({

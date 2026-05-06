@@ -58,6 +58,7 @@ import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { normalizeWebsite } from "../lib/normalize-website";
+import { blockMinorAction } from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -1054,6 +1055,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    // Task #359 — minors cannot create public follow edges to orgs.
+    if (blockMinorAction(res, me, "follow_organization")) return;
     // Explicit follow clears any prior opt-out so future auto-follows work.
     await db
       .delete(organizationFollowOptouts)
@@ -1104,12 +1107,24 @@ router.post(
     if (me.id === req.params.userId) {
       return apiError(res, 400, "Cannot follow yourself");
     }
+    // Task #359 — minors cannot follow, and minors are not followable
+    // by strangers. The minor's linked guardian is allowed through, since
+    // follow + family dashboard are how parents oversee the account.
+    if (blockMinorAction(res, me, "follow_user")) return;
     const [target] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, isMinor: users.isMinor, parentId: users.parentId })
       .from(users)
       .where(eq(users.id, req.params.userId))
       .limit(1);
     if (!target) return notFound(res);
+    if (target.isMinor && target.parentId !== me.id) {
+      return apiError(
+        res,
+        403,
+        "This account isn't available for following.",
+        { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
+      );
+    }
     const inserted = await db
       .insert(userFollowers)
       .values({ followingUserId: req.params.userId, followerUserId: me.id })
@@ -1159,6 +1174,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    // Task #359 — minors cannot create public team-follow edges.
+    if (blockMinorAction(res, me, "follow_team")) return;
     const [target] = await db
       .select({ id: teams.id })
       .from(teams)

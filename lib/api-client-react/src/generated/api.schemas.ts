@@ -191,12 +191,38 @@ export const PrivateUserResponseRole = {
   parent: "parent",
 } as const;
 
+/**
+ * Task #359 — gates sign-in. `pending_guardian` means
+COPPA verifiable parental consent has not been finalized;
+`disabled` means a guardian has revoked consent.
+
+ */
+export type PrivateUserResponseAccountStatus =
+  (typeof PrivateUserResponseAccountStatus)[keyof typeof PrivateUserResponseAccountStatus];
+
+export const PrivateUserResponseAccountStatus = {
+  active: "active",
+  pending_guardian: "pending_guardian",
+  disabled: "disabled",
+} as const;
+
 export type PrivateUserResponse = PublicUserResponse & {
   email: string;
   /** @nullable */
   dateOfBirth?: string | null;
   /** The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page). */
   role: PrivateUserResponseRole;
+  /** Task #359 — true when the account belongs to a user
+under 13. The client uses this to hide UI surfaces (DM,
+comments, follow, profile PII fields) the server also
+blocks. Snapshot at signup; never recomputed.
+ */
+  isMinor?: boolean;
+  /** Task #359 — gates sign-in. `pending_guardian` means
+COPPA verifiable parental consent has not been finalized;
+`disabled` means a guardian has revoked consent.
+ */
+  accountStatus?: PrivateUserResponseAccountStatus;
   /**
    * The user's linked parent/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.
 
@@ -4117,6 +4143,55 @@ export type AuthPasswordResetCompleteBody = {
 
 export type AuthPasswordResetComplete200 = {
   ok?: boolean;
+};
+
+export type AuthAgeCheckBody = {
+  /** ISO 8601 date (YYYY-MM-DD). */
+  dateOfBirth: string;
+};
+
+export type AuthAgeCheck200 = {
+  requiresParentalConsent: boolean;
+};
+
+export type GetParentalConsentNotice200State =
+  (typeof GetParentalConsentNotice200State)[keyof typeof GetParentalConsentNotice200State];
+
+export const GetParentalConsentNotice200State = {
+  pending_notice: "pending_notice",
+  pending_followup: "pending_followup",
+  finalized: "finalized",
+  revoked: "revoked",
+  expired: "expired",
+} as const;
+
+export type GetParentalConsentNotice200 = {
+  athleteName: string;
+  guardianEmail: string;
+  noticeVersion: string;
+  noticeText: string;
+  state: GetParentalConsentNotice200State;
+};
+
+export type SubmitParentalConsentBody = {
+  agreed: boolean;
+  noticeVersion: string;
+};
+
+export type SubmitParentalConsent200 = {
+  ok: boolean;
+  guardianEmail: string;
+  athleteName: string;
+};
+
+export type FinalizeParentalConsent200 = {
+  ok: boolean;
+  athleteName: string;
+};
+
+export type RevokeParentalConsent200 = {
+  ok: boolean;
+  athleteName: string;
 };
 
 export type AuthGuardianConfirmBody = {

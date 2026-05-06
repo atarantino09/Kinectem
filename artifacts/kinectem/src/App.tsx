@@ -22,6 +22,11 @@ import InviteAcceptPage from "@/pages/InviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import GuardianConfirmPage from "@/pages/GuardianConfirmPage";
+import GuardianConsentPage from "@/pages/GuardianConsentPage";
+import GuardianConsentFinalizePage from "@/pages/GuardianConsentFinalizePage";
+import GuardianRevokePage from "@/pages/GuardianRevokePage";
+import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
+import CoppaNoticePage from "@/pages/CoppaNoticePage";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminModeration from "@/pages/admin/AdminModeration";
@@ -43,6 +48,17 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/reset-password/:token" component={ResetPasswordPage} />
       <Route path="/guardian-confirm/:token" component={GuardianConfirmPage} />
+      {/* Task #359 — COPPA email-plus parental-consent flow. The order
+          here matters: wouter matches the more-specific /finalize route
+          before falling through to the bare consent route. */}
+      <Route
+        path="/guardian-consent/:token/finalize"
+        component={GuardianConsentFinalizePage}
+      />
+      <Route path="/guardian-consent/:token" component={GuardianConsentPage} />
+      <Route path="/guardian-revoke/:token" component={GuardianRevokePage} />
+      <Route path="/privacy-policy" component={PrivacyPolicyPage} />
+      <Route path="/coppa-notice" component={CoppaNoticePage} />
       <Route path="/invites/:token" component={InviteAcceptPage} />
       <Route path="/posts/new" component={NewPostPage} />
 

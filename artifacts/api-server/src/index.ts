@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
 import { runStartupMigrations } from "./lib/migrations";
+import { startConsentScheduler } from "./lib/consent-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -30,6 +31,15 @@ async function start() {
     await seedIfEmpty();
   } catch (err) {
     logger.error({ err }, "Failed to seed database");
+  }
+
+  // Task #359 — durable email-plus follow-up scheduler. Picks up any
+  // pending_followup rows whose in-process timer was lost across a
+  // restart and delivers the second email.
+  try {
+    startConsentScheduler();
+  } catch (err) {
+    logger.error({ err }, "Failed to start consent scheduler (non-fatal)");
   }
 
   app.listen(port, (err) => {

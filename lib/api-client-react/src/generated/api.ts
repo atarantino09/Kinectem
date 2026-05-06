@@ -111,6 +111,8 @@ import type {
   AssetResponse,
   AssetUploadRequest,
   AssetUploadResponse,
+  AuthAgeCheck200,
+  AuthAgeCheckBody,
   AuthGuardianConfirm200,
   AuthGuardianConfirmBody,
   AuthGuardianResend200,
@@ -157,6 +159,7 @@ import type {
   EmailPreferenceResponse,
   ErrorResponse,
   FeedResponse,
+  FinalizeParentalConsent200,
   FollowOrgResponse,
   FollowSuggestionsResponse,
   FollowUserResponse,
@@ -167,6 +170,7 @@ import type {
   GetInviteByToken200,
   GetMyReportForContent200,
   GetMyReportForContentParams,
+  GetParentalConsentNotice200,
   GetWhoami200,
   GuardianLinkResponse,
   HealthCheck200,
@@ -268,6 +272,7 @@ import type {
   ResetAdminUserPassword200,
   ResolveAdminReport200,
   ResolveAdminReportBody,
+  RevokeParentalConsent200,
   SearchConversationContacts200,
   SearchConversationContactsParams,
   SearchUsers200,
@@ -277,6 +282,8 @@ import type {
   SharePreferenceResponse,
   StartAdminMasquerade200,
   StopAdminMasquerade200,
+  SubmitParentalConsent200,
+  SubmitParentalConsentBody,
   TagResponse,
   TeamFollowResponse,
   TeamMemberResponse,
@@ -18545,7 +18552,487 @@ export const useAuthPasswordResetComplete = <
 };
 
 /**
- * @summary Guardian confirms an under-13 athlete account
+ * Task #359 — COPPA Phase 1 neutral age gate. The client posts the
+visitor's date of birth ONCE before the rest of the signup form
+is shown. The server returns whether the visitor is under 13 and
+sets a short-lived signed cookie carrying ONLY that boolean — the
+date of birth itself is never stored client-side. A failed gate
+does not block signup outright (children can still sign up via
+the verifiable parental consent flow), but a forged cookie cannot
+bypass the under-13 branch because /auth/signup verifies the
+cookie HMAC signature.
+
+ * @summary Neutral age gate before signup
+ */
+export const getAuthAgeCheckUrl = () => {
+  return `/api/v1/auth/age-check`;
+};
+
+export const authAgeCheck = async (
+  authAgeCheckBody: AuthAgeCheckBody,
+  options?: RequestInit,
+): Promise<AuthAgeCheck200> => {
+  return customFetch<AuthAgeCheck200>(getAuthAgeCheckUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(authAgeCheckBody),
+  });
+};
+
+export const getAuthAgeCheckMutationOptions = <
+  TError = ErrorType<BadRequestResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authAgeCheck>>,
+    TError,
+    { data: BodyType<AuthAgeCheckBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof authAgeCheck>>,
+  TError,
+  { data: BodyType<AuthAgeCheckBody> },
+  TContext
+> => {
+  const mutationKey = ["authAgeCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof authAgeCheck>>,
+    { data: BodyType<AuthAgeCheckBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return authAgeCheck(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AuthAgeCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authAgeCheck>>
+>;
+export type AuthAgeCheckMutationBody = BodyType<AuthAgeCheckBody>;
+export type AuthAgeCheckMutationError = ErrorType<BadRequestResponse>;
+
+/**
+ * @summary Neutral age gate before signup
+ */
+export const useAuthAgeCheck = <
+  TError = ErrorType<BadRequestResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authAgeCheck>>,
+    TError,
+    { data: BodyType<AuthAgeCheckBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof authAgeCheck>>,
+  TError,
+  { data: BodyType<AuthAgeCheckBody> },
+  TContext
+> => {
+  return useMutation(getAuthAgeCheckMutationOptions(options));
+};
+
+/**
+ * Task #359 — Step 1 of the COPPA email-plus flow. The guardian
+opens the link in the first email; the client calls this
+endpoint to render the verbatim notice + checkbox. Returns 404
+if the token is invalid or already consumed, 410 if expired.
+
+ * @summary Fetch the parental-consent notice for a token
+ */
+export const getGetParentalConsentNoticeUrl = (token: string) => {
+  return `/api/v1/auth/guardian-consent/${token}`;
+};
+
+export const getParentalConsentNotice = async (
+  token: string,
+  options?: RequestInit,
+): Promise<GetParentalConsentNotice200> => {
+  return customFetch<GetParentalConsentNotice200>(
+    getGetParentalConsentNoticeUrl(token),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetParentalConsentNoticeQueryKey = (token: string) => {
+  return [`/api/v1/auth/guardian-consent/${token}`] as const;
+};
+
+export const getGetParentalConsentNoticeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getParentalConsentNotice>>,
+  TError = ErrorType<NotFoundResponse | void>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getParentalConsentNotice>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetParentalConsentNoticeQueryKey(token);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getParentalConsentNotice>>
+  > = ({ signal }) =>
+    getParentalConsentNotice(token, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!token,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getParentalConsentNotice>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetParentalConsentNoticeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getParentalConsentNotice>>
+>;
+export type GetParentalConsentNoticeQueryError =
+  ErrorType<NotFoundResponse | void>;
+
+/**
+ * @summary Fetch the parental-consent notice for a token
+ */
+
+export function useGetParentalConsentNotice<
+  TData = Awaited<ReturnType<typeof getParentalConsentNotice>>,
+  TError = ErrorType<NotFoundResponse | void>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getParentalConsentNotice>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetParentalConsentNoticeQueryOptions(token, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #359 — Step 1 of the COPPA email-plus flow. The guardian
+ticked the box on the notice page; we mark the consent row as
+`pending_followup` and immediately email the second confirmation
+link to the same address. The athlete account remains disabled
+until the followup link is opened.
+
+ * @summary Guardian grants first-step consent (notice + checkbox)
+ */
+export const getSubmitParentalConsentUrl = (token: string) => {
+  return `/api/v1/auth/guardian-consent/${token}`;
+};
+
+export const submitParentalConsent = async (
+  token: string,
+  submitParentalConsentBody: SubmitParentalConsentBody,
+  options?: RequestInit,
+): Promise<SubmitParentalConsent200> => {
+  return customFetch<SubmitParentalConsent200>(
+    getSubmitParentalConsentUrl(token),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(submitParentalConsentBody),
+    },
+  );
+};
+
+export const getSubmitParentalConsentMutationOptions = <
+  TError = ErrorType<BadRequestResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitParentalConsent>>,
+    TError,
+    { token: string; data: BodyType<SubmitParentalConsentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitParentalConsent>>,
+  TError,
+  { token: string; data: BodyType<SubmitParentalConsentBody> },
+  TContext
+> => {
+  const mutationKey = ["submitParentalConsent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitParentalConsent>>,
+    { token: string; data: BodyType<SubmitParentalConsentBody> }
+  > = (props) => {
+    const { token, data } = props ?? {};
+
+    return submitParentalConsent(token, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitParentalConsentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitParentalConsent>>
+>;
+export type SubmitParentalConsentMutationBody =
+  BodyType<SubmitParentalConsentBody>;
+export type SubmitParentalConsentMutationError = ErrorType<
+  BadRequestResponse | NotFoundResponse | void
+>;
+
+/**
+ * @summary Guardian grants first-step consent (notice + checkbox)
+ */
+export const useSubmitParentalConsent = <
+  TError = ErrorType<BadRequestResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitParentalConsent>>,
+    TError,
+    { token: string; data: BodyType<SubmitParentalConsentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitParentalConsent>>,
+  TError,
+  { token: string; data: BodyType<SubmitParentalConsentBody> },
+  TContext
+> => {
+  return useMutation(getSubmitParentalConsentMutationOptions(options));
+};
+
+/**
+ * Task #359 — Step 2 of the COPPA email-plus flow. The guardian
+opens the link in the second email; we flip the consent row to
+`finalized` and the child's `account_status` to `active`. From
+this point the athlete may sign in.
+
+ * @summary Guardian completes the email-plus second click
+ */
+export const getFinalizeParentalConsentUrl = (token: string) => {
+  return `/api/v1/auth/guardian-consent/${token}/finalize`;
+};
+
+export const finalizeParentalConsent = async (
+  token: string,
+  options?: RequestInit,
+): Promise<FinalizeParentalConsent200> => {
+  return customFetch<FinalizeParentalConsent200>(
+    getFinalizeParentalConsentUrl(token),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getFinalizeParentalConsentMutationOptions = <
+  TError = ErrorType<NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof finalizeParentalConsent>>,
+    TError,
+    { token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof finalizeParentalConsent>>,
+  TError,
+  { token: string },
+  TContext
+> => {
+  const mutationKey = ["finalizeParentalConsent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof finalizeParentalConsent>>,
+    { token: string }
+  > = (props) => {
+    const { token } = props ?? {};
+
+    return finalizeParentalConsent(token, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type FinalizeParentalConsentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof finalizeParentalConsent>>
+>;
+
+export type FinalizeParentalConsentMutationError =
+  ErrorType<NotFoundResponse | void>;
+
+/**
+ * @summary Guardian completes the email-plus second click
+ */
+export const useFinalizeParentalConsent = <
+  TError = ErrorType<NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof finalizeParentalConsent>>,
+    TError,
+    { token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof finalizeParentalConsent>>,
+  TError,
+  { token: string },
+  TContext
+> => {
+  return useMutation(getFinalizeParentalConsentMutationOptions(options));
+};
+
+/**
+ * Task #359 — One-click revoke. Disables the child's account and
+appends a revocation entry to the audit log. Idempotent.
+
+ * @summary Guardian revokes consent for an under-13 account
+ */
+export const getRevokeParentalConsentUrl = (token: string) => {
+  return `/api/v1/auth/guardian-revoke/${token}`;
+};
+
+export const revokeParentalConsent = async (
+  token: string,
+  options?: RequestInit,
+): Promise<RevokeParentalConsent200> => {
+  return customFetch<RevokeParentalConsent200>(
+    getRevokeParentalConsentUrl(token),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRevokeParentalConsentMutationOptions = <
+  TError = ErrorType<NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeParentalConsent>>,
+    TError,
+    { token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeParentalConsent>>,
+  TError,
+  { token: string },
+  TContext
+> => {
+  const mutationKey = ["revokeParentalConsent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeParentalConsent>>,
+    { token: string }
+  > = (props) => {
+    const { token } = props ?? {};
+
+    return revokeParentalConsent(token, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevokeParentalConsentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeParentalConsent>>
+>;
+
+export type RevokeParentalConsentMutationError = ErrorType<NotFoundResponse>;
+
+/**
+ * @summary Guardian revokes consent for an under-13 account
+ */
+export const useRevokeParentalConsent = <
+  TError = ErrorType<NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeParentalConsent>>,
+    TError,
+    { token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revokeParentalConsent>>,
+  TError,
+  { token: string },
+  TContext
+> => {
+  return useMutation(getRevokeParentalConsentMutationOptions(options));
+};
+
+/**
+ * Pre-task-359 single-step guardian confirmation. Retained for
+accounts created before the COPPA email-plus flow shipped; new
+signups walk through `/auth/guardian-consent/{token}` instead.
+
+ * @summary (Legacy) Guardian confirms an under-13 athlete account
  */
 export const getAuthGuardianConfirmUrl = () => {
   return `/api/v1/auth/guardian-confirm`;
@@ -18610,7 +19097,7 @@ export type AuthGuardianConfirmMutationError = ErrorType<
 >;
 
 /**
- * @summary Guardian confirms an under-13 athlete account
+ * @summary (Legacy) Guardian confirms an under-13 athlete account
  */
 export const useAuthGuardianConfirm = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,

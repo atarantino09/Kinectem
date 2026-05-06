@@ -71,6 +71,7 @@ import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
+import { blockMinorAction, logConsentEvent } from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -881,8 +882,43 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    // Task #359 — minors cannot post comments anywhere.
+    if (blockMinorAction(res, me, "comment_post")) {
+      void logConsentEvent({
+        event: "minor_blocked_action",
+        childUserId: me.id,
+        details: "comment_post",
+      });
+      return;
+    }
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    // Task #359 — public commenting on a minor-owned post is also
+    // refused. The minor's linked guardian is the only outside voice
+    // allowed, so they can still moderate / converse on their child's
+    // content. The minor themselves was already filtered above.
+    const ownerId = await loadPostOwnerId(parsed);
+    if (ownerId && ownerId !== me.id) {
+      const [owner] = await db
+        .select({ isMinor: users.isMinor, parentId: users.parentId })
+        .from(users)
+        .where(eq(users.id, ownerId))
+        .limit(1);
+      if (owner?.isMinor && owner.parentId !== me.id) {
+        void logConsentEvent({
+          event: "minor_blocked_action",
+          childUserId: ownerId,
+          actorEmail: me.email ?? null,
+          details: "comment_on_minor_post",
+        });
+        return apiError(
+          res,
+          403,
+          "Comments are off for this account.",
+          { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
+        );
+      }
+    }
     const body = String(req.body?.body ?? "").trim();
     if (!body) return apiError(res, 400, "Comment body is required");
     const [c] = await db

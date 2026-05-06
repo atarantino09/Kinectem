@@ -5069,10 +5069,238 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/auth/age-check:
+    post:
+      operationId: authAgeCheck
+      summary: Neutral age gate before signup
+      description: |
+        Task #359 — COPPA Phase 1 neutral age gate. The client posts the
+        visitor's date of birth ONCE before the rest of the signup form
+        is shown. The server returns whether the visitor is under 13 and
+        sets a short-lived signed cookie carrying ONLY that boolean — the
+        date of birth itself is never stored client-side. A failed gate
+        does not block signup outright (children can still sign up via
+        the verifiable parental consent flow), but a forged cookie cannot
+        bypass the under-13 branch because /auth/signup verifies the
+        cookie HMAC signature.
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dateOfBirth
+              properties:
+                dateOfBirth:
+                  type: string
+                  format: date
+                  description: ISO 8601 date (YYYY-MM-DD).
+      responses:
+        "200":
+          description: Age gate decision recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - requiresParentalConsent
+                properties:
+                  requiresParentalConsent:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/v1/auth/guardian-consent/{token}:
+    get:
+      operationId: getParentalConsentNotice
+      summary: Fetch the parental-consent notice for a token
+      description: |
+        Task #359 — Step 1 of the COPPA email-plus flow. The guardian
+        opens the link in the first email; the client calls this
+        endpoint to render the verbatim notice + checkbox. Returns 404
+        if the token is invalid or already consumed, 410 if expired.
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notice payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - athleteName
+                  - guardianEmail
+                  - noticeVersion
+                  - noticeText
+                  - state
+                properties:
+                  athleteName:
+                    type: string
+                  guardianEmail:
+                    type: string
+                    format: email
+                  noticeVersion:
+                    type: string
+                  noticeText:
+                    type: string
+                  state:
+                    type: string
+                    enum:
+                      - pending_notice
+                      - pending_followup
+                      - finalized
+                      - revoked
+                      - expired
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: This consent link has expired.
+    post:
+      operationId: submitParentalConsent
+      summary: Guardian grants first-step consent (notice + checkbox)
+      description: |
+        Task #359 — Step 1 of the COPPA email-plus flow. The guardian
+        ticked the box on the notice page; we mark the consent row as
+        `pending_followup` and immediately email the second confirmation
+        link to the same address. The athlete account remains disabled
+        until the followup link is opened.
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - agreed
+                - noticeVersion
+              properties:
+                agreed:
+                  type: boolean
+                noticeVersion:
+                  type: string
+      responses:
+        "200":
+          description: Consent recorded. Followup email queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - guardianEmail
+                  - athleteName
+                properties:
+                  ok:
+                    type: boolean
+                  guardianEmail:
+                    type: string
+                    format: email
+                  athleteName:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: This consent link has expired.
+  /api/v1/auth/guardian-consent/{token}/finalize:
+    post:
+      operationId: finalizeParentalConsent
+      summary: Guardian completes the email-plus second click
+      description: |
+        Task #359 — Step 2 of the COPPA email-plus flow. The guardian
+        opens the link in the second email; we flip the consent row to
+        `finalized` and the child's `account_status` to `active`. From
+        this point the athlete may sign in.
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent finalized; account activated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - athleteName
+                properties:
+                  ok:
+                    type: boolean
+                  athleteName:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: This consent link has expired.
+  /api/v1/auth/guardian-revoke/{token}:
+    post:
+      operationId: revokeParentalConsent
+      summary: Guardian revokes consent for an under-13 account
+      description: |
+        Task #359 — One-click revoke. Disables the child's account and
+        appends a revocation entry to the audit log. Idempotent.
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent revoked; account disabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - athleteName
+                properties:
+                  ok:
+                    type: boolean
+                  athleteName:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/auth/guardian-confirm:
     post:
       operationId: authGuardianConfirm
-      summary: Guardian confirms an under-13 athlete account
+      summary: (Legacy) Guardian confirms an under-13 athlete account
+      description: |
+        Pre-task-359 single-step guardian confirmation. Retained for
+        accounts created before the COPPA email-plus flow shipped; new
+        signups walk through `/auth/guardian-consent/{token}` instead.
       tags:
         - Auth
       security: []
@@ -6322,6 +6550,23 @@ components:
                 - admin
                 - parent
               description: The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
+            isMinor:
+              type: boolean
+              description: |
+                Task #359 — true when the account belongs to a user
+                under 13. The client uses this to hide UI surfaces (DM,
+                comments, follow, profile PII fields) the server also
+                blocks. Snapshot at signup; never recomputed.
+            accountStatus:
+              type: string
+              enum:
+                - active
+                - pending_guardian
+                - disabled
+              description: |
+                Task #359 — gates sign-in. `pending_guardian` means
+                COPPA verifiable parental consent has not been finalized;
+                `disabled` means a guardian has revoked consent.
             parentId:
               type: string
               format: uuid

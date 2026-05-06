@@ -27,6 +27,35 @@ lists are `{ data, pagination: { nextCursor, hasMore, totalCount } }`,
 naming is camelCase, etc.). The typed React-Query client and Zod
 schemas are generated from the spec.
 
+## COPPA Phase 1 (task #359)
+
+Under-13 accounts go through a two-step "email plus" parental consent
+flow before they can sign in. Schema additions on `users`: `isMinor`,
+`accountStatus` (`active|disabled|pending_guardian|pending_revocation`),
+`consentFinalizedAt`, `consentRevokedAt`. New tables: `parentalConsents`
+(snapshot of notice version + text + IP + guardian email/userId + state)
+and `consentAuditLog` (append-only).
+
+Endpoints (under `/api/v1/auth`):
+`POST /age-check` (sets signed `kinectem_age_gate` cookie),
+`GET/POST /guardian-consent/{token}` (notice + first leg),
+`POST /guardian-consent/{token}/finalize` (second-email leg, activates
+account), `POST /guardian-revoke/{token}` (one-click revoke). Legacy
+`/auth/guardian-confirm` remains for the old in-app guardian flow.
+
+Server-side enforcement (`src/lib/coppa.ts`):
+`blockMinorAction`/`blockIfEitherMinor` (used by messages, comments,
+profile-PII writes) and `filterOutMinors` (used by `/search` and
+follower listings). Asset uploads by minors restricted to JPEG/PNG with
+EXIF/GPS/XMP/IPTC/ICC stripped via `src/lib/exif-strip.ts`. All blocks
+return `{ error, code: "MINOR_BLOCKED", minorBlocked: true }`.
+
+Frontend (`artifacts/kinectem`): age-gate runs as part of `SignUpForm`
+before POSTing `/auth/signup`. Pages: `/guardian-consent/:token`,
+`/guardian-consent/:token/finalize`, `/guardian-revoke/:token`,
+`/privacy-policy`, `/coppa-notice`. Keep `/coppa-notice` wording in
+sync with `CONSENT_NOTICE_TEXT` in `artifacts/api-server/src/lib/coppa.ts`.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

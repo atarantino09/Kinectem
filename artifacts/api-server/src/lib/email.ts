@@ -175,6 +175,88 @@ If you don't recognize this signup, you can ignore this email and the account wi
   });
 }
 
+// Task #359 — first email of the COPPA "email plus" verifiable parental
+// consent flow. The link points at the consent landing page that shows
+// the full COPPA notice and a checkbox the guardian must tick.
+export async function sendParentalConsentNoticeEmail(
+  to: string,
+  athleteName: string,
+  token: string,
+): Promise<void> {
+  const url = `${appBaseUrl()}/guardian-consent/${token}`;
+  await sendEmail({
+    to,
+    subject: `Action required: confirm consent for ${athleteName}'s Kinectem account`,
+    text: `${athleteName} listed you as their parent or guardian when signing up for Kinectem.
+
+Because they are under 13, federal law (COPPA) requires us to get your verifiable consent before we collect personal information from them.
+
+Please open this link to read the full notice and grant consent:
+${url}
+
+After you submit consent, we'll email you ONE more time at this address with a "confirm" link. The account stays disabled until you click that second link — that two-step "email plus" pattern is how we verify the consent really came from you.
+
+If you don't recognize this signup, ignore this email and the account will stay locked.`,
+    html: `<p><strong>${athleteName}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
+<p>Because they are under 13, federal law (COPPA) requires us to get your verifiable consent before we collect personal information from them.</p>
+<p>Please open this link to read the full notice and grant consent:</p>
+<p><a href="${url}">${url}</a></p>
+<p>After you submit consent, we'll email you ONE more time at this address with a &quot;confirm&quot; link. The account stays disabled until you click that second link — that two-step &quot;email plus&quot; pattern is how we verify the consent really came from you.</p>
+<p>If you don't recognize this signup, ignore this email and the account will stay locked.</p>`,
+  });
+}
+
+// Task #359 — second email of the email-plus flow. Sent shortly after
+// the guardian completes the notice + checkbox step.
+export async function sendParentalConsentFollowupEmail(
+  to: string,
+  athleteName: string,
+  token: string,
+): Promise<void> {
+  const url = `${appBaseUrl()}/guardian-consent/${token}/finalize`;
+  await sendEmail({
+    to,
+    subject: `Final step: finish enabling ${athleteName}'s Kinectem account`,
+    text: `Thanks — we received your consent for ${athleteName}'s Kinectem account.
+
+To finish (and to verify it really came from you), open this link:
+${url}
+
+The account will stay disabled until you click. The link is good for 7 days.
+
+If you didn't grant consent, do nothing — without this second click the account will not be activated.`,
+    html: `<p>Thanks — we received your consent for <strong>${athleteName}</strong>'s Kinectem account.</p>
+<p>To finish (and to verify it really came from you), open this link:</p>
+<p><a href="${url}">${url}</a></p>
+<p>The account will stay disabled until you click. The link is good for 7 days.</p>
+<p>If you didn't grant consent, do nothing — without this second click the account will not be activated.</p>`,
+  });
+}
+
+// Task #359 — sent at finalization so the guardian always has a one-
+// click revoke link they can keep in their inbox.
+export async function sendParentalConsentFinalizedEmail(
+  to: string,
+  athleteName: string,
+  revokeToken: string,
+): Promise<void> {
+  const revokeUrl = `${appBaseUrl()}/guardian-revoke/${revokeToken}`;
+  await sendEmail({
+    to,
+    subject: `${athleteName}'s Kinectem account is now active`,
+    text: `${athleteName}'s Kinectem account has been activated.
+
+You can revoke consent at any time, which will immediately disable the account and stop any further data collection. Keep this link handy for that:
+${revokeUrl}
+
+You can also manage the account from your Family page after signing in to Kinectem.`,
+    html: `<p><strong>${athleteName}</strong>'s Kinectem account has been activated.</p>
+<p>You can revoke consent at any time, which will immediately disable the account and stop any further data collection. Keep this link handy for that:</p>
+<p><a href="${revokeUrl}">${revokeUrl}</a></p>
+<p>You can also manage the account from your Family page after signing in to Kinectem.</p>`,
+  });
+}
+
 export async function sendGuardianExpiredEmail(
   to: string,
   athleteName: string,

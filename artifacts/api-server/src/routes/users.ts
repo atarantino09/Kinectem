@@ -71,6 +71,7 @@ import {
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import { normalizeWebsite } from "../lib/normalize-website";
+import { filterOutMinors, rejectMinorProfileFields } from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -110,6 +111,10 @@ router.get(
           .limit(40)
       : await db.select().from(users).where(isNull(users.deletedAt)).limit(40);
     if (roleFilter) rows = rows.filter((u) => u.role === roleFilter);
+    // Task #359 — minors are not discoverable through public listings.
+    // The viewer-aware filter still surfaces the minor to themselves and
+    // to their linked guardian.
+    rows = filterOutMinors(rows, req.sessionUser?.id ?? null);
     res.json({
       data: rows.slice(0, 20).map((u) => {
         const { firstName, lastName } = splitName(u.name);
@@ -137,6 +142,37 @@ router.get(
     if (u.deletedAt && req.realUser?.role !== "admin") return notFound(res);
     const me = req.sessionUser;
     const isOwnProfile = me?.id === u.id;
+
+    // Minor profiles aren't directly retrievable by the public — only
+    // self, linked guardian, platform admin, or an org admin sharing
+    // a team with the minor. Everyone else gets 404.
+    if (u.isMinor && !isOwnProfile) {
+      const isLinkedGuardian = !!me && u.parentId === me.id;
+      const isPlatformAdmin = req.realUser?.role === "admin";
+      let isSharedTeamAdmin = false;
+      if (!isLinkedGuardian && !isPlatformAdmin && me) {
+        const sharedAdmin = await db
+          .select({ id: organizationAdmins.organizationId })
+          .from(organizationAdmins)
+          .innerJoin(
+            teams,
+            eq(teams.organizationId, organizationAdmins.organizationId),
+          )
+          .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+          .where(
+            and(
+              eq(organizationAdmins.userId, me.id),
+              eq(rosterEntries.userId, u.id),
+              inArray(organizationAdmins.role, ["owner", "admin"]),
+            ),
+          )
+          .limit(1);
+        isSharedTeamAdmin = sharedAdmin.length > 0;
+      }
+      if (!isLinkedGuardian && !isPlatformAdmin && !isSharedTeamAdmin) {
+        return notFound(res);
+      }
+    }
 
     // Linked accounts (parent ↔ child) are sensitive on a youth-sports
     // product, but with different rules for the two halves:
@@ -174,7 +210,30 @@ router.get(
         if (sharedAdmin.length > 0) canSeeParents = true;
       }
     }
-    const canSeeChildren = !!me; // any logged-in viewer sees the family card
+    // Children are minors — only self, platform admin, or an org
+    // admin sharing a team with one of the children sees them.
+    let canSeeChildren = isOwnProfile;
+    if (!canSeeChildren && me) {
+      if (req.realUser?.role === "admin") {
+        canSeeChildren = true;
+      } else {
+        const sharedAdmin = await db
+          .select({ id: organizationAdmins.organizationId })
+          .from(organizationAdmins)
+          .innerJoin(teams, eq(teams.organizationId, organizationAdmins.organizationId))
+          .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+          .innerJoin(users, eq(users.id, rosterEntries.userId))
+          .where(
+            and(
+              eq(organizationAdmins.userId, me.id),
+              eq(users.parentId, u.id),
+              inArray(organizationAdmins.role, ["owner", "admin"]),
+            ),
+          )
+          .limit(1);
+        if (sharedAdmin.length > 0) canSeeChildren = true;
+      }
+    }
 
     let linkedAccounts: { parents: unknown[]; children: unknown[] } | undefined;
     if (canSeeParents || canSeeChildren) {
@@ -291,6 +350,17 @@ router.patch(
       !req.isMasquerading;
     if (existing.id !== me.id && !isAdmin && !isLinkedParent) {
       return apiError(res, 403, "Forbidden");
+    }
+    // Task #359 — when the target is a minor, the data-minimization rules
+    // apply even if the editor is the linked parent (FTC: parents can
+    // edit but operators must still keep collection minimal).
+    if (existing.isMinor) {
+      // Task #359 — single source of truth for which PII fields are
+      // forbidden on minor accounts. Adding "location" here used to
+      // be done inline in this route; importing the centralized
+      // helper means /users/:userId PATCH and the helper-driven paths
+      // (current-user PATCH, etc.) never drift apart.
+      if (rejectMinorProfileFields(res, req.body)) return;
     }
     const body = req.body ?? {};
     const updates: Partial<typeof users.$inferInsert> = {};

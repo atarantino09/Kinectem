@@ -187,6 +187,18 @@ export const GetUserByIdResponse = zod.union([
           .describe(
             "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
           ),
+        isMinor: zod
+          .boolean()
+          .optional()
+          .describe(
+            "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+          ),
+        accountStatus: zod
+          .enum(["active", "pending_guardian", "disabled"])
+          .optional()
+          .describe(
+            "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+          ),
         parentId: zod
           .string()
           .uuid()
@@ -411,6 +423,18 @@ export const UpdateUserResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+        ),
       parentId: zod
         .string()
         .uuid()
@@ -497,6 +521,18 @@ export const SetUserCoverPhotoResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+        ),
       parentId: zod
         .string()
         .uuid()
@@ -575,6 +611,18 @@ export const DeleteUserCoverPhotoResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
         ),
       parentId: zod
         .string()
@@ -662,6 +710,18 @@ export const SetUserAvatarResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+        ),
       parentId: zod
         .string()
         .uuid()
@@ -740,6 +800,18 @@ export const DeleteUserAvatarResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
         ),
       parentId: zod
         .string()
@@ -920,6 +992,18 @@ export const GetLoggedInUserResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
         ),
       parentId: zod
         .string()
@@ -7079,6 +7163,18 @@ export const UpdateAdminUserResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+        ),
       parentId: zod
         .string()
         .uuid()
@@ -7157,6 +7253,18 @@ export const SoftDeleteAdminUserResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+        ),
       parentId: zod
         .string()
         .uuid()
@@ -7234,6 +7342,18 @@ export const RestoreAdminUserResponse = zod
         .enum(["athlete", "coach", "admin", "parent"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
+        ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
         ),
       parentId: zod
         .string()
@@ -7603,6 +7723,18 @@ export const AuthLoginResponse = zod
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
+      isMinor: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+        ),
+      accountStatus: zod
+        .enum(["active", "pending_guardian", "disabled"])
+        .optional()
+        .describe(
+          "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+        ),
       parentId: zod
         .string()
         .uuid()
@@ -7769,6 +7901,18 @@ export const AuthTokenResponse = zod
               .describe(
                 "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
               ),
+            isMinor: zod
+              .boolean()
+              .optional()
+              .describe(
+                "Task #359 — true when the account belongs to a user\nunder 13. The client uses this to hide UI surfaces (DM,\ncomments, follow, profile PII fields) the server also\nblocks. Snapshot at signup; never recomputed.\n",
+              ),
+            accountStatus: zod
+              .enum(["active", "pending_guardian", "disabled"])
+              .optional()
+              .describe(
+                "Task #359 — gates sign-in. `pending_guardian` means\nCOPPA verifiable parental consent has not been finalized;\n`disabled` means a guardian has revoked consent.\n",
+              ),
             parentId: zod
               .string()
               .uuid()
@@ -7849,7 +7993,114 @@ export const AuthPasswordResetCompleteResponse = zod.object({
 });
 
 /**
- * @summary Guardian confirms an under-13 athlete account
+ * Task #359 — COPPA Phase 1 neutral age gate. The client posts the
+visitor's date of birth ONCE before the rest of the signup form
+is shown. The server returns whether the visitor is under 13 and
+sets a short-lived signed cookie carrying ONLY that boolean — the
+date of birth itself is never stored client-side. A failed gate
+does not block signup outright (children can still sign up via
+the verifiable parental consent flow), but a forged cookie cannot
+bypass the under-13 branch because /auth/signup verifies the
+cookie HMAC signature.
+
+ * @summary Neutral age gate before signup
+ */
+export const AuthAgeCheckBody = zod.object({
+  dateOfBirth: zod.coerce.date().describe("ISO 8601 date (YYYY-MM-DD)."),
+});
+
+export const AuthAgeCheckResponse = zod.object({
+  requiresParentalConsent: zod.boolean(),
+});
+
+/**
+ * Task #359 — Step 1 of the COPPA email-plus flow. The guardian
+opens the link in the first email; the client calls this
+endpoint to render the verbatim notice + checkbox. Returns 404
+if the token is invalid or already consumed, 410 if expired.
+
+ * @summary Fetch the parental-consent notice for a token
+ */
+export const GetParentalConsentNoticeParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const GetParentalConsentNoticeResponse = zod.object({
+  athleteName: zod.string(),
+  guardianEmail: zod.string().email(),
+  noticeVersion: zod.string(),
+  noticeText: zod.string(),
+  state: zod.enum([
+    "pending_notice",
+    "pending_followup",
+    "finalized",
+    "revoked",
+    "expired",
+  ]),
+});
+
+/**
+ * Task #359 — Step 1 of the COPPA email-plus flow. The guardian
+ticked the box on the notice page; we mark the consent row as
+`pending_followup` and immediately email the second confirmation
+link to the same address. The athlete account remains disabled
+until the followup link is opened.
+
+ * @summary Guardian grants first-step consent (notice + checkbox)
+ */
+export const SubmitParentalConsentParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const SubmitParentalConsentBody = zod.object({
+  agreed: zod.boolean(),
+  noticeVersion: zod.string(),
+});
+
+export const SubmitParentalConsentResponse = zod.object({
+  ok: zod.boolean(),
+  guardianEmail: zod.string().email(),
+  athleteName: zod.string(),
+});
+
+/**
+ * Task #359 — Step 2 of the COPPA email-plus flow. The guardian
+opens the link in the second email; we flip the consent row to
+`finalized` and the child's `account_status` to `active`. From
+this point the athlete may sign in.
+
+ * @summary Guardian completes the email-plus second click
+ */
+export const FinalizeParentalConsentParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const FinalizeParentalConsentResponse = zod.object({
+  ok: zod.boolean(),
+  athleteName: zod.string(),
+});
+
+/**
+ * Task #359 — One-click revoke. Disables the child's account and
+appends a revocation entry to the audit log. Idempotent.
+
+ * @summary Guardian revokes consent for an under-13 account
+ */
+export const RevokeParentalConsentParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const RevokeParentalConsentResponse = zod.object({
+  ok: zod.boolean(),
+  athleteName: zod.string(),
+});
+
+/**
+ * Pre-task-359 single-step guardian confirmation. Retained for
+accounts created before the COPPA email-plus flow shipped; new
+signups walk through `/auth/guardian-consent/{token}` instead.
+
+ * @summary (Legacy) Guardian confirms an under-13 athlete account
  */
 export const AuthGuardianConfirmBody = zod.object({
   token: zod.string(),

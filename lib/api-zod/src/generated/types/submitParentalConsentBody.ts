@@ -80,31 +80,8 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { PrivateUserResponseAccountStatus } from "./privateUserResponseAccountStatus";
-import type { PrivateUserResponseRole } from "./privateUserResponseRole";
-import type { PublicUserResponse } from "./publicUserResponse";
 
-export type PrivateUserResponse = PublicUserResponse & {
-  email: string;
-  /** @nullable */
-  dateOfBirth?: Date | null;
-  /** The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page). */
-  role: PrivateUserResponseRole;
-  /** Task #359 — true when the account belongs to a user
-under 13. The client uses this to hide UI surfaces (DM,
-comments, follow, profile PII fields) the server also
-blocks. Snapshot at signup; never recomputed.
- */
-  isMinor?: boolean;
-  /** Task #359 — gates sign-in. `pending_guardian` means
-COPPA verifiable parental consent has not been finalized;
-`disabled` means a guardian has revoked consent.
- */
-  accountStatus?: PrivateUserResponseAccountStatus;
-  /**
-   * The user's linked parent/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.
-
-   * @nullable
-   */
-  parentId?: string | null;
+export type SubmitParentalConsentBody = {
+  agreed: boolean;
+  noticeVersion: string;
 };

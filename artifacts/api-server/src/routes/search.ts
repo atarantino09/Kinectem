@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, users, organizations, teams } from "@workspace/db";
-import { eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, or } from "drizzle-orm";
+import { filterOutMinors } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -40,15 +41,20 @@ router.get(
         teams: { data: [], pagination: emptyPagination() },
       });
     }
-    const [userRows, orgRows, teamRows] = await Promise.all([
+    const [userRowsRaw, orgRows, teamRows] = await Promise.all([
       db
         .select()
         .from(users)
         .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
-        .limit(10),
+        .limit(20),
       db.select().from(organizations).where(ilike(organizations.name, `%${q}%`)).limit(10),
       db.select().from(teams).where(ilike(teams.name, `%${q}%`)).limit(10),
     ]);
+    // Task #359 — minor accounts must not be discoverable via cross-
+    // entity search. We filter post-query so the (possibly indexed)
+    // ilike + name match still uses its existing plan.
+    const viewerId = req.sessionUser?.id ?? null;
+    const userRows = filterOutMinors(userRowsRaw, viewerId).slice(0, 10);
     res.json({
       users: {
         data: userRows.map((u) => ({

@@ -41,6 +41,34 @@ export const adminTargetTypeEnum = pgEnum("admin_target_type", [
   "report",
 ]);
 
+// Task #359 — COPPA Phase 1.
+export const accountStatusEnum = pgEnum("account_status", [
+  "active",
+  "pending_guardian",
+  "disabled",
+]);
+export const parentalConsentStateEnum = pgEnum("parental_consent_state", [
+  "pending_notice",
+  "pending_followup",
+  "finalized",
+  "revoked",
+  "expired",
+]);
+export const consentAuditEventEnum = pgEnum("consent_audit_event", [
+  "age_gate_attempt",
+  "age_gate_blocked",
+  "child_signup",
+  "guardian_email_sent",
+  "guardian_notice_viewed",
+  "guardian_first_consent",
+  "guardian_followup_sent",
+  "guardian_finalized",
+  "guardian_revoked",
+  "minor_blocked_action",
+  "exif_stripped",
+  "deletion_scheduled",
+]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").unique(),
@@ -75,6 +103,26 @@ export const users = pgTable("users", {
   guardianExpiredEmailOptOut: boolean("guardian_expired_email_opt_out")
     .notNull()
     .default(false),
+  // Task #359 — COPPA Phase 1.
+  // `isMinor` is true when the account belongs to a user under 13. Stored
+  // as a snapshot at signup time (we don't recompute on every request).
+  isMinor: boolean("is_minor").notNull().default(false),
+  // `accountStatus` gates sign-in. `pending_guardian` means signup
+  // happened but verifiable parental consent isn't finalized yet;
+  // `disabled` means a guardian revoked consent (account is frozen but
+  // not deleted, awaiting review).
+  accountStatus: accountStatusEnum("account_status")
+    .notNull()
+    .default("active"),
+  consentFinalizedAt: timestamp("consent_finalized_at"),
+  consentRevokedAt: timestamp("consent_revoked_at"),
+  // COPPA Phase 1 (task #359) — when a guardian revokes consent we
+  // disable the account immediately and set this timestamp 30 days
+  // out. The Phase-1 deliverable wires only the schedule + audit
+  // event; the actual purge worker is tracked separately so the data
+  // isn't dropped before a human reviews edge cases (linked guardian
+  // accounts, in-flight team transfers, etc).
+  deletionScheduledAt: timestamp("deletion_scheduled_at"),
   // Per-recipient opt-out for the in-app "X shared your recap" bell
   // notification (task #167). Default false → recap authors get bell-
   // notified on every fresh share. Set true → POST /posts/:postId/share
@@ -594,3 +642,71 @@ export const highlightTagsRelations = relations(highlightTags, ({ one }) => ({
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
+
+// ---------------------------------------------------------------------------
+// Task #359 — COPPA Phase 1: parental consent records + audit log.
+// ---------------------------------------------------------------------------
+//
+// `parentalConsents` is one row per consent ceremony (a fresh attempt by a
+// guardian). It snapshots the exact notice text shown so we can prove later
+// what the parent agreed to. The "email-plus" verifiable consent flow walks
+// the row through pending_notice → pending_followup → finalized; revoke
+// flips it to revoked and disables the child's account.
+export const parentalConsents = pgTable("parental_consents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  childUserId: uuid("child_user_id")
+    .notNull()
+    .references((): AnyPgColumn => users.id, { onDelete: "cascade" }),
+  guardianEmail: text("guardian_email").notNull(),
+  guardianUserId: uuid("guardian_user_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  state: parentalConsentStateEnum("state").notNull().default("pending_notice"),
+  // FTC verifiable parental consent method actually used for this row.
+  // Phase 1 only ships "email-plus" (a second emailed action), but this
+  // column lets us add credit-card / signed-form / video-call methods
+  // later without losing legal traceability of older records.
+  method: text("method").notNull().default("email-plus"),
+  noticeVersion: text("notice_version").notNull(),
+  noticeText: text("notice_text").notNull(),
+  // First-step token: the link in the original guardian email. Single-use
+  // sha256 hash. Cleared once the guardian completes the notice + checkbox.
+  firstTokenHash: text("first_token_hash").unique(),
+  firstTokenExpiresAt: timestamp("first_token_expires_at"),
+  firstConsentAt: timestamp("first_consent_at"),
+  firstConsentIp: text("first_consent_ip"),
+  // Follow-up token: emailed after a short delay so the guardian must take
+  // a second action from a different email (FTC "email plus"). Independent
+  // hash + expiry from the first.
+  followupTokenHash: text("followup_token_hash").unique(),
+  followupTokenExpiresAt: timestamp("followup_token_expires_at"),
+  followupSentAt: timestamp("followup_sent_at"),
+  finalizedAt: timestamp("finalized_at"),
+  finalizedIp: text("finalized_ip"),
+  // Revocation token: emailed at finalize time so the guardian can revoke
+  // any time without logging in. Stored as a sha256 hash; never expires.
+  revokeTokenHash: text("revoke_token_hash").unique(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Append-only audit log for every consent-relevant event. Used to satisfy
+// the FTC requirement that the operator retain proof of consent and to
+// give parents a transparent history.
+export const consentAuditLog = pgTable("consent_audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  childUserId: uuid("child_user_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  consentId: uuid("consent_id").references(
+    (): AnyPgColumn => parentalConsents.id,
+    { onDelete: "set null" },
+  ),
+  event: consentAuditEventEnum("event").notNull(),
+  actorEmail: text("actor_email"),
+  actorIp: text("actor_ip"),
+  details: text("details"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

@@ -41,6 +41,12 @@ export function SignUpForm({
 }: SignUpFormProps) {
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
+  // Task #359 — neutral age-gate: the user first sees ONLY a date-of-
+  // birth field, with no role-related copy that would tip them off to
+  // lie. Once they submit, the server tells us whether they are
+  // under-13 and we render the appropriate branch.
+  const [step, setStep] = useState<"age" | "form">("age");
+  const [serverIsUnder13, setServerIsUnder13] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [role, setRole] = useState<Role>(initialRole);
@@ -51,7 +57,36 @@ export function SignUpForm({
   const [guardianConsent, setGuardianConsent] = useState(false);
 
   const age = ageInYears(dob);
-  const isUnder13 = role === "athlete" && age !== null && age < 13;
+  const clientUnder13 = age !== null && age < 13;
+  // Once the server has classified the visitor, trust that flag — the
+  // age gate is sticky on the server side, so it can never downgrade.
+  const isUnder13 = serverIsUnder13 || clientUnder13;
+  // For adults, role is selectable; under-13 is athlete-only because no
+  // other role makes sense for an under-13 visitor.
+  const effectiveRole: Role = isUnder13 ? "athlete" : role;
+
+  const handleAgeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    onError(null);
+    try {
+      if (!dob) throw new Error("Please enter your date of birth.");
+      // Hit the neutral /auth/age-check first. The server returns
+      // { requiresParentalConsent: true|false } and sets the signed
+      // `kinectem_age_gate` cookie; the signup call later requires it.
+      const probe = (await customFetch("/api/v1/auth/age-check", {
+        method: "POST",
+        body: JSON.stringify({ dateOfBirth: dob }),
+      })) as { requiresParentalConsent?: boolean };
+      setServerIsUnder13(Boolean(probe?.requiresParentalConsent));
+      setStep("form");
+    } catch (err) {
+      const e = err as { message?: string; body?: { error?: string } };
+      onError(e?.body?.error ?? e?.message ?? "Could not continue. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +98,7 @@ export function SignUpForm({
       }
       if (isUnder13 && (!guardianEmail.trim() || !guardianConsent)) {
         throw new Error(
-          "Athletes under 13 need a guardian email and confirmation before signing up.",
+          "We need a parent or guardian's email and their confirmation to continue.",
         );
       }
       const res = (await customFetch("/api/v1/auth/signup", {
@@ -71,7 +106,7 @@ export function SignUpForm({
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          role,
+          role: effectiveRole,
           email: signupEmail.trim().toLowerCase(),
           password: signupPassword,
           dateOfBirth: dob || null,
@@ -97,6 +132,54 @@ export function SignUpForm({
       setSubmitting(false);
     }
   };
+
+  if (step === "age") {
+    return (
+      <form className="space-y-4" onSubmit={handleAgeSubmit} data-testid="form-age-gate">
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="age-dob"
+            className="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          >
+            Date of birth
+          </Label>
+          <Input
+            id="age-dob"
+            type="date"
+            required
+            value={dob}
+            onChange={(e) => setDob(e.target.value)}
+            className="rounded-xl h-11"
+            data-testid="input-age-dob"
+          />
+          <p className="text-xs text-slate-500">
+            We ask everyone for their date of birth before creating an account.
+          </p>
+        </div>
+        <Button
+          type="submit"
+          variant="brandBlock"
+          disabled={submitting}
+          data-testid="btn-age-continue"
+        >
+          {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+          Continue
+          <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
+        <p className="text-center text-sm text-slate-500">
+          Already have an account?{" "}
+          <button
+            type="button"
+            onClick={onSwitchSignin}
+            className="font-bold text-violet-600 hover:underline"
+            data-testid="btn-switch-signin"
+          >
+            Sign in
+          </button>
+        </p>
+      </form>
+    );
+  }
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
@@ -137,29 +220,31 @@ export function SignUpForm({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label
-          htmlFor="role"
-          className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-        >
-          I am a...
-        </Label>
-        <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-          <SelectTrigger
-            id="role"
-            className="rounded-xl h-11"
-            data-testid="select-signup-role"
+      {!isUnder13 && (
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="role"
+            className="text-xs font-semibold uppercase tracking-wide text-slate-600"
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="athlete">Athlete</SelectItem>
-            <SelectItem value="coach">Coach</SelectItem>
-            <SelectItem value="parent">Parent / Guardian</SelectItem>
-            <SelectItem value="admin">Org admin</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+            I am a...
+          </Label>
+          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+            <SelectTrigger
+              id="role"
+              className="rounded-xl h-11"
+              data-testid="select-signup-role"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="athlete">Athlete</SelectItem>
+              <SelectItem value="coach">Coach</SelectItem>
+              <SelectItem value="parent">Parent / Guardian</SelectItem>
+              <SelectItem value="admin">Org admin</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label
@@ -208,27 +293,24 @@ export function SignUpForm({
         </div>
       </div>
 
-      {role === "athlete" && (
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="dob"
-            className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-          >
-            Date of birth
-          </Label>
-          <Input
-            id="dob"
-            type="date"
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            className="rounded-xl h-11"
-            data-testid="input-signup-dob"
-          />
-          <p className="text-xs text-slate-500">
-            Athletes under 13 will need a parent or guardian to confirm.
-          </p>
-        </div>
-      )}
+      {/* DOB was already captured in step 1; show a read-only summary so
+         the user can confirm what they entered before submitting. */}
+      <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 flex items-center justify-between">
+        <span>
+          Date of birth: <span className="font-semibold text-slate-800">{dob}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setStep("age");
+            setServerIsUnder13(false);
+          }}
+          className="font-semibold text-violet-600 hover:underline"
+          data-testid="btn-edit-dob"
+        >
+          Change
+        </button>
+      </div>
 
       {isUnder13 && (
         <div

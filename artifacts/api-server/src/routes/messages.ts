@@ -52,6 +52,7 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { blockIfEitherMinor, blockMinorAction, filterOutMinors, logConsentEvent } from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -245,6 +246,21 @@ router.post(
     if (!recipientId) return apiError(res, 400, "recipientId is required");
     if (recipientType === "user" && recipientId === me.id)
       return apiError(res, 400, "Cannot start a conversation with yourself");
+    // Task #359 — direct messages are blocked for under-13 accounts on
+    // both sides. Org conversations are allowed to/from adult accounts
+    // because the org represents an institutional contact, not a peer.
+    if (recipientType === "user") {
+      if (await blockIfEitherMinor(res, me.id, recipientId, "create_conversation")) {
+        void logConsentEvent({
+          event: "minor_blocked_action",
+          childUserId: me.id,
+          details: "create_conversation",
+        });
+        return;
+      }
+    } else if (blockMinorAction(res, me, "create_conversation")) {
+      return;
+    }
 
     // Look for an existing direct conversation
     const meParts = await db
@@ -368,6 +384,8 @@ router.get(
         id: users.id,
         name: users.name,
         avatarUrl: users.avatarUrl,
+        isMinor: users.isMinor,
+        parentId: users.parentId,
       })
       .from(users)
       .where(
@@ -378,8 +396,11 @@ router.get(
       )
       .orderBy(asc(users.name))
       .limit(limit);
+    // Task #359 — strangers cannot start a DM with a minor through the
+    // contacts picker; the minor's linked guardian still sees them.
+    const visible = filterOutMinors(rows, me.id);
     res.json({
-      data: rows.map((u) => ({
+      data: visible.map((u) => ({
         id: u.id,
         displayName: u.name,
         avatarUrl: safeAvatarUrl(u.avatarUrl),
@@ -508,6 +529,43 @@ router.post(
       )
       .limit(1);
     if (!iAmIn) return apiError(res, 403, "Not a participant");
+    // Task #359 — minors cannot post follow-up messages either.
+    if (blockMinorAction(res, me, "send_message")) return;
+    // Adults cannot keep messaging into an existing conversation that
+    // includes a minor recipient (the minor's linked guardian is
+    // exempt — that's the family-oversight channel).
+    const otherUserParts = await db
+      .select({
+        userId: conversationParticipants.participantId,
+        isMinor: users.isMinor,
+        parentId: users.parentId,
+      })
+      .from(conversationParticipants)
+      .innerJoin(users, eq(users.id, conversationParticipants.participantId))
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, req.params.id),
+          eq(conversationParticipants.participantType, "user"),
+          ne(conversationParticipants.participantId, me.id),
+        ),
+      );
+    const minorRecipient = otherUserParts.find(
+      (p) => p.isMinor && p.parentId !== me.id,
+    );
+    if (minorRecipient) {
+      void logConsentEvent({
+        event: "minor_blocked_action",
+        childUserId: minorRecipient.userId,
+        actorEmail: me.email ?? null,
+        details: "send_message_to_minor",
+      });
+      return apiError(
+        res,
+        403,
+        "This conversation includes an account that can't receive new messages.",
+        { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
+      );
+    }
     const body = String(req.body?.body ?? "").trim();
     const rawAssetIds = Array.isArray(req.body?.assetIds)
       ? (req.body.assetIds as unknown[])

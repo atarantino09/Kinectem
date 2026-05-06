@@ -222,6 +222,108 @@ ALTER TABLE parent_child_notification_reads
   ADD COLUMN IF NOT EXISTS prior_status text;
 `;
 
+// Task #359 — COPPA Phase 1. Adds the minor / account-status / consent
+// fields on `users`, plus the `parental_consents` ledger and the
+// `consent_audit_log` append-only event log. Idempotent.
+const TASK_359_COPPA_PHASE_1 = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'account_status') THEN
+    CREATE TYPE account_status AS ENUM ('active', 'pending_guardian', 'disabled');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'parental_consent_state') THEN
+    CREATE TYPE parental_consent_state AS ENUM (
+      'pending_notice', 'pending_followup', 'finalized', 'revoked', 'expired'
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'consent_audit_event') THEN
+    CREATE TYPE consent_audit_event AS ENUM (
+      'age_gate_attempt', 'age_gate_blocked', 'child_signup',
+      'guardian_email_sent', 'guardian_notice_viewed',
+      'guardian_first_consent', 'guardian_followup_sent',
+      'guardian_finalized', 'guardian_revoked',
+      'minor_blocked_action', 'exif_stripped'
+    );
+  END IF;
+END$migration$;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS is_minor              boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS account_status        account_status NOT NULL DEFAULT 'active',
+  ADD COLUMN IF NOT EXISTS consent_finalized_at  timestamp,
+  ADD COLUMN IF NOT EXISTS consent_revoked_at    timestamp,
+  ADD COLUMN IF NOT EXISTS deletion_scheduled_at timestamp;
+
+-- Append a "deletion_scheduled" event to the audit-log enum so the
+-- revoke handler can record the grace-period start. ADD VALUE IF NOT
+-- EXISTS makes this safe to re-run.
+ALTER TYPE consent_audit_event ADD VALUE IF NOT EXISTS 'deletion_scheduled';
+
+-- Backfill: any existing user under 13 by date_of_birth gets is_minor=true.
+-- We do not change account_status for legacy rows — they keep the
+-- guardianConfirmedAt-based gate already wired in /auth/login.
+UPDATE users
+   SET is_minor = true
+ WHERE is_minor = false
+   AND date_of_birth IS NOT NULL
+   AND age(date_of_birth) < interval '13 years';
+
+CREATE TABLE IF NOT EXISTS parental_consents (
+  id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_user_id               uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  guardian_email              text NOT NULL,
+  guardian_user_id            uuid REFERENCES users(id) ON DELETE SET NULL,
+  state                       parental_consent_state NOT NULL DEFAULT 'pending_notice',
+  method                      text NOT NULL DEFAULT 'email-plus',
+  notice_version              text NOT NULL,
+  notice_text                 text NOT NULL,
+  first_token_hash            text UNIQUE,
+  first_token_expires_at      timestamp,
+  first_consent_at            timestamp,
+  first_consent_ip            text,
+  followup_token_hash         text UNIQUE,
+  followup_token_expires_at   timestamp,
+  followup_sent_at            timestamp,
+  finalized_at                timestamp,
+  finalized_ip                text,
+  revoke_token_hash           text UNIQUE,
+  revoked_at                  timestamp,
+  created_at                  timestamp NOT NULL DEFAULT now()
+);
+-- Backfill the "method" column on any pre-existing parental_consents
+-- rows (an earlier draft of this migration created the table without
+-- the column). Safe to re-run thanks to ADD COLUMN IF NOT EXISTS.
+ALTER TABLE parental_consents
+  ADD COLUMN IF NOT EXISTS method text NOT NULL DEFAULT 'email-plus';
+
+CREATE INDEX IF NOT EXISTS parental_consents_child_idx
+  ON parental_consents(child_user_id);
+CREATE INDEX IF NOT EXISTS parental_consents_state_idx
+  ON parental_consents(state);
+
+CREATE TABLE IF NOT EXISTS consent_audit_log (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  consent_id    uuid REFERENCES parental_consents(id) ON DELETE SET NULL,
+  event         consent_audit_event NOT NULL,
+  actor_email   text,
+  actor_ip      text,
+  details       text,
+  created_at    timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS consent_audit_log_child_idx
+  ON consent_audit_log(child_user_id);
+CREATE INDEX IF NOT EXISTS consent_audit_log_created_idx
+  ON consent_audit_log(created_at);
+
+-- COPPA default: every minor (newly flagged above or already on file)
+-- must approve tags one-by-one. Adults keep whatever they chose.
+UPDATE users
+   SET require_tag_consent = true
+ WHERE is_minor = true
+   AND require_tag_consent = false;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -266,6 +368,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-02-task-358-api-keys",
     sql: TASK_358_API_KEYS,
+  },
+  {
+    name: "2026-05-06-task-359-coppa-phase-1",
+    sql: TASK_359_COPPA_PHASE_1,
   },
 ];
 

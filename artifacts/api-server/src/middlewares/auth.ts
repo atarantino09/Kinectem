@@ -6,6 +6,18 @@ import { extractBearerToken, verifyAccessToken } from "../lib/tokens";
 import { looksLikeApiKey } from "../lib/api-keys";
 import { hashToken } from "../lib/passwords";
 
+// Task #359 — central account-status gate. `disabled` (revoked
+// consent) and `pending_guardian` (consent not yet finalized) accounts
+// must not authenticate, regardless of how they present credentials
+// (cookie session, bearer access token, or API key). Returning `false`
+// here causes loadSession to drop the candidate user and the rest of
+// the request runs anonymously, which the existing requireAuth chain
+// then turns into a clean 401.
+function isAccountStatusActive(u: { accountStatus?: string | null }): boolean {
+  const s = u.accountStatus ?? "active";
+  return s !== "disabled" && s !== "pending_guardian";
+}
+
 // Attach session/user/realUser/isMasquerading on the Request based on the
 // session cookie. If no cookie session is found, fall back to an
 // `Authorization: Bearer <access-token>` header (issued by `/auth/token`)
@@ -25,6 +37,9 @@ export async function loadSession(req: Request, _res: Response, next: NextFuncti
         .limit(1);
       if (row) {
         if (row.user.deletedAt) return next();
+        // Task #359 — disabled / pending_guardian accounts cannot use
+        // their cookie session even if it hasn't expired yet.
+        if (!isAccountStatusActive(row.user)) return next();
         req.realUser = row.user;
         req.sessionRow = row.session;
         const masqueradeId = row.session.masqueradingAsUserId;
@@ -71,7 +86,7 @@ export async function loadSession(req: Request, _res: Response, next: NextFuncti
           .innerJoin(users, eq(apiKeys.userId, users.id))
           .where(and(eq(apiKeys.tokenHash, tokenHash), isNull(apiKeys.revokedAt)))
           .limit(1);
-        if (row && !row.user.deletedAt) {
+        if (row && !row.user.deletedAt && isAccountStatusActive(row.user)) {
           req.realUser = row.user;
           req.sessionUser = row.user;
           // Best-effort lastUsedAt update; we don't await so a stalled
@@ -97,7 +112,7 @@ export async function loadSession(req: Request, _res: Response, next: NextFuncti
             .from(users)
             .where(and(eq(users.id, payload.sub), isNull(users.deletedAt)))
             .limit(1);
-          if (user) {
+          if (user && isAccountStatusActive(user)) {
             req.realUser = user;
             req.sessionUser = user;
             // No sessionRow / no masquerade for bearer auth — masquerade is

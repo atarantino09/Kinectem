@@ -1,6 +1,11 @@
 import express, { Router, type IRouter, type Request } from "express";
-import { db, assets } from "@workspace/db";
+import { db, assets, users } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import {
+  ALLOWED_MINOR_UPLOAD_MIMES,
+  stripMetadataForMinor,
+} from "../lib/exif-strip";
+import { logConsentEvent } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -95,7 +100,7 @@ router.put(
       .limit(1);
     if (!a) return notFound(res);
     if (a.ownerId !== me.id) return apiError(res, 403, "Forbidden");
-    const buf = Buffer.isBuffer(req.body) ? req.body : null;
+    let buf = Buffer.isBuffer(req.body) ? req.body : null;
     if (!buf || buf.length === 0) {
       return apiError(res, 400, "Request body is empty");
     }
@@ -103,6 +108,28 @@ router.put(
       return apiError(res, 413, "Upload exceeds 10 MB");
     }
     const mime = a.fileType || "application/octet-stream";
+    // Task #359 — minor uploads are restricted to JPEG/PNG (so we can
+    // walk every metadata segment) and have EXIF/XMP/IPTC/ICC and PNG
+    // textual chunks stripped before the bytes hit the database. We
+    // re-fetch the owner row so the snapshot is fresh in case the
+    // session user object was loaded before consent finalized.
+    if (me.isMinor) {
+      if (!ALLOWED_MINOR_UPLOAD_MIMES.has(mime.toLowerCase())) {
+        return apiError(
+          res,
+          400,
+          "Under-13 accounts may only upload JPEG or PNG images.",
+          { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
+        );
+      }
+      const stripped = stripMetadataForMinor(buf, mime);
+      buf = stripped.buffer;
+      void logConsentEvent({
+        event: "exif_stripped",
+        childUserId: me.id,
+        details: `mime=${mime} bytesRemoved=${stripped.bytesRemoved}`,
+      });
+    }
     const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
     await db
       .update(assets)

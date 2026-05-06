@@ -1,7 +1,26 @@
 import { Router, type IRouter } from "express";
-import { db, users, passwordResets, apiKeys } from "@workspace/db";
+import { db, users, passwordResets, apiKeys, parentalConsents } from "@workspace/db";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
+import {
+  AGE_GATE_COOKIE,
+  AGE_GATE_TTL_MS,
+  CONSENT_NOTICE_TEXT,
+  CONSENT_NOTICE_VERSION,
+  FOLLOWUP_DELAY_MS,
+  FOLLOWUP_TOKEN_TTL_MS,
+  clientIp,
+  hashConsentToken,
+  isUnder13,
+  logConsentEvent,
+  signAgeGate,
+  verifyAgeGate,
+} from "../lib/coppa";
+import {
+  sendParentalConsentFinalizedEmail,
+  sendParentalConsentFollowupEmail,
+  sendParentalConsentNoticeEmail,
+} from "../lib/email";
 import {
   generateApiKey,
   ALLOWED_API_KEY_SCOPES,
@@ -145,6 +164,44 @@ const logoutLimiter = rateLimit({
     "Too many logout attempts. Please wait a moment and try again.",
 });
 
+// Task #359 — block sign-in for under-13 accounts whose verifiable
+// parental consent has been revoked (account_status = 'disabled') or has
+// not been finalized yet (account_status = 'pending_guardian'). Returns
+// `true` and writes the response when blocked.
+function blockOnAccountStatus(
+  res: import("express").Response,
+  user: { accountStatus?: string | null; isMinor?: boolean | null; guardianConfirmTokenExpiresAt?: Date | null; guardianEmail?: string | null; guardianConfirmedAt?: Date | null; guardianConfirmToken?: string | null },
+): boolean {
+  if (user.accountStatus === "disabled") {
+    apiError(
+      res,
+      403,
+      "This account has been disabled because a parent or guardian revoked consent. Contact privacy@kinectem.com if you believe this is a mistake.",
+      { extras: { accountStatus: "disabled" } },
+    );
+    return true;
+  }
+  if (user.accountStatus === "pending_guardian" || (user.guardianEmail && !user.guardianConfirmedAt)) {
+    const expired =
+      !user.guardianConfirmToken ||
+      !user.guardianConfirmTokenExpiresAt ||
+      user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
+    apiError(
+      res,
+      403,
+      "Your account is waiting on parent or guardian confirmation. Ask them to open the link sent to their email.",
+      {
+        extras: {
+          pendingGuardianConfirmation: true,
+          guardianConfirmExpired: expired,
+        },
+      },
+    );
+    return true;
+  }
+  return false;
+}
+
 router.post(
   "/auth/login",
   loginLimiter,
@@ -164,6 +221,7 @@ router.post(
       res.status(403).json({ error: "This account has been deactivated." });
       return;
     }
+    if (blockOnAccountStatus(res, user)) return;
     if (user.guardianEmail && !user.guardianConfirmedAt) {
       const expired =
         !user.guardianConfirmToken ||
@@ -190,16 +248,84 @@ router.post(
   }),
 );
 
+// Task #359 — neutral age gate. Posts the visitor's date of birth ONCE
+// before the rest of the signup form is visible. The server response
+// carries only a boolean ("requiresParentalConsent"); the date itself
+// is set as a short-lived signed cookie that /auth/signup verifies, so
+// a forged client cookie cannot bypass the under-13 branch.
+router.post(
+  "/auth/age-check",
+  asyncHandler(async (req, res) => {
+    const dob = String(req.body?.dateOfBirth ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || Number.isNaN(Date.parse(dob))) {
+      apiError(res, 400, "A valid date of birth is required.");
+      return;
+    }
+    let under13 = isUnder13(dob);
+    // Task #359 — sticky age gate: once a visitor has been classified
+    // as under-13 in this session, retrying with an older DOB cannot
+    // downgrade them to "13+". Forcing a fresh device/cookie is a
+    // reset path documented for support; see /coppa-notice.
+    const existing = verifyAgeGate(req.cookies?.[AGE_GATE_COOKIE]);
+    if (existing?.isUnder13) under13 = true;
+    const token = signAgeGate({ isUnder13: under13, iat: Date.now() });
+    res.cookie(AGE_GATE_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: AGE_GATE_TTL_MS,
+      path: "/",
+    });
+    void logConsentEvent({
+      event: under13 ? "age_gate_blocked" : "age_gate_attempt",
+      actorIp: clientIp(req),
+      details: under13 ? "under-13" : "13+",
+    });
+    res.json({ requiresParentalConsent: under13 });
+  }),
+);
+
 router.post(
   "/auth/signup",
   signupLimiter,
   asyncHandler(async (req, res) => {
     const body = SignupBody.parse(req.body);
     const dob = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
+    // Server-side age gate is mandatory for athlete signup. The signed
+    // `kinectem_age_gate` cookie (set by /auth/age-check) is the only
+    // trusted age claim; non-athlete roles are exempt.
+    const ageGate = verifyAgeGate(req.cookies?.[AGE_GATE_COOKIE]);
+    if (body.role === "athlete") {
+      if (!ageGate) {
+        apiError(
+          res,
+          400,
+          "Please confirm your date of birth before creating an account.",
+          { code: "AGE_GATE_REQUIRED" },
+        );
+        return;
+      }
+      if (!dob) {
+        apiError(
+          res,
+          400,
+          "Athlete accounts require a date of birth.",
+          { code: "DOB_REQUIRED" },
+        );
+        return;
+      }
+    }
+    // Cookie is canonical: if it says under-13, that wins over a
+    // client-supplied DOB that claims adult.
     let guardianRequired = false;
-    if (body.role === "athlete" && dob) {
-      const ageYears = (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000);
-      guardianRequired = ageYears < 13;
+    if (body.role === "athlete") {
+      if (ageGate?.isUnder13) {
+        guardianRequired = true;
+      } else if (dob) {
+        const ageYears =
+          (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000);
+        guardianRequired = ageYears < 13;
+      }
     }
     if (guardianRequired && !body.guardianEmail) {
       apiError(res, 400, "Athletes under 13 must provide a parent or guardian email so we can confirm the account.");
@@ -217,6 +343,32 @@ router.post(
       apiError(res, 400, "Please confirm a parent or guardian has agreed to receive a confirmation email.");
       return;
     }
+    // Strict data-minimization allowlist for under-13 signups.
+    if (guardianRequired) {
+      const allowed = new Set([
+        "firstName",
+        "lastName",
+        "role",
+        "email",
+        "password",
+        "dateOfBirth",
+        "guardianEmail",
+        "guardianConsent",
+      ]);
+      const raw = (req.body ?? {}) as Record<string, unknown>;
+      const extra = Object.keys(raw).filter(
+        (k) => !allowed.has(k) && raw[k] !== undefined && raw[k] !== null,
+      );
+      if (extra.length > 0) {
+        apiError(
+          res,
+          400,
+          `Under-13 signup only accepts the minimum required fields. Remove: ${extra.join(", ")}.`,
+          { code: "MINOR_BLOCKED", extras: { minorBlocked: true, fields: extra } },
+        );
+        return;
+      }
+    }
 
     const email = body.email.toLowerCase();
     const [exists] = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -226,7 +378,15 @@ router.post(
     }
 
     const passwordHash = await hashPassword(body.password);
-    const guardianToken = guardianRequired ? generateToken() : null;
+    // Task #359 — under-13 athletes get a fresh "email plus" consent
+    // ceremony token instead of the single-step legacy guardian-confirm
+    // token. We still populate the legacy column so any existing UI that
+    // reads `guardianConfirmedAt` keeps working as a "consent finalized"
+    // signal, but the canonical record lives in `parental_consents`.
+    const firstToken = guardianRequired ? generateToken() : null;
+    const guardianEmail = guardianRequired
+      ? body.guardianEmail!.toLowerCase()
+      : null;
 
     const [created] = await db
       .insert(users)
@@ -236,26 +396,67 @@ router.post(
         email,
         passwordHash,
         dateOfBirth: dob ?? undefined,
-        parentId: body.parentId ?? undefined,
-        guardianEmail: guardianRequired ? body.guardianEmail!.toLowerCase() : undefined,
-        guardianConfirmToken: guardianToken ?? undefined,
+        // For minors we never accept a client-supplied parent link —
+        // the parent ↔ child relationship is established only when the
+        // guardian completes the email-plus consent ceremony.
+        parentId: guardianRequired ? undefined : (body.parentId ?? undefined),
+        guardianEmail: guardianEmail ?? undefined,
+        // Legacy single-step token — unused by the new flow but kept
+        // populated for older clients reading these columns directly.
+        guardianConfirmToken: firstToken ?? undefined,
         guardianConfirmTokenExpiresAt: guardianRequired
           ? new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS)
           : undefined,
+        // Task #359 snapshot.
+        isMinor: guardianRequired,
+        accountStatus: guardianRequired ? "pending_guardian" : "active",
+        // COPPA defaults: under-13 accounts must approve every tag the
+        // first time, so we flip `requireTagConsent` on at creation. An
+        // adult account keeps the legacy default (off) and can opt in
+        // from settings.
+        requireTagConsent: guardianRequired ? true : undefined,
       })
       .returning();
 
     if (guardianRequired) {
-      // Account is created but cannot sign in until the guardian confirms.
+      const [consent] = await db
+        .insert(parentalConsents)
+        .values({
+          childUserId: created.id,
+          guardianEmail: guardianEmail!,
+          state: "pending_notice",
+          noticeVersion: CONSENT_NOTICE_VERSION,
+          noticeText: CONSENT_NOTICE_TEXT,
+          firstTokenHash: hashConsentToken(firstToken!),
+          firstTokenExpiresAt: new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS),
+        })
+        .returning();
       try {
-        await sendGuardianConfirmationEmail(
-          body.guardianEmail!.toLowerCase(),
+        await sendParentalConsentNoticeEmail(
+          guardianEmail!,
           created.name,
-          guardianToken!,
+          firstToken!,
         );
       } catch (err) {
-        logger.error({ err }, "Failed to send guardian confirmation email");
+        logger.error({ err }, "Failed to send parental-consent notice email");
       }
+      void logConsentEvent({
+        event: "child_signup",
+        childUserId: created.id,
+        consentId: consent.id,
+        actorEmail: guardianEmail,
+        actorIp: clientIp(req),
+      });
+      void logConsentEvent({
+        event: "guardian_email_sent",
+        childUserId: created.id,
+        consentId: consent.id,
+        actorEmail: guardianEmail,
+        details: "notice",
+      });
+      // Clear the age-gate cookie so the visitor's browser doesn't
+      // carry an "under 13" flag past signup.
+      res.clearCookie(AGE_GATE_COOKIE, { path: "/" });
       res.status(201).json({
         ...toPrivateUser(created),
         pendingGuardianConfirmation: true,
@@ -263,6 +464,7 @@ router.post(
       return;
     }
 
+    res.clearCookie(AGE_GATE_COOKIE, { path: "/" });
     const sess = await createSession(created.id);
     setSessionCookie(res, sess.id, sess.expiresAt);
     res.status(201).json(toPrivateUser(created));
@@ -472,24 +674,7 @@ router.post(
       apiError(res, 403, "This account has been deactivated.");
       return;
     }
-    if (user.guardianEmail && !user.guardianConfirmedAt) {
-      const expired =
-        !user.guardianConfirmToken ||
-        !user.guardianConfirmTokenExpiresAt ||
-        user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
-      apiError(
-        res,
-        403,
-        "Your account is waiting on guardian confirmation. Ask your parent or guardian to open the confirmation link sent to their email.",
-        {
-          extras: {
-            pendingGuardianConfirmation: true,
-            guardianConfirmExpired: expired,
-          },
-        },
-      );
-      return;
-    }
+    if (blockOnAccountStatus(res, user)) return;
     const access = signAccessToken(user.id);
     const refresh = await issueRefreshToken(user.id, body.deviceLabel ?? null);
     await db.update(users).set({ lastSignInAt: new Date() }).where(eq(users.id, user.id));
@@ -527,6 +712,11 @@ router.post(
       apiError(res, 401, "Refresh token is invalid, expired, or already used.");
       return;
     }
+    // Task #359 — refresh must respect the same account-status gates as
+    // /auth/login and /auth/token. A revoked or unfinalized account
+    // cannot mint a new access token even if it still holds a valid
+    // refresh token.
+    if (blockOnAccountStatus(res, user)) return;
     const access = signAccessToken(rotated.userId);
     res.json(
       tokenResponse({
