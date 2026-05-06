@@ -51,14 +51,139 @@ import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 const GRACE_HOURS = Number(process.env.COPPA_DELETION_GRACE_HOURS ?? "24");
 const APPLY = process.argv.includes("--apply");
-const USER_ID = process.argv.find(
-  (a, i) => i >= 2 && !a.startsWith("--"),
-);
+const DECLINE = process.argv.includes("--decline");
+const POST_FLAG_INDEX = process.argv.indexOf("--post");
+const POST_REF =
+  POST_FLAG_INDEX > -1 ? process.argv[POST_FLAG_INDEX + 1] : undefined;
+const USER_ID = POST_REF
+  ? undefined
+  : process.argv.find((a, i) => i >= 2 && !a.startsWith("--"));
+
+async function resolveTakedown(): Promise<void> {
+  if (!POST_REF) return;
+  // Task #367 — operator path for the photo-of-minor takedown queue.
+  // A guardian filed a takedown via POST /guardians/.../takedown-request;
+  // the post is hidden from public feeds while the request is pending.
+  // The operator reviews it manually and runs this script to either
+  //   • approve  : --post <article|highlight>:<uuid> --apply
+  //                deletes the post (FK cascades tags/reactions/etc.)
+  //                and stamps every matching pending takedown row as
+  //                `approved` so the audit trail is preserved.
+  //   • decline  : --post <article|highlight>:<uuid> --decline
+  //                marks the matching pending takedown rows as
+  //                `declined` so the post becomes visible again.
+  const m = /^(article|highlight):([0-9a-f-]{36})$/i.exec(POST_REF);
+  if (!m) {
+    console.error(
+      "Invalid --post value. Expected 'article:<uuid>' or 'highlight:<uuid>'.",
+    );
+    process.exit(2);
+  }
+  const kind = m[1].toLowerCase() as "article" | "highlight";
+  const refId = m[2];
+  const pending = await db
+    .select({
+      id: takedownRequests.id,
+      childUserId: takedownRequests.childUserId,
+      requestedByGuardianId: takedownRequests.requestedByGuardianId,
+      reason: takedownRequests.reason,
+    })
+    .from(takedownRequests)
+    .where(
+      and(
+        eq(takedownRequests.postKind, kind),
+        eq(takedownRequests.postRefId, refId),
+        eq(takedownRequests.status, "pending"),
+      ),
+    );
+  if (pending.length === 0) {
+    console.error(
+      `No pending takedown_requests row found for ${kind}:${refId}.`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `${pending.length} pending takedown request(s) for ${kind}:${refId}:`,
+  );
+  for (const r of pending) {
+    console.log(
+      `  - id=${r.id}  child=${r.childUserId}  guardian=${r.requestedByGuardianId}  reason=${r.reason ?? "(none)"}`,
+    );
+  }
+  if (DECLINE) {
+    if (!APPLY) {
+      console.log(
+        "\nDry-run only. Re-run with `--apply --decline` to mark the takedown(s) declined.",
+      );
+      return;
+    }
+    await db
+      .update(takedownRequests)
+      .set({ status: "declined" })
+      .where(
+        and(
+          eq(takedownRequests.postKind, kind),
+          eq(takedownRequests.postRefId, refId),
+          eq(takedownRequests.status, "pending"),
+        ),
+      );
+    for (const r of pending) {
+      await db.insert(consentAuditLog).values({
+        event: "guardian_takedown_declined",
+        childUserId: r.childUserId,
+        actorEmail: "operator-script",
+        details: JSON.stringify({ takedownId: r.id, kind, refId }),
+      });
+    }
+    console.log(`  declined ${pending.length} request(s); post becomes visible again.`);
+    return;
+  }
+  if (!APPLY) {
+    console.log(
+      "\nDry-run only. Re-run with `--apply` to delete the post (or `--apply --decline` to dismiss).",
+    );
+    return;
+  }
+  // Hard takedown: delete the post itself; FK cascades clear tags,
+  // reactions, comments, shares, assets, etc.
+  if (kind === "article") {
+    await db.delete(articles).where(eq(articles.id, refId));
+  } else {
+    await db.delete(highlights).where(eq(highlights.id, refId));
+  }
+  await db
+    .update(takedownRequests)
+    .set({ status: "approved" })
+    .where(
+      and(
+        eq(takedownRequests.postKind, kind),
+        eq(takedownRequests.postRefId, refId),
+        eq(takedownRequests.status, "pending"),
+      ),
+    );
+  for (const r of pending) {
+    await db.insert(consentAuditLog).values({
+      event: "guardian_takedown_approved",
+      childUserId: r.childUserId,
+      actorEmail: "operator-script",
+      details: JSON.stringify({ takedownId: r.id, kind, refId }),
+    });
+  }
+  console.log(`  deleted ${kind}:${refId}; ${pending.length} takedown request(s) approved.`);
+}
 
 async function main(): Promise<void> {
+  if (POST_REF) {
+    await resolveTakedown();
+    return;
+  }
   if (!USER_ID) {
     console.error(
-      "Usage: pnpm --filter @workspace/scripts run coppa:delete -- <userId> [--apply]",
+      "Usage:\n" +
+        "  Hard-delete a child account (right-to-delete):\n" +
+        "    pnpm --filter @workspace/scripts run coppa:delete -- <userId> [--apply]\n" +
+        "  Resolve a guardian-filed photo takedown:\n" +
+        "    pnpm --filter @workspace/scripts run coppa:delete -- --post <article|highlight>:<uuid> [--apply | --apply --decline]",
     );
     process.exit(2);
   }

@@ -148,7 +148,12 @@ router.get(
     // self, linked guardian, platform admin, an org admin sharing a
     // team with the minor, or (task #367) a follower whose follow
     // edge has been guardian-approved. Everyone else gets 404.
-    if (u.isMinor && !isOwnProfile) {
+    //
+    // Task #367 — only fire the carve-out for minors whose
+    // `profileVisibility` is restricted (anything other than `public`).
+    // Guardians who explicitly consent to a public profile keep the
+    // adult-equivalent surface so the intentionally-public flow works.
+    if (u.isMinor && u.profileVisibility !== "public" && !isOwnProfile) {
       const isLinkedGuardian = !!me && u.parentId === me.id;
       const isPlatformAdmin = req.realUser?.role === "admin";
       let isSharedTeamAdmin = false;

@@ -15,6 +15,7 @@ import {
   queryOpts,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoIndex } from "@/components/NoIndex";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
 import { EditTeamDialog } from "@/components/EditTeamDialog";
@@ -154,8 +155,21 @@ export default function TeamPage() {
   const seasonId = team.currentSeason?.id ?? team.id;
   const recentPosts = postsResp?.data ?? [];
 
+  // Task #367 — team pages with any minor roster member must not be
+  // search-indexed. We treat any roster row with at least one linked
+  // parent as a minor (the Phase 1 schema only ever populates
+  // `parents[]` on under-13 accounts), which gives us a usable signal
+  // without exposing `isMinor` on the public roster API. Youth-sports
+  // teams typically have many minors on roster, so this is a strong
+  // default — adult-only club teams (rare on Kinectem) get the more
+  // permissive default automatically.
+  const teamHasMinorMembers = allMembersForGate.some(
+    (m) => Array.isArray(m.parents) && m.parents.length > 0,
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+      {teamHasMinorMembers ? <NoIndex /> : null}
       <div className="space-y-6 min-w-0">
         <TeamHeaderCard
           team={team}
