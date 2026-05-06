@@ -883,7 +883,21 @@ router.get(
       me && owner?.parentId && owner.parentId === me.id
     );
     if (!viewerIsGuardian && !isAdmin) {
-      conds.push(eq(postComments.moderationStatus, "approved"));
+      // Approved comments are public; the comment author can also see
+      // their own pending row so they understand it's awaiting review.
+      if (me) {
+        conds.push(
+          or(
+            eq(postComments.moderationStatus, "approved"),
+            and(
+              eq(postComments.moderationStatus, "pending"),
+              eq(postComments.authorId, me.id),
+            ),
+          )!,
+        );
+      } else {
+        conds.push(eq(postComments.moderationStatus, "approved"));
+      }
     } else if (!isAdmin) {
       // Guardian: hide declined; show approved + pending.
       conds.push(ne(postComments.moderationStatus, "declined"));

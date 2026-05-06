@@ -24,7 +24,7 @@ import {
   dmAllowlist,
   notifications,
 } from "@workspace/db";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
 import {
   apiError,
@@ -671,6 +671,7 @@ router.get(
       recentFollowing,
       recentTagsArticles,
       recentTagsHighlights,
+      recentReceivedComments,
     ] = await Promise.all([
         db
           .select({
@@ -773,6 +774,49 @@ router.get(
           .where(eq(highlightTags.userId, auth.childId))
           .orderBy(desc(highlightTags.createdAt))
           .limit(limit),
+        // Comments received on the child's own posts (articles +
+        // highlights), excluding self-comments.
+        db
+          .select({
+            id: postComments.id,
+            body: postComments.body,
+            createdAt: postComments.createdAt,
+            moderationStatus: postComments.moderationStatus,
+            authorId: postComments.authorId,
+            postKind: postComments.postKind,
+            postRefId: postComments.postRefId,
+          })
+          .from(postComments)
+          .where(
+            and(
+              isNull(postComments.deletedAt),
+              sql`${postComments.authorId} <> ${auth.childId}`,
+              or(
+                and(
+                  eq(postComments.postKind, "article"),
+                  inArray(
+                    postComments.postRefId,
+                    db
+                      .select({ id: articles.id })
+                      .from(articles)
+                      .where(eq(articles.authorId, auth.childId)),
+                  ),
+                ),
+                and(
+                  eq(postComments.postKind, "highlight"),
+                  inArray(
+                    postComments.postRefId,
+                    db
+                      .select({ id: highlights.id })
+                      .from(highlights)
+                      .where(eq(highlights.uploaderId, auth.childId)),
+                  ),
+                ),
+              ),
+            ),
+          )
+          .orderBy(desc(postComments.createdAt))
+          .limit(limit),
       ]);
     return res.json({
       articles: recentArticles.map((r) => ({
@@ -823,6 +867,15 @@ router.get(
         status: r.status,
         createdAt: r.createdAt.toISOString(),
       })),
+      commentsReceived: recentReceivedComments.map((r) => ({
+        id: r.id,
+        body: r.body,
+        authorId: r.authorId,
+        postKind: r.postKind,
+        postRefId: r.postRefId,
+        createdAt: r.createdAt.toISOString(),
+        moderationStatus: r.moderationStatus,
+      })),
     });
   }),
 );
@@ -855,6 +908,7 @@ router.get(
       followers,
       following,
       allowlistRows,
+      receivedComments,
     ] = await Promise.all([
       db.select().from(users).where(eq(users.id, auth.childId)).limit(1),
       db
@@ -932,6 +986,42 @@ router.get(
         .select()
         .from(dmAllowlist)
         .where(eq(dmAllowlist.childUserId, auth.childId)),
+      // Comments received on the child's own posts (articles +
+      // highlights), excluding self-comments. Required for full
+      // COPPA access parity.
+      db
+        .select()
+        .from(postComments)
+        .where(
+          and(
+            isNull(postComments.deletedAt),
+            sql`${postComments.authorId} <> ${auth.childId}`,
+            or(
+              and(
+                eq(postComments.postKind, "article"),
+                inArray(
+                  postComments.postRefId,
+                  db
+                    .select({ id: articles.id })
+                    .from(articles)
+                    .where(eq(articles.authorId, auth.childId)),
+                ),
+              ),
+              and(
+                eq(postComments.postKind, "highlight"),
+                inArray(
+                  postComments.postRefId,
+                  db
+                    .select({ id: highlights.id })
+                    .from(highlights)
+                    .where(eq(highlights.uploaderId, auth.childId)),
+                ),
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(postComments.createdAt))
+        .limit(500),
     ]);
     void logConsentEvent({
       event: "guardian_data_exported",
@@ -958,6 +1048,7 @@ router.get(
       messagesSent: sentDms,
       messagesReceived: receivedDms.map((r) => r.m),
       comments: allComments,
+      commentsReceived: receivedComments,
       articles: allArticles,
       highlights: allHighlights,
       tagsInArticles: tagsArticles,
