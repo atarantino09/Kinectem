@@ -7,6 +7,37 @@ import {
   sendTagNotificationEmail,
 } from "./email";
 import { logger } from "./logger";
+import { notifyGuardianOfPendingItem } from "./coppa";
+
+// Task #363 Phase 2 — fire a `child_pending_tag` bell on the linked
+// guardian for every pending tag whose target is a minor. This is the
+// missing fourth `kind` from `notifyGuardianOfPendingItem` (follow,
+// dm, comment, tag) so the family dashboard surfaces tags the same
+// way it surfaces the other pending items. Independent of the existing
+// recap/highlight tag-email channel, which targets the player.
+async function notifyGuardiansOfPendingTags(args: {
+  pendingUserIds: string[];
+  postTitle: string;
+}): Promise<void> {
+  if (args.pendingUserIds.length === 0) return;
+  const childRows = await db
+    .select({
+      id: users.id,
+      isMinor: users.isMinor,
+      parentId: users.parentId,
+    })
+    .from(users)
+    .where(inArray(users.id, args.pendingUserIds));
+  for (const c of childRows) {
+    if (!c.isMinor || !c.parentId) continue;
+    await notifyGuardianOfPendingItem({
+      guardianUserId: c.parentId,
+      childUserId: c.id,
+      kind: "tag",
+      message: `Please review a pending tag in "${args.postTitle}"`,
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
@@ -213,6 +244,11 @@ export async function notifyNewlyTaggedInRecap(args: {
     postLink: link,
     actorUserId: args.actorUserId,
   });
+  // Task #363 Phase 2 — guardian bell for pending recap tags on minors.
+  await notifyGuardiansOfPendingTags({
+    pendingUserIds: target.filter((u) => statusByUser.get(u) === "pending"),
+    postTitle: title,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -384,4 +420,13 @@ export async function notifyNewlyTaggedInHighlight(args: {
   if (parentInserts.length > 0) {
     await db.insert(notifications).values(parentInserts);
   }
+
+  // Task #363 Phase 2 — also fire the family-dashboard bell
+  // (`child_pending_tag`) so the guardian sees pending tags in the
+  // same queue as pending follows/dms/comments. Distinct from the
+  // tag-review bell above, which links into the post page.
+  await notifyGuardiansOfPendingTags({
+    pendingUserIds: pendingChildIds,
+    postTitle: title,
+  });
 }

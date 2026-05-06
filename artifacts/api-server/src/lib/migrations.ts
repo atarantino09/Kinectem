@@ -354,6 +354,7 @@ DECLARE
 BEGIN
   FOREACH v IN ARRAY ARRAY[
     'child_pending_follow','child_pending_dm','child_pending_comment',
+    'child_pending_tag',
     'guardian_approved_follow','guardian_declined_follow',
     'guardian_approved_dm','guardian_declined_dm',
     'guardian_approved_comment','guardian_declined_comment',

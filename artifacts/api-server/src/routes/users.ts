@@ -279,6 +279,9 @@ router.get(
 
     let isFollowing = false;
     if (me && !isOwnProfile) {
+      // Task #363 — pending follow edges must not show as "following"
+      // until the linked guardian approves them; only approved rows
+      // count toward the boolean.
       const [f] = await db
         .select()
         .from(userFollowers)
@@ -286,6 +289,7 @@ router.get(
           and(
             eq(userFollowers.followingUserId, u.id),
             eq(userFollowers.followerUserId, me.id),
+            eq(userFollowers.moderationStatus, "approved"),
           ),
         )
         .limit(1);

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Check, Download, Lock, Unlock, X } from "lucide-react";
+import { Check, Download, ExternalLink, Lock, Unlock, X } from "lucide-react";
 import type { Child } from "./types";
 
 type Actor = { id: string; displayName: string; avatarUrl: string | null };
@@ -41,6 +42,34 @@ type AllowEntry = {
 
 type ListEnvelope<T> = { data: T[] };
 
+type ActivityResponse = {
+  articles: { id: string; title: string | null; createdAt: string }[];
+  highlights: { id: string; title: string | null; createdAt: string }[];
+  comments: {
+    id: string;
+    body: string;
+    createdAt: string;
+    moderationStatus: string;
+  }[];
+  dmsSent: { id: string; createdAt: string; moderationStatus: string }[];
+  dmsReceived: {
+    id: string;
+    senderUserId: string;
+    createdAt: string;
+    moderationStatus: string;
+  }[];
+  followers: {
+    followerUserId: string;
+    createdAt: string;
+    moderationStatus: string;
+  }[];
+  following: {
+    followingUserId: string;
+    createdAt: string;
+    moderationStatus: string;
+  }[];
+};
+
 interface Props {
   child: Child;
 }
@@ -51,6 +80,7 @@ export function MinorControls({ child }: Props) {
   const [comments, setComments] = useState<CommentItem[] | null>(null);
   const [tags, setTags] = useState<TagItem[] | null>(null);
   const [allow, setAllow] = useState<AllowEntry[] | null>(null);
+  const [activity, setActivity] = useState<ActivityResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [allowDraft, setAllowDraft] = useState("");
@@ -60,18 +90,20 @@ export function MinorControls({ child }: Props) {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const [f, d, c, t, a] = await Promise.all([
+      const [f, d, c, t, a, act] = await Promise.all([
         customFetch<ListEnvelope<FollowItem>>(`${base}/pending-follows`),
         customFetch<ListEnvelope<DmItem>>(`${base}/pending-dms`),
         customFetch<ListEnvelope<CommentItem>>(`${base}/pending-comments`),
         customFetch<ListEnvelope<TagItem>>(`${base}/pending-tags`),
         customFetch<ListEnvelope<AllowEntry>>(`${base}/dm-allowlist`),
+        customFetch<ActivityResponse>(`${base}/activity`),
       ]);
       setFollows(f.data ?? []);
       setDms(d.data ?? []);
       setComments(c.data ?? []);
       setTags(t.data ?? []);
       setAllow(a.data ?? []);
+      setActivity(act);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     }
@@ -182,7 +214,7 @@ export function MinorControls({ child }: Props) {
     [base, child.firstName, refresh],
   );
 
-  if (!follows || !dms || !comments || !tags || !allow) {
+  if (!follows || !dms || !comments || !tags || !allow || !activity) {
     return <Skeleton className="h-32 rounded-lg" />;
   }
 
@@ -253,6 +285,11 @@ export function MinorControls({ child }: Props) {
             Communication controls — {child.firstName}
           </h3>
           <div className="flex items-center gap-2">
+            <Link href={`/users/${child.id}`}>
+              <Button size="sm" variant="outline">
+                <ExternalLink className="w-3 h-3 mr-1" /> Open timeline
+              </Button>
+            </Link>
             <Button
               size="sm"
               variant="outline"
@@ -385,6 +422,83 @@ export function MinorControls({ child }: Props) {
               ))}
             </div>
           )}
+        </div>
+        <div className="space-y-2">
+          <h4 className="text-sm font-black tracking-tight">Recent activity</h4>
+          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <div className="rounded-lg border border-border p-2">
+              <div className="font-medium text-foreground">
+                Posts ({activity.articles.length + activity.highlights.length})
+              </div>
+              {activity.articles.slice(0, 3).map((a) => (
+                <div key={a.id} className="truncate">
+                  {a.title ?? "Untitled recap"} · {new Date(a.createdAt).toLocaleDateString()}
+                </div>
+              ))}
+              {activity.highlights.slice(0, 3).map((h) => (
+                <div key={h.id} className="truncate">
+                  {h.title ?? "Untitled highlight"} · {new Date(h.createdAt).toLocaleDateString()}
+                </div>
+              ))}
+              {activity.articles.length + activity.highlights.length === 0 ? (
+                <div>None yet.</div>
+              ) : null}
+            </div>
+            <div className="rounded-lg border border-border p-2">
+              <div className="font-medium text-foreground">
+                Comments ({activity.comments.length})
+              </div>
+              {activity.comments.slice(0, 3).map((c) => (
+                <div key={c.id} className="truncate">
+                  [{c.moderationStatus}] {c.body}
+                </div>
+              ))}
+              {activity.comments.length === 0 ? <div>None yet.</div> : null}
+            </div>
+            <div className="rounded-lg border border-border p-2">
+              <div className="font-medium text-foreground">
+                DMs (sent {activity.dmsSent.length} · received {activity.dmsReceived.length})
+              </div>
+              {activity.dmsSent.slice(0, 3).map((m) => (
+                <div key={`s-${m.id}`} className="truncate">
+                  sent · [{m.moderationStatus}] {new Date(m.createdAt).toLocaleString()}
+                </div>
+              ))}
+              {activity.dmsReceived.slice(0, 3).map((m) => (
+                <div key={`r-${m.id}`} className="truncate">
+                  received · [{m.moderationStatus}] {new Date(m.createdAt).toLocaleString()}
+                </div>
+              ))}
+              {activity.dmsSent.length + activity.dmsReceived.length === 0 ? (
+                <div>None yet.</div>
+              ) : null}
+            </div>
+            <div className="rounded-lg border border-border p-2">
+              <div className="font-medium text-foreground">
+                Follows (followers {activity.followers.length} · following{" "}
+                {activity.following.length})
+              </div>
+              {activity.followers.slice(0, 3).map((f) => (
+                <div key={`fr-${f.followerUserId}`} className="truncate">
+                  follower · [{f.moderationStatus}]{" "}
+                  <Link href={`/users/${f.followerUserId}`} className="underline">
+                    {f.followerUserId.slice(0, 8)}
+                  </Link>
+                </div>
+              ))}
+              {activity.following.slice(0, 3).map((f) => (
+                <div key={`fg-${f.followingUserId}`} className="truncate">
+                  following · [{f.moderationStatus}]{" "}
+                  <Link href={`/users/${f.followingUserId}`} className="underline">
+                    {f.followingUserId.slice(0, 8)}
+                  </Link>
+                </div>
+              ))}
+              {activity.followers.length + activity.following.length === 0 ? (
+                <div>None yet.</div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

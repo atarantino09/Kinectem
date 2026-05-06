@@ -57,6 +57,7 @@ import {
   blockMinorAction,
   filterOutMinors,
   gateDmToRecipient,
+  isOnDmAllowlist,
   loadMinorLookup,
   logConsentEvent,
   notifyGuardianOfPendingItem,
@@ -274,17 +275,34 @@ router.post(
     // so we block when `me` is a minor. Adults messaging a minor land
     // as `pending` per-message and the guardian moderates from the
     // family dashboard. Org conversations require adult-only.
-    if (recipientType === "user") {
+    // Task #363 Phase 2 — minors can DM, but only counterparties on
+    // the guardian-managed allowlist. Org DMs stay fully blocked for
+    // minors. Adults messaging a minor land as `pending` per-message
+    // and the guardian moderates from the family dashboard.
+    if (recipientType === "organization") {
       if (blockMinorAction(res, me, "create_conversation")) {
         void logConsentEvent({
           event: "minor_blocked_action",
           childUserId: me.id,
-          details: "create_conversation",
+          details: "create_conversation_org",
         });
         return;
       }
-    } else if (blockMinorAction(res, me, "create_conversation")) {
-      return;
+    } else if (me.isMinor) {
+      const allowed = await isOnDmAllowlist(me.id, recipientId);
+      if (!allowed) {
+        void logConsentEvent({
+          event: "minor_blocked_action",
+          childUserId: me.id,
+          details: `create_conversation_not_allowlisted:${recipientId}`,
+        });
+        return apiError(
+          res,
+          403,
+          "You can only message people your parent or guardian has approved.",
+          { code: "MINOR_BLOCKED", extras: { minorBlocked: true, action: "create_conversation_not_allowlisted" } },
+        );
+      }
     }
     // Resolve minor-recipient gating up front so the first-message
     // insert below can stamp `moderation_status` correctly.
@@ -612,8 +630,47 @@ router.post(
       )
       .limit(1);
     if (!iAmIn) return apiError(res, 403, "Not a participant");
-    // Task #359 — minors cannot post follow-up messages either.
-    if (blockMinorAction(res, me, "send_message")) return;
+    // Task #363 Phase 2 — outbound DMs from a minor are restricted to
+    // the guardian-managed allowlist. Block early if the only other
+    // user participant is not on `me`'s allowlist.
+    if (me.isMinor) {
+      const otherUserCheck = await db
+        .select({ id: conversationParticipants.participantId })
+        .from(conversationParticipants)
+        .where(
+          and(
+            eq(conversationParticipants.conversationId, req.params.id),
+            eq(conversationParticipants.participantType, "user"),
+            ne(conversationParticipants.participantId, me.id),
+          ),
+        );
+      if (otherUserCheck.length === 0) {
+        return apiError(res, 403, "Direct messages aren't available here.", {
+          code: "MINOR_BLOCKED",
+          extras: { minorBlocked: true, action: "send_message_no_user" },
+        });
+      }
+      let anyAllowed = false;
+      for (const o of otherUserCheck) {
+        if (await isOnDmAllowlist(me.id, o.id)) {
+          anyAllowed = true;
+          break;
+        }
+      }
+      if (!anyAllowed) {
+        void logConsentEvent({
+          event: "minor_blocked_action",
+          childUserId: me.id,
+          details: "send_message_not_allowlisted",
+        });
+        return apiError(
+          res,
+          403,
+          "You can only message people your parent or guardian has approved.",
+          { code: "MINOR_BLOCKED", extras: { minorBlocked: true, action: "send_message_not_allowlisted" } },
+        );
+      }
+    }
     // Task #363 — Phase 2. Find any minor recipient on the other side
     // and gate the message: linked guardians + DM-allowlist senders go
     // through approved; everyone else lands `pending`.

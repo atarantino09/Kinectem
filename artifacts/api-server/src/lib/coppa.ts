@@ -155,6 +155,7 @@ export type ConsentAuditEvent =
   | "child_pending_follow"
   | "child_pending_dm"
   | "child_pending_comment"
+  | "child_pending_tag"
   | "guardian_approved_follow"
   | "guardian_declined_follow"
   | "guardian_approved_dm"
