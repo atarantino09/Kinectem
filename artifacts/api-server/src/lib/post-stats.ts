@@ -95,6 +95,7 @@ export async function loadPostStats(
             and(
               eq(postComments.postKind, "article"),
               isNull(postComments.deletedAt),
+              eq(postComments.moderationStatus, "approved"),
               inArray(postComments.postRefId, articleIds),
             ),
           )
@@ -161,6 +162,7 @@ export async function loadPostStats(
             and(
               eq(postComments.postKind, "highlight"),
               isNull(postComments.deletedAt),
+              eq(postComments.moderationStatus, "approved"),
               inArray(postComments.postRefId, highlightIds),
             ),
           )
@@ -227,6 +229,7 @@ export async function loadPostStats(
             and(
               eq(postComments.postKind, "org_post"),
               isNull(postComments.deletedAt),
+              eq(postComments.moderationStatus, "approved"),
               inArray(postComments.postRefId, orgPostIds),
             ),
           )
