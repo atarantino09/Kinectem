@@ -6,8 +6,8 @@
 // follows / comments / profile-edit / asset-upload.
 
 import type { Request, Response } from "express";
-import { db, consentAuditLog, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, consentAuditLog, users, dmAllowlist, notifications } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { apiError } from "./spec-helpers";
 import { logger } from "./logger";
@@ -150,7 +150,24 @@ export type ConsentAuditEvent =
   | "guardian_revoked"
   | "minor_blocked_action"
   | "exif_stripped"
-  | "deletion_scheduled";
+  | "deletion_scheduled"
+  // Task #363 — COPPA Phase 2.
+  | "child_pending_follow"
+  | "child_pending_dm"
+  | "child_pending_comment"
+  | "guardian_approved_follow"
+  | "guardian_declined_follow"
+  | "guardian_approved_dm"
+  | "guardian_declined_dm"
+  | "guardian_approved_comment"
+  | "guardian_declined_comment"
+  | "guardian_approved_tag"
+  | "guardian_declined_tag"
+  | "guardian_dm_allowlist_add"
+  | "guardian_dm_allowlist_remove"
+  | "guardian_data_exported"
+  | "guardian_revoke_requested"
+  | "guardian_consent_regranted";
 
 export async function logConsentEvent(args: {
   event: ConsentAuditEvent;
@@ -298,4 +315,128 @@ export function filterOutMinors<
     if (r.parentId && r.parentId === viewerId) return true;
     return false;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Task #363 — COPPA Phase 2 minor-gating primitives.
+// ---------------------------------------------------------------------------
+//
+// These return one of `"approved" | "pending"` (or, for DMs, also
+// `"blocked"`) so the calling route can decide whether to write the
+// row immediately or stash it as pending awaiting guardian approval.
+// All loads are bounded to a single user lookup (the `user_followers`
+// / `messages` / `post_comments` writes that follow already happen on
+// the hot path so a few extra cheap selects are acceptable).
+
+export interface MinorLookup {
+  id: string;
+  isMinor: boolean | null;
+  parentId: string | null;
+}
+
+export async function loadMinorLookup(userId: string): Promise<MinorLookup | null> {
+  const [row] = await db
+    .select({ id: users.id, isMinor: users.isMinor, parentId: users.parentId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function isOnDmAllowlist(
+  childUserId: string,
+  counterpartyUserId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ c: dmAllowlist.childUserId })
+    .from(dmAllowlist)
+    .where(
+      and(
+        eq(dmAllowlist.childUserId, childUserId),
+        eq(dmAllowlist.counterpartyUserId, counterpartyUserId),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+// Decides the gating status for a brand-new follow edge whose
+// `followingUserId` is `target`. Returns `approved` for adult targets
+// or when the actor is the linked guardian; `pending` when an outside
+// account is following a minor (the pre-Phase-1 hard-block path remains
+// in the route — Phase 2 only relaxes that block to "pending" once we
+// surface a guardian approval queue).
+export function gateFollowOfMinor(
+  target: MinorLookup,
+  actorId: string,
+): "approved" | "pending" {
+  if (!target.isMinor) return "approved";
+  if (target.parentId && target.parentId === actorId) return "approved";
+  return "pending";
+}
+
+// Decides the gating status for a comment authored by `actorId` on a
+// post owned by `ownerId`. Adult-owned posts always `approved`.
+// Minor-owned posts: the linked guardian and the minor themselves
+// approved; everyone else pending.
+export function gateCommentOnMinorPost(
+  owner: MinorLookup,
+  actorId: string,
+): "approved" | "pending" {
+  if (!owner.isMinor) return "approved";
+  if (owner.id === actorId) return "approved";
+  if (owner.parentId && owner.parentId === actorId) return "approved";
+  return "pending";
+}
+
+// Decides whether a DM whose recipient is `recipientId` (sent by
+// `senderId`) should land approved, pending, or be blocked outright.
+// `blocked` is reserved for the case where the sender is themselves a
+// minor and shouldn't be initiating DMs at all (the Phase-1 rule we
+// keep). Returning `pending` means the message persists with
+// `moderation_status = 'pending'` and the linked guardian is notified.
+export async function gateDmToRecipient(
+  senderId: string,
+  recipientId: string,
+): Promise<{
+  status: "approved" | "pending" | "blocked";
+  recipient: MinorLookup | null;
+  reason?: string;
+}> {
+  const recipient = await loadMinorLookup(recipientId);
+  if (!recipient) return { status: "approved", recipient: null };
+  // Sender-side minor check is already enforced by `blockMinorAction`
+  // in the route, so we trust the caller and only gate by recipient.
+  if (!recipient.isMinor) return { status: "approved", recipient };
+  if (recipient.parentId && recipient.parentId === senderId) {
+    return { status: "approved", recipient };
+  }
+  if (await isOnDmAllowlist(recipient.id, senderId)) {
+    return { status: "approved", recipient };
+  }
+  return { status: "pending", recipient };
+}
+
+// Bell-notify a child's linked guardian that a new pending item is
+// waiting in the family dashboard. We deliberately ring only the
+// guardian (not the child) so a 7-year-old isn't pulled into the
+// approval ceremony — they just see the relationship "go live" later
+// if/when the parent approves it.
+export async function notifyGuardianOfPendingItem(args: {
+  guardianUserId: string;
+  childUserId: string;
+  kind: "follow" | "dm" | "comment" | "tag";
+  message: string;
+}): Promise<void> {
+  try {
+    await db.insert(notifications).values({
+      userId: args.guardianUserId,
+      kind: `child_pending_${args.kind}`,
+      message: args.message,
+      link: `/family?childId=${args.childUserId}&tab=pending`,
+      actorUserId: args.childUserId,
+    });
+  } catch (err) {
+    logger.error({ err, kind: args.kind }, "Failed to notify guardian of pending item");
+  }
 }

@@ -71,7 +71,13 @@ import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
-import { blockMinorAction, logConsentEvent } from "../lib/coppa";
+import {
+  blockMinorAction,
+  gateCommentOnMinorPost,
+  loadMinorLookup,
+  logConsentEvent,
+  notifyGuardianOfPendingItem,
+} from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -867,6 +873,21 @@ router.get(
       isNull(postComments.deletedAt),
     ];
     if (!isAdmin) conds.push(isNull(postComments.hiddenAt));
+    // Task #363 — hide pending / declined comments from non-guardian
+    // viewers. The guardian sees them via the family dashboard's
+    // pending queue, not the public comments feed.
+    const me = req.sessionUser;
+    const ownerId = await loadPostOwnerId(parsed);
+    const owner = ownerId ? await loadMinorLookup(ownerId) : null;
+    const viewerIsGuardian = !!(
+      me && owner?.parentId && owner.parentId === me.id
+    );
+    if (!viewerIsGuardian && !isAdmin) {
+      conds.push(eq(postComments.moderationStatus, "approved"));
+    } else if (!isAdmin) {
+      // Guardian: hide declined; show approved + pending.
+      conds.push(ne(postComments.moderationStatus, "declined"));
+    }
     const rows = await db
       .select({ c: postComments, author: users })
       .from(postComments)
@@ -893,31 +914,17 @@ router.post(
     }
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
-    // Task #359 — public commenting on a minor-owned post is also
-    // refused. The minor's linked guardian is the only outside voice
-    // allowed, so they can still moderate / converse on their child's
-    // content. The minor themselves was already filtered above.
+    // Task #363 — COPPA Phase 2. Comments on a minor-owned post now
+    // land as `pending` instead of being hard-blocked, so the linked
+    // guardian can review and approve / decline from the family
+    // dashboard. The minor themselves and the guardian remain
+    // `approved` so threads they author keep flowing.
     const ownerId = await loadPostOwnerId(parsed);
+    let status: "approved" | "pending" = "approved";
+    let owner = null as Awaited<ReturnType<typeof loadMinorLookup>>;
     if (ownerId && ownerId !== me.id) {
-      const [owner] = await db
-        .select({ isMinor: users.isMinor, parentId: users.parentId })
-        .from(users)
-        .where(eq(users.id, ownerId))
-        .limit(1);
-      if (owner?.isMinor && owner.parentId !== me.id) {
-        void logConsentEvent({
-          event: "minor_blocked_action",
-          childUserId: ownerId,
-          actorEmail: me.email ?? null,
-          details: "comment_on_minor_post",
-        });
-        return apiError(
-          res,
-          403,
-          "Comments are off for this account.",
-          { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
-        );
-      }
+      owner = await loadMinorLookup(ownerId);
+      if (owner) status = gateCommentOnMinorPost(owner, me.id);
     }
     const body = String(req.body?.body ?? "").trim();
     if (!body) return apiError(res, 400, "Comment body is required");
@@ -928,8 +935,23 @@ router.post(
         postRefId: parsed.id,
         authorId: me.id,
         body,
+        moderationStatus: status,
       })
       .returning();
+    if (status === "pending" && owner?.parentId) {
+      void logConsentEvent({
+        event: "child_pending_comment",
+        childUserId: owner.id,
+        actorEmail: me.email ?? null,
+        details: `comment:${c.id}`,
+      });
+      await notifyGuardianOfPendingItem({
+        guardianUserId: owner.parentId,
+        childUserId: owner.id,
+        kind: "comment",
+        message: `New comment is awaiting your approval`,
+      });
+    }
     res.status(201).json(toComment(c, me));
   }),
 );

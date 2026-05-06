@@ -324,6 +324,86 @@ UPDATE users
    AND require_tag_consent = false;
 `;
 
+// Task #363 — COPPA Phase 2. Adds the gating status columns on
+// user_followers / post_comments / messages, the dm_allowlist table,
+// and extends the consent_audit_event + account_status enums. Every
+// statement is idempotent so re-running on a freshly pushed schema is
+// a no-op. Declared before MIGRATIONS so the array can reference it.
+const TASK_363_COPPA_PHASE_2 = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'minor_gate_status') THEN
+    CREATE TYPE minor_gate_status AS ENUM ('pending','approved','declined');
+  END IF;
+END$migration$;
+
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'account_status' AND e.enumlabel = 'pending_revocation'
+  ) THEN
+    ALTER TYPE account_status ADD VALUE 'pending_revocation';
+  END IF;
+END$migration$;
+
+DO $migration$
+DECLARE
+  v text;
+BEGIN
+  FOREACH v IN ARRAY ARRAY[
+    'child_pending_follow','child_pending_dm','child_pending_comment',
+    'guardian_approved_follow','guardian_declined_follow',
+    'guardian_approved_dm','guardian_declined_dm',
+    'guardian_approved_comment','guardian_declined_comment',
+    'guardian_approved_tag','guardian_declined_tag',
+    'guardian_dm_allowlist_add','guardian_dm_allowlist_remove',
+    'guardian_data_exported','guardian_revoke_requested',
+    'guardian_consent_regranted'
+  ] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_enum e
+      JOIN pg_type t ON t.oid = e.enumtypid
+      WHERE t.typname = 'consent_audit_event' AND e.enumlabel = v
+    ) THEN
+      EXECUTE format('ALTER TYPE consent_audit_event ADD VALUE %L', v);
+    END IF;
+  END LOOP;
+END$migration$;
+
+ALTER TABLE user_followers
+  ADD COLUMN IF NOT EXISTS moderation_status minor_gate_status NOT NULL DEFAULT 'approved',
+  ADD COLUMN IF NOT EXISTS decided_by_guardian_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS decided_at timestamp;
+
+ALTER TABLE post_comments
+  ADD COLUMN IF NOT EXISTS moderation_status minor_gate_status NOT NULL DEFAULT 'approved',
+  ADD COLUMN IF NOT EXISTS decided_by_guardian_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS decided_at timestamp;
+
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS moderation_status minor_gate_status NOT NULL DEFAULT 'approved',
+  ADD COLUMN IF NOT EXISTS decided_by_guardian_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS decided_at timestamp;
+
+CREATE TABLE IF NOT EXISTS dm_allowlist (
+  child_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  counterparty_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  added_by_guardian_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  note text,
+  created_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (child_user_id, counterparty_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS user_followers_pending_idx
+  ON user_followers (following_user_id) WHERE moderation_status = 'pending';
+CREATE INDEX IF NOT EXISTS post_comments_pending_idx
+  ON post_comments (post_kind, post_ref_id) WHERE moderation_status = 'pending';
+CREATE INDEX IF NOT EXISTS messages_pending_idx
+  ON messages (conversation_id) WHERE moderation_status = 'pending';
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -372,6 +452,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-06-task-359-coppa-phase-1",
     sql: TASK_359_COPPA_PHASE_1,
+  },
+  {
+    name: "2026-05-06-task-363-coppa-phase-2",
+    sql: TASK_363_COPPA_PHASE_2,
   },
 ];
 

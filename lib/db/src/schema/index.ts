@@ -41,11 +41,26 @@ export const adminTargetTypeEnum = pgEnum("admin_target_type", [
   "report",
 ]);
 
-// Task #359 — COPPA Phase 1.
+// Task #359 — COPPA Phase 1. Phase 2 (#363) adds `pending_revocation`
+// for guardians who have asked to revoke consent but the grace period
+// has not yet expired. Treated like `disabled` for sign-in.
 export const accountStatusEnum = pgEnum("account_status", [
   "active",
   "pending_guardian",
   "disabled",
+  "pending_revocation",
+]);
+
+// Task #363 — COPPA Phase 2 gating status used on `user_followers`,
+// `post_comments`, `messages` rows where one end of the interaction is
+// a minor. `approved` is the existing default and what every adult-side
+// row carries (so Phase 2 is invisible for non-minor accounts). New
+// minor-targeted writes start `pending` and a guardian flips them to
+// `approved` or `declined` from the family dashboard.
+export const minorGateStatusEnum = pgEnum("minor_gate_status", [
+  "pending",
+  "approved",
+  "declined",
 ]);
 export const parentalConsentStateEnum = pgEnum("parental_consent_state", [
   "pending_notice",
@@ -67,6 +82,23 @@ export const consentAuditEventEnum = pgEnum("consent_audit_event", [
   "minor_blocked_action",
   "exif_stripped",
   "deletion_scheduled",
+  // Task #363 — COPPA Phase 2 events.
+  "child_pending_follow",
+  "child_pending_dm",
+  "child_pending_comment",
+  "guardian_approved_follow",
+  "guardian_declined_follow",
+  "guardian_approved_dm",
+  "guardian_declined_dm",
+  "guardian_approved_comment",
+  "guardian_declined_comment",
+  "guardian_approved_tag",
+  "guardian_declined_tag",
+  "guardian_dm_allowlist_add",
+  "guardian_dm_allowlist_remove",
+  "guardian_data_exported",
+  "guardian_revoke_requested",
+  "guardian_consent_regranted",
 ]);
 
 export const users = pgTable("users", {
@@ -247,6 +279,19 @@ export const userFollowers = pgTable("user_followers", {
   followingUserId: uuid("following_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   followerUserId: uuid("follower_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Task #363 — COPPA Phase 2 minor-gating. Adult-to-adult follows are
+  // always 'approved'. Follows whose `followingUserId` is a minor start
+  // 'pending' until the linked guardian approves or declines from the
+  // family dashboard. `decidedByGuardianId` + `decidedAt` are stamped
+  // on transition out of `pending`.
+  moderationStatus: minorGateStatusEnum("moderation_status")
+    .notNull()
+    .default("approved"),
+  decidedByGuardianId: uuid("decided_by_guardian_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  decidedAt: timestamp("decided_at"),
 }, (t) => ({ pk: primaryKey({ columns: [t.followingUserId, t.followerUserId] }) }));
 
 export const teams = pgTable("teams", {
@@ -414,6 +459,17 @@ export const postComments = pgTable("post_comments", {
   deletedAt: timestamp("deleted_at"),
   hiddenAt: timestamp("hidden_at"),
   hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  // Task #363 — COPPA Phase 2: comments left by adults on a minor-owned
+  // post start `pending` until the minor's guardian approves them. Other
+  // comments default to `approved` so non-minor flows are unaffected.
+  moderationStatus: minorGateStatusEnum("moderation_status")
+    .notNull()
+    .default("approved"),
+  decidedByGuardianId: uuid("decided_by_guardian_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  decidedAt: timestamp("decided_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -464,8 +520,45 @@ export const messages = pgTable("messages", {
   senderOrgId: uuid("sender_org_id").references(() => organizations.id, { onDelete: "set null" }),
   body: text("body"),
   deletedAt: timestamp("deleted_at"),
+  // Task #363 — COPPA Phase 2: messages whose recipient is a minor (and
+  // whose sender is not on that minor's DM allowlist) start `pending`
+  // until the linked guardian approves. Adult↔adult messages keep the
+  // `approved` default so existing conversations are unaffected.
+  moderationStatus: minorGateStatusEnum("moderation_status")
+    .notNull()
+    .default("approved"),
+  decidedByGuardianId: uuid("decided_by_guardian_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  decidedAt: timestamp("decided_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Task #363 — DM allowlist for minor accounts. When `(childId, otherId)`
+// is present, messages from `otherId` to the child bypass guardian
+// approval and land directly in the conversation. The guardian is the
+// only one who can add/remove entries; the minor cannot self-allow.
+export const dmAllowlist = pgTable(
+  "dm_allowlist",
+  {
+    childUserId: uuid("child_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    counterpartyUserId: uuid("counterparty_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    addedByGuardianId: uuid("added_by_guardian_id").references(
+      (): AnyPgColumn => users.id,
+      { onDelete: "set null" },
+    ),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.childUserId, t.counterpartyUserId] }),
+  }),
+);
 
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),

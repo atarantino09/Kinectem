@@ -58,7 +58,12 @@ import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { normalizeWebsite } from "../lib/normalize-website";
-import { blockMinorAction } from "../lib/coppa";
+import {
+  blockMinorAction,
+  gateFollowOfMinor,
+  loadMinorLookup,
+  notifyGuardianOfPendingItem,
+} from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -1111,43 +1116,49 @@ router.post(
     // by strangers. The minor's linked guardian is allowed through, since
     // follow + family dashboard are how parents oversee the account.
     if (blockMinorAction(res, me, "follow_user")) return;
-    const [target] = await db
-      .select({ id: users.id, isMinor: users.isMinor, parentId: users.parentId })
-      .from(users)
-      .where(eq(users.id, req.params.userId))
-      .limit(1);
+    const target = await loadMinorLookup(req.params.userId);
     if (!target) return notFound(res);
-    if (target.isMinor && target.parentId !== me.id) {
-      return apiError(
-        res,
-        403,
-        "This account isn't available for following.",
-        { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
-      );
-    }
+    // Task #363 — COPPA Phase 2. Phase 1 hard-blocked stranger follows
+    // of minors; Phase 2 lets them through as `pending` so the linked
+    // guardian can approve from the family dashboard. Adult targets
+    // and the guardian's own follow-edge stay `approved` (the existing
+    // default).
+    const status = gateFollowOfMinor(target, me.id);
     const inserted = await db
       .insert(userFollowers)
-      .values({ followingUserId: req.params.userId, followerUserId: me.id })
+      .values({
+        followingUserId: req.params.userId,
+        followerUserId: me.id,
+        moderationStatus: status,
+      })
       .onConflictDoNothing()
       .returning({ followerUserId: userFollowers.followerUserId });
-    // Bell-notify the followed user. Stamp `actorUserId` with the
-    // follower so the family dashboard's Remove action can revoke
-    // exactly this (follower → child) edge. Only insert when the
-    // follow was actually new — re-following someone who already
-    // follows them shouldn't re-ring the bell.
     if (inserted.length > 0) {
-      await db.insert(notifications).values({
-        userId: req.params.userId,
-        kind: "follow",
-        message: `${displayName(me)} started following you`,
-        link: `/users/${me.id}`,
-        actorUserId: me.id,
-      });
+      if (status === "approved") {
+        // Bell-notify the followed user when the follow lands live.
+        // Pending follows do NOT bell-notify the minor — they ring
+        // the guardian instead.
+        await db.insert(notifications).values({
+          userId: req.params.userId,
+          kind: "follow",
+          message: `${displayName(me)} started following you`,
+          link: `/users/${me.id}`,
+          actorUserId: me.id,
+        });
+      } else if (target.parentId) {
+        await notifyGuardianOfPendingItem({
+          guardianUserId: target.parentId,
+          childUserId: target.id,
+          kind: "follow",
+          message: `${displayName(me)} wants to follow your child`,
+        });
+      }
     }
     res.status(201).json({
       followerId: me.id,
       followingUserId: req.params.userId,
       createdAt: new Date().toISOString(),
+      moderationStatus: status,
     });
   }),
 );

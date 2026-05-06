@@ -6,6 +6,7 @@ import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { EmailPrefCard } from "@/components/guardian-page/EmailPrefCard";
 import { LinkChildSearch } from "@/components/guardian-page/LinkChildSearch";
 import { ChildRow } from "@/components/guardian-page/ChildRow";
+import { MinorControls } from "@/components/guardian-page/MinorControls";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
 
 export default function GuardianPage() {
@@ -58,6 +59,7 @@ export default function GuardianPage() {
           ) : (
             <div className="space-y-3">
               {dash.children.map((c) => (
+                <div key={c.id} className="space-y-3">
                 <ChildRow
                   key={c.id}
                   child={c}
@@ -81,6 +83,8 @@ export default function GuardianPage() {
                   onApproveAll={dash.notifs.approveAllChildItems}
                   onToggleShowDecided={dash.notifs.toggleShowDecided}
                 />
+                <MinorControls child={c} />
+                </div>
               ))}
             </div>
           )}

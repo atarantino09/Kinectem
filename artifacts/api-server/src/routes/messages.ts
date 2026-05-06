@@ -52,7 +52,15 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
-import { blockIfEitherMinor, blockMinorAction, filterOutMinors, logConsentEvent } from "../lib/coppa";
+import {
+  blockIfEitherMinor,
+  blockMinorAction,
+  filterOutMinors,
+  gateDmToRecipient,
+  loadMinorLookup,
+  logConsentEvent,
+  notifyGuardianOfPendingItem,
+} from "../lib/coppa";
 
 const router: IRouter = Router();
 
@@ -246,11 +254,12 @@ router.post(
     if (!recipientId) return apiError(res, 400, "recipientId is required");
     if (recipientType === "user" && recipientId === me.id)
       return apiError(res, 400, "Cannot start a conversation with yourself");
-    // Task #359 — direct messages are blocked for under-13 accounts on
-    // both sides. Org conversations are allowed to/from adult accounts
-    // because the org represents an institutional contact, not a peer.
+    // Task #363 — Phase 2. Minors still cannot SEND DMs (Phase 1 rule),
+    // so we block when `me` is a minor. Adults messaging a minor land
+    // as `pending` per-message and the guardian moderates from the
+    // family dashboard. Org conversations require adult-only.
     if (recipientType === "user") {
-      if (await blockIfEitherMinor(res, me.id, recipientId, "create_conversation")) {
+      if (blockMinorAction(res, me, "create_conversation")) {
         void logConsentEvent({
           event: "minor_blocked_action",
           childUserId: me.id,
@@ -260,6 +269,12 @@ router.post(
       }
     } else if (blockMinorAction(res, me, "create_conversation")) {
       return;
+    }
+    // Resolve minor-recipient gating up front so the first-message
+    // insert below can stamp `moderation_status` correctly.
+    let dmGate: Awaited<ReturnType<typeof gateDmToRecipient>> | null = null;
+    if (recipientType === "user") {
+      dmGate = await gateDmToRecipient(me.id, recipientId);
     }
 
     // Look for an existing direct conversation
@@ -334,14 +349,33 @@ router.post(
     }
 
     if (firstBody || validAssets.length > 0) {
+      const moderationStatus = dmGate?.status === "pending" ? "pending" : "approved";
       const [created] = await db
         .insert(messages)
         .values({
           conversationId: conv.id,
           senderUserId: me.id,
           body: firstBody || null,
+          moderationStatus,
         })
         .returning();
+      if (
+        moderationStatus === "pending" &&
+        dmGate?.recipient?.parentId
+      ) {
+        void logConsentEvent({
+          event: "child_pending_dm",
+          childUserId: dmGate.recipient.id,
+          actorEmail: me.email ?? null,
+          details: `message:${created.id}`,
+        });
+        await notifyGuardianOfPendingItem({
+          guardianUserId: dmGate.recipient.parentId,
+          childUserId: dmGate.recipient.id,
+          kind: "dm",
+          message: `New message is awaiting your approval`,
+        });
+      }
       if (validAssets.length > 0) {
         const orderById = new Map(assetIds.map((id, i) => [id, i] as const));
         await db.insert(messageAssets).values(
@@ -488,7 +522,40 @@ router.get(
       .from(messageChildHides)
       .where(eq(messageChildHides.childId, me.id));
     const hiddenIds = new Set(hides.map((h) => h.messageId));
-    const visibleRows = rows.filter((r) => !hiddenIds.has(r.m.id));
+    // Task #363 — Phase 2 message gating. The minor recipient should
+    // never see a `pending` or `declined` message; the sender always
+    // sees their own (with a "pending review" indicator surfaced via
+    // the `moderationStatus` field); the linked guardian sees them all
+    // for moderation. We keep the filter cheap by inferring the
+    // viewer's relationship to each message off `senderUserId` and the
+    // child↔guardian map computed once for this conversation.
+    const otherUsers = await db
+      .select({
+        userId: conversationParticipants.participantId,
+        parentId: users.parentId,
+      })
+      .from(conversationParticipants)
+      .innerJoin(users, eq(users.id, conversationParticipants.participantId))
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, req.params.id),
+          eq(conversationParticipants.participantType, "user"),
+        ),
+      );
+    const myChildren = new Set(
+      otherUsers.filter((u) => u.parentId === me.id).map((u) => u.userId),
+    );
+    const isViewerGuardian = myChildren.size > 0;
+    const visibleRows = rows.filter((r) => {
+      if (hiddenIds.has(r.m.id)) return false;
+      if (r.m.moderationStatus === "approved") return true;
+      // Sender always sees their own message.
+      if (r.m.senderUserId === me.id) return true;
+      // Guardian sees pending — pending is only created when a minor
+      // they parent is the recipient.
+      if (isViewerGuardian && r.m.moderationStatus === "pending") return true;
+      return false;
+    });
     const assetsByMessage = await loadAssetsForMessages(
       visibleRows.map((r) => r.m.id),
     );
@@ -531,9 +598,9 @@ router.post(
     if (!iAmIn) return apiError(res, 403, "Not a participant");
     // Task #359 — minors cannot post follow-up messages either.
     if (blockMinorAction(res, me, "send_message")) return;
-    // Adults cannot keep messaging into an existing conversation that
-    // includes a minor recipient (the minor's linked guardian is
-    // exempt — that's the family-oversight channel).
+    // Task #363 — Phase 2. Find any minor recipient on the other side
+    // and gate the message: linked guardians + DM-allowlist senders go
+    // through approved; everyone else lands `pending`.
     const otherUserParts = await db
       .select({
         userId: conversationParticipants.participantId,
@@ -549,22 +616,10 @@ router.post(
           ne(conversationParticipants.participantId, me.id),
         ),
       );
-    const minorRecipient = otherUserParts.find(
-      (p) => p.isMinor && p.parentId !== me.id,
-    );
+    const minorRecipient = otherUserParts.find((p) => p.isMinor) ?? null;
+    let messageGate: Awaited<ReturnType<typeof gateDmToRecipient>> | null = null;
     if (minorRecipient) {
-      void logConsentEvent({
-        event: "minor_blocked_action",
-        childUserId: minorRecipient.userId,
-        actorEmail: me.email ?? null,
-        details: "send_message_to_minor",
-      });
-      return apiError(
-        res,
-        403,
-        "This conversation includes an account that can't receive new messages.",
-        { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
-      );
+      messageGate = await gateDmToRecipient(me.id, minorRecipient.userId);
     }
     const body = String(req.body?.body ?? "").trim();
     const rawAssetIds = Array.isArray(req.body?.assetIds)
@@ -596,14 +651,34 @@ router.post(
         return apiError(res, 400, "All assets must be confirmed before attaching");
       }
     }
+    const moderationStatus =
+      messageGate?.status === "pending" ? "pending" : "approved";
     const [m] = await db
       .insert(messages)
       .values({
         conversationId: req.params.id,
         senderUserId: me.id,
         body: body || null,
+        moderationStatus,
       })
       .returning();
+    if (
+      moderationStatus === "pending" &&
+      messageGate?.recipient?.parentId
+    ) {
+      void logConsentEvent({
+        event: "child_pending_dm",
+        childUserId: messageGate.recipient.id,
+        actorEmail: me.email ?? null,
+        details: `message:${m.id}`,
+      });
+      await notifyGuardianOfPendingItem({
+        guardianUserId: messageGate.recipient.parentId,
+        childUserId: messageGate.recipient.id,
+        kind: "dm",
+        message: `New message is awaiting your approval`,
+      });
+    }
     if (validAssets.length > 0) {
       const orderById = new Map(assetIds.map((id, i) => [id, i] as const));
       await db.insert(messageAssets).values(

@@ -56,6 +56,38 @@ before POSTing `/auth/signup`. Pages: `/guardian-consent/:token`,
 `/privacy-policy`, `/coppa-notice`. Keep `/coppa-notice` wording in
 sync with `CONSENT_NOTICE_TEXT` in `artifacts/api-server/src/lib/coppa.ts`.
 
+## COPPA Phase 2 (task #363)
+
+Layers guardian-mediated communication controls on top of Phase 1.
+Schema additions: `moderationStatus` (`approved | pending | declined`)
++ `decidedByGuardianId` + `decidedAt` columns on `userFollowers`,
+`postComments`, `messages`; new `dmAllowlist` table
+(`childUserId, counterpartyUserId, addedByGuardianId, note`); extended
+`accountStatusEnum` and `consentAuditEventEnum`. Migration
+`2026-05-06-task-363-coppa-phase-2`.
+
+Server gating helpers in `src/lib/coppa.ts`: `gateFollowOfMinor`,
+`gateCommentOnMinorPost`, `gateDmToRecipient` (allowlist short-circuits
+to approved), `notifyGuardianOfPendingItem`. Wired into
+`organizations.ts` (POST follow), `posts.ts` (comment create + comment
+list filter — guardian sees pending, others see approved only),
+`messages.ts` (POST conversations + sendMessage + list filter), and
+`follows.ts` (followers list filter).
+
+Guardian-only routes in `src/routes/guardians-coppa.ts` mounted by
+`routes/index.ts`, all authorized by `users.parentId === me.id`:
+`GET /guardians/children/{childId}/pending-{follows,dms,comments,tags}`,
+`POST .../pending/{kind}/{id}/{approve|decline}`, `GET/POST/DELETE
+.../dm-allowlist[/:counterpartyUserId]`, `GET .../activity`,
+`GET .../export`, `POST .../revoke-consent`,
+`POST .../regrant-consent`. These endpoints are not in the OpenAPI
+spec — there is no openapi-validator middleware, so frontend calls
+them directly via `customFetch` from `@workspace/api-client-react`.
+
+Frontend: a new `MinorControls` card on `GuardianPage` renders pending
+queues, approve/decline buttons, the DM allowlist editor, and
+Export / Pause / Re-activate actions per linked child.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

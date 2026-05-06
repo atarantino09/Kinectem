@@ -160,7 +160,23 @@ router.get(
     const userId =
       req.params.userId === "me" ? req.sessionUser?.id : req.params.userId;
     if (!userId) return apiError(res, 401, "Not authenticated");
+    // Task #363 — non-guardian viewers only see APPROVED follows. The
+    // child's linked guardian sees them all (pending + approved) so the
+    // family page reflects what they're managing.
+    const me = req.sessionUser;
     const conds = [eq(userFollowers.followingUserId, userId)];
+    const isGuardianViewer = me ? await (async () => {
+      const [u] = await db
+        .select({ parentId: users.parentId })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      return !!(u && u.parentId === me.id);
+    })() : false;
+    const isSelf = me?.id === userId;
+    if (!isGuardianViewer && !isSelf) {
+      conds.push(eq(userFollowers.moderationStatus, "approved"));
+    }
     if (cursor) {
       conds.push(
         sql`(${userFollowers.createdAt}, ${userFollowers.followerUserId}) < (${cursor.createdAt.toISOString()}, ${cursor.id})`,
