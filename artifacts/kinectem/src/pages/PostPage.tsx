@@ -146,9 +146,65 @@ export default function PostPage() {
   // server; this <meta> covers the SPA-shell render path.
   const authorIsMinor = Boolean((post.author as { isMinor?: boolean })?.isMinor);
 
+  // Task #367 — guardian-only "Report photo of my child" action. We
+  // only surface this in the existing guardian preview mode (where
+  // the guardian arrived from /family with a known childId), so we
+  // already know who the takedown is being filed on behalf of and
+  // don't need a child-picker modal for the MVP. The action POSTs
+  // to the COPPA Phase 3 endpoint; a successful filing immediately
+  // hides the post from feeds for everyone except admin + the
+  // requesting guardian.
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const handleReportPhotoOfChild = async () => {
+    if (!asChildId) return;
+    setReportSubmitting(true);
+    try {
+      const refKind = isShort ? "highlight" : "article";
+      await customFetch(
+        `/api/v1/guardians/children/${asChildId}/takedown-request`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId: `${refKind}:${post.id}` }),
+        },
+      );
+      toast({
+        title: "Takedown requested",
+        description:
+          "We've notified moderators. The post is hidden from public feeds while we review it.",
+      });
+      qc.invalidateQueries({ queryKey: ["post", postId] });
+      qc.invalidateQueries({ queryKey: ["child-post", asChildId, postId] });
+    } catch (err) {
+      toast({
+        title: "Couldn't submit takedown",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Something went wrong filing the takedown request.",
+        variant: "destructive",
+      });
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   return (
     <article className="max-w-3xl mx-auto space-y-6">
       {authorIsMinor ? <NoIndex /> : null}
+      {asChildId && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={reportSubmitting}
+            onClick={handleReportPhotoOfChild}
+            data-testid="btn-report-photo-of-child"
+          >
+            {reportSubmitting ? "Submitting…" : "Report photo of my child"}
+          </Button>
+        </div>
+      )}
       {asChildId && (
         <div
           className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"

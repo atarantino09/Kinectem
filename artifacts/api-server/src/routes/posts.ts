@@ -74,6 +74,7 @@ import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
 import {
   blockMinorAction,
+  filterOutMinors,
   gateCommentOnMinorPost,
   loadMinorLookup,
   logConsentEvent,
@@ -110,6 +111,47 @@ async function isPendingTakedown(
     return false;
   }
   return true;
+}
+
+// Bulk variant of `isPendingTakedown` for feed/profile listings.
+// Returns the set of post IDs (of the given kind) that have a pending
+// takedown the viewer is NOT the requesting guardian for. Listings
+// drop these IDs entirely so a flagged photo of a minor disappears
+// from feeds while moderation is in flight (the requesting guardian
+// and platform admins continue to see it via GET /posts/:postId so
+// they can resolve the queue).
+async function pendingTakedownIdSet(
+  kind: "article" | "highlight",
+  postIds: string[],
+  viewerId: string | null,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (postIds.length === 0) return out;
+  const rows = await db
+    .select({
+      postRefId: takedownRequests.postRefId,
+      requestedByGuardianId: takedownRequests.requestedByGuardianId,
+    })
+    .from(takedownRequests)
+    .where(
+      and(
+        eq(takedownRequests.postKind, kind),
+        eq(takedownRequests.status, "pending"),
+        inArray(takedownRequests.postRefId, postIds),
+      ),
+    );
+  // Group by post id so a single requesting-guardian carve-out wins.
+  const byPost = new Map<string, string[]>();
+  for (const r of rows) {
+    const arr = byPost.get(r.postRefId) ?? [];
+    arr.push(r.requestedByGuardianId);
+    byPost.set(r.postRefId, arr);
+  }
+  for (const [postId, guardians] of byPost) {
+    if (viewerId && guardians.includes(viewerId)) continue;
+    out.add(postId);
+  }
+  return out;
 }
 
 async function articleHasMinorTag(articleId: string): Promise<boolean> {
@@ -228,8 +270,20 @@ router.get(
           highlightIds: ownHls.map((r) => r.h.id),
         }),
       ]);
+      // Task #367 — drop pending-takedown items from listings. Real
+      // (non-masquerading) admins bypass the filter so the moderation
+      // queue isn't invisible to them in their own feed.
+      const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+      const [pendingArtIds, pendingHlIds] = isAdmin
+        ? [new Set<string>(), new Set<string>()]
+        : await Promise.all([
+            pendingTakedownIdSet("article", ownArts.map((r) => r.a.id), me.id),
+            pendingTakedownIdSet("highlight", ownHls.map((r) => r.h.id), me.id),
+          ]);
+      const ownArtsVisible = ownArts.filter((r) => !pendingArtIds.has(r.a.id));
+      const ownHlsVisible = ownHls.filter((r) => !pendingHlIds.has(r.h.id));
       const items = [
-        ...ownArts.map((r) =>
+        ...ownArtsVisible.map((r) =>
           articleToPost(r.a, {
             team: r.team,
             org: r.org,
@@ -241,7 +295,7 @@ router.get(
             currentUserTag: currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
           }),
         ),
-        ...ownHls.map((r) =>
+        ...ownHlsVisible.map((r) =>
           highlightToPost(r.h, {
             team: r.team,
             org: r.org,
@@ -467,13 +521,41 @@ router.get(
       }),
     ]);
 
+    // Task #367 — drop pending-takedown items from the populated feed
+    // path. Real (non-masquerading) admins bypass the filter so they
+    // can see the moderation queue from their own feed.
+    const feedIsAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
+    const [feedPendingArtIds, feedPendingHlIds] = feedIsAdmin
+      ? [new Set<string>(), new Set<string>()]
+      : await Promise.all([
+          pendingTakedownIdSet(
+            "article",
+            [
+              ...arts.map((r) => r.a.id),
+              ...sharedArticleRows.map((r) => r.a.id),
+            ],
+            me.id,
+          ),
+          pendingTakedownIdSet(
+            "highlight",
+            [
+              ...hls.map((r) => r.h.id),
+              ...sharedHighlightRows.map((r) => r.h.id),
+            ],
+            me.id,
+          ),
+        ]);
     const seenIds = new Set<string>([
-      ...arts.map((r) => `article-${r.a.id}`),
-      ...hls.map((r) => `highlight-${r.h.id}`),
+      ...arts
+        .filter((r) => !feedPendingArtIds.has(r.a.id))
+        .map((r) => `article-${r.a.id}`),
+      ...hls
+        .filter((r) => !feedPendingHlIds.has(r.h.id))
+        .map((r) => `highlight-${r.h.id}`),
     ]);
 
     const items: ReturnType<typeof articleToPost>[] = [
-      ...arts.map((r) =>
+      ...arts.filter((r) => !feedPendingArtIds.has(r.a.id)).map((r) =>
         articleToPost(r.a, {
           team: r.team,
           org: r.org,
@@ -485,7 +567,7 @@ router.get(
           currentUserTag: currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
         }),
       ),
-      ...hls.map((r) => {
+      ...hls.filter((r) => !feedPendingHlIds.has(r.h.id)).map((r) => {
         const isUploader = !!me && r.h.uploaderId === me.id;
         return highlightToPost(r.h, {
           team: r.team,
@@ -513,6 +595,9 @@ router.get(
     ];
 
     for (const sr of shareRows) {
+      // Task #367 — also drop shares whose target is under takedown.
+      if (sr.s.postKind === "article" && feedPendingArtIds.has(sr.s.postRefId)) continue;
+      if (sr.s.postKind === "highlight" && feedPendingHlIds.has(sr.s.postRefId)) continue;
       const key = `${sr.s.postKind}-${sr.s.postRefId}`;
       if (seenIds.has(key)) continue;
       seenIds.add(key);
@@ -689,8 +774,17 @@ router.get(
         desc(users.createdAt),
       )
       .limit(SUGGESTION_LIMIT + excludedUserIds.size);
+    // Task #367 — never recommend minors. `filterOutMinors` keeps
+    // self / linked-guardian / admin carve-outs intact so a guardian
+    // can still see their own child surfaced in their own dashboard.
+    const userRowsVisible = filterOutMinors(
+      userRows.map((r) => r.user),
+      me.id,
+    );
+    const visibleUserIds = new Set(userRowsVisible.map((u) => u.id));
     const userSuggestions = userRows
       .filter((r) => !excludedUserIds.has(r.user.id))
+      .filter((r) => visibleUserIds.has(r.user.id))
       .slice(0, SUGGESTION_LIMIT)
       .map((r) => toPublicUser(r.user, { isOwnProfile: false, isFollowing: false }));
 

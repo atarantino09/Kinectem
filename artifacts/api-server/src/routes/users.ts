@@ -14,6 +14,7 @@ import {
   highlights,
   highlightTags,
   postShares,
+  takedownRequests,
 } from "@workspace/db";
 import {
   and,
@@ -547,6 +548,56 @@ router.get(
     }
     const canSeePending = isSelf || isAdmin || isParent;
 
+    // Task #367 — minor profile listings mirror the visibility carve-out
+    // applied by GET /users/:userId. A minor's posts are only visible
+    // to: self, linked guardian, platform admin, an org admin sharing
+    // a team with the minor, OR an approved follower (the same set
+    // that can load the profile itself). Everyone else gets 404 — we
+    // do NOT 403 because that would leak existence of the minor.
+    if (u.isMinor && !isSelf && !isAdmin && !isParent) {
+      let isSharedTeamAdmin = false;
+      let isApprovedFollower = false;
+      if (me) {
+        const sharedAdmin = await db
+          .select({ id: organizationAdmins.organizationId })
+          .from(organizationAdmins)
+          .innerJoin(teams, eq(teams.organizationId, organizationAdmins.organizationId))
+          .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+          .where(
+            and(
+              eq(organizationAdmins.userId, me.id),
+              eq(rosterEntries.userId, u.id),
+              // Same role filter as GET /users/:userId — only org
+              // owners/admins (not generic members) get the carve-out.
+              inArray(organizationAdmins.role, ["owner", "admin"]),
+            ),
+          )
+          .limit(1);
+        isSharedTeamAdmin = sharedAdmin.length > 0;
+        if (!isSharedTeamAdmin) {
+          const followRow = await db
+            .select({ s: userFollowers.moderationStatus })
+            .from(userFollowers)
+            .where(
+              and(
+                eq(userFollowers.followingUserId, u.id),
+                eq(userFollowers.followerUserId, me.id),
+                eq(userFollowers.moderationStatus, "approved"),
+              ),
+            )
+            .limit(1);
+          isApprovedFollower = followRow.length > 0;
+        }
+      }
+      if (!isSharedTeamAdmin && !isApprovedFollower) {
+        return notFound(res);
+      }
+      // Belt-and-braces: profile itself sets X-Robots-Tag, but the
+      // posts feed for a minor profile is part of the same indexing
+      // surface so we set it here too.
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noimageindex");
+    }
+
     const articleConds = [eq(articles.status, "published")];
     if (!isAdmin) articleConds.push(isNull(articles.hiddenAt));
 
@@ -779,7 +830,48 @@ router.get(
       }
       return row.h.createdAt.getTime();
     };
-    const ordered = Array.from(seen.values()).sort((x, y) => effectiveDate(y) - effectiveDate(x));
+    // Task #367 — drop pending-takedown items from the profile feed.
+    // Mirrors the same filter applied in /feed: the requesting guardian
+    // and platform admins continue to see flagged content via
+    // GET /posts/:postId so they can resolve the queue.
+    const allArticleIds = Array.from(seen.values())
+      .filter((r): r is Extract<MergedRow, { kind: "article" }> => r.kind === "article")
+      .map((r) => r.a.id);
+    const allHighlightIds = Array.from(seen.values())
+      .filter((r): r is Extract<MergedRow, { kind: "highlight" }> => r.kind === "highlight")
+      .map((r) => r.h.id);
+    const pendingTakedownArticleIds = new Set<string>();
+    const pendingTakedownHighlightIds = new Set<string>();
+    if (!isAdmin && (allArticleIds.length || allHighlightIds.length)) {
+      const tdRows = await db
+        .select({
+          postKind: takedownRequests.postKind,
+          postRefId: takedownRequests.postRefId,
+          requestedByGuardianId: takedownRequests.requestedByGuardianId,
+        })
+        .from(takedownRequests)
+        .where(
+          and(
+            eq(takedownRequests.status, "pending"),
+            inArray(takedownRequests.postRefId, [
+              ...allArticleIds,
+              ...allHighlightIds,
+            ]),
+          ),
+        );
+      for (const r of tdRows) {
+        // The requesting guardian still sees their own pending takedown
+        // so they can act on it from the profile too.
+        if (me?.id && r.requestedByGuardianId === me.id) continue;
+        if (r.postKind === "article") pendingTakedownArticleIds.add(r.postRefId);
+        else if (r.postKind === "highlight") pendingTakedownHighlightIds.add(r.postRefId);
+      }
+    }
+    const filteredSeen = Array.from(seen.values()).filter((r) => {
+      if (r.kind === "article") return !pendingTakedownArticleIds.has(r.a.id);
+      return !pendingTakedownHighlightIds.has(r.h.id);
+    });
+    const ordered = filteredSeen.sort((x, y) => effectiveDate(y) - effectiveDate(x));
     const limited = ordered.slice(0, 20);
 
     // Bulk-load reaction / comment / share stats for the page.

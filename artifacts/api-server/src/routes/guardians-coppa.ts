@@ -1266,6 +1266,33 @@ router.post(
         );
       }
     }
+    // Task #367 — idempotent: a duplicate filing by the same guardian
+    // for the same post/child while a request is still pending returns
+    // the existing row instead of stacking new ones. Resolved (non-
+    // pending) prior requests don't block a fresh filing — once admin
+    // ruled, the guardian can re-flag if the post resurfaces.
+    const [existing] = await db
+      .select()
+      .from(takedownRequests)
+      .where(
+        and(
+          eq(takedownRequests.childUserId, auth.childId),
+          eq(takedownRequests.requestedByGuardianId, auth.guardianId),
+          eq(takedownRequests.postKind, kind),
+          eq(takedownRequests.postRefId, refId),
+          eq(takedownRequests.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      return res.status(200).json({
+        id: existing.id,
+        postKind: kind,
+        postRefId: refId,
+        status: existing.status,
+        createdAt: existing.createdAt.toISOString(),
+      });
+    }
     const [created] = await db
       .insert(takedownRequests)
       .values({

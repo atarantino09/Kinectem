@@ -66,8 +66,10 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 ## Gotchas
 
 - **Roster Status Mapping**: `roster_entries.status` in DB (`accepted | pending | declined`) maps to public API `active | pending`. Expect `"active"` from `/teams/:teamId/members*` and `/users/:userId/teams` responses.
-- **Minor Profile Visibility**: Minor profiles are private by default (`followers` visibility on signup). Access is restricted to self, guardian, admin, or approved followers/team members.
-- **Minor Content Takedown**: `GET /posts/:postId` will 404 a post by a minor if a takedown request is `pending`, unless accessed by the requesting guardian or platform admin.
+- **Minor Profile Visibility**: Minor profiles are private by default (`followers` visibility on signup). Access is restricted to self, guardian, admin, or approved followers/team members. Same carve-out applies to `GET /users/:userId/posts`.
+- **Minor Content Takedown**: `GET /posts/:postId`, `/feed`, and `/users/:userId/posts` exclude any article/highlight with a `pending` `takedown_requests` row, except for the requesting guardian and platform admins. Guardian-filed takedowns require the child be linked to the post (author/uploader or tagged).
+- **Right-to-delete**: Guardians call `POST /guardians/children/:childId/request-deletion` (idempotent — first call stamps `deletion_requested_at`). Operator runs `pnpm --filter @workspace/scripts run coppa:delete -- <userId> --apply` to hard-delete after the cooling-off window (default 24h, override `COPPA_DELETION_GRACE_HOURS`).
+- **Minor recommendations**: `/posts/follow-suggestions` filters out minors via `filterOutMinors` so children never surface in stranger recommendation flows.
 - **Article Re-shares**: Sharing your own recap is a visual no-op on your own profile due to merge logic prioritizing authored content.
 - **Avatar Rendering**: Always use `<UserAvatar>` or `<TeamAvatar>` components; do not compose Radix avatars directly to avoid loading state issues.
 
