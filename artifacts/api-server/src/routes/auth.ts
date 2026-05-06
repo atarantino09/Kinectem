@@ -170,7 +170,7 @@ const logoutLimiter = rateLimit({
 // `true` and writes the response when blocked.
 function blockOnAccountStatus(
   res: import("express").Response,
-  user: { accountStatus?: string | null; isMinor?: boolean | null; guardianConfirmTokenExpiresAt?: Date | null; guardianEmail?: string | null; guardianConfirmedAt?: Date | null; guardianConfirmToken?: string | null },
+  user: { accountStatus?: string | null; isMinor?: boolean | null; guardianConfirmTokenExpiresAt?: Date | null; guardianEmail?: string | null; guardianConfirmedAt?: Date | null },
 ): boolean {
   if (user.accountStatus === "disabled") {
     apiError(
@@ -183,7 +183,6 @@ function blockOnAccountStatus(
   }
   if (user.accountStatus === "pending_guardian" || (user.guardianEmail && !user.guardianConfirmedAt)) {
     const expired =
-      !user.guardianConfirmToken ||
       !user.guardianConfirmTokenExpiresAt ||
       user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
     apiError(
@@ -224,7 +223,6 @@ router.post(
     if (blockOnAccountStatus(res, user)) return;
     if (user.guardianEmail && !user.guardianConfirmedAt) {
       const expired =
-        !user.guardianConfirmToken ||
         !user.guardianConfirmTokenExpiresAt ||
         user.guardianConfirmTokenExpiresAt.getTime() < Date.now();
       apiError(
@@ -403,7 +401,9 @@ router.post(
         guardianEmail: guardianEmail ?? undefined,
         // Legacy single-step token — unused by the new flow but kept
         // populated for older clients reading these columns directly.
-        guardianConfirmToken: firstToken ?? undefined,
+        // Task #32 — store only the SHA-256 hash; the raw token lives
+        // exclusively inside the email we send the parent.
+        guardianConfirmTokenHash: firstToken ? hashToken(firstToken) : undefined,
         guardianConfirmTokenExpiresAt: guardianRequired
           ? new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS)
           : undefined,
@@ -537,7 +537,7 @@ router.post(
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.guardianConfirmToken, body.token))
+      .where(eq(users.guardianConfirmTokenHash, hashToken(body.token)))
       .limit(1);
     if (!user) {
       apiError(res, 400, "This confirmation link is invalid or has already been used.");
@@ -566,7 +566,7 @@ router.post(
       .update(users)
       .set({
         guardianConfirmedAt: new Date(),
-        guardianConfirmToken: null,
+        guardianConfirmTokenHash: null,
         guardianConfirmTokenExpiresAt: null,
         guardianConfirmedByUserId: guardianUser?.id ?? null,
         parentId: user.parentId ?? guardianUser?.id ?? null,
@@ -598,7 +598,7 @@ router.post(
     await db
       .update(users)
       .set({
-        guardianConfirmToken: newToken,
+        guardianConfirmTokenHash: hashToken(newToken),
         guardianConfirmTokenExpiresAt: new Date(Date.now() + GUARDIAN_TOKEN_TTL_MS),
         // Resending the link starts a new expiry cycle, so reset the
         // expired-email tracker. If the new token also expires, the parent

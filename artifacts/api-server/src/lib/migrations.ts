@@ -484,6 +484,38 @@ CREATE INDEX IF NOT EXISTS takedown_requests_child_idx
   ON takedown_requests (child_user_id, status);
 `;
 
+// Task #32 — Hash guardian-confirmation tokens at rest. The legacy
+// `users.guardian_confirm_token` column held the raw token, which is a
+// working "I am the parent" capability for the TTL window. We add the
+// hash column, backfill existing rows from the plaintext token, then
+// drop the plaintext column. Idempotent: safe to re-run.
+const TASK_32_HASH_GUARDIAN_TOKENS = `
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS guardian_confirm_token_hash text;
+
+DO $migration$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'guardian_confirm_token'
+  ) THEN
+    UPDATE users
+       SET guardian_confirm_token_hash =
+             encode(digest(guardian_confirm_token, 'sha256'), 'hex')
+     WHERE guardian_confirm_token IS NOT NULL
+       AND guardian_confirm_token_hash IS NULL;
+  END IF;
+END$migration$;
+
+CREATE INDEX IF NOT EXISTS users_guardian_confirm_token_hash_idx
+  ON users (guardian_confirm_token_hash)
+  WHERE guardian_confirm_token_hash IS NOT NULL;
+
+ALTER TABLE users DROP COLUMN IF EXISTS guardian_confirm_token;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -540,6 +572,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-06-task-367-coppa-phase-3",
     sql: TASK_367_COPPA_PHASE_3,
+  },
+  {
+    name: "2026-05-06-task-32-hash-guardian-tokens",
+    sql: TASK_32_HASH_GUARDIAN_TOKENS,
   },
 ];
 

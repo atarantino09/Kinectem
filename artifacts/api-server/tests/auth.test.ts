@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, users } from "@workspace/db";
+import { createHash } from "node:crypto";
 import { app, listSeedUsers, loginAs, request, DEMO_PASSWORD } from "./helpers";
 const sentEmails: Array<{ to: string; subject: string; text: string }> = [];
 
@@ -158,6 +159,16 @@ describe("auth", () => {
     expect(blocked.body.guardianConfirmUrl).toBeUndefined();
 
     const token = url.split("/").pop()!;
+
+    // Task #32 — DB stores only the SHA-256 hash, never the raw token.
+    const [row] = await db
+      .select({ hash: users.guardianConfirmTokenHash })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    const expectedHash = createHash("sha256").update(token).digest("hex");
+    expect(row.hash).toBe(expectedHash);
+    expect(row.hash).not.toBe(token);
 
     // Wrong guardian email is rejected so kids can't confirm themselves.
     const wrongEmail = await request(app)

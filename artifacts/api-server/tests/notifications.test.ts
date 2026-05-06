@@ -105,7 +105,7 @@ describe("notifications", () => {
           guardianEmail: "lisa@kinectem.demo",
           guardianConfirmedAt: null,
           guardianConfirmedByUserId: null,
-          guardianConfirmToken: "expired-token-test",
+          guardianConfirmTokenHash: "expired-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
           guardianExpiredEmailSentAt: null,
         })
@@ -153,7 +153,7 @@ describe("notifications", () => {
           guardianEmail: "lisa@kinectem.demo",
           guardianConfirmedAt: null,
           guardianConfirmedByUserId: null,
-          guardianConfirmToken: "valid-token-test",
+          guardianConfirmTokenHash: "valid-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
         })
         .where(eq(users.id, child.id));
@@ -176,7 +176,7 @@ describe("notifications", () => {
         .set({
           guardianEmail: "lisa@kinectem.demo",
           guardianConfirmedAt: new Date(),
-          guardianConfirmToken: null,
+          guardianConfirmTokenHash: null,
           guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
         })
         .where(eq(users.id, child.id));
@@ -202,7 +202,7 @@ describe("notifications", () => {
           guardianEmail: "lisa@kinectem.demo",
           guardianConfirmedAt: null,
           guardianConfirmedByUserId: null,
-          guardianConfirmToken: "expired-token-test",
+          guardianConfirmTokenHash: "expired-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
           guardianExpiredEmailSentAt: null,
         })
@@ -253,7 +253,7 @@ describe("notifications", () => {
           guardianEmail: null,
           guardianConfirmedAt: null,
           guardianConfirmedByUserId: null,
-          guardianConfirmToken: "expired-token-test",
+          guardianConfirmTokenHash: "expired-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() - 60_000),
           guardianExpiredEmailSentAt: null,
         })
@@ -279,7 +279,7 @@ describe("notifications", () => {
           guardianEmail: "lisa@kinectem.demo",
           guardianConfirmedAt: null,
           guardianConfirmedByUserId: null,
-          guardianConfirmToken: "valid-token-test",
+          guardianConfirmTokenHash: "valid-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
           guardianExpiredEmailSentAt: null,
         })
@@ -410,7 +410,7 @@ describe("notifications", () => {
       await db
         .update(users)
         .set({
-          guardianConfirmToken: "new-token-test",
+          guardianConfirmTokenHash: "new-token-test",
           guardianConfirmTokenExpiresAt: new Date(Date.now() + 60 * 60_000),
           guardianExpiredEmailSentAt: null,
         })

@@ -161,7 +161,11 @@ export const users = pgTable("users", {
   dateOfBirth: timestamp("date_of_birth"),
   parentId: uuid("parent_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   guardianEmail: text("guardian_email"),
-  guardianConfirmToken: text("guardian_confirm_token"),
+  // Task #32 — Guardian-confirmation tokens are stored as SHA-256
+  // hashes (`hashToken(raw)` in `lib/passwords.ts`). The raw value
+  // exists only inside the email we send the parent. Looking up a
+  // confirmation request requires hashing the submitted token first.
+  guardianConfirmTokenHash: text("guardian_confirm_token_hash"),
   guardianConfirmTokenExpiresAt: timestamp("guardian_confirm_token_expires_at"),
   guardianConfirmedAt: timestamp("guardian_confirmed_at"),
   guardianConfirmedByUserId: uuid("guardian_confirmed_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),

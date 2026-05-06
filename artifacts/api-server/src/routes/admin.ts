@@ -489,7 +489,7 @@ router.patch(
     if (body.clearGuardianConfirmation === true) {
       updates.guardianConfirmedAt = null;
       updates.guardianConfirmedByUserId = null;
-      updates.guardianConfirmToken = null;
+      updates.guardianConfirmTokenHash = null;
       updates.guardianConfirmTokenExpiresAt = null;
     }
     const [updated] = Object.keys(updates).length

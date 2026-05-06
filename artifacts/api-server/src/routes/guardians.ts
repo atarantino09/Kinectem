@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, users } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { generateToken } from "../lib/passwords";
+import { generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { logger } from "../lib/logger";
@@ -152,7 +152,7 @@ router.post(
     await db
       .update(users)
       .set({
-        guardianConfirmToken: newToken,
+        guardianConfirmTokenHash: hashToken(newToken),
         guardianConfirmTokenExpiresAt: new Date(
           Date.now() + GUARDIAN_TOKEN_TTL_MS,
         ),

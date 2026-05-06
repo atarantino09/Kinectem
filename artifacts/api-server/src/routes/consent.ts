@@ -250,7 +250,7 @@ router.post(
         accountStatus: "active",
         consentFinalizedAt: now,
         guardianConfirmedAt: now,
-        guardianConfirmToken: null,
+        guardianConfirmTokenHash: null,
         guardianConfirmTokenExpiresAt: null,
         // If the guardian's email matches a real user, link parentId so
         // existing Family-page UI sees the relationship immediately.
