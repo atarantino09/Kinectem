@@ -661,8 +661,17 @@ router.get(
     const auth = await authorizeGuardianForChild(req, res, String(req.params.childId));
     if (!auth) return;
     const limit = 25;
-    const [recentArticles, recentHighlights, recentComments, recentDms] =
-      await Promise.all([
+    const [
+      recentArticles,
+      recentHighlights,
+      recentComments,
+      recentDms,
+      recentReceivedDms,
+      recentFollowers,
+      recentFollowing,
+      recentTagsArticles,
+      recentTagsHighlights,
+    ] = await Promise.all([
         db
           .select({
             id: articles.id,
@@ -700,6 +709,70 @@ router.get(
           .where(eq(messages.senderUserId, auth.childId))
           .orderBy(desc(messages.createdAt))
           .limit(limit),
+        db
+          .select({
+            id: messages.id,
+            createdAt: messages.createdAt,
+            moderationStatus: messages.moderationStatus,
+            senderUserId: messages.senderUserId,
+          })
+          .from(messages)
+          .innerJoin(
+            conversationParticipants,
+            and(
+              eq(
+                conversationParticipants.conversationId,
+                messages.conversationId,
+              ),
+              eq(conversationParticipants.participantType, "user"),
+              eq(conversationParticipants.participantId, auth.childId),
+            ),
+          )
+          .where(sql`${messages.senderUserId} <> ${auth.childId}`)
+          .orderBy(desc(messages.createdAt))
+          .limit(limit),
+        db
+          .select({
+            followerUserId: userFollowers.followerUserId,
+            createdAt: userFollowers.createdAt,
+            moderationStatus: userFollowers.moderationStatus,
+          })
+          .from(userFollowers)
+          .where(eq(userFollowers.followingUserId, auth.childId))
+          .orderBy(desc(userFollowers.createdAt))
+          .limit(limit),
+        db
+          .select({
+            followingUserId: userFollowers.followingUserId,
+            createdAt: userFollowers.createdAt,
+            moderationStatus: userFollowers.moderationStatus,
+          })
+          .from(userFollowers)
+          .where(eq(userFollowers.followerUserId, auth.childId))
+          .orderBy(desc(userFollowers.createdAt))
+          .limit(limit),
+        db
+          .select({
+            id: articleTags.id,
+            articleId: articleTags.articleId,
+            status: articleTags.status,
+            createdAt: articleTags.createdAt,
+          })
+          .from(articleTags)
+          .where(eq(articleTags.userId, auth.childId))
+          .orderBy(desc(articleTags.createdAt))
+          .limit(limit),
+        db
+          .select({
+            id: highlightTags.id,
+            highlightId: highlightTags.highlightId,
+            status: highlightTags.status,
+            createdAt: highlightTags.createdAt,
+          })
+          .from(highlightTags)
+          .where(eq(highlightTags.userId, auth.childId))
+          .orderBy(desc(highlightTags.createdAt))
+          .limit(limit),
       ]);
     return res.json({
       articles: recentArticles.map((r) => ({
@@ -717,10 +790,38 @@ router.get(
         createdAt: r.createdAt.toISOString(),
         moderationStatus: r.moderationStatus,
       })),
-      dms: recentDms.map((r) => ({
+      dmsSent: recentDms.map((r) => ({
         id: r.id,
         createdAt: r.createdAt.toISOString(),
         moderationStatus: r.moderationStatus,
+      })),
+      dmsReceived: recentReceivedDms.map((r) => ({
+        id: r.id,
+        senderUserId: r.senderUserId,
+        createdAt: r.createdAt.toISOString(),
+        moderationStatus: r.moderationStatus,
+      })),
+      followers: recentFollowers.map((r) => ({
+        followerUserId: r.followerUserId,
+        createdAt: r.createdAt.toISOString(),
+        moderationStatus: r.moderationStatus,
+      })),
+      following: recentFollowing.map((r) => ({
+        followingUserId: r.followingUserId,
+        createdAt: r.createdAt.toISOString(),
+        moderationStatus: r.moderationStatus,
+      })),
+      tagsInArticles: recentTagsArticles.map((r) => ({
+        id: r.id,
+        articleId: r.articleId,
+        status: r.status,
+        createdAt: r.createdAt.toISOString(),
+      })),
+      tagsInHighlights: recentTagsHighlights.map((r) => ({
+        id: r.id,
+        highlightId: r.highlightId,
+        status: r.status,
+        createdAt: r.createdAt.toISOString(),
       })),
     });
   }),
@@ -735,38 +836,103 @@ router.get(
   asyncHandler(async (req, res) => {
     const auth = await authorizeGuardianForChild(req, res, String(req.params.childId));
     if (!auth) return;
-    const [profile, allConsents, allAudit, allDms, allComments, allArticles] =
-      await Promise.all([
-        db.select().from(users).where(eq(users.id, auth.childId)).limit(1),
-        db
-          .select()
-          .from(parentalConsents)
-          .where(eq(parentalConsents.childUserId, auth.childId)),
-        db
-          .select()
-          .from(consentAuditLog)
-          .where(eq(consentAuditLog.childUserId, auth.childId))
-          .orderBy(desc(consentAuditLog.createdAt))
-          .limit(500),
-        db
-          .select()
-          .from(messages)
-          .where(eq(messages.senderUserId, auth.childId))
-          .orderBy(desc(messages.createdAt))
-          .limit(500),
-        db
-          .select()
-          .from(postComments)
-          .where(eq(postComments.authorId, auth.childId))
-          .orderBy(desc(postComments.createdAt))
-          .limit(500),
-        db
-          .select()
-          .from(articles)
-          .where(eq(articles.authorId, auth.childId))
-          .orderBy(desc(articles.createdAt))
-          .limit(500),
-      ]);
+    // Task #363 — guardian export must cover every category the
+    // platform stores about the child: profile, consent records,
+    // audit log, DMs (sent + received), comments authored, posts
+    // (articles + highlights), tags they're in, and follow edges in
+    // both directions.
+    const [
+      profile,
+      allConsents,
+      allAudit,
+      sentDms,
+      receivedDms,
+      allComments,
+      allArticles,
+      allHighlights,
+      tagsArticles,
+      tagsHighlights,
+      followers,
+      following,
+      allowlistRows,
+    ] = await Promise.all([
+      db.select().from(users).where(eq(users.id, auth.childId)).limit(1),
+      db
+        .select()
+        .from(parentalConsents)
+        .where(eq(parentalConsents.childUserId, auth.childId)),
+      db
+        .select()
+        .from(consentAuditLog)
+        .where(eq(consentAuditLog.childUserId, auth.childId))
+        .orderBy(desc(consentAuditLog.createdAt))
+        .limit(500),
+      db
+        .select()
+        .from(messages)
+        .where(eq(messages.senderUserId, auth.childId))
+        .orderBy(desc(messages.createdAt))
+        .limit(500),
+      db
+        .select({ m: messages })
+        .from(messages)
+        .innerJoin(
+          conversationParticipants,
+          and(
+            eq(
+              conversationParticipants.conversationId,
+              messages.conversationId,
+            ),
+            eq(conversationParticipants.participantType, "user"),
+            eq(conversationParticipants.participantId, auth.childId),
+          ),
+        )
+        .where(sql`${messages.senderUserId} <> ${auth.childId}`)
+        .orderBy(desc(messages.createdAt))
+        .limit(500),
+      db
+        .select()
+        .from(postComments)
+        .where(eq(postComments.authorId, auth.childId))
+        .orderBy(desc(postComments.createdAt))
+        .limit(500),
+      db
+        .select()
+        .from(articles)
+        .where(eq(articles.authorId, auth.childId))
+        .orderBy(desc(articles.createdAt))
+        .limit(500),
+      db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.uploaderId, auth.childId))
+        .orderBy(desc(highlights.createdAt))
+        .limit(500),
+      db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.userId, auth.childId))
+        .limit(500),
+      db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.userId, auth.childId))
+        .limit(500),
+      db
+        .select()
+        .from(userFollowers)
+        .where(eq(userFollowers.followingUserId, auth.childId))
+        .limit(500),
+      db
+        .select()
+        .from(userFollowers)
+        .where(eq(userFollowers.followerUserId, auth.childId))
+        .limit(500),
+      db
+        .select()
+        .from(dmAllowlist)
+        .where(eq(dmAllowlist.childUserId, auth.childId)),
+    ]);
     void logConsentEvent({
       event: "guardian_data_exported",
       childUserId: auth.childId,
@@ -789,9 +955,16 @@ router.get(
         : null,
       consents: allConsents,
       auditLog: allAudit,
-      messages: allDms,
+      messagesSent: sentDms,
+      messagesReceived: receivedDms.map((r) => r.m),
       comments: allComments,
       articles: allArticles,
+      highlights: allHighlights,
+      tagsInArticles: tagsArticles,
+      tagsInHighlights: tagsHighlights,
+      followers,
+      following,
+      dmAllowlist: allowlistRows,
     });
   }),
 );

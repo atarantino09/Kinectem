@@ -291,14 +291,26 @@ router.get(
         .limit(1);
       isFollowing = !!f;
     }
+    // Task #363 — pending follow edges must not bump publicly-visible
+    // counts; only approved edges count toward follower/following totals.
     const [{ followerCount }] = await db
       .select({ followerCount: sql<number>`count(*)::int` })
       .from(userFollowers)
-      .where(eq(userFollowers.followingUserId, u.id));
+      .where(
+        and(
+          eq(userFollowers.followingUserId, u.id),
+          eq(userFollowers.moderationStatus, "approved"),
+        ),
+      );
     const [{ followingCount }] = await db
       .select({ followingCount: sql<number>`count(*)::int` })
       .from(userFollowers)
-      .where(eq(userFollowers.followerUserId, u.id));
+      .where(
+        and(
+          eq(userFollowers.followerUserId, u.id),
+          eq(userFollowers.moderationStatus, "approved"),
+        ),
+      );
     // A linked parent of the target user gets the same private fields the
     // user would see for themselves (email, role, parentId) so the parent
     // can edit the child's profile from `/family` and `/users/<childId>`.

@@ -128,10 +128,20 @@ export async function loadAssetsForMessages(
 export async function loadConversationView(conv: { id: string; type: string; createdAt: Date; updatedAt: Date }, meId: string) {
   const participant = await getOtherParticipant(conv.id, meId);
   if (!participant) return null;
+  // Task #363 — never expose a pending message to anyone other than
+  // its sender (the recipient + everyone else must wait for guardian
+  // approval). The latest-message preview must respect this so a
+  // minor's conversation row doesn't leak the body of an unmoderated
+  // incoming DM.
   const [last] = await db
     .select()
     .from(messages)
-    .where(eq(messages.conversationId, conv.id))
+    .where(
+      and(
+        eq(messages.conversationId, conv.id),
+        sql`(${messages.moderationStatus} = 'approved' OR ${messages.senderUserId} = ${meId})`,
+      ),
+    )
     .orderBy(desc(messages.createdAt))
     .limit(1);
   let lastSenderName: string | null = null;
@@ -168,6 +178,9 @@ export async function loadConversationView(conv: { id: string; type: string; cre
           eq(messages.conversationId, conv.id),
           isNull(messages.deletedAt),
           ne(messages.senderUserId, meId),
+          // Task #363 — pending DMs must not bump unread counts for the
+          // recipient until their guardian approves them.
+          eq(messages.moderationStatus, "approved"),
           myPart.lastReadAt
             ? gt(messages.createdAt, myPart.lastReadAt)
             : sql`true`,
@@ -234,6 +247,9 @@ router.get(
             eq(messages.conversationId, p.conversationId),
             isNull(messages.deletedAt),
             ne(messages.senderUserId, me.id),
+            // Task #363 — exclude pending DMs from the global unread
+            // count for the same reason as `loadConversationView`.
+            eq(messages.moderationStatus, "approved"),
             p.lastReadAt ? gt(messages.createdAt, p.lastReadAt) : sql`true`,
           ),
         );

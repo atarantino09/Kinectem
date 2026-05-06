@@ -173,8 +173,11 @@ router.get(
         .limit(1);
       return !!(u && u.parentId === me.id);
     })() : false;
-    const isSelf = me?.id === userId;
-    if (!isGuardianViewer && !isSelf) {
+    // Task #363 — pending follow edges are only visible to the linked
+    // guardian. The child themselves should not see incoming pending
+    // follows in their public follower list (those live on the
+    // family-managed surface). Self-views also see approved-only.
+    if (!isGuardianViewer) {
       conds.push(eq(userFollowers.moderationStatus, "approved"));
     }
     if (cursor) {
@@ -226,7 +229,13 @@ router.get(
       req.params.userId === "me" ? req.sessionUser?.id : req.params.userId;
     if (!userId) return apiError(res, 401, "Not authenticated");
     // Combine followed users + followed organizations, sort by createdAt desc.
-    const userConds = [eq(userFollowers.followerUserId, userId)];
+    // Task #363 — only show approved outgoing follows in the public
+    // /following list; pending edges remain invisible until guardian
+    // approval.
+    const userConds = [
+      eq(userFollowers.followerUserId, userId),
+      eq(userFollowers.moderationStatus, "approved"),
+    ];
     const userRowsRaw = await db
       .select({
         id: users.id,
