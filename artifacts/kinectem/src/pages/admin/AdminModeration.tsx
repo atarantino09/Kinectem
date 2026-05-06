@@ -57,12 +57,16 @@ export default function AdminModeration() {
         <TabsList>
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
+          <TabsTrigger value="takedowns" data-testid="tab-takedowns">Takedowns</TabsTrigger>
         </TabsList>
         <TabsContent value="reports">
           <ReportsPanel />
         </TabsContent>
         <TabsContent value="content">
           <ContentPanel />
+        </TabsContent>
+        <TabsContent value="takedowns">
+          <TakedownsPanel />
         </TabsContent>
       </Tabs>
     </AdminLayout>
@@ -193,6 +197,126 @@ function ReportsPanel() {
                     data-testid={`btn-delete-${r.id}`}
                   >
                     Delete content
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
+type Takedown = {
+  id: string;
+  status: "pending" | "approved" | "declined";
+  reason: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  child: { id: string; name: string; email: string | null; avatarUrl: string | null } | null;
+  guardian: { id: string; name: string; email: string | null } | null;
+  post: { id: string; kind: "article" | "highlight"; title: string | null; exists: boolean };
+};
+
+function TakedownsPanel() {
+  const [status, setStatus] = useState<"pending" | "approved" | "declined">("pending");
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ data: Takedown[] }>({
+    queryKey: ["admin", "takedowns", status],
+    queryFn: () =>
+      customFetch<{ data: Takedown[] }>(`/api/v1/admin/takedowns?status=${status}`, {
+        method: "GET",
+      }),
+  });
+
+  const decide = async (id: string, decision: "approve" | "decline") => {
+    if (decision === "approve" && !confirm("Approve takedown? This permanently deletes the post.")) {
+      return;
+    }
+    try {
+      await customFetch(`/api/v1/admin/takedowns/${id}/${decision}`, { method: "POST" });
+      toast({ title: decision === "approve" ? "Post taken down" : "Takedown declined" });
+      qc.invalidateQueries({ queryKey: ["admin", "takedowns"] });
+    } catch (err) {
+      toast({ title: "Failed", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-3 mt-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold">Status:</span>
+        <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+          <SelectTrigger className="w-40" data-testid="select-takedown-status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="declined">Declined</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {isLoading ? (
+        <div className="text-muted-foreground">Loading…</div>
+      ) : (data?.data ?? []).length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-muted-foreground text-sm">
+            No takedown requests here.
+          </CardContent>
+        </Card>
+      ) : (
+        (data?.data ?? []).map((t) => (
+          <Card key={t.id} data-testid={`takedown-${t.id}`}>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline">{t.post.kind}</Badge>
+                <Badge variant={t.status === "pending" ? "destructive" : "secondary"}>
+                  {t.status}
+                </Badge>
+                {!t.post.exists && <Badge variant="outline">post deleted</Badge>}
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {new Date(t.createdAt).toLocaleString()}
+                </span>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Child:</span>{" "}
+                <span className="font-medium">{t.child?.name ?? "—"}</span>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Guardian:</span>{" "}
+                {t.guardian ? `${t.guardian.name} (${t.guardian.email ?? "—"})` : "—"}
+              </div>
+              {t.post.title && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Post:</span>{" "}
+                  <span className="font-medium">{t.post.title}</span>
+                </div>
+              )}
+              {t.reason && (
+                <div className="text-sm border-l-2 border-muted-foreground pl-2 text-muted-foreground italic">
+                  "{t.reason}"
+                </div>
+              )}
+              {t.status === "pending" && (
+                <div className="flex gap-2 pt-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => decide(t.id, "approve")}
+                    data-testid={`btn-approve-takedown-${t.id}`}
+                  >
+                    Approve (delete post)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => decide(t.id, "decline")}
+                    data-testid={`btn-decline-takedown-${t.id}`}
+                  >
+                    Decline
                   </Button>
                 </div>
               )}

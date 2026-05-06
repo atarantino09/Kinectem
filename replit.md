@@ -72,6 +72,7 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 - **Minor recommendations**: `/posts/follow-suggestions` filters out minors via `filterOutMinors` so children never surface in stranger recommendation flows.
 - **Article Re-shares**: Sharing your own recap is a visual no-op on your own profile due to merge logic prioritizing authored content.
 - **Avatar Rendering**: Always use `<UserAvatar>` or `<TeamAvatar>` components; do not compose Radix avatars directly to avoid loading state issues.
+- **Admin takedown queue**: Pending guardian takedowns surface at `/admin/moderation` → Takedowns tab and via `GET /admin/takedowns?status=`. Approve hard-deletes the article/highlight and stamps every matching pending row `approved`; decisions are written to `consent_audit_log` (`guardian_takedown_approved|declined`), not `admin_activity_log`. Filing a takedown drops a `admin_takedown_filed` notification into every admin's bell.
 
 ## Pointers
 

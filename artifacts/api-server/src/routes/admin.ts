@@ -15,6 +15,8 @@ import {
   userFollowers,
   organizationFollowers,
   teamFollowers,
+  takedownRequests,
+  consentAuditLog,
 } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1061,6 +1063,193 @@ router.post(
       await logAdminAction(req.realUser!.id, "masquerade_stop", "user", previousTarget, {});
     }
     res.json({ ok: true });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #368 — COPPA Phase 4: photo-of-minor takedown queue (admin UI).
+// ---------------------------------------------------------------------------
+//
+// Lists pending guardian-filed takedowns and lets a platform admin
+// approve (delete the post + cascade FKs) or decline (mark declined,
+// post becomes visible again). Mirrors the operator script
+// `pnpm --filter @workspace/scripts run coppa:delete -- --post ...`
+// so the in-app UI and CLI stay behaviorally identical.
+
+router.get(
+  "/takedowns",
+  asyncHandler(async (req, res) => {
+    const status =
+      typeof req.query["status"] === "string" ? req.query["status"] : "pending";
+    const filter =
+      status === "pending" || status === "approved" || status === "declined"
+        ? eq(takedownRequests.status, status)
+        : undefined;
+    const rows = await db
+      .select({
+        t: takedownRequests,
+        child: {
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          avatarUrl: users.avatarUrl,
+        },
+      })
+      .from(takedownRequests)
+      .leftJoin(users, eq(users.id, takedownRequests.childUserId))
+      .where(filter)
+      .orderBy(desc(takedownRequests.createdAt))
+      .limit(100);
+
+    // Resolve guardian + post snapshot per row (small N).
+    const out = await Promise.all(
+      rows.map(async (r) => {
+        let guardian: { id: string; name: string; email: string | null } | null =
+          null;
+        if (r.t.requestedByGuardianId) {
+          const [g] = await db
+            .select({ id: users.id, name: users.name, email: users.email })
+            .from(users)
+            .where(eq(users.id, r.t.requestedByGuardianId))
+            .limit(1);
+          guardian = g ?? null;
+        }
+        let post: {
+          id: string;
+          kind: "article" | "highlight";
+          title: string | null;
+          exists: boolean;
+        } = {
+          id: r.t.postRefId,
+          kind: r.t.postKind as "article" | "highlight",
+          title: null,
+          exists: false,
+        };
+        if (r.t.postKind === "article") {
+          const [a] = await db
+            .select({ id: articles.id, title: articles.title })
+            .from(articles)
+            .where(eq(articles.id, r.t.postRefId))
+            .limit(1);
+          if (a) post = { ...post, title: a.title, exists: true };
+        } else if (r.t.postKind === "highlight") {
+          const [h] = await db
+            .select({ id: highlights.id, title: highlights.title })
+            .from(highlights)
+            .where(eq(highlights.id, r.t.postRefId))
+            .limit(1);
+          if (h) post = { ...post, title: h.title, exists: true };
+        }
+        return {
+          id: r.t.id,
+          status: r.t.status,
+          reason: r.t.reason,
+          createdAt: r.t.createdAt.toISOString(),
+          decidedAt: r.t.decidedAt?.toISOString() ?? null,
+          child: r.child,
+          guardian,
+          post,
+        };
+      }),
+    );
+    res.json({ data: out });
+  }),
+);
+
+async function resolveTakedownRow(
+  takedownId: string,
+): Promise<{ kind: "article" | "highlight"; refId: string } | null> {
+  const [row] = await db
+    .select({ postKind: takedownRequests.postKind, postRefId: takedownRequests.postRefId })
+    .from(takedownRequests)
+    .where(eq(takedownRequests.id, takedownId))
+    .limit(1);
+  if (!row) return null;
+  if (row.postKind !== "article" && row.postKind !== "highlight") return null;
+  return { kind: row.postKind, refId: row.postRefId };
+}
+
+// Decide a takedown atomically. Wraps the post mutation, the conditional
+// status update (only rows still `pending` are transitioned, so concurrent
+// approve/decline races collapse to a single winner), and the per-child
+// audit-log insert in one transaction. The audit log is driven by
+// `RETURNING` so we never emit decisions for rows another moderator already
+// closed.
+async function decideTakedown(
+  req: import("express").Request,
+  ref: { kind: "article" | "highlight"; refId: string },
+  decision: "approved" | "declined",
+): Promise<{ id: string; childUserId: string }[]> {
+  const event =
+    decision === "approved"
+      ? "guardian_takedown_approved"
+      : "guardian_takedown_declined";
+  return db.transaction(async (tx) => {
+    // Transition pending rows first; if a concurrent decision already
+    // closed them, `transitioned` will be empty and we must not delete
+    // the post or write audit rows.
+    const transitioned = await tx
+      .update(takedownRequests)
+      .set({
+        status: decision,
+        decidedByUserId: req.realUser!.id,
+        decidedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(takedownRequests.postKind, ref.kind),
+          eq(takedownRequests.postRefId, ref.refId),
+          eq(takedownRequests.status, "pending"),
+        ),
+      )
+      .returning({
+        id: takedownRequests.id,
+        childUserId: takedownRequests.childUserId,
+      });
+    if (transitioned.length > 0 && decision === "approved") {
+      // Hard takedown: delete the post; FKs cascade tags/reactions/etc.
+      if (ref.kind === "article") {
+        await tx.delete(articles).where(eq(articles.id, ref.refId));
+      } else {
+        await tx.delete(highlights).where(eq(highlights.id, ref.refId));
+      }
+    }
+    if (transitioned.length > 0) {
+      await tx.insert(consentAuditLog).values(
+        transitioned.map((r) => ({
+          event,
+          childUserId: r.childUserId,
+          actorEmail: req.realUser?.email ?? null,
+          details: JSON.stringify({
+            takedownId: r.id,
+            kind: ref.kind,
+            refId: ref.refId,
+            via: "admin_ui",
+          }),
+        })),
+      );
+    }
+    return transitioned;
+  });
+}
+
+router.post(
+  "/takedowns/:takedownId/approve",
+  asyncHandler(async (req, res) => {
+    const ref = await resolveTakedownRow(p(req.params.takedownId));
+    if (!ref) return notFound(res, "Takedown not found");
+    const transitioned = await decideTakedown(req, ref, "approved");
+    res.json({ ok: true, decision: "approved", affected: transitioned.length });
+  }),
+);
+
+router.post(
+  "/takedowns/:takedownId/decline",
+  asyncHandler(async (req, res) => {
+    const ref = await resolveTakedownRow(p(req.params.takedownId));
+    if (!ref) return notFound(res, "Takedown not found");
+    const transitioned = await decideTakedown(req, ref, "declined");
+    res.json({ ok: true, decision: "declined", affected: transitioned.length });
   }),
 );
 

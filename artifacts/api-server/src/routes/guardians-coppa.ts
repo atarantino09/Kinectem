@@ -1345,6 +1345,28 @@ router.post(
       actorIp: clientIp(req),
       details: `${kind}:${refId}${reason ? ` — ${reason}` : ""}`,
     });
+    // Task #368 — surface fresh takedowns in every platform admin's
+    // notification bell so the moderation queue isn't only visible to
+    // admins who happen to look at /admin/moderation. Silent on failure.
+    try {
+      const admins = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.role, "admin"), isNull(users.deletedAt)));
+      if (admins.length > 0) {
+        await db.insert(notifications).values(
+          admins.map((a) => ({
+            userId: a.id,
+            kind: "admin_takedown_filed",
+            message: `New photo-of-minor takedown for ${kind}`,
+            link: "/admin/moderation",
+            actorUserId: auth.guardianId,
+          })),
+        );
+      }
+    } catch (err) {
+      req.log.error({ err }, "Failed to notify admins of takedown");
+    }
     req.log.info(
       { childId: auth.childId, takedownId: created.id, kind, refId },
       "Guardian filed takedown request",
