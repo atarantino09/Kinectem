@@ -525,8 +525,6 @@ describe("COPPA Phase 4 launch-readiness", () => {
       // Use a brand new team the child is NOT on by skipping team selection:
       // we just use any existing team but ensure samira is not rostered/tagged.
       const teamId = await getAnyTeamId();
-      const { db: _ } = await import("@workspace/db");
-      const { rosterEntries } = await import("@workspace/db");
       // Defensively remove any roster entry for samira on that team.
       await db
         .delete(rosterEntries)
