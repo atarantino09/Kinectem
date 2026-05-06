@@ -1209,9 +1209,18 @@ router.post(
     //   • highlight tagging the child
     // A platform admin queue handles false flags + edge cases
     // (e.g. tag missing entirely) out of band.
+    // Task #367 — child-link authorization. Accepted signals:
+    //   • article authored / highlight uploaded by the child
+    //   • article/highlight tagging the child (any tag status —
+    //     pending tags are exactly the kind a guardian needs to
+    //     suppress)
+    //   • article/highlight posted by a team the child is rostered
+    //     on (game-recap photos taken at the child's own game are
+    //     a primary takedown vector even when the child isn't
+    //     individually tagged)
     if (kind === "article") {
       const [row] = await db
-        .select({ id: articles.id, authorId: articles.authorId })
+        .select({ id: articles.id, authorId: articles.authorId, teamId: articles.teamId })
         .from(articles)
         .where(eq(articles.id, refId))
         .limit(1);
@@ -1230,16 +1239,29 @@ router.post(
           .limit(1);
         childIsLinked = !!tag;
       }
+      if (!childIsLinked && row.teamId) {
+        const [roster] = await db
+          .select({ id: rosterEntries.id })
+          .from(rosterEntries)
+          .where(
+            and(
+              eq(rosterEntries.teamId, row.teamId),
+              eq(rosterEntries.userId, auth.childId),
+            ),
+          )
+          .limit(1);
+        childIsLinked = !!roster;
+      }
       if (!childIsLinked) {
         return apiError(
           res,
           403,
-          "Child is not linked to this post (not author, not tagged).",
+          "Child is not linked to this post (not author, not tagged, not rostered on the posting team).",
         );
       }
     } else {
       const [row] = await db
-        .select({ id: highlights.id, uploaderId: highlights.uploaderId })
+        .select({ id: highlights.id, uploaderId: highlights.uploaderId, teamId: highlights.teamId })
         .from(highlights)
         .where(eq(highlights.id, refId))
         .limit(1);
@@ -1258,11 +1280,24 @@ router.post(
           .limit(1);
         childIsLinked = !!tag;
       }
+      if (!childIsLinked && row.teamId) {
+        const [roster] = await db
+          .select({ id: rosterEntries.id })
+          .from(rosterEntries)
+          .where(
+            and(
+              eq(rosterEntries.teamId, row.teamId),
+              eq(rosterEntries.userId, auth.childId),
+            ),
+          )
+          .limit(1);
+        childIsLinked = !!roster;
+      }
       if (!childIsLinked) {
         return apiError(
           res,
           403,
-          "Child is not linked to this post (not uploader, not tagged).",
+          "Child is not linked to this post (not uploader, not tagged, not rostered on the posting team).",
         );
       }
     }

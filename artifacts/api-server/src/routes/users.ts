@@ -549,12 +549,18 @@ router.get(
     const canSeePending = isSelf || isAdmin || isParent;
 
     // Task #367 — minor profile listings mirror the visibility carve-out
-    // applied by GET /users/:userId. A minor's posts are only visible
-    // to: self, linked guardian, platform admin, an org admin sharing
-    // a team with the minor, OR an approved follower (the same set
-    // that can load the profile itself). Everyone else gets 404 — we
-    // do NOT 403 because that would leak existence of the minor.
-    if (u.isMinor && !isSelf && !isAdmin && !isParent) {
+    // applied by GET /users/:userId. The carve-out only fires for minors
+    // whose `profileVisibility` is restricted (anything other than
+    // explicit `public`). When a guardian has consented to a public
+    // profile we treat the listing the same as for an adult so the
+    // intentional public surface keeps working.
+    //
+    // For restricted-visibility minors the visible set is: self, linked
+    // guardian, platform admin, an org admin sharing a team with the
+    // minor, OR an approved follower. Everyone else gets 404 — we do
+    // NOT 403 because that would leak existence of the minor.
+    const minorIsRestricted = u.isMinor && u.profileVisibility !== "public";
+    if (minorIsRestricted && !isSelf && !isAdmin && !isParent) {
       let isSharedTeamAdmin = false;
       let isApprovedFollower = false;
       if (me) {

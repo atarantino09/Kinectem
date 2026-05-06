@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +77,51 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const { toast } = useToast();
   const [currentPath, setLocation] = useLocation();
   const [reportOpen, setReportOpen] = useState(false);
+  // Task #367 — when a guardian is browsing in child-preview mode
+  // (URL carries `?asChildId=<uuid>`), expose the "Report photo of
+  // my child" action right on each feed card so they don't have to
+  // click into the post first. The same action is also rendered on
+  // PostPage as a top-level button.
+  const search = useSearch();
+  const asChildId = (() => {
+    const p = new URLSearchParams(search);
+    const v = p.get("asChildId");
+    return v && /^[0-9a-f-]{36}$/i.test(v) ? v : null;
+  })();
+  const [reportingPhoto, setReportingPhoto] = useState(false);
+  const handleReportPhotoOfChild = async () => {
+    if (!asChildId) return;
+    setReportingPhoto(true);
+    try {
+      await customFetch(
+        `/api/v1/guardians/children/${asChildId}/takedown-request`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            postId: `${reportTarget.contentType}:${reportTarget.contentId}`,
+          }),
+        },
+      );
+      toast({
+        title: "Takedown requested",
+        description:
+          "We've notified moderators. The post is hidden from public feeds while we review it.",
+      });
+      qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+    } catch (err) {
+      toast({
+        title: "Couldn't submit takedown",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Something went wrong filing the takedown request.",
+        variant: "destructive",
+      });
+    } finally {
+      setReportingPhoto(false);
+    }
+  };
   const [confirmShareOpen, setConfirmShareOpen] = useState(false);
   const [untagOpen, setUntagOpen] = useState(false);
   const [untagging, setUntagging] = useState(false);
@@ -344,6 +389,16 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                     data-testid={`menuitem-edit-${post.id}`}
                   >
                     <Pencil className="w-4 h-4 mr-2" /> Edit post
+                  </DropdownMenuItem>
+                )}
+                {asChildId && (
+                  <DropdownMenuItem
+                    disabled={reportingPhoto}
+                    onSelect={() => handleReportPhotoOfChild()}
+                    data-testid="menu-report-photo-of-child"
+                  >
+                    <Flag className="w-4 h-4 mr-2" />
+                    {reportingPhoto ? "Submitting…" : "Report photo of my child"}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem

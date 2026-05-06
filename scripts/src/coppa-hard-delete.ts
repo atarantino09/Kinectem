@@ -3,22 +3,30 @@
 // Single-user hard-delete: pass the userId to purge. The script
 // validates the user is `pending_deletion` and that the request is
 // older than the configured cooling-off window (default 24 hours),
-// then cascades through every FK (every minor-touching table is
-// declared with ON DELETE CASCADE in `lib/db/src/schema/index.ts`).
+// then performs the deletion in three phases:
 //
-// Per-table row counts are captured before the delete and written
-// into the `guardian_data_deleted` audit row so the consent_audit_log
-// preserves an exact accounting of what was purged.
+//   (1) Explicitly DELETE every message the child authored. The
+//       `messages` schema points `senderUserId` at users with
+//       ON DELETE SET NULL, so relying on FK cascade alone would
+//       leave the message body intact in recipients' inboxes — a
+//       direct COPPA right-to-delete violation.
+//   (2) For messages SENT TO the child (received side), redact the
+//       body to `[deleted]` and clear the sender attribution. The
+//       counterpart adult still sees their own outgoing message,
+//       just with the child's identifying side scrubbed.
+//   (3) DELETE the users row. Every other minor-touching table is
+//       declared with ON DELETE CASCADE in `lib/db/src/schema/*`
+//       and is purged by Postgres as part of that cascade.
+//
+// Per-table row counts captured BEFORE the cascade are written into
+// the `guardian_data_deleted` consent_audit_log row so we preserve
+// an exact accounting of what was purged.
 //
 // Run from the repo root:
 //   pnpm --filter @workspace/scripts run coppa:delete -- <userId>
 //   pnpm --filter @workspace/scripts run coppa:delete -- <userId> --apply
 //
-// The default cooling-off window is 24h; override with
-// COPPA_DELETION_GRACE_HOURS for ops drills or production policy
-// changes. The script is intentionally separate from the API server:
-// hard deletion of a child account is a high-risk operation that an
-// operator opts into manually after reviewing the candidate.
+// Override the cooling-off window with COPPA_DELETION_GRACE_HOURS.
 
 import {
   db,
@@ -35,26 +43,17 @@ import {
   rosterEntries,
   notifications,
   conversationParticipants,
+  conversations,
   messages,
   takedownRequests,
 } from "@workspace/db";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 const GRACE_HOURS = Number(process.env.COPPA_DELETION_GRACE_HOURS ?? "24");
 const APPLY = process.argv.includes("--apply");
 const USER_ID = process.argv.find(
   (a, i) => i >= 2 && !a.startsWith("--"),
 );
-
-async function countWhere(
-  table: { id?: unknown; toString(): string },
-  whereSql: ReturnType<typeof sql>,
-): Promise<number> {
-  const [row] = (await db.execute(
-    sql`select count(*)::int as c from ${table as never} where ${whereSql}`,
-  )) as unknown as { c: number }[];
-  return row?.c ?? 0;
-}
 
 async function main(): Promise<void> {
   if (!USER_ID) {
@@ -101,19 +100,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Per-table row counts captured BEFORE the cascade so the audit
-  // log records what we actually purged. Tables not listed cascade
-  // implicitly via FK definitions.
   const counts: Record<string, number> = {};
-  const collect = async (label: string, where: ReturnType<typeof sql>): Promise<void> => {
-    counts[label] = await countWhere(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ({ toString: () => label } as any),
-      where,
-    );
-  };
-  // We can't pass drizzle table objects to raw SQL by reference, so
-  // run explicit COUNT queries with the typed query builder instead.
   counts.articles = (
     await db.select({ c: sql<number>`count(*)::int` }).from(articles).where(eq(articles.authorId, u.id))
   )[0]?.c ?? 0;
@@ -154,13 +141,33 @@ async function main(): Promise<void> {
       ),
     )
   )[0]?.c ?? 0;
-  counts.messages = (
+  // Sender-side messages are hard-deleted; recipient-side messages
+  // (where the child is a participant but not the sender) get their
+  // body redacted. Track both counts separately for the audit log.
+  counts.messages_sent = (
     await db.select({ c: sql<number>`count(*)::int` }).from(messages).where(eq(messages.senderUserId, u.id))
+  )[0]?.c ?? 0;
+  counts.messages_received_redacted = (
+    await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(messages)
+      .innerJoin(
+        conversationParticipants,
+        eq(conversationParticipants.conversationId, messages.conversationId),
+      )
+      .where(
+        and(
+          eq(conversationParticipants.participantType, "user"),
+          eq(conversationParticipants.participantId, u.id),
+          // Don't double-count messages the child sent themselves.
+          sql`${messages.senderUserId} IS DISTINCT FROM ${u.id}`,
+          isNull(messages.deletedAt),
+        ),
+      )
   )[0]?.c ?? 0;
   counts.takedown_requests = (
     await db.select({ c: sql<number>`count(*)::int` }).from(takedownRequests).where(eq(takedownRequests.childUserId, u.id))
   )[0]?.c ?? 0;
-  // The users row itself is the final cascade root.
   counts.users = 1;
 
   console.log(
@@ -193,6 +200,46 @@ async function main(): Promise<void> {
       counts,
     }),
   });
+
+  // Phase (1) — hard-delete messages the child authored. Cascades
+  // through message_assets via FK.
+  await db.delete(messages).where(eq(messages.senderUserId, u.id));
+
+  // Phase (2) — redact recipient-side message bodies in conversations
+  // the child participated in. This preserves the adult counterpart's
+  // ability to navigate the conversation but scrubs every message
+  // identifying or addressed to the child. We use a correlated
+  // subquery to scope the update to conversations the child was in.
+  await db.execute(sql`
+    update ${messages}
+    set body = '[deleted]'
+    where ${messages.deletedAt} is null
+      and ${messages.conversationId} in (
+        select ${conversationParticipants.conversationId}
+        from ${conversationParticipants}
+        where ${conversationParticipants.participantType} = 'user'
+          and ${conversationParticipants.participantId} = ${u.id}
+      )
+  `);
+
+  // Drop the conversation row entirely if the child was the only
+  // participant left after their record is removed (happens in
+  // direct-message threads). This also cascades message rows.
+  await db.execute(sql`
+    delete from ${conversations}
+    where ${conversations.id} in (
+      select ${conversationParticipants.conversationId}
+      from ${conversationParticipants}
+      where ${conversationParticipants.participantType} = 'user'
+        and ${conversationParticipants.participantId} = ${u.id}
+    )
+    and (
+      select count(*) from ${conversationParticipants} cp2
+      where cp2.conversation_id = ${conversations.id}
+    ) <= 1
+  `);
+
+  // Phase (3) — drop the users row; FK cascade handles everything else.
   await db.delete(users).where(eq(users.id, u.id));
   console.log(`  deleted ${u.id}`);
   console.log("Done.");
