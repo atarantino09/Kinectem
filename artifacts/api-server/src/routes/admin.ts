@@ -1085,6 +1085,22 @@ router.get(
       status === "pending" || status === "approved" || status === "declined"
         ? eq(takedownRequests.status, status)
         : undefined;
+    // Task #368 — paginated. The default page is 100 to keep the
+    // existing UI behavior, but operators can walk older history with
+    // `?limit=&offset=` or bump `limit` up to 500 per request.
+    const limitRaw = parseInt(
+      typeof req.query["limit"] === "string" ? req.query["limit"] : "",
+      10,
+    );
+    const offsetRaw = parseInt(
+      typeof req.query["offset"] === "string" ? req.query["offset"] : "",
+      10,
+    );
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 500
+        ? limitRaw
+        : 100;
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
     const rows = await db
       .select({
         t: takedownRequests,
@@ -1099,7 +1115,8 @@ router.get(
       .leftJoin(users, eq(users.id, takedownRequests.childUserId))
       .where(filter)
       .orderBy(desc(takedownRequests.createdAt))
-      .limit(100);
+      .limit(limit)
+      .offset(offset);
 
     // Resolve guardian + post snapshot per row (small N).
     const out = await Promise.all(

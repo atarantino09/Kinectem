@@ -178,9 +178,6 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
-      '@workspace/scripts':
-        specifier: workspace:*
-        version: link:../../scripts
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -224,6 +221,9 @@ importers:
       '@types/supertest':
         specifier: ^7.2.0
         version: 7.2.0
+      '@workspace/scripts':
+        specifier: workspace:*
+        version: link:../../scripts
       esbuild:
         specifier: 0.27.3
         version: 0.27.3
