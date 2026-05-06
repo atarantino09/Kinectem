@@ -27,6 +27,18 @@ export default function PrivacyPolicyPage() {
         <p className="text-sm text-slate-500">Last updated: 2026-05-06.</p>
 
         <section className="space-y-2">
+          <h2 className="font-bold text-xl">Operator contact</h2>
+          <p>
+            Kinectem is operated by Kinectem, Inc., 2261 Market Street
+            #4567, San Francisco, CA 94114. Reach the privacy team at{" "}
+            <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
+              privacy@kinectem.com
+            </a>{" "}
+            or +1 (415) 555-0137.
+          </p>
+        </section>
+
+        <section className="space-y-2">
           <h2 className="font-bold text-xl">What we collect</h2>
           <p>
             When you create a Kinectem account we collect your name, email
@@ -64,22 +76,49 @@ export default function PrivacyPolicyPage() {
         <section className="space-y-2">
           <h2 className="font-bold text-xl">How we share data</h2>
           <p>
-            We share your data with the people you publish to (your team, your
-            organization, your followers) and with our infrastructure
-            providers (database, email delivery). We do not sell personal
-            information. We do not show third-party advertising.
+            We share your data with the people you publish to (your team,
+            your organization, your followers) and with the following
+            service providers, each contractually bound to use the data
+            only to provide their service to Kinectem:
+          </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Database hosting (Postgres / Replit infrastructure).</li>
+            <li>Transactional email delivery.</li>
+            <li>Object storage for uploaded photos and videos.</li>
+          </ul>
+          <p>
+            We do <strong>not</strong> sell personal information. We do{" "}
+            <strong>not</strong> show third-party advertising. We do{" "}
+            <strong>not</strong> share data with marketing, analytics, or
+            ad-tech vendors. We may disclose data when required by law or
+            to protect the safety of a child.
           </p>
         </section>
 
         <section className="space-y-2">
           <h2 className="font-bold text-xl">Your rights</h2>
           <p>
-            You can edit or delete your account at any time. Email{" "}
+            You can edit or delete your account at any time. Guardians of
+            an under-13 account can export the child's data, request
+            account deletion (locks immediately, hard-deletes after a
+            30-day cooling-off window), or revoke consent — all from the
+            Family page. You can also email{" "}
             <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
               privacy@kinectem.com
             </a>{" "}
-            with any data-access or deletion request, including for an under-13
-            account.
+            with any data-access or deletion request, including for an
+            under-13 account. We respond within 10 business days.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-bold text-xl">Photos of minors</h2>
+          <p>
+            If you are the guardian of a child whose photo appears in a
+            recap or highlight without your approval, open the post and
+            use the <strong>Request takedown</strong> link, or email
+            privacy@kinectem.com. The post is hidden while we review the
+            request.
           </p>
         </section>
       </main>

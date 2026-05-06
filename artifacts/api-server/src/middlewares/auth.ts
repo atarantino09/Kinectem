@@ -21,7 +21,11 @@ function isAccountStatusActive(u: { accountStatus?: string | null }): boolean {
   return (
     s !== "disabled" &&
     s !== "pending_guardian" &&
-    s !== "pending_revocation"
+    s !== "pending_revocation" &&
+    // Task #367 — pending_deletion is the right-to-delete cooling-off
+    // window. Account is locked the same way `disabled` is until the
+    // operator hard-delete script removes the row.
+    s !== "pending_deletion"
   );
 }
 

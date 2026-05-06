@@ -405,6 +405,85 @@ CREATE INDEX IF NOT EXISTS messages_pending_idx
   ON messages (conversation_id) WHERE moderation_status = 'pending';
 `;
 
+// Task #367 — COPPA Phase 3 launch readiness. Adds the
+// `pending_deletion` account-status value, the `profile_visibility`
+// enum + column on users, the `deletion_requested_at` timestamp, the
+// new `takedown_status` enum + `takedown_requests` table, and the
+// new consent-audit events. All idempotent.
+const TASK_367_COPPA_PHASE_3 = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'account_status' AND e.enumlabel = 'pending_deletion'
+  ) THEN
+    ALTER TYPE account_status ADD VALUE 'pending_deletion';
+  END IF;
+END$migration$;
+
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'profile_visibility') THEN
+    CREATE TYPE profile_visibility AS ENUM ('public','followers','private');
+  END IF;
+END$migration$;
+
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'takedown_status') THEN
+    CREATE TYPE takedown_status AS ENUM ('pending','approved','declined');
+  END IF;
+END$migration$;
+
+DO $migration$
+DECLARE
+  v text;
+BEGIN
+  FOREACH v IN ARRAY ARRAY[
+    'guardian_deletion_requested',
+    'guardian_data_deleted',
+    'guardian_takedown_requested',
+    'guardian_takedown_approved',
+    'guardian_takedown_declined'
+  ] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_enum e
+      JOIN pg_type t ON t.oid = e.enumtypid
+      WHERE t.typname = 'consent_audit_event' AND e.enumlabel = v
+    ) THEN
+      EXECUTE format('ALTER TYPE consent_audit_event ADD VALUE %L', v);
+    END IF;
+  END LOOP;
+END$migration$;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS profile_visibility profile_visibility NOT NULL DEFAULT 'public',
+  ADD COLUMN IF NOT EXISTS deletion_requested_at timestamp;
+
+-- Backfill: every existing minor account starts at the followers tier.
+UPDATE users SET profile_visibility = 'followers'
+  WHERE is_minor = true AND profile_visibility = 'public';
+
+CREATE TABLE IF NOT EXISTS takedown_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  child_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  requested_by_guardian_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  post_kind post_kind NOT NULL,
+  post_ref_id uuid NOT NULL,
+  reason text,
+  status takedown_status NOT NULL DEFAULT 'pending',
+  decided_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  decided_at timestamp,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS takedown_requests_pending_idx
+  ON takedown_requests (post_kind, post_ref_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS takedown_requests_child_idx
+  ON takedown_requests (child_user_id, status);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -457,6 +536,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-06-task-363-coppa-phase-2",
     sql: TASK_363_COPPA_PHASE_2,
+  },
+  {
+    name: "2026-05-06-task-367-coppa-phase-3",
+    sql: TASK_367_COPPA_PHASE_3,
   },
 ];
 

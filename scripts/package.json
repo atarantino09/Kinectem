@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill-avatars": "tsx ./src/backfill-avatars.ts",
+    "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

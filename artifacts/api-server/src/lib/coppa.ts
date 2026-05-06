@@ -15,32 +15,72 @@ import { logger } from "./logger";
 // Single source of truth for the parental-consent notice. Any change
 // requires bumping `CONSENT_NOTICE_VERSION` so we can prove which
 // wording a parent saw at the moment they consented.
-export const CONSENT_NOTICE_VERSION = "1.0.0";
+// Task #367 bumped to 1.1.0 — added the operator-of-record contact
+// block (legal mailing address + privacy phone) and the explicit
+// third-party data-sharing disclosure (no sale, no ad targeting,
+// named infrastructure providers) the FTC's "Direct Notice"
+// guidance requires. Bump again on any wording change so we can
+// prove which version a parent saw at consent time.
+export const CONSENT_NOTICE_VERSION = "1.1.0";
 export const CONSENT_NOTICE_TEXT = `
-Kinectem is a youth-sports social platform. Federal law (the Children's
-Online Privacy Protection Act, "COPPA") requires us to obtain verifiable
-parental consent before we collect personal information from a child
-under 13.
+Kinectem is a youth-sports social platform operated by Kinectem, Inc.,
+2261 Market Street #4567, San Francisco, CA 94114. Federal law (the
+Children's Online Privacy Protection Act, "COPPA") requires us to
+obtain verifiable parental consent before we collect personal
+information from a child under 13.
+
+OPERATOR CONTACT
+- Mail: Kinectem, Inc., 2261 Market Street #4567, San Francisco, CA 94114
+- Email: privacy@kinectem.com
+- Phone: +1 (415) 555-0137
+
+WHAT WE COLLECT FROM YOUR CHILD
+The child's first name, last name, sport, jersey number, and date of
+birth. Their date of birth is used only to determine when COPPA limits
+no longer apply and to age-gate features. If you allow it, an avatar
+photo (with GPS / camera metadata stripped before storage). Coaches
+and teammates may tag your child in recaps and highlights; the tagged
+photos are stored with the same metadata-stripping rule.
 
 If you confirm consent, your child's Kinectem account will be allowed to:
 - Sign in and view their team roster, recaps, and highlights.
-- Be tagged in posts created by coaches and teammates (you can require
-  per-tag approval at any time from your Family page).
+- Be tagged in posts created by coaches and teammates (per-tag
+  approval is on by default for under-13 accounts; you can keep it on
+  forever from your Family page).
 - Upload a profile photo (we automatically strip GPS / location and
   other camera metadata before storing minor uploads).
 
 We will NOT enable for an under-13 account:
+- A discoverable public profile (the profile is visible only to the
+  user themselves, you the linked guardian, platform administrators,
+  organization admins of teams the child is on, and approved
+  followers).
 - Public profile fields beyond first initial + jersey number / sport.
-- Direct messaging with anyone.
+- Direct messaging with anyone outside the allowlist you control.
 - Posting comments or new content visible to strangers.
 - Following users, organizations, or teams in search.
 
-We collect the minimum information needed: the child's first name,
-last name, sport, jersey number, and date of birth (so we can tell
-when they age out of these limits). You can revoke consent at any
-time, which immediately disables the account and stops further data
-collection. Use the "Revoke consent" link in the email we send you, or
-the Revoke button on your Family page.
+THIRD-PARTY DATA SHARING
+We do NOT sell your child's personal information. We do NOT show
+third-party advertising to under-13 accounts. We do NOT share your
+child's data with marketing, analytics, or ad-tech vendors. We share
+the minimum data necessary with the following service providers,
+each contractually bound to use the data only to provide their
+service to Kinectem:
+- Database hosting (Postgres / Replit infrastructure).
+- Transactional email delivery (for the parental-consent emails and
+  account notifications you receive).
+- Object storage for uploaded photos and videos.
+We may disclose data when required by law (e.g. lawful subpoena) or
+to protect the safety of a child.
+
+YOUR RIGHTS
+You can review the personal information we have collected from your
+child, request its deletion, or refuse to permit further collection
+or use. Use the Family page to export the data, request deletion, or
+revoke consent (which immediately disables the account). You can
+also email privacy@kinectem.com with any request. We respond within
+10 business days.
 
 Questions: privacy@kinectem.com.
 `.trim();
@@ -168,7 +208,13 @@ export type ConsentAuditEvent =
   | "guardian_dm_allowlist_remove"
   | "guardian_data_exported"
   | "guardian_revoke_requested"
-  | "guardian_consent_regranted";
+  | "guardian_consent_regranted"
+  // Task #367 — COPPA Phase 3 launch readiness.
+  | "guardian_deletion_requested"
+  | "guardian_data_deleted"
+  | "guardian_takedown_requested"
+  | "guardian_takedown_approved"
+  | "guardian_takedown_declined";
 
 export async function logConsentEvent(args: {
   event: ConsentAuditEvent;

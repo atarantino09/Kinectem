@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { NoIndex } from "@/components/NoIndex";
 import {
   Building2,
   ChevronDown,
@@ -304,6 +305,11 @@ export default function UserProfilePage() {
         hasAnyAffiliation ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""
       } gap-6 items-start`}
     >
+      {/* Task #367 — minor profile pages must not be search-indexed.
+          The API also sets X-Robots-Tag, but the SPA shell may render
+          the page from the static index.html before the API call
+          completes. */}
+      {(user as { isMinor?: boolean }).isMinor ? <NoIndex /> : null}
       <div className="space-y-6 min-w-0">
       {/* Hero */}
       <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">

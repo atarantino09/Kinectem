@@ -49,6 +49,33 @@ export const accountStatusEnum = pgEnum("account_status", [
   "pending_guardian",
   "disabled",
   "pending_revocation",
+  // Task #367 — guardian has requested deletion. Account is locked
+  // out the same way as `pending_revocation`/`disabled`; the operator
+  // hard-delete script (`pnpm --filter @workspace/scripts coppa:delete`)
+  // cascades the row removal once the 30-day window completes.
+  "pending_deletion",
+]);
+
+// Task #367 — Profile visibility tier. Adult accounts default `public`
+// (existing behavior); under-13 accounts are forced to `followers` at
+// signup so a minor profile and their posts are only retrievable by
+// the user themselves, their linked guardian, platform admins, an org
+// admin sharing a team with the minor, or a follower whose follow edge
+// has been guardian-approved. `private` is reserved for a future
+// "guardian locked it down completely" mode.
+export const profileVisibilityEnum = pgEnum("profile_visibility", [
+  "public",
+  "followers",
+  "private",
+]);
+
+// Task #367 — Status of a photo-of-minor takedown request submitted by
+// a guardian. While `pending` the targeted post is hidden from every
+// listing.
+export const takedownStatusEnum = pgEnum("takedown_status", [
+  "pending",
+  "approved",
+  "declined",
 ]);
 
 // Task #363 — COPPA Phase 2 gating status used on `user_followers`,
@@ -100,6 +127,12 @@ export const consentAuditEventEnum = pgEnum("consent_audit_event", [
   "guardian_data_exported",
   "guardian_revoke_requested",
   "guardian_consent_regranted",
+  // Task #367 — COPPA Phase 3 launch readiness events.
+  "guardian_deletion_requested",
+  "guardian_data_deleted",
+  "guardian_takedown_requested",
+  "guardian_takedown_approved",
+  "guardian_takedown_declined",
 ]);
 
 export const users = pgTable("users", {
@@ -149,6 +182,17 @@ export const users = pgTable("users", {
     .default("active"),
   consentFinalizedAt: timestamp("consent_finalized_at"),
   consentRevokedAt: timestamp("consent_revoked_at"),
+  // Task #367 — COPPA Phase 3.
+  // Profile-visibility tier — `public` for adults, `followers` for
+  // minors (set at signup time so an adult who later flips a child
+  // visibility back to public has a single column to flip).
+  profileVisibility: profileVisibilityEnum("profile_visibility")
+    .notNull()
+    .default("public"),
+  // Stamped when a guardian (or the user themselves) submits a
+  // right-to-delete request. The hard-delete script keys off this
+  // column once the cooling-off window passes.
+  deletionRequestedAt: timestamp("deletion_requested_at"),
   // COPPA Phase 1 (task #359) — when a guardian revokes consent we
   // disable the account immediately and set this timestamp 30 days
   // out. The Phase-1 deliverable wires only the schedule + audit
@@ -560,6 +604,36 @@ export const dmAllowlist = pgTable(
     pk: primaryKey({ columns: [t.childUserId, t.counterpartyUserId] }),
   }),
 );
+
+// Task #367 — COPPA Phase 3 photo-of-minor takedown queue. A guardian
+// flags an article or highlight that contains an unapproved image of
+// their child; while `status='pending'` the post is hidden from every
+// listing and 404s on direct fetch (except for the requesting guardian
+// and platform admins, who can resolve it). `status` transitions to
+// `approved` (post stays hidden + tag(s) torn down) or `declined`
+// (post becomes visible again). `postKind` is restricted to
+// `article|highlight` at the API layer (org_post takedowns are out of
+// scope for the launch-readiness MVP).
+export const takedownRequests = pgTable("takedown_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  childUserId: uuid("child_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  requestedByGuardianId: uuid("requested_by_guardian_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  postKind: postKindEnum("post_kind").notNull(),
+  postRefId: uuid("post_ref_id").notNull(),
+  reason: text("reason"),
+  status: takedownStatusEnum("status").notNull().default("pending"),
+  decidedByUserId: uuid("decided_by_user_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  decidedAt: timestamp("decided_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),

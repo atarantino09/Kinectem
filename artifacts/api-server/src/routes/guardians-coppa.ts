@@ -23,6 +23,7 @@ import {
   consentAuditLog,
   dmAllowlist,
   notifications,
+  takedownRequests,
 } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
@@ -1105,6 +1106,194 @@ router.post(
       details: "regrant_via_dashboard",
     });
     return res.json({ ok: true, accountStatus: "active" });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #367 — COPPA Phase 3: right-to-delete + photo-of-minor takedown.
+// ---------------------------------------------------------------------------
+
+// POST /guardians/children/:childId/request-deletion
+// Marks the account `pending_deletion` and stamps `deletion_requested_at`
+// with the current timestamp (the operator hard-delete script keys
+// off this column once the cooling-off window passes). The account is
+// immediately locked out — further sign-ins fail the same way as a
+// `disabled` account. Idempotent: a second call is a no-op.
+router.post(
+  "/guardians/children/:childId/request-deletion",
+  asyncHandler(async (req, res) => {
+    const auth = await authorizeGuardianForChild(
+      req,
+      res,
+      String(req.params.childId),
+    );
+    if (!auth) return;
+    // Task #367 — idempotent: only stamp `deletionRequestedAt` on the
+    // first transition into `pending_deletion`. Repeated calls leave
+    // the original timestamp alone so a confused / malicious caller
+    // can't keep pushing out the 30-day hard-delete eligibility
+    // window by re-submitting the request.
+    const [child] = await db
+      .select({
+        accountStatus: users.accountStatus,
+        deletionRequestedAt: users.deletionRequestedAt,
+      })
+      .from(users)
+      .where(eq(users.id, auth.childId))
+      .limit(1);
+    const alreadyPending =
+      child?.accountStatus === "pending_deletion" && !!child?.deletionRequestedAt;
+    if (!alreadyPending) {
+      await db
+        .update(users)
+        .set({
+          accountStatus: "pending_deletion",
+          deletionRequestedAt: new Date(),
+        })
+        .where(eq(users.id, auth.childId));
+    }
+    void logConsentEvent({
+      event: "guardian_deletion_requested",
+      childUserId: auth.childId,
+      actorEmail: req.sessionUser?.email ?? null,
+      actorIp: clientIp(req),
+      details: "request_via_dashboard",
+    });
+    req.log.info(
+      { childId: auth.childId, guardianId: auth.guardianId },
+      "Guardian requested COPPA deletion",
+    );
+    return res.json({ ok: true, accountStatus: "pending_deletion" });
+  }),
+);
+
+// POST /guardians/children/:childId/takedown-request
+// Body: { postId: "article:<uuid>" | "highlight:<uuid>", reason?: string }
+// Files a photo-of-minor takedown for an article or highlight that
+// contains an unapproved image of the linked child. While
+// `status='pending'`, GET /posts/:postId 404s the post for everyone
+// except the requesting guardian and platform admins (who can resolve
+// it). Org-post takedowns are out of scope for the launch-readiness
+// MVP and rejected with 400.
+router.post(
+  "/guardians/children/:childId/takedown-request",
+  asyncHandler(async (req, res) => {
+    const auth = await authorizeGuardianForChild(
+      req,
+      res,
+      String(req.params.childId),
+    );
+    if (!auth) return;
+    const body = (req.body ?? {}) as { postId?: unknown; reason?: unknown };
+    const postIdRaw = typeof body.postId === "string" ? body.postId : "";
+    const reason =
+      typeof body.reason === "string" && body.reason.trim().length > 0
+        ? body.reason.trim().slice(0, 500)
+        : null;
+    const m = /^(article|highlight):([0-9a-f-]{36})$/i.exec(postIdRaw);
+    if (!m) {
+      return apiError(res, 400, "Invalid postId. Expected article:<uuid> or highlight:<uuid>.");
+    }
+    const kind = m[1].toLowerCase() as "article" | "highlight";
+    const refId = m[2];
+    // Task #367 — authorization: the guardian may only file a
+    // takedown for a post that ALREADY links the child somehow.
+    // Without this check, any guardian could suppress arbitrary
+    // posts platform-wide by abusing the pending-takedown 404 in
+    // GET /posts/:postId. Accepted child-relation signals:
+    //   • article authored by the child
+    //   • article tagging the child (any tag status — including
+    //     pending — because a not-yet-approved tag is exactly the
+    //     kind of photo a guardian needs to suppress)
+    //   • highlight uploaded by the child
+    //   • highlight tagging the child
+    // A platform admin queue handles false flags + edge cases
+    // (e.g. tag missing entirely) out of band.
+    if (kind === "article") {
+      const [row] = await db
+        .select({ id: articles.id, authorId: articles.authorId })
+        .from(articles)
+        .where(eq(articles.id, refId))
+        .limit(1);
+      if (!row) return apiError(res, 404, "Post not found");
+      let childIsLinked = row.authorId === auth.childId;
+      if (!childIsLinked) {
+        const [tag] = await db
+          .select({ id: articleTags.id })
+          .from(articleTags)
+          .where(
+            and(
+              eq(articleTags.articleId, refId),
+              eq(articleTags.userId, auth.childId),
+            ),
+          )
+          .limit(1);
+        childIsLinked = !!tag;
+      }
+      if (!childIsLinked) {
+        return apiError(
+          res,
+          403,
+          "Child is not linked to this post (not author, not tagged).",
+        );
+      }
+    } else {
+      const [row] = await db
+        .select({ id: highlights.id, uploaderId: highlights.uploaderId })
+        .from(highlights)
+        .where(eq(highlights.id, refId))
+        .limit(1);
+      if (!row) return apiError(res, 404, "Post not found");
+      let childIsLinked = row.uploaderId === auth.childId;
+      if (!childIsLinked) {
+        const [tag] = await db
+          .select({ id: highlightTags.id })
+          .from(highlightTags)
+          .where(
+            and(
+              eq(highlightTags.highlightId, refId),
+              eq(highlightTags.userId, auth.childId),
+            ),
+          )
+          .limit(1);
+        childIsLinked = !!tag;
+      }
+      if (!childIsLinked) {
+        return apiError(
+          res,
+          403,
+          "Child is not linked to this post (not uploader, not tagged).",
+        );
+      }
+    }
+    const [created] = await db
+      .insert(takedownRequests)
+      .values({
+        childUserId: auth.childId,
+        requestedByGuardianId: auth.guardianId,
+        postKind: kind,
+        postRefId: refId,
+        reason,
+      })
+      .returning();
+    void logConsentEvent({
+      event: "guardian_takedown_requested",
+      childUserId: auth.childId,
+      actorEmail: req.sessionUser?.email ?? null,
+      actorIp: clientIp(req),
+      details: `${kind}:${refId}${reason ? ` — ${reason}` : ""}`,
+    });
+    req.log.info(
+      { childId: auth.childId, takedownId: created.id, kind, refId },
+      "Guardian filed takedown request",
+    );
+    return res.status(201).json({
+      id: created.id,
+      postKind: kind,
+      postRefId: refId,
+      status: created.status,
+      createdAt: created.createdAt.toISOString(),
+    });
   }),
 );
 

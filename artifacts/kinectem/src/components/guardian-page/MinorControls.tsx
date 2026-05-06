@@ -171,6 +171,26 @@ export function MinorControls({ child }: Props) {
     [base, refresh],
   );
 
+  const deleteAccount = useCallback(async () => {
+    const confirmed = window.confirm(
+      `Permanently delete ${child.firstName}'s Kinectem account?\n\n` +
+        `The account is locked immediately. After a 30-day cooling-off ` +
+        `period, all of ${child.firstName}'s data is hard-deleted from ` +
+        `our database. This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setBusy("delete");
+    setError(null);
+    try {
+      await customFetch(`${base}/request-deletion`, { method: "POST" });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Deletion request failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [base, child.firstName, refresh]);
+
   const exportData = useCallback(async () => {
     setBusy("export");
     try {
@@ -313,6 +333,20 @@ export function MinorControls({ child }: Props) {
               disabled={busy === "consent:regrant"}
             >
               <Unlock className="w-3 h-3 mr-1" /> Re-activate
+            </Button>
+            {/* Task #367 — right-to-delete. Marks the account
+                pending_deletion immediately; an operator script
+                hard-deletes the row after a 30-day cooling-off
+                window. Behind a strong confirm because the action
+                is irreversible. */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 hover:text-red-700"
+              onClick={() => void deleteAccount()}
+              disabled={busy === "delete"}
+            >
+              <Lock className="w-3 h-3 mr-1" /> Delete account
             </Button>
           </div>
         </div>

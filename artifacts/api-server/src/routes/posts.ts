@@ -19,6 +19,7 @@ import {
   postReactions,
   postComments,
   postShares,
+  takedownRequests,
 } from "@workspace/db";
 import {
   and,
@@ -80,6 +81,58 @@ import {
 } from "../lib/coppa";
 
 const router: IRouter = Router();
+
+// Task #367 — COPPA Phase 3 helpers used by GET /posts/:postId.
+//
+// `isPendingTakedown` returns true when an article/highlight has at
+// least one open takedown_requests row. The requesting guardian and
+// platform admins still see the post (they need to resolve the
+// queue); everyone else gets a 404. The viewer carve-out is folded
+// into the helper so callers don't have to remember to pass
+// `requestedByGuardianId`.
+async function isPendingTakedown(
+  kind: "article" | "highlight",
+  postId: string,
+  viewerId: string | null,
+): Promise<boolean> {
+  const rows = await db
+    .select({ requestedByGuardianId: takedownRequests.requestedByGuardianId })
+    .from(takedownRequests)
+    .where(
+      and(
+        eq(takedownRequests.postKind, kind),
+        eq(takedownRequests.postRefId, postId),
+        eq(takedownRequests.status, "pending"),
+      ),
+    );
+  if (rows.length === 0) return false;
+  if (viewerId && rows.some((r) => r.requestedByGuardianId === viewerId)) {
+    return false;
+  }
+  return true;
+}
+
+async function articleHasMinorTag(articleId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: users.id })
+    .from(articleTags)
+    .innerJoin(users, eq(users.id, articleTags.userId))
+    .where(and(eq(articleTags.articleId, articleId), eq(users.isMinor, true)))
+    .limit(1);
+  return !!row;
+}
+
+async function highlightHasMinorTag(highlightId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: users.id })
+    .from(highlightTags)
+    .innerJoin(users, eq(users.id, highlightTags.userId))
+    .where(
+      and(eq(highlightTags.highlightId, highlightId), eq(users.isMinor, true)),
+    )
+    .limit(1);
+  return !!row;
+}
 
 // ---------------------------------------------------------------------------
 // Posts
@@ -673,6 +726,23 @@ router.get(
       if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
         return notFound(res);
       }
+      // Task #367 — pending photo-of-minor takedown hides the post
+      // from everyone except the requesting guardian and platform
+      // admins, who need to see it to resolve the queue.
+      if (
+        !isAdmin &&
+        (await isPendingTakedown("article", row.a.id, me?.id ?? null))
+      ) {
+        return notFound(res);
+      }
+      // Task #367 — when the recap author is a minor (or any tagged
+      // user is a minor), instruct search engines not to index it.
+      if (
+        row.author?.isMinor ||
+        (await articleHasMinorTag(row.a.id))
+      ) {
+        res.setHeader("X-Robots-Tag", "noindex, nofollow, noimageindex");
+      }
       // Co-authors get the same edit affordance as the author. Skip
       // the lookup if we already know the viewer can edit (author/admin)
       // or if they're not logged in.
@@ -770,6 +840,21 @@ router.get(
       .limit(1);
     if (!row) return notFound(res);
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
+    // Task #367 — pending takedown hides the highlight from listings.
+    if (
+      !isAdmin &&
+      (await isPendingTakedown("highlight", row.h.id, me?.id ?? null))
+    ) {
+      return notFound(res);
+    }
+    // Task #367 — minor uploader OR any minor tagged in the highlight
+    // → noindex headers.
+    if (
+      row.uploader?.isMinor ||
+      (await highlightHasMinorTag(row.h.id))
+    ) {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noimageindex");
+    }
     // Uploader-only edit + delete on highlights.
     const isUploader = !!me && row.h.uploaderId === me.id;
     const [stats, shareStats, tagViews, currentUserTags] = await Promise.all([

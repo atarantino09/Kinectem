@@ -219,6 +219,12 @@ export function toPublicUser(
     isOwnProfile: opts.isOwnProfile ?? false,
     isFollowing: opts.isFollowing ?? false,
     isConnection: false,
+    // Task #367 — non-PII boolean exposed on every public profile so
+    // the SPA can mount <NoIndex/> as a belt-and-braces against the
+    // X-Robots-Tag header. Public listings of minors are already
+    // suppressed by `filterOutMinors`, so the only callers that see
+    // this true are viewers who passed the minor profile carve-out.
+    isMinor: !!u.isMinor,
     followerCount: opts.followerCount ?? 0,
     followingCount: opts.followingCount ?? 0,
     createdAt: u.createdAt.toISOString(),
@@ -275,6 +281,10 @@ export function toPostAuthor(
     id: u.id,
     displayName: displayName(u),
     avatarUrl: safeAvatarUrl(u.avatarUrl),
+    // Task #367 — same rationale as toPublicUser.isMinor: the SPA
+    // PostPage uses this to mount <NoIndex/> when the post author is
+    // a minor, in addition to the X-Robots-Tag header the API sets.
+    isMinor: !!u.isMinor,
     // Article-backed long-form posts populate this with the author's
     // strongest team-relevant role (Coach > Author > Owner > Admin) so
     // the recap header can render "Jane Doe · Coach". Highlights, org

@@ -410,6 +410,12 @@ router.post(
         // Task #359 snapshot.
         isMinor: guardianRequired,
         accountStatus: guardianRequired ? "pending_guardian" : "active",
+        // Task #367 — minor profiles are private-by-default. The
+        // followers tier means only the user, their linked guardian,
+        // platform admins, an org admin sharing a team with the
+        // minor, or a guardian-approved follower can resolve the
+        // profile. Adults keep the legacy `public` default.
+        profileVisibility: guardianRequired ? "followers" : undefined,
         // COPPA defaults: under-13 accounts must approve every tag the
         // first time, so we flip `requireTagConsent` on at creation. An
         // adult account keeps the legacy default (off) and can opt in

@@ -32,6 +32,24 @@ export default function CoppaNoticePage() {
         </p>
 
         <section className="space-y-2">
+          <h2 className="font-bold text-xl">Operator contact</h2>
+          <p>
+            Kinectem is operated by Kinectem, Inc. You can reach our
+            privacy team about anything in this notice:
+          </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Mail: Kinectem, Inc., 2261 Market Street #4567, San Francisco, CA 94114</li>
+            <li>
+              Email:{" "}
+              <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
+                privacy@kinectem.com
+              </a>
+            </li>
+            <li>Phone: +1 (415) 555-0137</li>
+          </ul>
+        </section>
+
+        <section className="space-y-2">
           <h2 className="font-bold text-xl">What we collect</h2>
           <p>
             Your child's first name, last name, sport, jersey number, and date
@@ -58,11 +76,57 @@ export default function CoppaNoticePage() {
         <section className="space-y-2">
           <h2 className="font-bold text-xl">What is disabled</h2>
           <ul className="list-disc pl-6 space-y-1">
+            <li>
+              A discoverable public profile. Under-13 profiles are visible
+              only to the user, the linked guardian, platform
+              administrators, organization admins of teams the child is on,
+              and approved followers.
+            </li>
             <li>Public profile fields beyond first initial + jersey number.</li>
-            <li>Direct messaging with anyone.</li>
+            <li>
+              Direct messaging with anyone outside the allowlist you control
+              from your Family page.
+            </li>
             <li>Posting comments or new content visible to strangers.</li>
             <li>Following users, organizations, or teams in search.</li>
           </ul>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-bold text-xl">Third-party data sharing</h2>
+          <p>
+            We do <strong>not</strong> sell your child's personal information,
+            we do <strong>not</strong> show third-party advertising to under-13
+            accounts, and we do <strong>not</strong> share your child's data
+            with marketing, analytics, or ad-tech vendors. We share the
+            minimum data necessary with the following service providers,
+            each contractually bound to use the data only to provide their
+            service to Kinectem:
+          </p>
+          <ul className="list-disc pl-6 space-y-1">
+            <li>Database hosting (Postgres / Replit infrastructure).</li>
+            <li>Transactional email delivery (consent + account notifications).</li>
+            <li>Object storage for uploaded photos and videos.</li>
+          </ul>
+          <p>
+            We may disclose data when required by law (e.g. lawful
+            subpoena) or to protect the safety of a child.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-bold text-xl">Your rights</h2>
+          <p>
+            You can review the personal information we have collected from
+            your child, request its deletion, or refuse to permit further
+            collection or use. From your Family page you can{" "}
+            <strong>export</strong> the data, request{" "}
+            <strong>deletion</strong> (locks the account immediately and
+            hard-deletes after a 30-day cooling-off window), or{" "}
+            <strong>revoke</strong> consent. You can also email
+            privacy@kinectem.com with any request — we respond within 10
+            business days.
+          </p>
         </section>
 
         <section className="space-y-2">

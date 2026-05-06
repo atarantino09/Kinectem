@@ -11,6 +11,7 @@ import {
   type PostResponse,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { NoIndex } from "@/components/NoIndex";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,8 +141,14 @@ export default function PostPage() {
   const images = post.assets?.filter((a) => a.fileType?.startsWith("image/")) ?? [];
   const videoAsset = post.assets?.find((a) => a.fileType?.startsWith("video/"));
 
+  // Task #367 — keep recap/highlight URLs out of search engines if the
+  // author is a minor. Minor-tagged posts also get the header from the
+  // server; this <meta> covers the SPA-shell render path.
+  const authorIsMinor = Boolean((post.author as { isMinor?: boolean })?.isMinor);
+
   return (
     <article className="max-w-3xl mx-auto space-y-6">
+      {authorIsMinor ? <NoIndex /> : null}
       {asChildId && (
         <div
           className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"

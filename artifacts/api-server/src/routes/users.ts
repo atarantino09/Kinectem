@@ -144,12 +144,14 @@ router.get(
     const isOwnProfile = me?.id === u.id;
 
     // Minor profiles aren't directly retrievable by the public — only
-    // self, linked guardian, platform admin, or an org admin sharing
-    // a team with the minor. Everyone else gets 404.
+    // self, linked guardian, platform admin, an org admin sharing a
+    // team with the minor, or (task #367) a follower whose follow
+    // edge has been guardian-approved. Everyone else gets 404.
     if (u.isMinor && !isOwnProfile) {
       const isLinkedGuardian = !!me && u.parentId === me.id;
       const isPlatformAdmin = req.realUser?.role === "admin";
       let isSharedTeamAdmin = false;
+      let isApprovedFollower = false;
       if (!isLinkedGuardian && !isPlatformAdmin && me) {
         const sharedAdmin = await db
           .select({ id: organizationAdmins.organizationId })
@@ -168,10 +170,33 @@ router.get(
           )
           .limit(1);
         isSharedTeamAdmin = sharedAdmin.length > 0;
+        if (!isSharedTeamAdmin) {
+          const followRow = await db
+            .select({ s: userFollowers.moderationStatus })
+            .from(userFollowers)
+            .where(
+              and(
+                eq(userFollowers.followingUserId, u.id),
+                eq(userFollowers.followerUserId, me.id),
+                eq(userFollowers.moderationStatus, "approved"),
+              ),
+            )
+            .limit(1);
+          isApprovedFollower = followRow.length > 0;
+        }
       }
-      if (!isLinkedGuardian && !isPlatformAdmin && !isSharedTeamAdmin) {
+      if (
+        !isLinkedGuardian &&
+        !isPlatformAdmin &&
+        !isSharedTeamAdmin &&
+        !isApprovedFollower
+      ) {
         return notFound(res);
       }
+      // Task #367 — minor profile pages must not be search-indexed.
+      // The X-Robots-Tag header is honored by Google / Bing / DDG and
+      // belt-and-braces with the in-page <meta> the SPA mounts.
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noimageindex");
     }
 
     // Linked accounts (parent ↔ child) are sensitive on a youth-sports
