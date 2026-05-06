@@ -159,13 +159,20 @@ export default function PostPage() {
     if (!asChildId) return;
     setReportSubmitting(true);
     try {
+      // Task #367 — `post.id` is the synthetic id (e.g.
+      // `article-<uuid>` / `highlight-<uuid>`). The takedown
+      // endpoint expects the canonical `article:<uuid>` /
+      // `highlight:<uuid>` format, so strip the prefix and rebuild.
       const refKind = isShort ? "highlight" : "article";
+      const refUuid = post.id.startsWith(`${refKind}-`)
+        ? post.id.slice(refKind.length + 1)
+        : post.id;
       await customFetch(
         `/api/v1/guardians/children/${asChildId}/takedown-request`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postId: `${refKind}:${post.id}` }),
+          body: JSON.stringify({ postId: `${refKind}:${refUuid}` }),
         },
       );
       toast({

@@ -154,49 +154,31 @@ router.get(
     // Guardians who explicitly consent to a public profile keep the
     // adult-equivalent surface so the intentionally-public flow works.
     if (u.isMinor && u.profileVisibility !== "public" && !isOwnProfile) {
+      // Task #367 — restricted-minor profile audience is intentionally
+      // narrow: self, linked guardian, platform admin, or a follower
+      // whose follow edge has been guardian-approved. Shared org/team
+      // admin does NOT confer access here — that carve-out is reserved
+      // for staff-style admin flows where the org explicitly opted in,
+      // and would otherwise widen the disclosure surface beyond what
+      // the guardian intended when leaving the profile non-`public`.
       const isLinkedGuardian = !!me && u.parentId === me.id;
       const isPlatformAdmin = req.realUser?.role === "admin";
-      let isSharedTeamAdmin = false;
       let isApprovedFollower = false;
       if (!isLinkedGuardian && !isPlatformAdmin && me) {
-        const sharedAdmin = await db
-          .select({ id: organizationAdmins.organizationId })
-          .from(organizationAdmins)
-          .innerJoin(
-            teams,
-            eq(teams.organizationId, organizationAdmins.organizationId),
-          )
-          .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+        const followRow = await db
+          .select({ s: userFollowers.moderationStatus })
+          .from(userFollowers)
           .where(
             and(
-              eq(organizationAdmins.userId, me.id),
-              eq(rosterEntries.userId, u.id),
-              inArray(organizationAdmins.role, ["owner", "admin"]),
+              eq(userFollowers.followingUserId, u.id),
+              eq(userFollowers.followerUserId, me.id),
+              eq(userFollowers.moderationStatus, "approved"),
             ),
           )
           .limit(1);
-        isSharedTeamAdmin = sharedAdmin.length > 0;
-        if (!isSharedTeamAdmin) {
-          const followRow = await db
-            .select({ s: userFollowers.moderationStatus })
-            .from(userFollowers)
-            .where(
-              and(
-                eq(userFollowers.followingUserId, u.id),
-                eq(userFollowers.followerUserId, me.id),
-                eq(userFollowers.moderationStatus, "approved"),
-              ),
-            )
-            .limit(1);
-          isApprovedFollower = followRow.length > 0;
-        }
+        isApprovedFollower = followRow.length > 0;
       }
-      if (
-        !isLinkedGuardian &&
-        !isPlatformAdmin &&
-        !isSharedTeamAdmin &&
-        !isApprovedFollower
-      ) {
+      if (!isLinkedGuardian && !isPlatformAdmin && !isApprovedFollower) {
         return notFound(res);
       }
       // Task #367 — minor profile pages must not be search-indexed.
@@ -566,41 +548,26 @@ router.get(
     // NOT 403 because that would leak existence of the minor.
     const minorIsRestricted = u.isMinor && u.profileVisibility !== "public";
     if (minorIsRestricted && !isSelf && !isAdmin && !isParent) {
-      let isSharedTeamAdmin = false;
+      // Task #367 — narrow audience matches GET /users/:userId for
+      // restricted minors: self/guardian/platform admin (handled
+      // above) OR an approved follower. Shared-team-admin is NOT
+      // a carve-out here — see the matching note in GET /users/:id.
       let isApprovedFollower = false;
       if (me) {
-        const sharedAdmin = await db
-          .select({ id: organizationAdmins.organizationId })
-          .from(organizationAdmins)
-          .innerJoin(teams, eq(teams.organizationId, organizationAdmins.organizationId))
-          .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+        const followRow = await db
+          .select({ s: userFollowers.moderationStatus })
+          .from(userFollowers)
           .where(
             and(
-              eq(organizationAdmins.userId, me.id),
-              eq(rosterEntries.userId, u.id),
-              // Same role filter as GET /users/:userId — only org
-              // owners/admins (not generic members) get the carve-out.
-              inArray(organizationAdmins.role, ["owner", "admin"]),
+              eq(userFollowers.followingUserId, u.id),
+              eq(userFollowers.followerUserId, me.id),
+              eq(userFollowers.moderationStatus, "approved"),
             ),
           )
           .limit(1);
-        isSharedTeamAdmin = sharedAdmin.length > 0;
-        if (!isSharedTeamAdmin) {
-          const followRow = await db
-            .select({ s: userFollowers.moderationStatus })
-            .from(userFollowers)
-            .where(
-              and(
-                eq(userFollowers.followingUserId, u.id),
-                eq(userFollowers.followerUserId, me.id),
-                eq(userFollowers.moderationStatus, "approved"),
-              ),
-            )
-            .limit(1);
-          isApprovedFollower = followRow.length > 0;
-        }
+        isApprovedFollower = followRow.length > 0;
       }
-      if (!isSharedTeamAdmin && !isApprovedFollower) {
+      if (!isApprovedFollower) {
         return notFound(res);
       }
       // Belt-and-braces: profile itself sets X-Robots-Tag, but the
