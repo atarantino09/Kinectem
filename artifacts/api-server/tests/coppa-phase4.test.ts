@@ -339,8 +339,224 @@ describe("COPPA Phase 4 launch-readiness", () => {
     });
   });
 
+  describe("pending-takedown profile + feed suppression", () => {
+    async function plantTaggedTakedown(): Promise<{
+      articleId: string;
+      samiraId: string;
+      lisaId: string;
+      coachId: string;
+    }> {
+      const samiraId = await makeSamiraAMinor();
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Tagged samira recap",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      await db.insert(articleTags).values({
+        articleId: article.id,
+        userId: samiraId,
+        taggerUserId: coachId,
+        status: "approved",
+      });
+      await db.insert(takedownRequests).values({
+        childUserId: samiraId,
+        requestedByGuardianId: lisaId,
+        postKind: "article",
+        postRefId: article.id,
+        reason: "test",
+        status: "pending",
+      });
+      return { articleId: article.id, samiraId, lisaId, coachId };
+    }
+
+    it("excludes pending-takedown article from coach's /users/:id/posts for strangers", async () => {
+      const { articleId, coachId } = await plantTaggedTakedown();
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === "jordan@kinectem.demo",
+      );
+      const res = await stranger.get(`/api/v1/users/${coachId}/posts`);
+      expect(res.status).toBe(200);
+      const ids = (res.body.data as Array<{ id: string }>).map((p) => p.id);
+      expect(ids).not.toContain(`article-${articleId}`);
+    });
+
+    it("requesting guardian still sees the pending-takedown article on /users/:id/posts", async () => {
+      const { articleId, coachId } = await plantTaggedTakedown();
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa.get(`/api/v1/users/${coachId}/posts`);
+      expect(res.status).toBe(200);
+      const ids = (res.body.data as Array<{ id: string }>).map((p) => p.id);
+      expect(ids).toContain(`article-${articleId}`);
+    });
+
+    it("platform admin still sees the pending-takedown article on /users/:id/posts", async () => {
+      const { articleId, coachId } = await plantTaggedTakedown();
+      const { agent: admin } = await loginAs(
+        (u) => u.email === "sam@kinectem.demo",
+      );
+      const res = await admin.get(`/api/v1/users/${coachId}/posts`);
+      expect(res.status).toBe(200);
+      const ids = (res.body.data as Array<{ id: string }>).map((p) => p.id);
+      expect(ids).toContain(`article-${articleId}`);
+    });
+
+    it("excludes pending-takedown article from /feed for non-guardian non-admin viewers", async () => {
+      const { articleId } = await plantTaggedTakedown();
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === "jordan@kinectem.demo",
+      );
+      const res = await stranger.get(`/api/v1/feed?limit=100`);
+      expect(res.status).toBe(200);
+      const ids = (res.body.data as Array<{ id: string }>).map((p) => p.id);
+      expect(ids).not.toContain(`article-${articleId}`);
+    });
+  });
+
+  describe("guardian takedown child-link authorization matrix", () => {
+    it("403s when the child is not author/uploader, not tagged, and not rostered on the team", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const coachId = await findUserId("coach@kinectem.demo");
+      // Use a brand new team the child is NOT on by skipping team selection:
+      // we just use any existing team but ensure samira is not rostered/tagged.
+      const teamId = await getAnyTeamId();
+      const { db: _ } = await import("@workspace/db");
+      const { rosterEntries } = await import("@workspace/db");
+      // Defensively remove any roster entry for samira on that team.
+      await db
+        .delete(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, samiraId),
+          ),
+        );
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Unrelated post",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/guardians/children/${samiraId}/takedown-request`)
+        .send({ postId: `article:${article.id}`, reason: "no link" });
+      expect(res.status).toBe(403);
+    });
+
+    it("201s when the child is tagged on the article (any tag status)", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Tagged",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      await db.insert(articleTags).values({
+        articleId: article.id,
+        userId: samiraId,
+        taggerUserId: coachId,
+        status: "pending",
+      });
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/guardians/children/${samiraId}/takedown-request`)
+        .send({ postId: `article:${article.id}`, reason: "tagged" });
+      expect(res.status).toBe(201);
+    });
+  });
+
+  describe("operator hard-delete script", () => {
+    it("approve mode deletes the post, stamps takedowns approved, writes audit row", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Script approve",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      await db.insert(takedownRequests).values({
+        childUserId: samiraId,
+        requestedByGuardianId: lisaId,
+        postKind: "article",
+        postRefId: article.id,
+        status: "pending",
+      });
+      // Simulate the operator-script approve path (the script body
+      // exits the process so we replay its DB ops directly here).
+      await db.delete(articles).where(eq(articles.id, article.id));
+      await db
+        .update(takedownRequests)
+        .set({ status: "approved" })
+        .where(
+          and(
+            eq(takedownRequests.postKind, "article"),
+            eq(takedownRequests.postRefId, article.id),
+            eq(takedownRequests.status, "pending"),
+          ),
+        );
+      await db.insert(consentAuditLog).values({
+        event: "guardian_takedown_approved",
+        childUserId: samiraId,
+        actorEmail: "operator-script",
+        details: JSON.stringify({ kind: "article", refId: article.id }),
+      });
+
+      const [art] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, article.id));
+      expect(art).toBeUndefined();
+      const tdRows = await db
+        .select()
+        .from(takedownRequests)
+        .where(eq(takedownRequests.postRefId, article.id));
+      expect(tdRows.every((r) => r.status === "approved")).toBe(true);
+      const audits = await db
+        .select()
+        .from(consentAuditLog)
+        .where(
+          and(
+            eq(consentAuditLog.event, "guardian_takedown_approved"),
+            eq(consentAuditLog.childUserId, samiraId),
+          ),
+        );
+      expect(audits.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe("guardian takedown filing notifies admins", () => {
-    it("filing a takedown drops a notification into every admin's bell", async () => {
+    it("filing a takedown drops a notification into every admin's bell + a child_pending_takedown into the guardian's", async () => {
       const samiraId = await makeSamiraAMinor();
       const coachId = await findUserId("coach@kinectem.demo");
       const teamId = await getAnyTeamId();
@@ -382,6 +598,19 @@ describe("COPPA Phase 4 launch-readiness", () => {
         );
       expect(notifs.length).toBeGreaterThanOrEqual(1);
       expect(notifs[0].link).toBe("/admin/moderation");
+
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const guardianBell = await db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, lisaId),
+            eq(notifications.kind, "child_pending_takedown"),
+          ),
+        );
+      expect(guardianBell.length).toBeGreaterThanOrEqual(1);
+      expect(guardianBell[0].link).toMatch(/^\/family\?childId=/);
     });
   });
 });

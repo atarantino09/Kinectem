@@ -72,7 +72,8 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 - **Minor recommendations**: `/posts/follow-suggestions` filters out minors via `filterOutMinors` so children never surface in stranger recommendation flows.
 - **Article Re-shares**: Sharing your own recap is a visual no-op on your own profile due to merge logic prioritizing authored content.
 - **Avatar Rendering**: Always use `<UserAvatar>` or `<TeamAvatar>` components; do not compose Radix avatars directly to avoid loading state issues.
-- **Admin takedown queue**: Pending guardian takedowns surface at `/admin/moderation` → Takedowns tab and via `GET /admin/takedowns?status=`. Approve hard-deletes the article/highlight and stamps every matching pending row `approved`; decisions are written to `consent_audit_log` (`guardian_takedown_approved|declined`), not `admin_activity_log`. Filing a takedown drops a `admin_takedown_filed` notification into every admin's bell.
+- **Admin takedown queue**: Pending guardian takedowns surface at `/admin/moderation` → Takedowns tab and via `GET /admin/takedowns?status=`. Approve/decline runs in a single `db.transaction` with conditional `UPDATE ... WHERE status='pending' RETURNING`; concurrent approve+decline collapses to one winner / one audit row. Decisions are written to `consent_audit_log` (`guardian_takedown_approved|declined`), not `admin_activity_log`.
+- **COPPA notification kinds**: Guardian-side bell uses `child_pending_follow|dm|comment|tag|takedown` linking to `/family?childId=<id>&tab=pending`. Admin-side bell uses `admin_takedown_filed` linking to `/admin/moderation`. The takedown notification is emitted directly in `guardians-coppa.ts` (coppa.ts is locked).
 
 ## Pointers
 

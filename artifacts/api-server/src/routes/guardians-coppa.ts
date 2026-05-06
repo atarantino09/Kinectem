@@ -24,6 +24,7 @@ import {
   dmAllowlist,
   notifications,
   takedownRequests,
+  rosterEntries,
 } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
@@ -1366,6 +1367,21 @@ router.post(
       }
     } catch (err) {
       req.log.error({ err }, "Failed to notify admins of takedown");
+    }
+    // Task #368 — guardian-side bell entry so the takedown shows up in
+    // /family alongside the other `child_pending_*` items the guardian
+    // is tracking. Coppa.ts is locked, so the notification row is
+    // inserted directly here. Silent on failure.
+    try {
+      await db.insert(notifications).values({
+        userId: auth.guardianId,
+        kind: "child_pending_takedown",
+        message: `Photo-of-minor takedown filed for ${kind}`,
+        link: `/family?childId=${auth.childId}&tab=pending`,
+        actorUserId: auth.childId,
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to write guardian takedown notification");
     }
     req.log.info(
       { childId: auth.childId, takedownId: created.id, kind, refId },
