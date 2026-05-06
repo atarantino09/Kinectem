@@ -326,7 +326,18 @@ async function main(): Promise<void> {
     }),
   });
 
-  // Phase (1) — hard-delete messages the child authored. Cascades
+  // Phase (1a) — explicitly delete every row whose FK to users.id is
+  // declared `ON DELETE SET NULL` in the schema. Without this we would
+  // leave child-authored content in place with a NULLed `authorId` /
+  // `uploaderId` / etc., violating COPPA right-to-delete. The list of
+  // SET NULL columns mirrors lib/db/src/schema/index.ts. Cascading FKs
+  // (e.g. roster_entries, post_reactions, user_followers, parental_
+  // consents → users) are handled by the final users-row delete.
+  await db.delete(articles).where(eq(articles.authorId, u.id));
+  await db.delete(highlights).where(eq(highlights.uploaderId, u.id));
+  await db.delete(postComments).where(eq(postComments.authorId, u.id));
+
+  // Phase (1b) — hard-delete messages the child authored. Cascades
   // through message_assets via FK.
   await db.delete(messages).where(eq(messages.senderUserId, u.id));
 
@@ -364,7 +375,21 @@ async function main(): Promise<void> {
     ) <= 1
   `);
 
-  // Phase (3) — drop the users row; FK cascade handles everything else.
+  // Phase (3) — explicitly remove the child's conversation_participants
+  // rows. participantId is polymorphic (no FK to users.id), so the
+  // final cascade on `users` would otherwise leave orphaned rows.
+  await db
+    .delete(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.participantType, "user"),
+        eq(conversationParticipants.participantId, u.id),
+      ),
+    );
+
+  // Phase (4) — drop the users row; FK cascade handles the remaining
+  // tables that ARE declared cascade (roster_entries, post_reactions,
+  // post_shares, user_followers, parental_consents linkage, etc.).
   await db.delete(users).where(eq(users.id, u.id));
   console.log(`  deleted ${u.id}`);
   console.log("Done.");
