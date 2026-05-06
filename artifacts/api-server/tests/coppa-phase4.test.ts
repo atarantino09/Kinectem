@@ -16,11 +16,23 @@ import {
   users,
   articles,
   articleTags,
+  highlights,
+  highlightTags,
   takedownRequests,
   consentAuditLog,
   notifications,
   teams,
+  rosterEntries,
+  userFollowers,
+  postComments,
+  conversations,
+  conversationParticipants,
+  messages,
 } from "@workspace/db";
+import {
+  resolveTakedownCli,
+  hardDeleteUserCli,
+} from "@workspace/scripts/coppa-hard-delete";
 import { app, loginAs, request } from "./helpers";
 
 async function findUserId(email: string): Promise<string> {
@@ -79,6 +91,90 @@ describe("COPPA Phase 4 launch-readiness", () => {
         expect(res.status).toBe(200);
         expect(res.body.id).toBe(samiraId);
       }
+    });
+
+    it("anonymous (no session) cannot see a restricted minor's profile", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const res = await request(app).get(`/api/v1/users/${samiraId}`);
+      // Public route — anon falls through to the same restricted-minor 404
+      // carve-out as a logged-in stranger; either 401 or 404 is acceptable
+      // so long as the minor's profile is not exposed.
+      expect([401, 404]).toContain(res.status);
+    });
+
+    it("approved follower of the restricted minor sees the profile", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const marcusId = await findUserId("marcus@kinectem.demo");
+      await db
+        .insert(userFollowers)
+        .values({
+          followingUserId: samiraId,
+          followerUserId: marcusId,
+          moderationStatus: "approved",
+        })
+        .onConflictDoUpdate({
+          target: [userFollowers.followingUserId, userFollowers.followerUserId],
+          set: { moderationStatus: "approved" },
+        });
+      const { agent: marcus } = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const res = await marcus.get(`/api/v1/users/${samiraId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(samiraId);
+    });
+
+    it("shared-team admin (coach role) does NOT get a carve-out — 404", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const res = await coach.get(`/api/v1/users/${samiraId}`);
+      expect(res.status).toBe(404);
+    });
+
+    it("/users/:id/posts mirrors the same restricted-minor matrix", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const marcusId = await findUserId("marcus@kinectem.demo");
+      await db
+        .insert(userFollowers)
+        .values({
+          followingUserId: samiraId,
+          followerUserId: marcusId,
+          moderationStatus: "approved",
+        })
+        .onConflictDoUpdate({
+          target: [userFollowers.followingUserId, userFollowers.followerUserId],
+          set: { moderationStatus: "approved" },
+        });
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === "jordan@kinectem.demo",
+      );
+      const { agent: self } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const { agent: admin } = await loginAs(
+        (u) => u.email === "sam@kinectem.demo",
+      );
+      const { agent: marcus } = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const { agent: coach } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      const anon = request(app);
+
+      expect((await stranger.get(`/api/v1/users/${samiraId}/posts`)).status).toBe(404);
+      expect((await coach.get(`/api/v1/users/${samiraId}/posts`)).status).toBe(404);
+      const anonRes = await anon.get(`/api/v1/users/${samiraId}/posts`);
+      expect([401, 404]).toContain(anonRes.status);
+      expect((await self.get(`/api/v1/users/${samiraId}/posts`)).status).toBe(200);
+      expect((await lisa.get(`/api/v1/users/${samiraId}/posts`)).status).toBe(200);
+      expect((await admin.get(`/api/v1/users/${samiraId}/posts`)).status).toBe(200);
+      expect((await marcus.get(`/api/v1/users/${samiraId}/posts`)).status).toBe(200);
     });
 
     it("public-visibility minor stays publicly visible", async () => {
@@ -459,6 +555,81 @@ describe("COPPA Phase 4 launch-readiness", () => {
       expect(res.status).toBe(403);
     });
 
+    it("201s when the child is the article author", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: samiraId,
+          title: "Self-authored",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/guardians/children/${samiraId}/takedown-request`)
+        .send({ postId: `article:${article.id}`, reason: "author" });
+      expect(res.status).toBe(201);
+    });
+
+    it("201s when the child is the highlight uploader", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const teamId = await getAnyTeamId();
+      const [hl] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: samiraId,
+          title: "Self-uploaded",
+        })
+        .returning();
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/guardians/children/${samiraId}/takedown-request`)
+        .send({ postId: `highlight:${hl.id}`, reason: "uploader" });
+      expect(res.status).toBe(201);
+    });
+
+    it("201s when the child is rostered on the posting team (no tag, not author)", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      // Ensure samira is rostered on this team.
+      await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId: samiraId,
+          role: "player",
+          status: "accepted",
+        })
+        .onConflictDoNothing();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Team game recap",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/guardians/children/${samiraId}/takedown-request`)
+        .send({ postId: `article:${article.id}`, reason: "rostered" });
+      expect(res.status).toBe(201);
+    });
+
     it("201s when the child is tagged on the article (any tag status)", async () => {
       const samiraId = await makeSamiraAMinor();
       const coachId = await findUserId("coach@kinectem.demo");
@@ -489,8 +660,11 @@ describe("COPPA Phase 4 launch-readiness", () => {
     });
   });
 
-  describe("operator hard-delete script", () => {
-    it("approve mode deletes the post, stamps takedowns approved, writes audit row", async () => {
+  describe("operator hard-delete script (resolveTakedownCli)", () => {
+    async function plantPendingArticleTakedown(): Promise<{
+      articleId: string;
+      samiraId: string;
+    }> {
       const samiraId = await makeSamiraAMinor();
       const lisaId = await findUserId("lisa@kinectem.demo");
       const coachId = await findUserId("coach@kinectem.demo");
@@ -500,7 +674,7 @@ describe("COPPA Phase 4 launch-readiness", () => {
         .values({
           teamId,
           authorId: coachId,
-          title: "Script approve",
+          title: "Script target",
           body: "x",
           status: "published",
         })
@@ -512,35 +686,28 @@ describe("COPPA Phase 4 launch-readiness", () => {
         postRefId: article.id,
         status: "pending",
       });
-      // Simulate the operator-script approve path (the script body
-      // exits the process so we replay its DB ops directly here).
-      await db.delete(articles).where(eq(articles.id, article.id));
-      await db
-        .update(takedownRequests)
-        .set({ status: "approved" })
-        .where(
-          and(
-            eq(takedownRequests.postKind, "article"),
-            eq(takedownRequests.postRefId, article.id),
-            eq(takedownRequests.status, "pending"),
-          ),
-        );
-      await db.insert(consentAuditLog).values({
-        event: "guardian_takedown_approved",
-        childUserId: samiraId,
-        actorEmail: "operator-script",
-        details: JSON.stringify({ kind: "article", refId: article.id }),
+      return { articleId: article.id, samiraId };
+    }
+
+    it("approve mode deletes the post, stamps takedowns approved, writes audit row", async () => {
+      const { articleId, samiraId } = await plantPendingArticleTakedown();
+      const result = await resolveTakedownCli({
+        postRef: `article:${articleId}`,
+        apply: true,
+        decline: false,
       });
+      expect(result.ok).toBe(true);
+      expect(result.affected).toBeGreaterThanOrEqual(1);
 
       const [art] = await db
         .select()
         .from(articles)
-        .where(eq(articles.id, article.id));
+        .where(eq(articles.id, articleId));
       expect(art).toBeUndefined();
       const tdRows = await db
         .select()
         .from(takedownRequests)
-        .where(eq(takedownRequests.postRefId, article.id));
+        .where(eq(takedownRequests.postRefId, articleId));
       expect(tdRows.every((r) => r.status === "approved")).toBe(true);
       const audits = await db
         .select()
@@ -552,6 +719,145 @@ describe("COPPA Phase 4 launch-readiness", () => {
           ),
         );
       expect(audits.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("decline mode leaves the post intact, marks takedowns declined, writes a decline audit row", async () => {
+      const { articleId, samiraId } = await plantPendingArticleTakedown();
+      const result = await resolveTakedownCli({
+        postRef: `article:${articleId}`,
+        apply: true,
+        decline: true,
+      });
+      expect(result.ok).toBe(true);
+      const [art] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, articleId));
+      expect(art).toBeDefined();
+      const tdRows = await db
+        .select()
+        .from(takedownRequests)
+        .where(eq(takedownRequests.postRefId, articleId));
+      expect(tdRows.every((r) => r.status === "declined")).toBe(true);
+      const audits = await db
+        .select()
+        .from(consentAuditLog)
+        .where(
+          and(
+            eq(consentAuditLog.event, "guardian_takedown_declined"),
+            eq(consentAuditLog.childUserId, samiraId),
+          ),
+        );
+      expect(audits.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("dry-run (apply=false) is a no-op", async () => {
+      const { articleId } = await plantPendingArticleTakedown();
+      const result = await resolveTakedownCli({
+        postRef: `article:${articleId}`,
+        apply: false,
+        decline: false,
+      });
+      expect(result.ok).toBe(true);
+      expect(result.affected).toBe(0);
+      const [art] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, articleId));
+      expect(art).toBeDefined();
+      const tdRows = await db
+        .select()
+        .from(takedownRequests)
+        .where(eq(takedownRequests.postRefId, articleId));
+      expect(tdRows.every((r) => r.status === "pending")).toBe(true);
+    });
+  });
+
+  describe("operator hard-delete script (hardDeleteUserCli)", () => {
+    it("purges the user row, child-authored articles/highlights/comments, and conversation participants", async () => {
+      const samiraId = await makeSamiraAMinor();
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      // Child-authored content across the SET-NULL FK surface.
+      const [art] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: samiraId,
+          title: "Samira's recap",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [hl] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: samiraId,
+          title: "Samira clip",
+        })
+        .returning();
+      const [com] = await db
+        .insert(postComments)
+        .values({
+          postKind: "article",
+          postRefId: art.id,
+          authorId: samiraId,
+          body: "nice game",
+        })
+        .returning();
+      // Conversation with a polymorphic participant row pointing at samira.
+      const [conv] = await db
+        .insert(conversations)
+        .values({ type: "direct" })
+        .returning();
+      await db.insert(conversationParticipants).values([
+        { conversationId: conv.id, participantType: "user", participantId: samiraId },
+        { conversationId: conv.id, participantType: "user", participantId: coachId },
+      ]);
+      await db.insert(messages).values({
+        conversationId: conv.id,
+        senderUserId: samiraId,
+        body: "hi coach",
+      });
+      await db.insert(messages).values({
+        conversationId: conv.id,
+        senderUserId: coachId,
+        body: "hi samira",
+      });
+
+      await hardDeleteUserCli(samiraId);
+
+      const userRows = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, samiraId));
+      expect(userRows.length).toBe(0);
+      const artRows = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, art.id));
+      expect(artRows.length).toBe(0);
+      const hlRows = await db
+        .select()
+        .from(highlights)
+        .where(eq(highlights.id, hl.id));
+      expect(hlRows.length).toBe(0);
+      const commentRows = await db
+        .select()
+        .from(postComments)
+        .where(eq(postComments.id, com.id));
+      expect(commentRows.length).toBe(0);
+      const partRows = await db
+        .select()
+        .from(conversationParticipants)
+        .where(
+          and(
+            eq(conversationParticipants.participantType, "user"),
+            eq(conversationParticipants.participantId, samiraId),
+          ),
+        );
+      expect(partRows.length).toBe(0);
     });
   });
 

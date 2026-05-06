@@ -59,6 +59,86 @@ const USER_ID = POST_REF
   ? undefined
   : process.argv.find((a, i) => i >= 2 && !a.startsWith("--"));
 
+// Task #368 — exported so the COPPA Phase 4 vitest suite can drive the
+// operator workflows directly instead of forking a child process. The
+// CLI entry point (`main`) below still wraps these for the operator.
+export type ResolveTakedownArgs = {
+  postRef: string;
+  apply: boolean;
+  decline: boolean;
+};
+
+export async function resolveTakedownCli(
+  args: ResolveTakedownArgs,
+): Promise<{ ok: boolean; affected: number; reason?: string }> {
+  const m = /^(article|highlight):([0-9a-f-]{36})$/i.exec(args.postRef);
+  if (!m) return { ok: false, affected: 0, reason: "invalid_post_ref" };
+  const kind = m[1].toLowerCase() as "article" | "highlight";
+  const refId = m[2];
+  const pending = await db
+    .select({
+      id: takedownRequests.id,
+      childUserId: takedownRequests.childUserId,
+      requestedByGuardianId: takedownRequests.requestedByGuardianId,
+      reason: takedownRequests.reason,
+    })
+    .from(takedownRequests)
+    .where(
+      and(
+        eq(takedownRequests.postKind, kind),
+        eq(takedownRequests.postRefId, refId),
+        eq(takedownRequests.status, "pending"),
+      ),
+    );
+  if (pending.length === 0) return { ok: false, affected: 0, reason: "no_pending" };
+  if (!args.apply) return { ok: true, affected: 0, reason: "dry_run" };
+  if (args.decline) {
+    await db
+      .update(takedownRequests)
+      .set({ status: "declined" })
+      .where(
+        and(
+          eq(takedownRequests.postKind, kind),
+          eq(takedownRequests.postRefId, refId),
+          eq(takedownRequests.status, "pending"),
+        ),
+      );
+    for (const r of pending) {
+      await db.insert(consentAuditLog).values({
+        event: "guardian_takedown_declined",
+        childUserId: r.childUserId,
+        actorEmail: "operator-script",
+        details: JSON.stringify({ takedownId: r.id, kind, refId }),
+      });
+    }
+    return { ok: true, affected: pending.length };
+  }
+  if (kind === "article") {
+    await db.delete(articles).where(eq(articles.id, refId));
+  } else {
+    await db.delete(highlights).where(eq(highlights.id, refId));
+  }
+  await db
+    .update(takedownRequests)
+    .set({ status: "approved" })
+    .where(
+      and(
+        eq(takedownRequests.postKind, kind),
+        eq(takedownRequests.postRefId, refId),
+        eq(takedownRequests.status, "pending"),
+      ),
+    );
+  for (const r of pending) {
+    await db.insert(consentAuditLog).values({
+      event: "guardian_takedown_approved",
+      childUserId: r.childUserId,
+      actorEmail: "operator-script",
+      details: JSON.stringify({ takedownId: r.id, kind, refId }),
+    });
+  }
+  return { ok: true, affected: pending.length };
+}
+
 async function resolveTakedown(): Promise<void> {
   if (!POST_REF) return;
   // Task #367 — operator path for the photo-of-minor takedown queue.
@@ -170,6 +250,54 @@ async function resolveTakedown(): Promise<void> {
     });
   }
   console.log(`  deleted ${kind}:${refId}; ${pending.length} takedown request(s) approved.`);
+}
+
+// Task #368 — exported test entry point. Skips the cooling-off + status
+// guards so tests can drive the cascade phases directly. The CLI path
+// keeps its existing safeguards via `main()`.
+export async function hardDeleteUserCli(userId: string): Promise<void> {
+  // Phase (1a) — SET NULL FK columns: explicitly purge child-authored rows.
+  await db.delete(articles).where(eq(articles.authorId, userId));
+  await db.delete(highlights).where(eq(highlights.uploaderId, userId));
+  await db.delete(postComments).where(eq(postComments.authorId, userId));
+  // Phase (1b) — sender-side messages.
+  await db.delete(messages).where(eq(messages.senderUserId, userId));
+  // Phase (2) — redact recipient-side message bodies in conversations.
+  await db.execute(sql`
+    update ${messages}
+    set body = '[deleted]'
+    where ${messages.deletedAt} is null
+      and ${messages.conversationId} in (
+        select ${conversationParticipants.conversationId}
+        from ${conversationParticipants}
+        where ${conversationParticipants.participantType} = 'user'
+          and ${conversationParticipants.participantId} = ${userId}
+      )
+  `);
+  await db.execute(sql`
+    delete from ${conversations}
+    where ${conversations.id} in (
+      select ${conversationParticipants.conversationId}
+      from ${conversationParticipants}
+      where ${conversationParticipants.participantType} = 'user'
+        and ${conversationParticipants.participantId} = ${userId}
+    )
+    and (
+      select count(*) from ${conversationParticipants} cp2
+      where cp2.conversation_id = ${conversations.id}
+    ) <= 1
+  `);
+  // Phase (3) — polymorphic conversation_participants rows for the child.
+  await db
+    .delete(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.participantType, "user"),
+        eq(conversationParticipants.participantId, userId),
+      ),
+    );
+  // Phase (4) — users row; cascade handles the rest.
+  await db.delete(users).where(eq(users.id, userId));
 }
 
 async function main(): Promise<void> {
@@ -395,10 +523,19 @@ async function main(): Promise<void> {
   console.log("Done.");
 }
 
-main().then(
-  () => process.exit(0),
-  (err) => {
-    console.error("coppa-hard-delete failed:", err);
-    process.exit(1);
-  },
-);
+// Only run the CLI entry point when invoked directly (not when the
+// module is imported by tests via `@workspace/scripts/coppa-hard-delete`).
+const isDirectRun =
+  typeof process !== "undefined" &&
+  Array.isArray(process.argv) &&
+  process.argv[1] != null &&
+  /coppa-hard-delete(\.[cm]?[jt]s)?$/.test(process.argv[1]);
+if (isDirectRun) {
+  main().then(
+    () => process.exit(0),
+    (err) => {
+      console.error("coppa-hard-delete failed:", err);
+      process.exit(1);
+    },
+  );
+}

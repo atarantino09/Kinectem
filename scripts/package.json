@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./coppa-hard-delete": "./src/coppa-hard-delete.ts"
+  },
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill-avatars": "tsx ./src/backfill-avatars.ts",
