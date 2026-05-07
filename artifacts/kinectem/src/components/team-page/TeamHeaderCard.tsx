@@ -68,7 +68,7 @@ export function TeamHeaderCard({
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
       {/* Hero background: team-specific photo if set, otherwise the
           existing brand gradient as the empty-state. */}
-      <div className="relative h-44 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+      <div className="relative aspect-[16/5] bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
         {bannerUrl && (
           <img
             src={bannerUrl}
