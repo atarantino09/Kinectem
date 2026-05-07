@@ -1087,10 +1087,14 @@ router.get(
         if (seen.has(r.t.id)) continue;
         seen.add(r.t.id);
         // Synthetic membership row for an org admin who isn't on the
-        // team's roster. id reuses the team id (stable, opaque to
-        // clients); role=admin reflects the org-derived authority.
+        // team's roster. The schema requires `id` to be a UUID, so we
+        // reuse the team's UUID — it's stable, opaque to clients, and
+        // can't collide with any real roster_entries.id row in this
+        // response (we already de-duped by teamId above and a roster
+        // row would have taken the slot first). role=admin reflects
+        // the org-derived authority.
         data.push({
-          id: `org-admin:${r.t.id}`,
+          id: r.t.id,
           teamId: r.t.id,
           teamName: r.t.name,
           teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
