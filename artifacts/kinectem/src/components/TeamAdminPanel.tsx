@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetOrCreateTeamJoinLink,
@@ -31,6 +31,20 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
     },
   });
 
+  // Auto-load the existing join link on mount. The server endpoint is
+  // get-or-create (it reuses the single pending email-less rosterInvite
+  // for the team), so calling it on open does not create duplicates.
+  // Guarded by a ref so React StrictMode's double-invoke doesn't fire
+  // the request twice.
+  const autoFetchedRef = useRef<string | null>(null);
+  const generateMutate = generateLink.mutate;
+  useEffect(() => {
+    if (autoFetchedRef.current === teamId) return;
+    autoFetchedRef.current = teamId;
+    setLinkToken(null);
+    generateMutate({ teamId });
+  }, [teamId, generateMutate]);
+
   const fullLink = linkToken
     ? `${window.location.origin}${import.meta.env.BASE_URL}invites/${linkToken}`
     : null;
@@ -56,15 +70,17 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
               <Link2 className="w-3.5 h-3.5" />
               Shareable Join Link
             </h3>
-            <Button
-              variant="brand"
-              size="sm"
-              onClick={() => generateLink.mutate({ teamId })}
-              disabled={generateLink.isPending}
-              data-testid="button-generate-join-link"
-            >
-              {generateLink.isPending ? "Generating…" : "Generate"}
-            </Button>
+            {!fullLink && (
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() => generateLink.mutate({ teamId })}
+                disabled={generateLink.isPending}
+                data-testid="button-generate-join-link"
+              >
+                {generateLink.isPending ? "Loading…" : "Generate"}
+              </Button>
+            )}
           </div>
 
           {fullLink ? (
@@ -83,6 +99,8 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
                 Copy
               </Button>
             </div>
+          ) : generateLink.isPending ? (
+            <p className="text-xs text-muted-foreground">Loading join link…</p>
           ) : (
             <p className="text-xs text-muted-foreground">
               Generate a link players can use to request to join this team.
