@@ -29,6 +29,7 @@ import {
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
+import { TeamPhotoCropDialog } from "@/components/TeamPhotoCropDialog";
 
 const SPORTS = [
   "Soccer",
@@ -80,6 +81,12 @@ export function EditTeamDialog({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Crop dialog state. We hold the picked file's data URL + filename so
+  // the user can drag/zoom into the team-page banner shape *before* we
+  // hand the cropped result to the existing shrink + PATCH pipeline.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState<string>("team-photo");
+  const [cropOpen, setCropOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -128,9 +135,31 @@ export function EditTeamDialog({
       toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
+    // Open the crop dialog with this file as a data URL. The actual
+    // upload happens once the user confirms a crop in onCroppedConfirm.
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () =>
+          reject(reader.error ?? new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      setCropSrc(dataUrl);
+      setCropFileName(file.name);
+      setCropOpen(true);
+    } catch {
+      toast({ title: "Couldn't read that photo", variant: "destructive" });
+    }
+  };
+
+  const onCroppedConfirm = async (cropped: File) => {
     setUploading(true);
     try {
-      const dataUrl = await shrinkImageToDataUrl(file);
+      // The cropped output is already constrained in size by the cropper,
+      // but we still run it through shrinkImage for consistent JPEG
+      // encoding + the global 1024px longest-edge cap.
+      const dataUrl = await shrinkImageToDataUrl(cropped);
       await customFetch(`/api/v1/teams/${team.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -142,6 +171,7 @@ export function EditTeamDialog({
       toast({ title: "Failed to upload team photo", variant: "destructive" });
     } finally {
       setUploading(false);
+      setCropSrc(null);
     }
   };
 
@@ -188,6 +218,7 @@ export function EditTeamDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={onSubmit} className="space-y-4">
@@ -386,5 +417,16 @@ export function EditTeamDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <TeamPhotoCropDialog
+      src={cropSrc}
+      fileName={cropFileName}
+      open={cropOpen && !!cropSrc}
+      onOpenChange={(v) => {
+        setCropOpen(v);
+        if (!v) setCropSrc(null);
+      }}
+      onConfirm={onCroppedConfirm}
+    />
+    </>
   );
 }
