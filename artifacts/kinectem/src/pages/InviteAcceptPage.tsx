@@ -10,6 +10,7 @@ import {
   type AddedChild,
 } from "@/components/invite-accept/ChildSetupCard";
 import { InviteHeaderCard } from "@/components/invite-accept/InviteHeaderCard";
+import { InviteBenefitsCard } from "@/components/invite-accept/InviteBenefitsCard";
 
 interface InviteEnvelope {
   invite: {
@@ -166,6 +167,9 @@ export default function InviteAcceptPage() {
         token={token}
         onAccept={onAccept}
       />
+      {/* Hide the explainer once the invite is accepted so attention
+          moves to the success state / child-setup next action. */}
+      {!accepted && <InviteBenefitsCard />}
       {needsChildSetup && (
         <ChildSetupCard
           children={children}
