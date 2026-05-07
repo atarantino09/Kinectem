@@ -187,7 +187,7 @@ export function ManageMembersDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-lg max-h-[80vh] overflow-y-auto"
+          className="sm:max-w-lg sm:max-h-[80vh]"
           data-testid="dialog-manage-members"
         >
           <DialogHeader>
