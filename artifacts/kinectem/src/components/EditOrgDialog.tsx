@@ -32,6 +32,7 @@ import {
 } from "@/lib/shrinkImage";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
+import { ImageCropDialog } from "@/components/ImageCropDialog";
 
 type OrgLike = {
   id: string;
@@ -72,6 +73,11 @@ export function EditOrgDialog({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Task #387 — Stage the picked file in a square crop dialog so admins
+  // control framing on tall phone photos before the logo is uploaded.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState<string>("logo");
+  const [cropOpen, setCropOpen] = useState(false);
 
   const canManageLogo =
     organization.role === "admin" || organization.role === "owner";
@@ -125,9 +131,28 @@ export function EditOrgDialog({
       toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
+    // Open the crop dialog with this file as a data URL. The actual
+    // upload happens once the user confirms a crop in onCroppedConfirm.
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () =>
+          reject(reader.error ?? new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      setCropSrc(dataUrl);
+      setCropFileName(file.name);
+      setCropOpen(true);
+    } catch {
+      toast({ title: "Couldn't read that image", variant: "destructive" });
+    }
+  };
+
+  const onCroppedConfirm = async (cropped: File) => {
     setUploading(true);
     try {
-      const dataUrl = await shrinkImageToDataUrl(file);
+      const dataUrl = await shrinkImageToDataUrl(cropped);
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -137,8 +162,11 @@ export function EditOrgDialog({
         queryKey: getGetOrganizationByIdQueryKey(organization.id),
       });
       toast({ title: "Logo updated" });
-    } catch {
+      setCropSrc(null);
+    } catch (err) {
       toast({ title: "Failed to upload logo", variant: "destructive" });
+      // Re-throw so the crop dialog stays open and the user can retry.
+      throw err;
     } finally {
       setUploading(false);
     }
@@ -206,6 +234,7 @@ export function EditOrgDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={onSubmit} className="space-y-4">
@@ -441,5 +470,22 @@ export function EditOrgDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <ImageCropDialog
+      src={cropSrc}
+      fileName={cropFileName}
+      aspect={1}
+      cropShape="rect"
+      title="Position your logo"
+      description="Drag to move, pinch or use the slider to zoom. The frame matches how your logo will appear."
+      confirmLabel="Save logo"
+      fallbackBaseName="logo"
+      open={cropOpen && !!cropSrc}
+      onOpenChange={(v) => {
+        setCropOpen(v);
+        if (!v) setCropSrc(null);
+      }}
+      onConfirm={onCroppedConfirm}
+    />
+    </>
   );
 }

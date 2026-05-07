@@ -34,6 +34,7 @@ import { Camera, Loader2, Pencil, X } from "lucide-react";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { US_STATES } from "@/lib/usStates";
+import { ImageCropDialog } from "@/components/ImageCropDialog";
 
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -105,6 +106,12 @@ export function EditProfileDialog({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadGenRef = useRef(0);
+  // Task #387 — Stage the picked file in the crop dialog before running
+  // shrink + upload so users control framing on tall phone photos
+  // instead of getting an awkward center-crop into the round avatar.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState<string>("avatar");
+  const [cropOpen, setCropOpen] = useState(false);
 
   // When opened (especially when controlled by a parent that may swap the
   // user prop between children), reset the form fields to match the
@@ -161,6 +168,8 @@ export function EditProfileDialog({
       setState(user.state ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
+      setCropSrc(null);
+      setCropOpen(false);
     }
     if (isControlled) {
       controlledOnOpenChange?.(next);
@@ -184,19 +193,47 @@ export function EditProfileDialog({
       setAvatarError("Image must be under 5 MB.");
       return;
     }
+    // Read the file as a data URL and hand it to the crop dialog. The
+    // actual upload runs in onCroppedConfirm once the user confirms a
+    // square crop.
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () =>
+          reject(reader.error ?? new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      setCropSrc(dataUrl);
+      setCropFileName(file.name);
+      setCropOpen(true);
+    } catch {
+      setAvatarError("Couldn't read that image. Try another file.");
+    }
+  };
+
+  const onCroppedConfirm = async (cropped: File) => {
     const myGen = ++uploadGenRef.current;
     setAvatarUploading(true);
+    setAvatarError(null);
     try {
-      const prepared = await shrinkImage(file);
+      // The cropper already constrains output size, but we still run it
+      // through shrinkImage for consistent JPEG encoding and the global
+      // 1024px longest-edge cap before pushing to object storage.
+      const prepared = await shrinkImage(cropped);
       if (uploadGenRef.current !== myGen) return;
       const url = await uploadAvatarFile(prepared);
       if (uploadGenRef.current !== myGen) return;
       setAvatarUrl(url);
+      setCropSrc(null);
     } catch (err) {
       if (uploadGenRef.current !== myGen) return;
       setAvatarError(
         err instanceof Error ? err.message : "Upload failed. Try again.",
       );
+      // Re-throw so the crop dialog stays open and the user can retry
+      // without re-picking the file.
+      throw err;
     } finally {
       if (uploadGenRef.current === myGen) setAvatarUploading(false);
     }
@@ -207,6 +244,8 @@ export function EditProfileDialog({
     setAvatarError(null);
     setAvatarUploading(false);
     setAvatarUrl(null);
+    setCropSrc(null);
+    setCropOpen(false);
   };
 
   const onSave = () => {
@@ -241,6 +280,7 @@ export function EditProfileDialog({
 
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {!isControlled && (
         <DialogTrigger asChild>
@@ -462,5 +502,22 @@ export function EditProfileDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <ImageCropDialog
+      src={cropSrc}
+      fileName={cropFileName}
+      aspect={1}
+      cropShape="round"
+      title="Position your profile photo"
+      description="Drag to move, pinch or use the slider to zoom. The frame matches how your avatar will appear."
+      confirmLabel="Save photo"
+      fallbackBaseName="avatar"
+      open={cropOpen && !!cropSrc}
+      onOpenChange={(v) => {
+        setCropOpen(v);
+        if (!v) setCropSrc(null);
+      }}
+      onConfirm={onCroppedConfirm}
+    />
+    </>
   );
 }
