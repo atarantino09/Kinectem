@@ -66,7 +66,10 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
-import { ensureOrgFollowedForTeam } from "../lib/team-follow";
+import {
+  ensureOrgFollowedForTeam,
+  ensureTeamFollowedAsGuardian,
+} from "../lib/team-follow";
 
 const router: IRouter = Router();
 
@@ -1795,6 +1798,11 @@ router.post(
       })
       .returning();
     await ensureOrgFollowedForTeam(me.id, invite.teamId);
+    // The parent now has a child rostered on this team — auto-follow the
+    // team itself so it shows up under the parent's profile Teams section
+    // (synthesized as a `position: "parent"` membership row by
+    // GET /users/:userId/teams).
+    await ensureTeamFollowedAsGuardian(me.id, invite.teamId);
     res.status(201).json({
       child: {
         id: child.id,

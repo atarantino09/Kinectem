@@ -47,7 +47,10 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
-import { ensureOrgFollowedForTeam } from "../lib/team-follow";
+import {
+  ensureOrgFollowedForTeam,
+  ensureTeamFollowedAsGuardian,
+} from "../lib/team-follow";
 import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
@@ -364,6 +367,12 @@ router.post(
         })
         .returning();
       await ensureOrgFollowedForTeam(userId, teamId);
+      // If the added member is a minor with a linked guardian, auto-follow
+      // the team on the parent's behalf so it surfaces under the parent's
+      // profile Teams section (rendered as a `position: "parent"` row).
+      if (u.parentId) {
+        await ensureTeamFollowedAsGuardian(u.parentId, teamId);
+      }
       await db.insert(notifications).values({
         userId,
         kind: "roster_invite",
@@ -734,6 +743,9 @@ router.post(
           })
           .returning();
         await ensureOrgFollowedForTeam(existingUser.id, teamId);
+        if (existingUser.parentId) {
+          await ensureTeamFollowedAsGuardian(existingUser.parentId, teamId);
+        }
         await db.insert(notifications).values({
           userId: existingUser.id,
           kind: "roster_invite",

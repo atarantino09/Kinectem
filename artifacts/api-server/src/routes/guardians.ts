@@ -24,6 +24,7 @@ import {
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import { notifyExpiredGuardianConfirmations } from "../lib/guardian-confirmations";
+import { backfillTeamFollowsForLinkedChild } from "../lib/team-follow";
 import { GUARDIAN_TOKEN_TTL_MS } from "./auth";
 
 const router: IRouter = Router();
@@ -116,6 +117,9 @@ router.post(
       .set({ parentId: me.id })
       .where(eq(users.id, childId))
       .returning();
+    // Surface every team this child is already on under the parent's
+    // profile Teams section by auto-following each one. Best-effort.
+    await backfillTeamFollowsForLinkedChild(me.id, updated.id);
     const [first, ...rest] = updated.name.split(" ");
     res.status(201).json({
       id: updated.id,

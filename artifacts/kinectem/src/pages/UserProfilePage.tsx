@@ -220,6 +220,15 @@ export default function UserProfilePage() {
                 >
                   {t.organization.name}
                 </Badge>
+                {t.position === "parent" && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] uppercase tracking-wider font-bold"
+                    data-testid={`badge-team-parent-${t.teamId}`}
+                  >
+                    Parent
+                  </Badge>
+                )}
                 {isPending && (
                   <Badge
                     variant="outline"

@@ -7,6 +7,7 @@ import {
   organizationFollowers,
   userFollowers,
   teams,
+  teamFollowers,
   rosterEntries,
   articles,
   articleTags,
@@ -17,6 +18,7 @@ import {
   takedownRequests,
 } from "@workspace/db";
 import {
+  aliasedTable,
   and,
   eq,
   ilike,
@@ -1003,7 +1005,9 @@ router.get(
   "/users/:userId/teams",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    const targetId = req.params.userId;
+    // Express 5's typed params widens to string | string[]; UUID route
+    // params are always a single string here.
+    const targetId = String(req.params.userId);
     // Composer "Post to Team" picker: restrict to teams the caller can
     // actually author posts on (mirrors canCreateRecap — org owner/admin
     // OR roster role=coach OR roster position=author). Self-only because
@@ -1150,22 +1154,88 @@ router.get(
               eq(rosterEntries.status, "accepted"),
             ),
       );
-    const data = rows.map((r) => ({
-      id: r.r.id,
-      teamId: r.t.id,
-      teamName: r.t.name,
-      teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
-      teamAvatarUrl: r.t.logoUrl ?? null,
-      teamBannerUrl: r.t.bannerUrl ?? null,
-      organization: { id: r.org.id, name: r.org.name, slug: r.org.name.toLowerCase().replace(/\s+/g, "-") },
-      role: r.r.role === "coach" ? "admin" : ("member" as const),
-      position: r.r.role === "player" ? "player" : "coach",
-      status: r.r.status === "accepted" ? "active" : "pending",
-      seasonId: r.t.id,
-      seasonName: r.t.season ?? null,
-      jerseyNumber: r.r.jerseyNumber ?? null,
-      joinedAt: r.r.createdAt.toISOString(),
-    }));
+    const data: Array<Record<string, unknown>> = [];
+    const seenTeamIds = new Set<string>();
+    for (const r of rows) {
+      seenTeamIds.add(r.t.id);
+      data.push({
+        id: r.r.id,
+        teamId: r.t.id,
+        teamName: r.t.name,
+        teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
+        teamAvatarUrl: r.t.logoUrl ?? null,
+        teamBannerUrl: r.t.bannerUrl ?? null,
+        organization: {
+          id: r.org.id,
+          name: r.org.name,
+          slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+        },
+        role: r.r.role === "coach" ? "admin" : ("member" as const),
+        position: r.r.role === "player" ? "player" : "coach",
+        status: r.r.status === "accepted" ? "active" : "pending",
+        seasonId: r.t.id,
+        seasonName: r.t.season ?? null,
+        jerseyNumber: r.r.jerseyNumber ?? null,
+        joinedAt: r.r.createdAt.toISOString(),
+      });
+    }
+    // "Via child" teams: surface every team where the target user is a
+    // team_followers row AND is the parentId of at least one user with an
+    // accepted roster entry on that team. Synthesizes a `position: "parent"`
+    // membership row so the team appears in the parent's profile Teams
+    // section even though the parent isn't on the roster themselves.
+    // De-duped against the roster-derived rows above by teamId — a real
+    // membership wins.
+    const child = aliasedTable(users, "child");
+    const viaChildRows = await db
+      .select({
+        t: teams,
+        org: organizations,
+        followedAt: teamFollowers.createdAt,
+      })
+      .from(teamFollowers)
+      .innerJoin(teams, eq(teamFollowers.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
+      .innerJoin(child, eq(rosterEntries.userId, child.id))
+      .where(
+        and(
+          eq(teamFollowers.userId, targetId),
+          eq(child.parentId, targetId),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    const viaChildSeen = new Set<string>();
+    for (const r of viaChildRows) {
+      if (seenTeamIds.has(r.t.id)) continue;
+      if (viaChildSeen.has(r.t.id)) continue;
+      viaChildSeen.add(r.t.id);
+      seenTeamIds.add(r.t.id);
+      // Synthetic membership row. `id` reuses the team UUID (stable,
+      // opaque, and de-duped above so it can't collide with a real
+      // roster_entries.id). `position: "parent"` is the wire-format
+      // marker the client uses to render the "Parent" badge.
+      data.push({
+        id: r.t.id,
+        teamId: r.t.id,
+        teamName: r.t.name,
+        teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
+        teamAvatarUrl: r.t.logoUrl ?? null,
+        teamBannerUrl: r.t.bannerUrl ?? null,
+        organization: {
+          id: r.org.id,
+          name: r.org.name,
+          slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+        },
+        role: "member" as const,
+        position: "parent",
+        status: "active",
+        seasonId: r.t.id,
+        seasonName: r.t.season ?? null,
+        jerseyNumber: null,
+        joinedAt: (r.followedAt ?? new Date(0)).toISOString(),
+      });
+    }
     res.json(paginate(data));
   }),
 );

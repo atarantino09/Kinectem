@@ -1,4 +1,12 @@
-import { db, teams, organizationFollowers, organizationFollowOptouts } from "@workspace/db";
+import {
+  db,
+  teams,
+  users,
+  teamFollowers,
+  organizationFollowers,
+  organizationFollowOptouts,
+  rosterEntries,
+} from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { logger } from "./logger";
 
@@ -31,5 +39,76 @@ export async function ensureOrgFollowedForTeam(userId: string, teamId: string): 
       .onConflictDoNothing();
   } catch (err) {
     logger.warn({ err, userId, teamId }, "ensureOrgFollowedForTeam failed");
+  }
+}
+
+// Auto-follow a team on behalf of a guardian when their child is rostered
+// on it. Mirrors `ensureOrgFollowedForTeam`: idempotent insert, best-effort
+// (warn-and-continue) so it never blocks the primary roster operation.
+// Caller is expected to have already verified the parent↔child link.
+export async function ensureTeamFollowedAsGuardian(
+  parentUserId: string,
+  teamId: string,
+): Promise<void> {
+  try {
+    await db
+      .insert(teamFollowers)
+      .values({ teamId, userId: parentUserId })
+      .onConflictDoNothing();
+  } catch (err) {
+    logger.warn(
+      { err, parentUserId, teamId },
+      "ensureTeamFollowedAsGuardian failed",
+    );
+  }
+}
+
+// Convenience: given a child user id, look up their parent (if any) and
+// auto-follow the team on the parent's behalf. No-op when the child has
+// no linked guardian.
+export async function ensureChildsParentFollowsTeam(
+  childUserId: string,
+  teamId: string,
+): Promise<void> {
+  try {
+    const [child] = await db
+      .select({ parentId: users.parentId })
+      .from(users)
+      .where(eq(users.id, childUserId))
+      .limit(1);
+    if (!child?.parentId) return;
+    await ensureTeamFollowedAsGuardian(child.parentId, teamId);
+  } catch (err) {
+    logger.warn(
+      { err, childUserId, teamId },
+      "ensureChildsParentFollowsTeam failed",
+    );
+  }
+}
+
+// Backfill helper for "link existing child": for every team the child is
+// already accepted on, auto-follow on the parent's behalf. Best-effort.
+export async function backfillTeamFollowsForLinkedChild(
+  parentUserId: string,
+  childUserId: string,
+): Promise<void> {
+  try {
+    const rows = await db
+      .select({ teamId: rosterEntries.teamId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.userId, childUserId),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    for (const r of rows) {
+      await ensureTeamFollowedAsGuardian(parentUserId, r.teamId);
+    }
+  } catch (err) {
+    logger.warn(
+      { err, parentUserId, childUserId },
+      "backfillTeamFollowsForLinkedChild failed",
+    );
   }
 }
