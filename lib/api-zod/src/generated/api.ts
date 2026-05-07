@@ -878,6 +878,12 @@ export const ListUserTeamsQueryParams = zod.object({
     .default(listUserTeamsQueryIncludeTotalDefault),
   status: zod.enum(["active", "pending"]).optional(),
   seasonId: zod.coerce.string().uuid().optional(),
+  authorable: zod.coerce
+    .boolean()
+    .optional()
+    .describe(
+      'When true, restrict the response to teams the requester is allowed to author posts on (org owner\/admin, team coach, or roster position=author). The requester must be the same user as `userId`; other callers receive a 403. Used by the composer\'s \"Post to Team\" picker.\n',
+    ),
 });
 
 export const ListUserTeamsResponse = zod.object({

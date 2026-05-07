@@ -1004,6 +1004,118 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     const targetId = req.params.userId;
+    // Composer "Post to Team" picker: restrict to teams the caller can
+    // actually author posts on (mirrors canCreateRecap — org owner/admin
+    // OR roster role=coach OR roster position=author). Self-only because
+    // the answer is viewer-relative; other callers get a 403 to avoid
+    // leaking another user's authoring scope.
+    const authorable =
+      typeof req.query.authorable === "string"
+        ? req.query.authorable === "true"
+        : req.query.authorable === true;
+    if (authorable) {
+      if (!me) return apiError(res, 401, "Not authenticated");
+      if (me.id !== targetId)
+        return apiError(res, 403, "Can only list your own authorable teams.");
+      // Roster-derived authoring teams: any accepted entry where the
+      // user is a coach or holds the explicit "author" position.
+      const rosterRows = await db
+        .select({ r: rosterEntries, t: teams, org: organizations })
+        .from(rosterEntries)
+        .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .where(
+          and(
+            eq(rosterEntries.userId, me.id),
+            eq(rosterEntries.status, "accepted"),
+            or(
+              eq(rosterEntries.role, "coach"),
+              eq(rosterEntries.position, "author"),
+            ),
+          ),
+        );
+      // Org-admin-derived authoring teams: every team in any org where
+      // the user holds owner/admin. Unioned with roster matches and
+      // de-duped by teamId, preferring the roster row when both exist
+      // (so role/position/seasonId come from the real membership).
+      const adminOrgRows = await db
+        .select({ orgId: organizationAdmins.organizationId })
+        .from(organizationAdmins)
+        .where(
+          and(
+            eq(organizationAdmins.userId, me.id),
+            inArray(organizationAdmins.role, ["owner", "admin"]),
+          ),
+        );
+      const adminOrgIds = adminOrgRows.map((r) => r.orgId);
+      const orgTeamRows = adminOrgIds.length
+        ? await db
+            .select({ t: teams, org: organizations })
+            .from(teams)
+            .innerJoin(
+              organizations,
+              eq(teams.organizationId, organizations.id),
+            )
+            .where(inArray(teams.organizationId, adminOrgIds))
+        : [];
+      const seen = new Set<string>();
+      const data: Array<Record<string, unknown>> = [];
+      for (const r of rosterRows) {
+        seen.add(r.t.id);
+        data.push({
+          id: r.r.id,
+          teamId: r.t.id,
+          teamName: r.t.name,
+          teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
+          teamAvatarUrl: r.t.logoUrl ?? null,
+          teamBannerUrl: r.t.bannerUrl ?? null,
+          organization: {
+            id: r.org.id,
+            name: r.org.name,
+            slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+          },
+          role: r.r.role === "coach" ? "admin" : ("member" as const),
+          position: r.r.role === "player" ? "player" : "coach",
+          status: "active",
+          seasonId: r.t.id,
+          seasonName: r.t.season ?? null,
+          jerseyNumber: r.r.jerseyNumber ?? null,
+          joinedAt: r.r.createdAt.toISOString(),
+        });
+      }
+      for (const r of orgTeamRows) {
+        if (seen.has(r.t.id)) continue;
+        seen.add(r.t.id);
+        // Synthetic membership row for an org admin who isn't on the
+        // team's roster. id reuses the team id (stable, opaque to
+        // clients); role=admin reflects the org-derived authority.
+        data.push({
+          id: `org-admin:${r.t.id}`,
+          teamId: r.t.id,
+          teamName: r.t.name,
+          teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
+          teamAvatarUrl: r.t.logoUrl ?? null,
+          teamBannerUrl: r.t.bannerUrl ?? null,
+          organization: {
+            id: r.org.id,
+            name: r.org.name,
+            slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+          },
+          role: "admin" as const,
+          position: "admin",
+          status: "active",
+          seasonId: r.t.id,
+          seasonName: r.t.season ?? null,
+          jerseyNumber: null,
+          joinedAt: r.t.createdAt?.toISOString?.() ?? new Date(0).toISOString(),
+        });
+      }
+      data.sort((a, b) =>
+        String(a.teamName).localeCompare(String(b.teamName)),
+      );
+      res.json(paginate(data));
+      return;
+    }
     // A profile's pending invites should only be visible to people who
     // can actually act on them: the user themselves, their real
     // (non-masquerading) parent, or a real admin. Everyone else only

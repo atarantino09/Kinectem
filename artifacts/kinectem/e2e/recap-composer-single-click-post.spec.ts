@@ -33,8 +33,12 @@ const COACH_EMAIL = "coach@kinectem.demo";
 const PASSWORD = "demo1234";
 
 type LoginResponse = { id: string };
-type OrgRow = { id: string; name: string };
-type PaginatedOrgs = { data: OrgRow[] };
+type TeamRow = {
+  teamId: string;
+  teamName: string;
+  organization: { id: string; name: string };
+};
+type PaginatedTeams = { data: TeamRow[] };
 
 function resolveBaseURL(useBase: unknown): string {
   return (
@@ -67,24 +71,26 @@ async function loginViaUi(page: Page, email: string): Promise<void> {
   await page.waitForURL((url) => url.pathname === "/", { timeout: 15_000 });
 }
 
-// Discover an organization the coach can post on behalf of. We hit
-// the same /users/:id/organizations endpoint the composer uses so
-// the test fails clearly if the seed coach is ever stripped of
-// org memberships, instead of bit-rotting on a hard-coded org name.
-async function findOrganizationForUser(
+// Discover an authorable team for the coach. Hits the same
+// /users/:id/teams?authorable=true endpoint the composer uses so
+// the test fails clearly if the seed coach loses authoring rights,
+// instead of bit-rotting on a hard-coded team name.
+async function findAuthorableTeamForUser(
   api: APIRequestContext,
   userId: string,
-): Promise<OrgRow> {
-  const res = await api.get(`/api/v1/users/${userId}/organizations`);
+): Promise<TeamRow> {
+  const res = await api.get(
+    `/api/v1/users/${userId}/teams?authorable=true`,
+  );
   expect(
     res.ok(),
-    `GET /users/${userId}/organizations failed: ${res.status()}`,
+    `GET /users/${userId}/teams?authorable=true failed: ${res.status()}`,
   ).toBeTruthy();
-  const body = (await res.json()) as PaginatedOrgs;
+  const body = (await res.json()) as PaginatedTeams;
   const candidate = body.data[0];
   if (!candidate) {
     throw new Error(
-      `Coach user ${userId} has no organization memberships — seed data may be missing.`,
+      `Coach user ${userId} has no authorable teams — seed data may be missing.`,
     );
   }
   return candidate;
@@ -113,14 +119,14 @@ async function deletePostBestEffort(
 
 test.describe("Recap composer — Post on the first click (task #346)", () => {
   let coachApi: APIRequestContext | undefined;
-  let org: OrgRow;
+  let team: TeamRow;
   const createdPostIds: string[] = [];
 
   test.beforeAll(async ({}, testInfo) => {
     const baseURL = resolveBaseURL(testInfo.project.use.baseURL);
     coachApi = await pwRequest.newContext({ baseURL });
     const userId = await loginViaApi(coachApi, COACH_EMAIL, PASSWORD);
-    org = await findOrganizationForUser(coachApi, userId);
+    team = await findAuthorableTeamForUser(coachApi, userId);
   });
 
   test.afterAll(async () => {
@@ -132,12 +138,12 @@ test.describe("Recap composer — Post on the first click (task #346)", () => {
     }
   });
 
-  test("bottom Post button submits recap on first click after opening Post On Behalf Of", async ({
+  test("bottom Post button submits recap on first click after opening Post to Team", async ({
     page,
   }) => {
     await loginViaUi(page, COACH_EMAIL);
 
-    // No teamId — that's what surfaces the "Post On Behalf Of"
+    // No teamId — that's what surfaces the "Post to Team"
     // Select (the composer hides it whenever the post is locked
     // to a team via the URL).
     await page.goto(`/posts/new?type=long`);
@@ -148,22 +154,22 @@ test.describe("Recap composer — Post on the first click (task #346)", () => {
       .getByTestId("input-body")
       .fill("Recap body for the single-click regression test.");
 
-    // Open the "Post On Behalf Of" select — this is the
+    // Open the "Post to Team" select — this is the
     // interaction that arms the Radix Select's dismissable layer.
     // The point of the regression test is to confirm that the
     // first Post click after this still reaches the submit handler.
-    const selectTrigger = page.getByTestId("select-post-on-behalf-of");
+    const selectTrigger = page.getByTestId("select-post-to-team");
     await expect(selectTrigger).toBeVisible();
     await selectTrigger.click();
 
-    // Wait for the option to appear, then pick the discovered org.
-    const option = page.getByTestId(`option-post-on-behalf-of-${org.id}`);
+    // Wait for the option to appear, then pick the discovered team.
+    const option = page.getByTestId(`option-post-to-team-${team.teamId}`);
     await expect(option).toBeVisible();
     await option.click();
 
-    // Trigger should now show the chosen org name, confirming
+    // Trigger should now show the chosen team name, confirming
     // the selection was committed before we click Post.
-    await expect(selectTrigger).toContainText(org.name);
+    await expect(selectTrigger).toContainText(team.teamName);
 
     // Arm the response listener BEFORE the click. We intentionally
     // accept ANY status — the regression we're guarding against is

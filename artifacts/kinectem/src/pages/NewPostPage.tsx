@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import {
   useGetLoggedInUser,
   useListTeamMembers,
-  useListUserOrganizations,
+  useListUserTeams,
   queryOpts,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,9 +47,16 @@ export default function NewPostPage() {
   });
 
   const { data: me } = useGetLoggedInUser();
-  const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
-    query: queryOpts({ enabled: !!me?.id && !initialTeamId }),
-  });
+  // Authorable-teams picker for the composer's "Post to Team" select.
+  // Skipped when the URL already locks the post to a specific team
+  // (the picker is hidden in that case anyway).
+  const { data: myTeams } = useListUserTeams(
+    me?.id ?? "",
+    { authorable: true },
+    {
+      query: queryOpts({ enabled: !!me?.id && !initialTeamId }),
+    },
+  );
 
   // Roster for the per-player Tag Players picker. Originally added
   // for the highlight composer (task #313); task #322 extends the
@@ -169,9 +176,9 @@ export default function NewPostPage() {
               onPhotosChange={form.setPhotos}
               videoUrl={form.videoUrl}
               onVideoUrlChange={form.setVideoUrl}
-              orgId={form.orgId}
-              onOrgIdChange={form.setOrgId}
-              myOrgs={myOrgs}
+              teamId={form.teamId}
+              onTeamIdChange={form.setTeamId}
+              myTeams={myTeams}
               draftId={form.draftId}
               lockedToTeam={form.lockedToTeam}
               isEditingPublished={form.isEditingPublished}

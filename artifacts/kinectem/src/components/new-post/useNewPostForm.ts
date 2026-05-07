@@ -155,7 +155,7 @@ export function useNewPostForm({
   const [postType, setPostType] = useState<"short" | "long">(initialType);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [orgId, setOrgId] = useState<string>("");
+  const [teamId, setTeamId] = useState<string>("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   // YYYY-MM-DD value bound to the date input. Pre-filled with today
@@ -422,9 +422,13 @@ export function useNewPostForm({
       postType,
       title: title.trim() || undefined,
       body: !isShort && body.trim() ? body.trim() : undefined,
-      organizationId: orgId || undefined,
-      ...(initialTeamId
-        ? ({ context: { type: "team", id: initialTeamId } } as object)
+      ...(initialTeamId || teamId
+        ? ({
+            context: {
+              type: "team",
+              id: (initialTeamId ?? teamId) as string,
+            },
+          } as object)
         : {}),
       ...(photos.length > 0
         ? ({ photoUrls: photos, coverImageUrl: photos[0] } as object)
@@ -737,7 +741,7 @@ export function useNewPostForm({
     postType,
     title,
     body,
-    orgId,
+    teamId,
     photos,
     videoUrl,
     gameDate,
@@ -776,7 +780,7 @@ export function useNewPostForm({
     setPostType,
     setTitle,
     setBody,
-    setOrgId,
+    setTeamId,
     setPhotos,
     setVideoUrl,
     setGameDate,

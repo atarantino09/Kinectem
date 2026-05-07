@@ -1,4 +1,4 @@
-import type { PaginatedOrganizationsResponse } from "@workspace/api-client-react";
+import type { PaginatedUserTeamMembershipsResponse } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -34,9 +34,9 @@ interface PostFormFieldsProps {
   onPhotosChange: (next: string[]) => void;
   videoUrl: string;
   onVideoUrlChange: (next: string) => void;
-  orgId: string;
-  onOrgIdChange: (v: string) => void;
-  myOrgs: PaginatedOrganizationsResponse | undefined;
+  teamId: string;
+  onTeamIdChange: (v: string) => void;
+  myTeams: PaginatedUserTeamMembershipsResponse | undefined;
   draftId: string | null;
   lockedToTeam: boolean;
   isEditingPublished: boolean;
@@ -80,9 +80,9 @@ export function PostFormFields({
   onPhotosChange,
   videoUrl,
   onVideoUrlChange,
-  orgId,
-  onOrgIdChange,
-  myOrgs,
+  teamId,
+  onTeamIdChange,
+  myTeams,
   draftId,
   lockedToTeam,
   isEditingPublished,
@@ -236,26 +236,26 @@ export function PostFormFields({
         onVideoUrlChange={onVideoUrlChange}
       />
 
-      {!draftId && !lockedToTeam && !isOrgPost && myOrgs && myOrgs.data.length > 0 && (
+      {!draftId && !lockedToTeam && !isOrgPost && myTeams && myTeams.data.length > 0 && (
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-            Post On Behalf Of
+            Post to Team
           </Label>
-          <Select value={orgId} onValueChange={onOrgIdChange}>
+          <Select value={teamId} onValueChange={onTeamIdChange}>
             <SelectTrigger
               className="mt-2"
-              data-testid="select-post-on-behalf-of"
+              data-testid="select-post-to-team"
             >
-              <SelectValue placeholder="My profile" />
+              <SelectValue placeholder="Pick a team" />
             </SelectTrigger>
             <SelectContent>
-              {myOrgs.data.map((org) => (
+              {myTeams.data.map((m) => (
                 <SelectItem
-                  key={org.id}
-                  value={org.id}
-                  data-testid={`option-post-on-behalf-of-${org.id}`}
+                  key={m.teamId}
+                  value={m.teamId}
+                  data-testid={`option-post-to-team-${m.teamId}`}
                 >
-                  {org.name}
+                  {m.organization.name} — {m.teamName}
                 </SelectItem>
               ))}
             </SelectContent>
