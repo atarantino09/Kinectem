@@ -78,7 +78,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
               {requests.map((r: JoinRequestResponse) => (
                 <div
                   key={r.id}
-                  className="flex items-center gap-3 p-2 rounded-lg bg-muted/40"
+                  className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-2 rounded-lg bg-muted/40"
                   data-testid={`join-request-${r.id}`}
                 >
                   <div className="flex-1 min-w-0">
@@ -91,7 +91,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                       Requested {timeAgo(r.createdAt)}
                     </p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 self-end sm:self-auto shrink-0">
                     <Button
                       size="sm"
                       variant="outline"
@@ -168,7 +168,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
               {approvals.map((a: PostApprovalResponse) => (
                 <div
                   key={a.id}
-                  className="flex items-center gap-3 p-2 rounded-lg bg-muted/40"
+                  className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-2 rounded-lg bg-muted/40"
                   data-testid={`post-approval-${a.id}`}
                 >
                   <div className="flex-1 min-w-0">
@@ -181,7 +181,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                       Submitted {timeAgo(a.createdAt)}
                     </p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 self-end sm:self-auto shrink-0">
                     <Button
                       size="sm"
                       variant="outline"

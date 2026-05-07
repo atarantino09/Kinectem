@@ -139,8 +139,8 @@ export default function OrganizationPage() {
           {/* Hero */}
           <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
             <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
-            <div className="px-6 pb-6 -mt-20 flex items-end justify-between gap-4 flex-wrap relative z-10">
-              <div className="flex items-end gap-4">
+            <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-16 sm:-mt-20 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 sm:flex-wrap relative z-10">
+              <div className="flex items-end gap-3 sm:gap-4 min-w-0">
                 <div className="shrink-0">
                   <AvatarLightbox
                     avatarUrl={organization.logoUrl}
@@ -151,7 +151,7 @@ export default function OrganizationPage() {
                     dialogTestId="dialog-org-logo-lightbox"
                     imageTestId="img-org-logo-lightbox"
                   >
-                    <div className="w-36 h-36 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
+                    <div className="w-24 h-24 sm:w-36 sm:h-36 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
                       {organization.logoUrl ? (
                         <img
                           src={organization.logoUrl}
@@ -159,18 +159,18 @@ export default function OrganizationPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="text-5xl font-black text-primary tracking-tighter">
+                        <div className="text-3xl sm:text-5xl font-black text-primary tracking-tighter">
                           {getInitials(organization.name)}
                         </div>
                       )}
                     </div>
                   </AvatarLightbox>
                 </div>
-                <div className="pb-2">
-                  <h1 className="text-4xl font-black tracking-tight leading-none">
+                <div className="pb-1 sm:pb-2 min-w-0 flex-1">
+                  <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
                     {organization.name}
                   </h1>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium flex-wrap">
                     <span className="font-bold text-foreground">@{organization.slug}</span>
                     {organization.role && (
                       <>
@@ -212,7 +212,7 @@ export default function OrganizationPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {isOrgManager && (
                   <Button
                     variant="outline"
@@ -238,13 +238,13 @@ export default function OrganizationPage() {
                   data-testid="btn-view-org-followers"
                 >
                   <Users className="w-4 h-4 mr-1.5" />
-                  {(organization as { followerCount?: number }).followerCount ?? 0}{" "}
-                  Followers
+                  {(organization as { followerCount?: number }).followerCount ?? 0}
+                  <span className="ml-1 hidden sm:inline">Followers</span>
                 </Button>
               </div>
             </div>
             {(organization.description || organization.website) && (
-              <div className="px-6 pb-6">
+              <div className="px-4 sm:px-6 pb-4 sm:pb-6">
                 {organization.description && (
                   <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
                     {organization.description}

@@ -41,7 +41,7 @@ export default function OrganizationsListPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-black tracking-tight">
+        <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
           <span className="brand-gradient-text">Organizations</span>
         </h1>
         <p className="text-sm text-muted-foreground mt-1 font-medium">
@@ -67,12 +67,12 @@ export default function OrganizationsListPage() {
           {data.data.map((org) => (
             <Link key={org.id} href={`/organizations/${org.id}`}>
               <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-4">
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex items-start gap-3 sm:gap-4">
                     <OrgLogoTile name={org.name} logoUrl={org.logoUrl ?? null} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-black text-lg leading-tight tracking-tight group-hover:text-primary transition-colors">
+                        <h3 className="font-black text-base sm:text-lg leading-tight tracking-tight group-hover:text-primary transition-colors break-words min-w-0">
                           {org.name}
                         </h3>
                         <ChevronRight className="w-5 h-5 text-primary shrink-0" />
