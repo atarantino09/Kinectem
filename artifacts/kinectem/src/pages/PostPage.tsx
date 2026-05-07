@@ -58,6 +58,7 @@ export default function PostPage() {
   const qc = useQueryClient();
   const deletePost = useDeletePost();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   // When the parent jumps in here from the family stream the link carries
   // `?asChild=<id>`. Surface that context so the parent knows why they
   // landed here, and fetch the post through the child-scoped endpoint so
@@ -154,7 +155,6 @@ export default function PostPage() {
   // to the COPPA Phase 3 endpoint; a successful filing immediately
   // hides the post from feeds for everyone except admin + the
   // requesting guardian.
-  const [reportSubmitting, setReportSubmitting] = useState(false);
   const handleReportPhotoOfChild = async () => {
     if (!asChildId) return;
     setReportSubmitting(true);
