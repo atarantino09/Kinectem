@@ -6,7 +6,6 @@ import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Trophy, User as UserIcon } from "lucide-react";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
-import { getInitials } from "@/lib/format";
 
 export default function SearchPage() {
   const search = useSearch();
@@ -92,9 +91,12 @@ export default function SearchPage() {
             {orgs.map((o) => (
               <Link key={o.id} href={`/organizations/${o.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
-                  <div className="w-10 h-10 rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black text-xs shrink-0">
-                    {getInitials(o.name)}
-                  </div>
+                  <TeamAvatar
+                    avatarUrl={o.avatarUrl}
+                    displayName={o.name}
+                    size="lg"
+                    fallbackClassName="bg-slate-100 text-slate-800"
+                  />
                   <div className="min-w-0">
                     <p className="font-bold text-sm truncate">{o.name}</p>
                     <p className="text-xs text-muted-foreground truncate">
