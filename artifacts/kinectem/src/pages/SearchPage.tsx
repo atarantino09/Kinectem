@@ -95,6 +95,7 @@ export default function SearchPage() {
                     avatarUrl={o.avatarUrl}
                     displayName={o.name}
                     size="lg"
+                    rounded="lg"
                     fallbackClassName="bg-slate-100 text-slate-800"
                   />
                   <div className="min-w-0">
