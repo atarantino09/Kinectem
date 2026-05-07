@@ -29,6 +29,7 @@ import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
+import { TeamPhotoCropDialog } from "@/components/TeamPhotoCropDialog";
 
 function slugify(s: string) {
   return s
@@ -75,6 +76,12 @@ export function CreateTeamDialog({
   const [bannerDataUrl, setBannerDataUrl] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Crop dialog state. We stage the picked file as a data URL and only
+  // shrink + persist after the user confirms a crop, matching the
+  // EditTeamDialog flow so admins always frame their photo before save.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState<string>("team-photo");
+  const [cropOpen, setCropOpen] = useState(false);
 
   const createTeam = useCreateTeam();
 
@@ -88,6 +95,11 @@ export function CreateTeamDialog({
     setLeague("");
     setSeasonName("");
     setBannerDataUrl(null);
+    // Also clear staged crop state so a reopen of the dialog starts
+    // from a fully clean slate (no leftover crop source / filename).
+    setCropSrc(null);
+    setCropOpen(false);
+    setCropFileName("team-photo");
   };
 
   const onNameChange = (v: string) => {
@@ -109,12 +121,37 @@ export function CreateTeamDialog({
       toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
+    // Open the crop dialog with this file as a data URL. The actual
+    // shrink + stash happens once the user confirms a crop in
+    // onCroppedConfirm, so admins always frame their photo first.
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () =>
+          reject(reader.error ?? new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      setCropSrc(dataUrl);
+      setCropFileName(file.name);
+      setCropOpen(true);
+    } catch {
+      toast({ title: "Couldn't read that photo", variant: "destructive" });
+    }
+  };
+
+  const onCroppedConfirm = async (cropped: File) => {
     setPhotoBusy(true);
     try {
-      const dataUrl = await shrinkImageToDataUrl(file);
+      // Cropper already constrains the output, but we still run it
+      // through shrinkImage for consistent JPEG encoding + the global
+      // 1024px longest-edge cap that the rest of the app relies on.
+      const dataUrl = await shrinkImageToDataUrl(cropped);
       setBannerDataUrl(dataUrl);
-    } catch {
+      setCropSrc(null);
+    } catch (err) {
       toast({ title: "Failed to read team photo", variant: "destructive" });
+      throw err;
     } finally {
       setPhotoBusy(false);
     }
@@ -153,6 +190,7 @@ export function CreateTeamDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={onSubmit} className="space-y-4">
@@ -347,5 +385,16 @@ export function CreateTeamDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <TeamPhotoCropDialog
+      src={cropSrc}
+      fileName={cropFileName}
+      open={cropOpen && !!cropSrc}
+      onOpenChange={(v) => {
+        setCropOpen(v);
+        if (!v) setCropSrc(null);
+      }}
+      onConfirm={onCroppedConfirm}
+    />
+    </>
   );
 }
