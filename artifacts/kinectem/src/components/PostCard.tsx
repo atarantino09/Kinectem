@@ -303,7 +303,9 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
               // contexts keep their existing avatar source.
               const displayedAvatarUrl =
                 post.context.type === "team"
-                  ? post.context.orgAvatarUrl ?? null
+                  ? ("orgAvatarUrl" in post.context
+                      ? post.context.orgAvatarUrl ?? null
+                      : null)
                   : post.context.avatarUrl;
               return (
                 <AvatarLightbox
@@ -348,7 +350,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 >
                   {post.author.displayName}
                 </Link>
-                {post.author.authorRole && (
+                {"authorRole" in post.author && post.author.authorRole && (
                   <span data-testid={`text-post-author-role-${post.id}`}>
                     {" · "}
                     {post.author.authorRole}

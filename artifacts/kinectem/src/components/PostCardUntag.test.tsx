@@ -15,7 +15,10 @@ import type { PostResponse } from "@workspace/api-client-react";
 
 // Mocks must be declared before importing the component under test so
 // vitest's hoisting picks them up.
-const customFetchMock = vi.fn(async () => null as unknown);
+const customFetchMock =
+  vi.fn<(input: RequestInfo | URL, options?: RequestInit) => Promise<unknown>>(
+    async () => null as unknown,
+  );
 const toastMock = vi.fn();
 
 vi.mock("@workspace/api-client-react", async () => {
@@ -24,7 +27,8 @@ vi.mock("@workspace/api-client-react", async () => {
   >("@workspace/api-client-react");
   return {
     ...actual,
-    customFetch: (...args: unknown[]) => customFetchMock(...args),
+    customFetch: (...args: Parameters<typeof actual.customFetch>) =>
+      customFetchMock(...args),
     // PostCard reads these as hooks — return shapes that satisfy its
     // destructuring without performing any real mutations.
     useAddPostReaction: () => ({ mutate: vi.fn() }),

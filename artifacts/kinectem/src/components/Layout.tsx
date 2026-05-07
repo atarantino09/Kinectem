@@ -83,7 +83,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (path === "/") return location === "/";
     return location === path || location.startsWith(`${path}/`);
   };
-  const navVariant = (active: boolean) => (active ? "secondary" : "ghost") as const;
+  const navVariant = (active: boolean): "secondary" | "ghost" =>
+    active ? "secondary" : "ghost";
 
   const unreadCount = unreadMsgs?.unreadCount ?? 0;
   const formattedUnread = unreadCount > 9 ? "9+" : String(unreadCount);
