@@ -289,8 +289,9 @@ export function PostFormFields({
         >
           <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
           <p className="text-xs text-muted-foreground font-medium">
-            You're not on any team rosters with posting rights yet. Ask
-            a coach or organization admin to add you before publishing.
+            Only admins, coaches, and authors can create game recaps.
+            Ask a coach or organization admin to add you to a team
+            before publishing.
           </p>
         </div>
       )}
