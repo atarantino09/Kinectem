@@ -167,11 +167,15 @@ export function EditTeamDialog({
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
       toast({ title: "Team photo updated" });
-    } catch {
+      // Only clear the staged crop source on success. On failure we
+      // re-throw below so the crop dialog stays open and the user can
+      // adjust + retry without re-picking the file.
+      setCropSrc(null);
+    } catch (err) {
       toast({ title: "Failed to upload team photo", variant: "destructive" });
+      throw err;
     } finally {
       setUploading(false);
-      setCropSrc(null);
     }
   };
 
