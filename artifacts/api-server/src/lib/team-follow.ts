@@ -63,29 +63,6 @@ export async function ensureTeamFollowedAsGuardian(
   }
 }
 
-// Convenience: given a child user id, look up their parent (if any) and
-// auto-follow the team on the parent's behalf. No-op when the child has
-// no linked guardian.
-export async function ensureChildsParentFollowsTeam(
-  childUserId: string,
-  teamId: string,
-): Promise<void> {
-  try {
-    const [child] = await db
-      .select({ parentId: users.parentId })
-      .from(users)
-      .where(eq(users.id, childUserId))
-      .limit(1);
-    if (!child?.parentId) return;
-    await ensureTeamFollowedAsGuardian(child.parentId, teamId);
-  } catch (err) {
-    logger.warn(
-      { err, childUserId, teamId },
-      "ensureChildsParentFollowsTeam failed",
-    );
-  }
-}
-
 // Backfill helper for "link existing child": for every team the child is
 // already accepted on, auto-follow on the parent's behalf. Best-effort.
 export async function backfillTeamFollowsForLinkedChild(
