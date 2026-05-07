@@ -25,6 +25,10 @@ interface PostHeaderBarProps {
   // undefined so the button never appears.
   canDelete?: boolean;
   onRequestDelete?: () => void;
+  // Mirror of PostFormFields' `publishDisabled` — used to disable the
+  // header's Post/Publish/Save submit button when the form has no
+  // valid team to post to (e.g. the user has zero authorable teams).
+  publishDisabled?: boolean;
 }
 
 export function PostHeaderBar({
@@ -41,6 +45,7 @@ export function PostHeaderBar({
   onSaveDraft,
   canDelete = false,
   onRequestDelete,
+  publishDisabled = false,
 }: PostHeaderBarProps) {
   // Only surface the Delete affordance when the viewer is editing an
   // already-published post AND the server marked them as eligible to
@@ -105,7 +110,7 @@ export function PostHeaderBar({
             type="submit"
             form="new-post-form"
             variant="brand"
-            disabled={publishing}
+            disabled={publishing || publishDisabled}
             data-testid="button-publish"
           >
             {publishing

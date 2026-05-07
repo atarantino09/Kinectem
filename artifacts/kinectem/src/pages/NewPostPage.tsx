@@ -1,5 +1,5 @@
 import { useSearch } from "wouter";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   useGetLoggedInUser,
   useListTeamMembers,
@@ -57,6 +57,30 @@ export default function NewPostPage() {
       query: queryOpts({ enabled: !!me?.id && !initialTeamId }),
     },
   );
+
+  // Auto-pre-select when the user only has one authorable team — the
+  // picker would otherwise force a redundant click. Guarded on
+  // `form.teamId` so we don't fight a manual selection, and on
+  // `!initialTeamId` so URL-locked composers keep their explicit team.
+  useEffect(() => {
+    if (initialTeamId) return;
+    if (form.teamId) return;
+    const only = myTeams?.data;
+    if (only && only.length === 1) {
+      form.setTeamId(only[0].teamId);
+    }
+  }, [myTeams, initialTeamId, form]);
+
+  // Disable Publish when the composer is in "needs a team but has
+  // none" territory: a brand-new post that isn't URL-locked to a
+  // team, isn't an org Update, isn't an edit / draft, and either the
+  // teams list has loaded with zero entries OR the user simply hasn't
+  // picked one yet. Drafts and edit-published posts already carry a
+  // team via the loaded payload, so they bypass this guard.
+  const composerNeedsTeam =
+    !initialTeamId && !form.draftId && !form.isEditingPublished;
+  const publishDisabled =
+    composerNeedsTeam && form.loadedKind !== "org_post" && !form.teamId;
 
   // Roster for the per-player Tag Players picker. Originally added
   // for the highlight composer (task #313); task #322 extends the
@@ -124,6 +148,7 @@ export default function NewPostPage() {
         onSaveDraft={form.onSaveDraft}
         canDelete={form.canDelete}
         onRequestDelete={() => form.setConfirmDeleteOpen(true)}
+        publishDisabled={publishDisabled}
       />
 
       <AlertDialog
@@ -191,6 +216,7 @@ export default function NewPostPage() {
               onTaggedUserIdsChange={form.setTaggedUserIds}
               saving={form.saving}
               publishing={form.publishing}
+              publishDisabled={publishDisabled}
               onSaveDraft={form.onSaveDraft}
               onSubmit={form.onPublish}
             />

@@ -61,6 +61,11 @@ interface PostFormFieldsProps {
   onTaggedUserIdsChange?: (next: string[]) => void;
   saving: boolean;
   publishing: boolean;
+  // True when the form should refuse submission because the user has
+  // no team to post to. Disables the bottom Post button so the user
+  // can't trigger a guaranteed-400 round-trip; the header bar gets
+  // the same flag through PostHeaderBar.
+  publishDisabled?: boolean;
   onSaveDraft: () => void;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -95,6 +100,7 @@ export function PostFormFields({
   onTaggedUserIdsChange,
   saving,
   publishing,
+  publishDisabled = false,
   onSaveDraft,
   onSubmit,
 }: PostFormFieldsProps) {
@@ -236,7 +242,7 @@ export function PostFormFields({
         onVideoUrlChange={onVideoUrlChange}
       />
 
-      {!draftId && !lockedToTeam && !isOrgPost && myTeams && myTeams.data.length > 0 && (
+      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && myTeams.data.length > 0 && (
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
             Post to Team
@@ -255,11 +261,37 @@ export function PostFormFields({
                   value={m.teamId}
                   data-testid={`option-post-to-team-${m.teamId}`}
                 >
-                  {m.organization.name} — {m.teamName}
+                  <div className="flex flex-col items-start">
+                    <span className="font-semibold">{m.teamName}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {m.organization.name}
+                    </span>
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {/* Zero-authorable-teams guard. Surfaces an explanatory message
+          when the picker would otherwise be empty AND the post isn't
+          locked to a team via the URL — i.e. the only way the user
+          could publish is by picking a team they don't have. Mirrors
+          the server-side "Only admins, coaches, and authors can create
+          game recaps" guard so the user sees why Publish is disabled
+          before clicking. Skipped for highlights without a team scope
+          and for the org Update / draft / edit-published paths. */}
+      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && myTeams.data.length === 0 && (
+        <div
+          className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"
+          data-testid="empty-state-no-authorable-teams"
+        >
+          <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground font-medium">
+            You're not on any team rosters with posting rights yet. Ask
+            a coach or organization admin to add you before publishing.
+          </p>
         </div>
       )}
 
@@ -400,7 +432,7 @@ export function PostFormFields({
         <Button
           type="submit"
           variant="brand"
-          disabled={publishing}
+          disabled={publishing || publishDisabled}
           data-testid="button-publish-bottom"
         >
           {publishing
