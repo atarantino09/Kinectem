@@ -8630,6 +8630,10 @@ components:
         slug:
           type: string
           example: westfield-warriors
+        logoUrl:
+          type: string
+          nullable: true
+          description: Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.
     TeamSeasonResponse:
       type: object
       required:
