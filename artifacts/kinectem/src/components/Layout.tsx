@@ -167,6 +167,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  void handleLogout();
+                }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-md font-semibold text-sm transition-colors hover:bg-muted text-foreground text-left"
+                data-testid="mobile-btn-logout"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="flex-1">Log out</span>
+              </button>
+            )}
           </nav>
         </SheetContent>
       </Sheet>
