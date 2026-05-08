@@ -132,7 +132,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
           )}
           <Item
             href={profileHref}
-            label={meId ? "Profile" : "Sign in"}
+            label="Profile"
             Icon={User}
             active={profileActive}
             testId="mobile-tab-profile"
