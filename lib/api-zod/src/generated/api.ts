@@ -905,6 +905,12 @@ export const ListUserTeamsResponse = zod.object({
         id: zod.string().uuid(),
         name: zod.string(),
         slug: zod.string(),
+        logoUrl: zod
+          .string()
+          .nullish()
+          .describe(
+            "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+          ),
       }),
       role: zod.enum(["owner", "admin", "author", "member"]),
       position: zod.enum([
@@ -3729,6 +3735,12 @@ export const ListOrgTeamsResponse = zod.object({
         id: zod.string().uuid(),
         name: zod.string(),
         slug: zod.string(),
+        logoUrl: zod
+          .string()
+          .nullish()
+          .describe(
+            "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+          ),
       }),
       name: zod.string(),
       slug: zod.string(),
@@ -3791,6 +3803,12 @@ export const GetTeamByIdResponse = zod.object({
     id: zod.string().uuid(),
     name: zod.string(),
     slug: zod.string(),
+    logoUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+      ),
   }),
   name: zod.string(),
   slug: zod.string(),
@@ -3864,6 +3882,12 @@ export const UpdateTeamResponse = zod.object({
     id: zod.string().uuid(),
     name: zod.string(),
     slug: zod.string(),
+    logoUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+      ),
   }),
   name: zod.string(),
   slug: zod.string(),
@@ -4682,6 +4706,12 @@ export const ListFollowSuggestionsResponse = zod.object({
         id: zod.string().uuid(),
         name: zod.string(),
         slug: zod.string(),
+        logoUrl: zod
+          .string()
+          .nullish()
+          .describe(
+            "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+          ),
       }),
       name: zod.string(),
       slug: zod.string(),
@@ -5447,6 +5477,12 @@ export const SetTeamAvatarResponse = zod.object({
     id: zod.string().uuid(),
     name: zod.string(),
     slug: zod.string(),
+    logoUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+      ),
   }),
   name: zod.string(),
   slug: zod.string(),

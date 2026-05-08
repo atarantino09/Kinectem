@@ -73,8 +73,18 @@ export default function MyTeamsPage() {
                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <Badge
                           variant="outline"
-                          className="text-[10px] uppercase tracking-wider font-bold"
+                          className="text-[10px] uppercase tracking-wider font-bold inline-flex items-center gap-1"
                         >
+                          {t.organization.logoUrl ? (
+                            <img
+                              src={t.organization.logoUrl}
+                              alt=""
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                              className="w-3 h-3 rounded-sm object-cover bg-muted shrink-0"
+                            />
+                          ) : null}
                           {t.organization.name}
                         </Badge>
                         {t.position === "parent" && (

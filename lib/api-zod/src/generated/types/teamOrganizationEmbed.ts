@@ -85,4 +85,9 @@ export interface TeamOrganizationEmbed {
   id: string;
   name: string;
   slug: string;
+  /**
+   * Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.
+   * @nullable
+   */
+  logoUrl?: string | null;
 }
