@@ -240,7 +240,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   >
                     <Icon className="w-4 h-4 mr-2" /> {item.label}
                     {hasBadge && (
-                      <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">
+                      <span
+                        className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                        data-testid={
+                          item.testId ? `badge-${item.testId}` : undefined
+                        }
+                      >
                         {item.badge! > 9 ? "9+" : item.badge}
                       </span>
                     )}

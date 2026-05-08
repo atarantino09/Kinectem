@@ -193,7 +193,10 @@ export default function MessagesPage() {
                     {c.participant.displayName}
                   </p>
                   {c.unreadCount > 0 && (
-                    <Badge className="text-[10px] font-black bg-primary text-primary-foreground h-4 px-1.5">
+                    <Badge
+                      className="text-[10px] font-black bg-primary text-primary-foreground h-4 px-1.5"
+                      data-testid={`badge-conversation-unread-${c.id}`}
+                    >
                       {c.unreadCount}
                     </Badge>
                   )}
