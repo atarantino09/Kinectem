@@ -36,6 +36,10 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
   const profileHref = meId ? `/users/${meId}` : "/login";
 
   const homeActive = isActive("/", true);
+  // Broad match: the tab highlights for the dedicated "my" lists AND for
+  // any /organizations/:orgId or /teams/:teamId detail page reached from
+  // them. The discovery page at /organizations also highlights (it shares
+  // the prefix); this is intentional so the section feels "sticky".
   const orgsActive = isActive("/organizations");
   const teamsActive = isActive("/teams");
   const profileActive = meId

@@ -18,16 +18,16 @@ function OrgLogoTile({
   name: string;
   logoUrl: string | null;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => {
-    setFailed(false);
+    setLogoFailed(false);
   }, [logoUrl]);
-  if (logoUrl && !failed) {
+  if (logoUrl && !logoFailed) {
     return (
       <img
         src={logoUrl}
         alt=""
-        onError={() => setFailed(true)}
+        onError={() => setLogoFailed(true)}
         className="w-14 h-14 rounded-xl object-cover bg-muted shrink-0"
       />
     );
@@ -45,18 +45,26 @@ export default function MyOrgsPage() {
   const { data, isLoading } = useListUserOrganizations(meId ?? "", undefined, {
     query: queryOpts({ enabled: !!meId }),
   });
-
   const orgs = data?.data ?? [];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
-          <span className="brand-gradient-text">My Organizations</span>
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 font-medium">
-          Clubs, schools, and academies you&rsquo;re a member of.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
+            <span className="brand-gradient-text">My Organizations</span>
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1 font-medium">
+            Organizations you belong to.
+          </p>
+        </div>
+        <Link
+          href="/organizations"
+          className="text-xs font-bold uppercase tracking-wider text-primary hover:underline shrink-0 mt-2"
+          data-testid="link-discover-orgs"
+        >
+          Discover
+        </Link>
       </div>
 
       {isLoading || !meId ? (
@@ -66,17 +74,17 @@ export default function MyOrgsPage() {
           ))}
         </div>
       ) : orgs.length === 0 ? (
-        <Card className="rounded-xl border border-border">
+        <Card className="rounded-xl border border-border" data-testid="my-orgs-empty">
           <CardContent className="p-8 text-center">
             <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">
-              You haven&rsquo;t joined any organizations yet.
+              You're not a member of any organizations yet.
             </p>
             <Link
               href="/organizations"
-              className="inline-block mt-3 text-xs font-semibold text-primary hover:underline"
+              className="inline-block mt-3 text-xs font-bold uppercase tracking-wider text-primary hover:underline"
             >
-              Discover organizations &rarr;
+              Discover organizations
             </Link>
           </CardContent>
         </Card>
@@ -84,7 +92,10 @@ export default function MyOrgsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {orgs.map((org) => (
             <Link key={org.id} href={`/organizations/${org.id}`}>
-              <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
+              <Card
+                className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group"
+                data-testid={`card-my-org-${org.id}`}
+              >
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex items-start gap-3 sm:gap-4">
                     <OrgLogoTile name={org.name} logoUrl={org.logoUrl ?? null} />

@@ -34,8 +34,8 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
 
           <Link
             href="/"
-            data-testid="mobile-top-logo"
             className="flex items-center gap-2 shrink-0"
+            data-testid="mobile-top-logo"
           >
             <img
               src={`${import.meta.env.BASE_URL}logo-icon.png`}
