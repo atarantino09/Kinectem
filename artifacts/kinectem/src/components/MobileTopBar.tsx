@@ -42,11 +42,35 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
     query: queryOpts({ enabled: !!meId }),
   });
 
-  // Affiliation priority: org affiliations first, then the first rostered
-  // team. Cap at 2 chips to keep the bar uncluttered on narrow phones.
+  // Affiliation priority: first org affiliation, then first rostered team.
+  // Falls through to a second org chip only when no team exists, so the
+  // common case of "one org + one team" gets exactly one of each.
   const chips: Chip[] = [];
-  for (const o of orgsResp?.data ?? []) {
-    if (chips.length >= 2) break;
+  const orgs = orgsResp?.data ?? [];
+  const teams = teamsResp?.data ?? [];
+  const firstOrg = orgs[0];
+  const firstTeam = teams[0];
+  if (firstOrg) {
+    chips.push({
+      key: `org-${firstOrg.id}`,
+      href: `/organizations/${firstOrg.id}`,
+      label: firstOrg.name,
+      avatarUrl: firstOrg.logoUrl,
+      initials: initialsOf(firstOrg.name) || "O",
+      testId: `mobile-top-chip-org-${firstOrg.id}`,
+    });
+  }
+  if (firstTeam) {
+    chips.push({
+      key: `team-${firstTeam.teamId}`,
+      href: `/teams/${firstTeam.teamId}`,
+      label: firstTeam.teamName,
+      avatarUrl: firstTeam.teamAvatarUrl,
+      initials: initialsOf(firstTeam.teamName) || "T",
+      testId: `mobile-top-chip-team-${firstTeam.teamId}`,
+    });
+  } else if (orgs[1]) {
+    const o = orgs[1];
     chips.push({
       key: `org-${o.id}`,
       href: `/organizations/${o.id}`,
@@ -56,19 +80,6 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
       testId: `mobile-top-chip-org-${o.id}`,
     });
   }
-  for (const t of teamsResp?.data ?? []) {
-    if (chips.length >= 2) break;
-    chips.push({
-      key: `team-${t.teamId}`,
-      href: `/teams/${t.teamId}`,
-      label: t.teamName,
-      avatarUrl: t.teamAvatarUrl,
-      initials: initialsOf(t.teamName) || "T",
-      testId: `mobile-top-chip-team-${t.teamId}`,
-    });
-  }
-
-  const formattedUnread = unreadCount > 9 ? "9+" : String(unreadCount);
 
   return (
     <header
@@ -140,7 +151,11 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Messages"
+            aria-label={
+              unreadCount > 0
+                ? `Messages, ${unreadCount} unread`
+                : "Messages"
+            }
             data-testid="mobile-top-messages"
             onClick={() => setLocation("/messages")}
             className="relative"
@@ -148,12 +163,11 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
             <Mail className="w-5 h-5" />
             {unreadCount > 0 && (
               <span
+                aria-hidden="true"
                 className={cn(
-                  "absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center",
+                  "absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary",
                 )}
-              >
-                {formattedUnread}
-              </span>
+              />
             )}
           </Button>
           {meId ? (
