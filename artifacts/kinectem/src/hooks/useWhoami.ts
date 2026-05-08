@@ -14,6 +14,10 @@ export type WhoamiResponse = {
   realUser?: WhoamiUser;
   viewingAs?: WhoamiUser | null;
   canAuthorRecap?: boolean;
+  // Task #400 — derived from `users.parentId`. True for any user with at
+  // least one linked child, regardless of `role`.
+  isGuardian?: boolean;
+  linkedChildrenCount?: number;
 };
 
 export function useWhoami() {

@@ -104,7 +104,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Feed", icon: Home },
     { href: "/organizations", label: "Orgs", icon: Building2 },
     { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
-    ...(currentUser?.role === "parent"
+    ...(whoami?.isGuardian
       ? [{ href: "/family", label: "Family", icon: Users, testId: "link-family" } satisfies NavItem]
       : []),
     ...(isAdmin

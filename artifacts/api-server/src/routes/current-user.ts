@@ -69,6 +69,7 @@ import {
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import { notifyExpiredGuardianConfirmations } from "../lib/guardian-confirmations";
+import { isGuardian } from "../lib/guardian-capability";
 
 const router: IRouter = Router();
 
@@ -81,7 +82,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const u = req.sessionUser;
     if (!u) return apiError(res, 401, "Not authenticated");
-    if (u.role === "parent") {
+    if (await isGuardian(u.id)) {
       try {
         await notifyExpiredGuardianConfirmations(u.id);
       } catch (err) {

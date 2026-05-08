@@ -25,6 +25,7 @@ import {
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import { notifyExpiredGuardianConfirmations } from "../lib/guardian-confirmations";
 import { backfillTeamFollowsForLinkedChild } from "../lib/team-follow";
+import { isGuardian } from "../lib/guardian-capability";
 import { GUARDIAN_TOKEN_TTL_MS } from "./auth";
 
 const router: IRouter = Router();
@@ -41,7 +42,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    if (me.role === "parent") {
+    if (await isGuardian(me.id)) {
       try {
         await notifyExpiredGuardianConfirmations(me.id);
       } catch (err) {
@@ -98,9 +99,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    if (me.role !== "parent") {
-      return apiError(res, 403, "Only parent accounts can link children");
-    }
+    // Guardian capability is derived from "this user has at least one
+    // linked child", not from `role === "parent"`. Anyone — including a
+    // coach, athlete-of-majority, or admin — can claim a child via this
+    // endpoint; permission to link a *specific* child is governed by the
+    // existing search-and-link logic below (the child must not already
+    // be linked to a different guardian).
     const childId = String(req.body?.childId ?? "").trim();
     if (!childId) return apiError(res, 400, "childId required");
     const [child] = await db

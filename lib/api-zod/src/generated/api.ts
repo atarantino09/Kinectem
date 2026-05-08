@@ -6851,6 +6851,8 @@ export const CrossEntitySearchResponse = zod.object({
 /**
  * @summary Get the currently authenticated session including masquerade state
  */
+export const getWhoamiResponseLinkedChildrenCountMin = 0;
+
 export const GetWhoamiResponse = zod.object({
   authenticated: zod.boolean(),
   isMasquerading: zod.boolean().optional(),
@@ -6875,6 +6877,19 @@ export const GetWhoamiResponse = zod.object({
     .optional()
     .describe(
       'True when the (effective) session user can author a Game Recap on at least one team — i.e. they are an org admin of any organization, OR have an accepted roster entry as a coach, OR have an accepted roster entry with the explicit \"author\" position.',
+    ),
+  isGuardian: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the (effective) session user has at least one linked child (a row in `users` with `parentId` equal to this user). Drives the Family nav item and the family-dashboard page guard, regardless of `role`.",
+    ),
+  linkedChildrenCount: zod
+    .number()
+    .min(getWhoamiResponseLinkedChildrenCountMin)
+    .optional()
+    .describe(
+      "Count of users linked to this account via `users.parentId`. `isGuardian` is exactly `linkedChildrenCount > 0`.",
     ),
 });
 

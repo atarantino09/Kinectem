@@ -96,6 +96,7 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
+import { countLinkedChildren } from "../lib/guardian-capability";
 
 const router: IRouter = Router();
 
@@ -119,7 +120,10 @@ router.get(
     // off this so a parent who can't author on any team doesn't see
     // a dead-end "Game Recap" item.
     const effectiveUserId = session?.id ?? real.id;
-    const canAuthorRecap = await canAuthorRecapAnywhere(effectiveUserId);
+    const [canAuthorRecap, linkedChildrenCount] = await Promise.all([
+      canAuthorRecapAnywhere(effectiveUserId),
+      countLinkedChildren(effectiveUserId),
+    ]);
     res.json({
       authenticated: true,
       isMasquerading: !!req.isMasquerading,
@@ -139,6 +143,12 @@ router.get(
             }
           : null,
       canAuthorRecap,
+      // Task #400 — capability flag derived from `users.parentId`. The
+      // web client uses this to render the Family nav item and the
+      // family-dashboard page guard for users of any role who have at
+      // least one linked child.
+      isGuardian: linkedChildrenCount > 0,
+      linkedChildrenCount,
     });
   }),
 );

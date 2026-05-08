@@ -89,5 +89,12 @@ export type GetWhoami200 = {
   viewingAs?: AdminWhoamiUser | null;
   /** True when the (effective) session user can author a Game Recap on at least one team — i.e. they are an org admin of any organization, OR have an accepted roster entry as a coach, OR have an accepted roster entry with the explicit "author" position. */
   canAuthorRecap?: boolean;
+  /** True when the (effective) session user has at least one linked child (a row in `users` with `parentId` equal to this user). Drives the Family nav item and the family-dashboard page guard, regardless of `role`. */
+  isGuardian?: boolean;
+  /**
+   * Count of users linked to this account via `users.parentId`. `isGuardian` is exactly `linkedChildrenCount > 0`.
+   * @minimum 0
+   */
+  linkedChildrenCount?: number;
   [key: string]: unknown;
 };

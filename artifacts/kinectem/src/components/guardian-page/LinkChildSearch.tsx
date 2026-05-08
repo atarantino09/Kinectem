@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ interface Props {
 // the rest of the dashboard.
 export function LinkChildSearch({ children, onLinked }: Props) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
@@ -57,6 +59,7 @@ export function LinkChildSearch({ children, onLinked }: Props) {
       toast({ title: "Child linked to your guardian account" });
       setQuery("");
       setResults([]);
+      await qc.invalidateQueries({ queryKey: ["whoami"] });
       await onLinked();
     } catch (e) {
       const msg = (e as Error)?.message ?? "Failed to link child";

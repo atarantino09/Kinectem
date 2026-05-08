@@ -1,33 +1,20 @@
-import { useGetLoggedInUser } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Shield, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { EmailPrefCard } from "@/components/guardian-page/EmailPrefCard";
 import { LinkChildSearch } from "@/components/guardian-page/LinkChildSearch";
 import { ChildRow } from "@/components/guardian-page/ChildRow";
 import { MinorControls } from "@/components/guardian-page/MinorControls";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
+import { useWhoami } from "@/hooks/useWhoami";
 
 export default function GuardianPage() {
-  const { data: me } = useGetLoggedInUser();
+  const { data: whoami } = useWhoami();
   const dash = useGuardianDashboard();
-
-  if (me && me.role !== "parent") {
-    return (
-      <Card className="rounded-xl border-border">
-        <CardContent className="p-8 text-center space-y-2">
-          <Shield className="w-10 h-10 text-muted-foreground mx-auto" />
-          <h2 className="text-xl font-black tracking-tight">
-            Guardian dashboard
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            This page is only available to parent or guardian accounts.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Guardian capability is "this user has at least one linked child"
+  // (any role), not `role === "parent"`. Whoami exposes this directly.
+  const isGuardian = whoami?.isGuardian === true;
 
   return (
     <div className="space-y-6">
@@ -44,7 +31,25 @@ export default function GuardianPage() {
         </div>
       </div>
 
-      <EmailPrefCard enabled={me?.role === "parent"} />
+      {!isGuardian && (
+        <Card
+          className="rounded-xl border-border"
+          data-testid="card-no-children"
+        >
+          <CardContent className="p-6 space-y-2">
+            <h2 className="font-black tracking-tight">
+              You haven't linked a child yet
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Search for your child below to link their account. Once linked,
+              you'll see their pending follow requests, DMs, comments, and tags
+              here, and you'll be able to act on them on your child's behalf.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <EmailPrefCard enabled={isGuardian} />
 
       <Card className="rounded-xl border-border">
         <CardContent className="p-6 space-y-4">
