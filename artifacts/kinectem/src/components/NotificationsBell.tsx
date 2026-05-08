@@ -14,6 +14,7 @@ import {
   type GetChildrenNotificationsSummary200,
   type NotificationUnreadCount,
   type NotificationResponse,
+  type PaginatedNotifications,
 } from "@workspace/api-client-react";
 import {
   DropdownMenu,
@@ -121,6 +122,24 @@ export function NotificationsBell() {
       queryKey: getGetChildrenNotificationsSummaryQueryKey(),
     });
     qc.invalidateQueries({ queryKey: getListNotificationsQueryKey() });
+  };
+
+  // Optimistically drop a row from the cached notifications list so it
+  // disappears from the dropdown the instant the user's action succeeds.
+  // Cancels any in-flight list refetches first — otherwise a response
+  // that started before the action (e.g. the refetch fired by
+  // `markAll.mutate()` on dropdown-open) can land after our setQueryData
+  // call and transiently re-add the row before the final `invalidate()`
+  // reconciles with the server.
+  const removeFromList = async (notificationId: string) => {
+    await qc.cancelQueries({ queryKey: getListNotificationsQueryKey() });
+    qc.setQueryData<PaginatedNotifications | undefined>(
+      getListNotificationsQueryKey(),
+      (prev) =>
+        prev
+          ? { ...prev, data: prev.data.filter((x) => x.id !== notificationId) }
+          : prev,
+    );
   };
 
   const markRead = async (notificationId: string) => {
@@ -256,6 +275,7 @@ export function NotificationsBell() {
           body: JSON.stringify({}),
         },
       );
+      await removeFromList(n.id);
       if (!n.isRead) {
         await markRead(n.id);
       } else {
@@ -307,6 +327,7 @@ export function NotificationsBell() {
           body: JSON.stringify({}),
         },
       );
+      await removeFromList(n.id);
       if (!n.isRead) {
         await markRead(n.id);
       } else {
