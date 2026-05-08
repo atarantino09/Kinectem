@@ -31,6 +31,9 @@ import {
 } from "../lib/auth";
 import {
   displayName,
+  displayNameForViewer,
+  maskedDisplayName,
+  buildMinorNameContext,
   toTeam,
   toTeamMember,
   toInvite,
@@ -373,10 +376,16 @@ router.post(
       if (u.parentId) {
         await ensureTeamFollowedAsGuardian(u.parentId, teamId);
       }
+      // Task #414 — `message` is persisted into the recipient's bell
+      // and read back as-is. Recipient is the invitee (a stranger to
+      // the inviter under the masking model), so when the inviter is
+      // a minor, mask at write time. Adult inviters keep full name.
+      // Render-time viewer-aware notification text is Task #415.
+      const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
       await db.insert(notifications).values({
         userId,
         kind: "roster_invite",
-        message: `${displayName(me)} added you to ${t.name}. Tap to accept or decline.`,
+        message: `${actorName} added you to ${t.name}. Tap to accept or decline.`,
         // Carry the roster entry id so the team page can open straight to
         // the Roster panel and scroll/highlight the invitee's pending row.
         link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
@@ -390,10 +399,12 @@ router.post(
           (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
             ? u.name!.trim().split(/\s+/)[0]
             : "your child";
+        // Task #414 — same write-time mask: guardian is privileged
+        // for `u` (their child) but not necessarily for `me`.
         await db.insert(notifications).values({
           userId: u.parentId,
           kind: "roster_invite_for_child",
-          message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
+          message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
           link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
           actorUserId: me.id,
         });
@@ -746,10 +757,13 @@ router.post(
         if (existingUser.parentId) {
           await ensureTeamFollowedAsGuardian(existingUser.parentId, teamId);
         }
+        // Task #414 — write-time mask when the inviter is a minor.
+        // See identical comment on the direct-add path above.
+        const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
         await db.insert(notifications).values({
           userId: existingUser.id,
           kind: "roster_invite",
-          message: `${displayName(me)} invited you to ${t.name}. Tap to accept or decline.`,
+          message: `${actorName} invited you to ${t.name}. Tap to accept or decline.`,
           // Carry the roster entry id so the team page can open straight
           // to the Roster panel and scroll/highlight the invitee's row.
           link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
@@ -763,7 +777,7 @@ router.post(
           await db.insert(notifications).values({
             userId: existingUser.parentId,
             kind: "roster_invite_for_child",
-            message: `${displayName(me)} invited ${childFirstName} to join ${t.name}.`,
+            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
             link: `/family?childId=${existingUser.id}&entryId=${entry.id}&teamId=${teamId}`,
             actorUserId: me.id,
           });
@@ -879,6 +893,17 @@ router.get(
       for (const u of inviterRows) inviterMap.set(u.id, u);
     }
 
+    // Task #414 — viewer is the linked guardian (or a real admin).
+    // Inviters are usually adult coaches but may technically be a
+    // teen captain. Mask minor inviters unless this guardian is
+    // privileged for that specific minor (linked-guardian or shared
+    // accepted-roster team via `buildMinorNameContext`).
+    const pendingInviteMinorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      Array.from(inviterMap.values())
+        .filter((u) => u.isMinor)
+        .map((u) => u.id),
+    );
     const data = rows.map((r) => {
       const inviter = r.entry.invitedById
         ? inviterMap.get(r.entry.invitedById) ?? null
@@ -895,7 +920,7 @@ router.get(
         invitedBy: inviter
           ? {
               id: inviter.id,
-              displayName: displayName(inviter),
+              displayName: displayNameForViewer(inviter, pendingInviteMinorCtx),
               avatarUrl: safeAvatarUrl(inviter.avatarUrl),
             }
           : null,
