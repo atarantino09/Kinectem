@@ -305,6 +305,78 @@ describe("Task #394 — parent auto-follows child's team", () => {
     expect(data2.find((d) => d.teamId === teamId)).toBeUndefined();
   });
 
+  it("de-dups: a real roster row for the parent wins over the via-child synthesized row", async () => {
+    const { teamId } = await getFootballTeam();
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+
+    // Child Samira accepted on the team -> would normally synthesize a
+    // position="parent" row for Lisa. But Lisa is also herself on the
+    // roster (as a coach) — the real row must win on de-dup.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      );
+    await db.insert(rosterEntries).values({
+      teamId,
+      userId: samiraId,
+      role: "player",
+      status: "accepted",
+      position: "player",
+    });
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, lisaId),
+        ),
+      );
+    await db.insert(rosterEntries).values({
+      teamId,
+      userId: lisaId,
+      role: "coach",
+      status: "accepted",
+      position: "coach",
+    });
+    await db
+      .insert(teamFollowers)
+      .values({ teamId, userId: lisaId })
+      .onConflictDoNothing();
+
+    const { agent: marcus } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const res = await marcus.get(`/api/v1/users/${lisaId}/teams`);
+    expect(res.status).toBe(200);
+    const data = res.body.data as Array<{
+      teamId: string;
+      role: string;
+      position: string | null;
+    }>;
+    const rows = data.filter((d) => d.teamId === teamId);
+    // Exactly one row for the team — the real roster row, not the
+    // synthesized parent row.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].role).toBe("admin");
+    expect(rows[0].position).toBe("coach");
+    expect(rows[0].position).not.toBe("parent");
+
+    // Cleanup so other tests aren't surprised by Lisa as a coach.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, lisaId),
+        ),
+      );
+  });
+
   it("requires no special auth for /users/:userId/teams (smoke check)", async () => {
     const lisaId = await findUserId("lisa@kinectem.demo");
     const res = await request(app).get(`/api/v1/users/${lisaId}/teams`);
