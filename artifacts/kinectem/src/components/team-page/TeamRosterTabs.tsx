@@ -450,7 +450,7 @@ export function TeamRosterTabs({
             <h3 className="font-black text-sm uppercase tracking-wider">
               Players ({players.length})
             </h3>
-            {isAdmin && (
+            {canManage && (
               <Button
                 size="sm"
                 className="font-bold"
@@ -491,7 +491,7 @@ export function TeamRosterTabs({
             <h3 className="font-black text-sm uppercase tracking-wider">
               Staff ({staff.length})
             </h3>
-            {isAdmin && (
+            {canManage && (
               <Button
                 size="sm"
                 variant="outline"
@@ -533,7 +533,7 @@ export function TeamRosterTabs({
               <h3 className="font-black text-sm uppercase tracking-wider">
                 Pending Invitations ({invites.length})
               </h3>
-              {isAdmin && (
+              {canManage && (
                 <Button
                   size="sm"
                   variant="outline"
