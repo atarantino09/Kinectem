@@ -1,4 +1,4 @@
-import { Link, useLocation, useSearch } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { Home, Building2, Plus, UsersRound, User } from "lucide-react";
 import {
@@ -17,7 +17,6 @@ type Props = {
 
 export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
   const [location, setLocation] = useLocation();
-  const search = useSearch();
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
 
   const isActive = (path: string, exact = false) => {
@@ -25,16 +24,23 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
     return location === path || location.startsWith(`${path}/`);
   };
 
+  // Bottom-nav destinations:
+  // - Orgs  → "my orgs" listing (/organizations/mine). The discovery page
+  //   at /organizations stays linkable from feed/search; the tab still
+  //   highlights for both via the broad `isActive("/organizations")`.
+  // - Teams → "my teams" listing (/teams). Individual team pages
+  //   (/teams/:teamId) keep the tab highlighted.
+  // - Profile → /users/:meId (any sub-path).
+  const orgsHref = meId ? "/organizations/mine" : "/login";
+  const teamsHref = meId ? "/teams" : "/login";
   const profileHref = meId ? `/users/${meId}` : "/login";
-  const teamsHref = meId ? `/users/${meId}?tab=teams` : "/login";
+
   const homeActive = isActive("/", true);
   const orgsActive = isActive("/organizations");
-  const onOwnProfile = meId ? location.startsWith(`/users/${meId}`) : false;
-  const tabIsTeams = new URLSearchParams(search).get("tab") === "teams";
-  const teamsActive = onOwnProfile && tabIsTeams;
-  // "Profile" is active for any /users/:meId view EXCEPT when the Teams tab
-  // is selected — that case belongs to the Teams entry instead.
-  const profileActive = onOwnProfile && !tabIsTeams;
+  const teamsActive = isActive("/teams");
+  const profileActive = meId
+    ? location.startsWith(`/users/${meId}`)
+    : false;
 
   const Item = ({
     href,
@@ -80,7 +86,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
             testId="mobile-tab-home"
           />
           <Item
-            href="/organizations"
+            href={orgsHref}
             label="Orgs"
             Icon={Building2}
             active={orgsActive}

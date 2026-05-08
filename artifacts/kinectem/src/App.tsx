@@ -7,6 +7,8 @@ import NotFound from "@/pages/not-found";
 import FeedPage from "@/pages/FeedPage";
 import OrganizationsListPage from "@/pages/OrganizationsListPage";
 import OrganizationPage from "@/pages/OrganizationPage";
+import MyOrgsPage from "@/pages/MyOrgsPage";
+import MyTeamsPage from "@/pages/MyTeamsPage";
 import TeamPage from "@/pages/TeamPage";
 import UserProfilePage from "@/pages/UserProfilePage";
 import PostPage from "@/pages/PostPage";
@@ -79,8 +81,14 @@ function Router() {
             />
             <Route path="/family" component={GuardianPage} />
             <Route path="/guardian" component={GuardianPage} />
+            {/* Static "/organizations/mine" must precede the
+                "/organizations/:orgId" dynamic route so wouter matches the
+                more-specific path first. Same pattern for "/teams" vs
+                "/teams/:teamId". */}
+            <Route path="/organizations/mine" component={MyOrgsPage} />
             <Route path="/organizations" component={OrganizationsListPage} />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
+            <Route path="/teams" component={MyTeamsPage} />
             <Route path="/teams/:teamId" component={TeamPage} />
             <Route path="/users/:userId" component={UserProfilePage} />
             <Route path="/posts/:postId" component={PostPage} />
