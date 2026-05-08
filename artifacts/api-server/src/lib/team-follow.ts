@@ -63,6 +63,87 @@ export async function ensureTeamFollowedAsGuardian(
   }
 }
 
+// Inverse of `backfillTeamFollowsForLinkedChild`. When a guardian unlinks a
+// child via `DELETE /users/me/children/:childId`, drop the via-child team
+// follows so the parent's profile no longer shows that team as a "Parent"
+// row. Conservative: only remove the follow if the parent has no other
+// reason to be on it — i.e. they're not themselves on the team's roster
+// and no *other* linked child of theirs is accepted on it. We don't track
+// whether a `team_followers` row was created via auto-follow vs. manually,
+// so this can occasionally remove a row the parent had also followed by
+// hand; that's acceptable given the alternative is leaving stale "Parent"
+// badges around forever.
+export async function cleanupTeamFollowsForUnlinkedChild(
+  parentUserId: string,
+  childUserId: string,
+): Promise<void> {
+  try {
+    const childTeams = await db
+      .select({ teamId: rosterEntries.teamId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.userId, childUserId),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    for (const { teamId } of childTeams) {
+      // Parent themselves on the roster? Keep the follow.
+      const [parentRoster] = await db
+        .select({ teamId: rosterEntries.teamId })
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, parentUserId),
+            eq(rosterEntries.status, "accepted"),
+          ),
+        )
+        .limit(1);
+      if (parentRoster) continue;
+      // Any *other* linked child of this parent still accepted on this
+      // team? Keep the follow so their other "Parent" badge survives.
+      const otherChildren = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.parentId, parentUserId));
+      let keepForOtherChild = false;
+      for (const c of otherChildren) {
+        if (c.id === childUserId) continue;
+        const [row] = await db
+          .select({ teamId: rosterEntries.teamId })
+          .from(rosterEntries)
+          .where(
+            and(
+              eq(rosterEntries.teamId, teamId),
+              eq(rosterEntries.userId, c.id),
+              eq(rosterEntries.status, "accepted"),
+            ),
+          )
+          .limit(1);
+        if (row) {
+          keepForOtherChild = true;
+          break;
+        }
+      }
+      if (keepForOtherChild) continue;
+      await db
+        .delete(teamFollowers)
+        .where(
+          and(
+            eq(teamFollowers.teamId, teamId),
+            eq(teamFollowers.userId, parentUserId),
+          ),
+        );
+    }
+  } catch (err) {
+    logger.warn(
+      { err, parentUserId, childUserId },
+      "cleanupTeamFollowsForUnlinkedChild failed",
+    );
+  }
+}
+
 // Backfill helper for "link existing child": for every team the child is
 // already accepted on, auto-follow on the parent's behalf. Best-effort.
 export async function backfillTeamFollowsForLinkedChild(

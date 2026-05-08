@@ -28,6 +28,7 @@ export function useGuardianDashboard() {
     Record<string, PendingTeamInvite[]>
   >({});
   const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
+  const [unlinking, setUnlinking] = useState<string | null>(null);
   const childRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const notifs = useChildNotifications();
@@ -219,6 +220,48 @@ export function useGuardianDashboard() {
     return () => window.clearTimeout(t);
   }, [deepLink, loading, pendingByChild]);
 
+  // Task #403 — sever the parent↔child link from the family dashboard.
+  // The server-side handler also cleans up the auto-followed teams that
+  // were created when the link was made, so refreshing the parent's
+  // profile page will drop the synthesized "Parent" rows too.
+  const unlinkChild = async (child: Child) => {
+    setUnlinking(child.id);
+    try {
+      await customFetch(`/api/v1/users/me/children/${child.id}`, {
+        method: "DELETE",
+      });
+      setChildren((prev) => prev.filter((c) => c.id !== child.id));
+      setPendingByChild((prev) => {
+        const next = { ...prev };
+        delete next[child.id];
+        return next;
+      });
+      // Force a whoami refetch so the Family nav item disappears once
+      // this was the last linked child.
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k)) return false;
+          const url = typeof k[0] === "string" ? k[0] : "";
+          return (
+            url.includes("/auth/whoami") ||
+            url.includes(`/users/${child.id}`) ||
+            url.endsWith("/teams")
+          );
+        },
+      });
+      toast({
+        title: `Unlinked ${child.firstName} ${child.lastName}`,
+        description: "You're no longer this child's guardian on Kinectem.",
+      });
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Failed to unlink child";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setUnlinking(null);
+    }
+  };
+
   const toggleConsent = async (child: Child, value: boolean) => {
     try {
       await customFetch(`/api/v1/users/me/children/${child.id}/visibility`, {
@@ -249,6 +292,7 @@ export function useGuardianDashboard() {
     loadingEditFor,
     pendingByChild,
     actingOnEntryId,
+    unlinking,
     childRefs,
     notifs,
     setEditingChild,
@@ -257,5 +301,6 @@ export function useGuardianDashboard() {
     resendConfirmation,
     handlePendingAction,
     toggleConsent,
+    unlinkChild,
   };
 }

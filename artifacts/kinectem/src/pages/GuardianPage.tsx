@@ -76,12 +76,14 @@ export default function GuardianPage() {
                   decidingItem={dash.notifs.decidingItem}
                   revertingItemKey={dash.notifs.revertingItemKey}
                   approveAllForChild={dash.notifs.approveAllForChild}
+                  unlinking={dash.unlinking}
                   refSetter={(el) => {
                     dash.childRefs.current[c.id] = el;
                   }}
                   onEdit={dash.openEditDialog}
                   onConsentChange={dash.toggleConsent}
                   onResend={dash.resendConfirmation}
+                  onUnlink={dash.unlinkChild}
                   onPendingAction={dash.handlePendingAction}
                   onDecide={dash.notifs.decideChildItem}
                   onRevertDecision={dash.notifs.revertChildDecision}

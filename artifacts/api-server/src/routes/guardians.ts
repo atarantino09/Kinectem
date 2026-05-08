@@ -24,7 +24,10 @@ import {
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import { notifyExpiredGuardianConfirmations } from "../lib/guardian-confirmations";
-import { backfillTeamFollowsForLinkedChild } from "../lib/team-follow";
+import {
+  backfillTeamFollowsForLinkedChild,
+  cleanupTeamFollowsForUnlinkedChild,
+} from "../lib/team-follow";
 import { isGuardian } from "../lib/guardian-capability";
 import { GUARDIAN_TOKEN_TTL_MS } from "./auth";
 
@@ -134,6 +137,40 @@ router.post(
       avatarUrl: safeAvatarUrl(updated.avatarUrl),
       requireTagConsent: updated.requireTagConsent,
     });
+  }),
+);
+
+// Task #403 — symmetric undo for `POST /users/me/children`. Lets the
+// currently-linked guardian (any role — link-derived capability) sever
+// the parent↔child relationship by nulling `users.parentId`. We refuse
+// to unlink a child the caller does not currently own so this can't be
+// used to detach a child from someone else. Best-effort cleanup of the
+// auto-followed teams created when the link was made; the parent can
+// re-follow manually if any get removed in error.
+router.delete(
+  "/users/me/children/:childId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const childId = String(req.params.childId ?? "").trim();
+    if (!childId) return apiError(res, 400, "childId required");
+    const [child] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, childId))
+      .limit(1);
+    if (!child) return apiError(res, 404, "Child not found");
+    if (child.parentId !== me.id) {
+      // Don't leak whether the child exists under another guardian —
+      // 404 is consistent with the resend endpoint above.
+      return apiError(res, 404, "Child not found");
+    }
+    await db
+      .update(users)
+      .set({ parentId: null })
+      .where(eq(users.id, childId));
+    await cleanupTeamFollowsForUnlinkedChild(me.id, childId);
+    res.status(204).send();
   }),
 );
 
