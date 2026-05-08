@@ -7,7 +7,7 @@ import {
 import { UserAvatar } from "@/components/UserAvatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Trophy, Mail, Tag, LogOut, UserCircle, Repeat, FileText, Users, Shield, Menu } from "lucide-react";
+import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -23,12 +23,15 @@ import {
   SheetContent,
   SheetDescription,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { MasqueradeBanner } from "@/components/MasqueradeBanner";
+import { CreateMenuItems } from "@/components/CreateMenuItems";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { MobileTopBar } from "@/components/MobileTopBar";
 import { useWhoami } from "@/hooks/useWhoami";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -58,6 +61,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [query, setQuery] = useState("");
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isMobile = useIsMobile();
   const qc = useQueryClient();
 
   const handleLogout = async () => {
@@ -87,7 +91,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     active ? "secondary" : "ghost";
 
   const unreadCount = unreadMsgs?.unreadCount ?? 0;
-  const formattedUnread = unreadCount > 9 ? "9+" : String(unreadCount);
 
   type NavItem = {
     href: string;
@@ -116,73 +119,71 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen text-foreground">
       <MasqueradeBanner />
+
+      {/* Drawer is rendered at top-level (outside the desktop-only header) so
+          the mobile top bar can open it without depending on the desktop tree. */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="w-72 p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <SheetDescription className="sr-only">
+            Move between the main sections of Kinectem.
+          </SheetDescription>
+          <div className="flex items-center gap-2 px-6 h-16 border-b border-border">
+            <img
+              src={`${import.meta.env.BASE_URL}logo-icon.png`}
+              alt="Kinectem"
+              className="w-8 h-8 rounded-lg object-cover"
+            />
+            <span className="font-black text-lg tracking-tight">
+              Kinect<span className="brand-gradient-text">em</span>
+            </span>
+          </div>
+          <nav className="flex flex-col gap-1 p-3">
+            {navItems.map((item) => {
+              const active = isNavActive(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileNavOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md font-semibold text-sm transition-colors",
+                    active
+                      ? "bg-secondary text-secondary-foreground"
+                      : "hover:bg-muted text-foreground",
+                  )}
+                  data-active={active ? "true" : undefined}
+                  data-testid={item.testId ? `mobile-${item.testId}` : undefined}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center">
+                      {item.badge > 9 ? "9+" : item.badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </SheetContent>
+      </Sheet>
+
+      <CreateOrgDialog open={createOrgOpen} onOpenChange={setCreateOrgOpen} />
+
+      {/* Mount mobile vs desktop chrome by viewport rather than CSS-hiding,
+          so we never double-mount expensive subtrees like NotificationsBell. */}
+      {isMobile ? (
+        <MobileTopBar
+          meId={currentUser?.id}
+          unreadCount={unreadCount}
+          onOpenNav={() => setMobileNavOpen(true)}
+        />
+      ) : (
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
-          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden shrink-0 relative"
-                aria-label="Open navigation menu"
-                data-testid="btn-mobile-nav"
-              >
-                <Menu className="w-5 h-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">
-                    {formattedUnread}
-                  </span>
-                )}
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <SheetDescription className="sr-only">
-                Move between the main sections of Kinectem.
-              </SheetDescription>
-              <div className="flex items-center gap-2 px-6 h-16 border-b border-border">
-                <img
-                  src={`${import.meta.env.BASE_URL}logo-icon.png`}
-                  alt="Kinectem"
-                  className="w-8 h-8 rounded-lg object-cover"
-                />
-                <span className="font-black text-lg tracking-tight">
-                  Kinect<span className="brand-gradient-text">em</span>
-                </span>
-              </div>
-              <nav className="flex flex-col gap-1 p-3">
-                {navItems.map((item) => {
-                  const active = isNavActive(item.href);
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMobileNavOpen(false)}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-md font-semibold text-sm transition-colors",
-                        active
-                          ? "bg-secondary text-secondary-foreground"
-                          : "hover:bg-muted text-foreground",
-                      )}
-                      data-active={active ? "true" : undefined}
-                      data-testid={item.testId ? `mobile-${item.testId}` : undefined}
-                    >
-                      <Icon className="w-5 h-5" />
-                      <span className="flex-1">{item.label}</span>
-                      {item.badge !== undefined && item.badge > 0 && (
-                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center">
-                          {item.badge > 9 ? "9+" : item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </SheetContent>
-          </Sheet>
-
           <Link href="/" className="flex items-center gap-2 shrink-0">
             <img
               src={`${import.meta.env.BASE_URL}logo-icon.png`}
@@ -243,39 +244,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              {canAuthorRecap && (
-                <DropdownMenuItem
-                  onSelect={() => setLocation("/posts/new?type=long")}
-                  data-testid="menu-create-recap"
-                >
-                  <Trophy className="w-4 h-4 mr-2" /> Game Recap
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => setLocation("/posts/new?type=short")}>
-                <Plus className="w-4 h-4 mr-2" /> Highlight Clip
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => setCreateOrgOpen(true)}
-                data-testid="menu-create-org"
-              >
-                <Building2 className="w-4 h-4 mr-2" /> New Organization
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setLocation("/organizations")}>
-                <Building2 className="w-4 h-4 mr-2" /> Browse Orgs
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setLocation("/tags/pending")}>
-                <Tag className="w-4 h-4 mr-2" /> Pending Tags
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => setLocation("/drafts")}
-                data-testid="menu-drafts"
-              >
-                <FileText className="w-4 h-4 mr-2" /> My Drafts
-              </DropdownMenuItem>
+              <CreateMenuItems
+                canAuthorRecap={canAuthorRecap}
+                onCreateOrg={() => setCreateOrgOpen(true)}
+              />
             </DropdownMenuContent>
           </DropdownMenu>
-          <CreateOrgDialog open={createOrgOpen} onOpenChange={setCreateOrgOpen} />
 
           <NotificationsBell />
 
@@ -326,8 +300,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
+      )}
 
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:pb-6">{children}</main>
+
+      {isMobile && (
+        <MobileBottomNav meId={currentUser?.id} canAuthorRecap={canAuthorRecap} />
+      )}
     </div>
   );
 }
