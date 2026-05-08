@@ -1,5 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { useListUserTeams, queryOpts } from "@workspace/api-client-react";
+import {
+  useListUserOrganizations,
+  useListUserTeams,
+  queryOpts,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationsBell } from "@/components/NotificationsBell";
@@ -12,7 +16,16 @@ type Props = {
   onOpenNav: () => void;
 };
 
-function teamInitials(name: string) {
+type Chip = {
+  key: string;
+  href: string;
+  label: string;
+  avatarUrl: string | null | undefined;
+  initials: string;
+  testId: string;
+};
+
+function initialsOf(name: string) {
   return name
     .split(/\s+/)
     .slice(0, 2)
@@ -22,16 +35,45 @@ function teamInitials(name: string) {
 
 export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
   const [, setLocation] = useLocation();
+  const { data: orgsResp } = useListUserOrganizations(meId ?? "", undefined, {
+    query: queryOpts({ enabled: !!meId }),
+  });
   const { data: teamsResp } = useListUserTeams(meId ?? "", undefined, {
     query: queryOpts({ enabled: !!meId }),
   });
-  const teams = (teamsResp?.data ?? []).slice(0, 2);
+
+  // Affiliation priority: org affiliations first, then the first rostered
+  // team. Cap at 2 chips to keep the bar uncluttered on narrow phones.
+  const chips: Chip[] = [];
+  for (const o of orgsResp?.data ?? []) {
+    if (chips.length >= 2) break;
+    chips.push({
+      key: `org-${o.id}`,
+      href: `/organizations/${o.id}`,
+      label: o.name,
+      avatarUrl: o.logoUrl,
+      initials: initialsOf(o.name) || "O",
+      testId: `mobile-top-chip-org-${o.id}`,
+    });
+  }
+  for (const t of teamsResp?.data ?? []) {
+    if (chips.length >= 2) break;
+    chips.push({
+      key: `team-${t.teamId}`,
+      href: `/teams/${t.teamId}`,
+      label: t.teamName,
+      avatarUrl: t.teamAvatarUrl,
+      initials: initialsOf(t.teamName) || "T",
+      testId: `mobile-top-chip-team-${t.teamId}`,
+    });
+  }
+
   const formattedUnread = unreadCount > 9 ? "9+" : String(unreadCount);
 
   return (
     <header
       data-testid="mobile-top-bar"
-      className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur md:hidden"
+      className="sticky top-0 z-30 border-b border-border bg-background md:hidden"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       <div className="flex items-center justify-between px-3 h-14 gap-2">
@@ -47,25 +89,25 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
             <Menu className="w-5 h-5" />
           </Button>
 
-          {meId && teams.length > 0 ? (
+          {meId && chips.length > 0 ? (
             <div className="flex items-center gap-1.5">
-              {teams.map((t) => (
+              {chips.map((c) => (
                 <Link
-                  key={t.teamId}
-                  href={`/teams/${t.teamId}`}
-                  aria-label={t.teamName}
-                  data-testid={`mobile-top-chip-${t.teamId}`}
+                  key={c.key}
+                  href={c.href}
+                  aria-label={c.label}
+                  data-testid={c.testId}
                 >
                   <Avatar className="w-8 h-8 border border-border">
-                    {t.teamAvatarUrl && (
+                    {c.avatarUrl && (
                       <AvatarImage
-                        src={t.teamAvatarUrl}
-                        alt={t.teamName}
+                        src={c.avatarUrl}
+                        alt={c.label}
                         className="object-cover"
                       />
                     )}
                     <AvatarFallback className="bg-secondary text-[10px] font-bold text-secondary-foreground">
-                      {teamInitials(t.teamName) || "T"}
+                      {c.initials}
                     </AvatarFallback>
                   </Avatar>
                 </Link>

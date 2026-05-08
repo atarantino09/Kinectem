@@ -182,7 +182,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           onOpenNav={() => setMobileNavOpen(true)}
         />
       ) : (
-      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+      <header className="hidden md:block sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
           <Link href="/" className="flex items-center gap-2 shrink-0">
             <img
@@ -302,7 +302,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:pb-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-16 md:pb-0">{children}</main>
 
       {isMobile && (
         <MobileBottomNav meId={currentUser?.id} canAuthorRecap={canAuthorRecap} />
