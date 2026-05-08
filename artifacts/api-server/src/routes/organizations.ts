@@ -47,6 +47,7 @@ import {
   toJoinRequest,
   apiError,
   notFound,
+  buildMinorNameContext,
 } from "../lib/spec-helpers";
 import {
   loadPostStats,
@@ -629,6 +630,28 @@ router.get(
         }),
       ]);
 
+    // Task #414 — Mask minor authors / uploaders / tag chips on the
+    // team-page post cards for stranger viewers, while keeping full
+    // names for the minor themselves, their linked guardian, platform
+    // admins, and shared-team viewers.
+    const teamPostsMinorIds = [
+      ...rows.map((r) => r.author?.id).filter((x): x is string => !!x),
+      ...hRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+      ...Array.from(highlightTagViews.values()).flatMap((views) =>
+        views.map((v) => v.id),
+      ),
+    ];
+    const teamPostsMinorCtx = await buildMinorNameContext(
+      { id: me?.id ?? null, role: req.realUser?.role ?? null },
+      teamPostsMinorIds,
+    );
+    // Refresh tag views with masking applied for stranger viewers.
+    const maskedHighlightTagViews = await loadHighlightTagViews(
+      me?.id ?? null,
+      hRows.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+      teamPostsMinorCtx,
+    );
+
     const articleData = rows.map((r) =>
       articleToPost(r.a, {
         team: r.team,
@@ -639,6 +662,7 @@ router.get(
         ...shareStatsFor(shareStats, "article", r.a.id),
         currentUserTag:
           currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
+        minorNameCtx: teamPostsMinorCtx,
       }),
     );
     const highlightData = hRows.map((r) => {
@@ -650,9 +674,10 @@ router.get(
         canEdit: isUploader,
         canDelete: isUploader,
         ...shareStatsFor(shareStats, "highlight", r.h.id),
-        taggedUsers: highlightTagViews.get(r.h.id) ?? [],
+        taggedUsers: maskedHighlightTagViews.get(r.h.id) ?? [],
         currentUserTag:
           currentUserTags.highlightTagByHighlightId.get(r.h.id) ?? null,
+        minorNameCtx: teamPostsMinorCtx,
       });
     });
     const merged = [...articleData, ...highlightData].sort((a, b) =>
@@ -732,6 +757,18 @@ router.get(
       ? await canManageOrganization(me.id, org.id)
       : false;
 
+    // Task #414 — Mask minor authors on org-page post cards (articles
+    // + org_post) for stranger viewers; full names for self / linked
+    // guardian / admin / shared-team.
+    const orgPostsMinorIds = [
+      ...articleRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+      ...orgPostRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+    ];
+    const orgPostsMinorCtx = await buildMinorNameContext(
+      { id: me?.id ?? null, role: req.realUser?.role ?? null },
+      orgPostsMinorIds,
+    );
+
     const data = [
       ...articleRows.map((r) =>
         articleToPost(r.a, {
@@ -744,6 +781,7 @@ router.get(
           ...shareStatsFor(shareStats, "article", r.a.id),
           currentUserTag:
             currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
+          minorNameCtx: orgPostsMinorCtx,
         }),
       ),
       ...orgPostRows.map((r) => {
@@ -754,6 +792,7 @@ router.get(
           canEdit: isAuthor || isViewerOrgAdmin,
           canDelete: isAuthor,
           ...statsFor(stats, "org_post", r.p.id),
+          minorNameCtx: orgPostsMinorCtx,
         });
       }),
     ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));

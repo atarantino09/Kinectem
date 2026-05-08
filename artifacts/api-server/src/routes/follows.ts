@@ -20,7 +20,13 @@ import {
   clearSessionCookie,
   SESSION_COOKIE,
 } from "../lib/auth";
-import { displayName, apiError, safeAvatarUrl } from "../lib/spec-helpers";
+import {
+  displayName,
+  displayNameForViewer,
+  buildMinorNameContext,
+  apiError,
+  safeAvatarUrl,
+} from "../lib/spec-helpers";
 import {
   loadPostStats,
   statsFor,
@@ -95,10 +101,21 @@ async function listOrgFollowers(req: Request, res: Response) {
     hasMore && page.length > 0
       ? encodeFollowCursor(page[page.length - 1].followedAt, page[page.length - 1].id)
       : null;
+  // Task #414 — surface masked names for any minor the viewer is not
+  // privileged for. `filterOutMinors` already drops most minor rows for
+  // strangers; surviving rows (self, linked guardian, shared-team) are
+  // also the ones that should keep the full name.
+  const ctx = await buildMinorNameContext(
+    { id: req.sessionUser?.id ?? null, role: req.sessionUser?.role ?? null },
+    page.filter((r) => r.isMinor).map((r) => r.id),
+  );
   res.json({
     data: page.map((r) => ({
       id: r.id,
-      displayName: displayName({ name: r.name }),
+      displayName: displayNameForViewer(
+        { id: r.id, name: r.name, isMinor: r.isMinor },
+        ctx,
+      ),
       avatarUrl: safeAvatarUrl(r.avatarUrl),
       followedAt: r.followedAt.toISOString(),
     })),
@@ -140,10 +157,18 @@ router.get(
       hasMore && page.length > 0
         ? encodeFollowCursor(page[page.length - 1].followedAt, page[page.length - 1].id)
         : null;
+    // Task #414 — see listOrgFollowers; same masking rationale.
+    const ctx = await buildMinorNameContext(
+      { id: req.sessionUser?.id ?? null, role: req.sessionUser?.role ?? null },
+      page.filter((r) => r.isMinor).map((r) => r.id),
+    );
     res.json({
       data: page.map((r) => ({
         id: r.id,
-        displayName: displayName({ name: r.name }),
+        displayName: displayNameForViewer(
+          { id: r.id, name: r.name, isMinor: r.isMinor },
+          ctx,
+        ),
         avatarUrl: safeAvatarUrl(r.avatarUrl),
         followedAt: r.followedAt.toISOString(),
       })),
@@ -208,10 +233,19 @@ router.get(
       hasMore && page.length > 0
         ? encodeFollowCursor(page[page.length - 1].followedAt, page[page.length - 1].id)
         : null;
+    // Task #414 — mask under-13 last names on the public follower list
+    // for any viewer not privileged for that minor.
+    const ctx = await buildMinorNameContext(
+      { id: req.sessionUser?.id ?? null, role: req.sessionUser?.role ?? null },
+      page.filter((r) => r.isMinor).map((r) => r.id),
+    );
     res.json({
       data: page.map((r) => ({
         id: r.id,
-        displayName: displayName({ name: r.name }),
+        displayName: displayNameForViewer(
+          { id: r.id, name: r.name, isMinor: r.isMinor },
+          ctx,
+        ),
         avatarUrl: safeAvatarUrl(r.avatarUrl),
         followedAt: r.followedAt.toISOString(),
       })),
@@ -252,6 +286,12 @@ router.get(
     // Task #359 — drop minor rows from the followed-user list; viewer
     // is allowed to see themselves and their own children through it.
     const userRows = filterOutMinors(userRowsRaw, req.sessionUser?.id ?? null);
+    // Task #414 — among the surviving minor rows, mask the last name
+    // unless the viewer is privileged for that specific minor.
+    const ctxFollowing = await buildMinorNameContext(
+      { id: req.sessionUser?.id ?? null, role: req.sessionUser?.role ?? null },
+      userRows.filter((r) => r.isMinor).map((r) => r.id),
+    );
     const orgConds = [eq(organizationFollowers.userId, req.params.userId)];
     const orgRows = await db
       .select({
@@ -267,7 +307,10 @@ router.get(
     const combined = [
       ...userRows.map((r) => ({
         id: r.id,
-        displayName: displayName({ name: r.name }),
+        displayName: displayNameForViewer(
+          { id: r.id, name: r.name, isMinor: r.isMinor },
+          ctxFollowing,
+        ),
         avatarUrl: safeAvatarUrl(r.avatarUrl),
         entityType: "user" as const,
         followedAt: r.followedAt,

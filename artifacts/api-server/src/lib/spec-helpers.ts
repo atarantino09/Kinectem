@@ -1,5 +1,6 @@
 import type { Response } from "express";
-import type {
+import {
+  db,
   users,
   organizations,
   teams,
@@ -15,6 +16,7 @@ import type {
   organizationJoinRequests,
   assets,
 } from "@workspace/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Standard API error envelope
@@ -140,6 +142,174 @@ export function splitName(name: string): { firstName: string; lastName: string }
 
 export function displayName(u: Pick<UserRow, "name">): string {
   return u.name;
+}
+
+// ---------------------------------------------------------------------------
+// Minor name masking (Task #414)
+// ---------------------------------------------------------------------------
+//
+// Per the parental-consent text in `coppa.ts`, an under-13 user's identity
+// must not be surfaced to strangers beyond first initial / sport / jersey
+// number. The implementation today returns the FULL "First Last" name in
+// every embed (post author chip, comment author, tag chip, sharedBy chip,
+// follower lists, search rows). That contradicts the consent the parent
+// signed.
+//
+// This helper masks the last name down to its first initial when:
+//   - the target user has `isMinor === true`, AND
+//   - the viewer is NOT in the privileged set for that target.
+//
+// Privileged viewers (full name still shown):
+//   - The minor themselves (`viewerId === target.id`)
+//   - The minor's linked guardian (`users.parentId === viewerId`)
+//   - A platform admin (`viewer.role === "admin"`)
+//   - Anyone sharing an accepted `roster_entries` team with the minor
+//
+// The mask only applies to **embeds** (post author, comment author, tag
+// chip, sharedBy, follower lists, search rows). The minor's own profile
+// resource (`GET /users/:userId`) and team roster listings always carry
+// the full name — those are explicitly carved out in the consent text.
+//
+// `coppa.ts` is locked, so the helpers live here and the relationship
+// lookups happen alongside the other read-time transforms.
+export type MinorNameViewerContext = {
+  viewerId: string | null;
+  viewerRole: string | null;
+  // Set of minor user-ids the viewer is privileged to see un-masked.
+  // Admins short-circuit by setting `bypass: true`.
+  privilegedTargetIds: ReadonlySet<string>;
+  bypass?: boolean;
+};
+
+// Sentinel "mask everyone" context for explicit stranger-surface use.
+export const ANON_MINOR_NAME_CONTEXT: MinorNameViewerContext = {
+  viewerId: null,
+  viewerRole: null,
+  privilegedTargetIds: new Set<string>(),
+};
+
+// Sentinel "trust the call site" context — used internally as the
+// default when a route hasn't been migrated to thread a real context
+// yet. Behaves like an admin: never masks. Only stranger-visible
+// routes (feed, search, follower lists, post detail, comments, tag
+// chips) need to opt in to a real context. Parent-inbox, admin
+// queues, child-conversations, and other already-privileged surfaces
+// keep their existing behavior with no code changes.
+export const TRUSTED_MINOR_NAME_CONTEXT: MinorNameViewerContext = {
+  viewerId: null,
+  viewerRole: null,
+  privilegedTargetIds: new Set<string>(),
+  bypass: true,
+};
+
+export function maskedDisplayName(u: Pick<UserRow, "name">): string {
+  const parts = (u.name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return u.name ?? "";
+  if (parts.length === 1) return parts[0];
+  const first = parts[0];
+  const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return `${first} ${lastInitial}.`;
+}
+
+export function shouldMaskMinorName(
+  target: Pick<UserRow, "id" | "isMinor">,
+  ctx: MinorNameViewerContext,
+): boolean {
+  if (!target.isMinor) return false;
+  if (ctx.bypass) return false;
+  if (ctx.viewerRole === "admin") return false;
+  if (ctx.viewerId && ctx.viewerId === target.id) return false;
+  if (ctx.privilegedTargetIds.has(target.id)) return false;
+  return true;
+}
+
+export function displayNameForViewer(
+  u: Pick<UserRow, "id" | "name" | "isMinor">,
+  ctx: MinorNameViewerContext = TRUSTED_MINOR_NAME_CONTEXT,
+): string {
+  return shouldMaskMinorName(u, ctx) ? maskedDisplayName(u) : u.name;
+}
+
+// Batched async builder. Resolves the privileged-target set in a single
+// query: linked-child rows + accepted-roster intersection. Admins
+// short-circuit; anonymous viewers get an empty set.
+export async function buildMinorNameContext(
+  viewer: { id: string | null; role: string | null },
+  candidateMinorIds: Iterable<string>,
+): Promise<MinorNameViewerContext> {
+  const role = viewer.role ?? null;
+  if (role === "admin") {
+    return {
+      viewerId: viewer.id,
+      viewerRole: role,
+      privilegedTargetIds: new Set<string>(),
+      bypass: true,
+    };
+  }
+  if (!viewer.id) {
+    return {
+      viewerId: null,
+      viewerRole: null,
+      privilegedTargetIds: new Set<string>(),
+    };
+  }
+  const ids = Array.from(new Set(candidateMinorIds));
+  const privileged = new Set<string>();
+  if (ids.length === 0) {
+    return {
+      viewerId: viewer.id,
+      viewerRole: role,
+      privilegedTargetIds: privileged,
+    };
+  }
+  // 1) Self
+  if (ids.includes(viewer.id)) privileged.add(viewer.id);
+  // 2) Linked children of the viewer.
+  const childRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(inArray(users.id, ids), eq(users.parentId, viewer.id)));
+  for (const r of childRows) privileged.add(r.id);
+  // 3) Shared accepted roster entries — anyone the viewer shares an
+  //    accepted roster team with is "inside the team" and gets the
+  //    full name.
+  const remaining = ids.filter((id) => !privileged.has(id));
+  if (remaining.length > 0) {
+    const sharedTeamRows = await db.execute<{ user_id: string }>(sql`
+      select distinct mine_others.user_id
+      from ${rosterEntries} as mine
+      inner join ${rosterEntries} as mine_others
+        on mine_others.team_id = mine.team_id
+      where mine.user_id = ${viewer.id}
+        and mine.status = 'accepted'
+        and mine_others.status = 'accepted'
+        and mine_others.user_id in (${sql.join(
+          remaining.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+    `);
+    for (const r of (sharedTeamRows.rows ?? sharedTeamRows) as { user_id: string }[]) {
+      privileged.add(r.user_id);
+    }
+  }
+  return {
+    viewerId: viewer.id,
+    viewerRole: role,
+    privilegedTargetIds: privileged,
+  };
+}
+
+// Convenience: caller supplies an arbitrary list of users (some may not
+// be minors) and we collect just the minor ids before delegating.
+export async function buildMinorNameContextFromUsers(
+  viewer: { id: string | null; role: string | null },
+  candidates: ReadonlyArray<Pick<UserRow, "id" | "isMinor"> | null | undefined>,
+): Promise<MinorNameViewerContext> {
+  const ids: string[] = [];
+  for (const c of candidates) {
+    if (c && c.isMinor) ids.push(c.id);
+  }
+  return buildMinorNameContext(viewer, ids);
 }
 
 export function slugify(s: string): string {
@@ -275,11 +445,14 @@ export type PostAuthorRoleLabel = "Coach" | "Author" | "Owner" | "Admin";
 
 export function toPostAuthor(
   u: UserRow,
-  opts: { authorRole?: PostAuthorRoleLabel | null } = {},
+  opts: {
+    authorRole?: PostAuthorRoleLabel | null;
+    minorNameCtx?: MinorNameViewerContext;
+  } = {},
 ) {
   return {
     id: u.id,
-    displayName: displayName(u),
+    displayName: displayNameForViewer(u, opts.minorNameCtx),
     avatarUrl: safeAvatarUrl(u.avatarUrl),
     // Task #367 — same rationale as toPublicUser.isMinor: the SPA
     // PostPage uses this to mount <NoIndex/> when the post author is
@@ -503,6 +676,10 @@ interface PostExtras {
   // unauthenticated viewers leave this undefined and the response
   // ships null. Org-post paths never populate it.
   currentUserTag?: CurrentUserTagView | null;
+  // Task #414 — Optional viewer context used to mask under-13 last
+  // names on embed surfaces (post author, sharedBy chip). Pass-through
+  // only; if undefined, names are masked for any minor target.
+  minorNameCtx?: MinorNameViewerContext;
 }
 
 export interface PostTaggedUserView {
@@ -637,7 +814,10 @@ function basePost(p: {
   extras: PostExtras;
 }) {
   const author = p.extras.author
-    ? toPostAuthor(p.extras.author, { authorRole: p.extras.authorRole ?? null })
+    ? toPostAuthor(p.extras.author, {
+        authorRole: p.extras.authorRole ?? null,
+        minorNameCtx: p.extras.minorNameCtx,
+      })
     : { id: "system", displayName: "System", avatarUrl: null, authorRole: null };
   const team = p.extras.team;
   const context = team
@@ -817,6 +997,7 @@ export function toComment(
   author: UserRow | null,
   reactionCount = 0,
   hasReacted = false,
+  minorNameCtx?: MinorNameViewerContext,
 ) {
   return {
     id: c.id,
@@ -829,7 +1010,7 @@ export function toComment(
     body: c.deletedAt ? "" : c.body,
     author: {
       id: author?.id ?? null,
-      displayName: author ? displayName(author) : "Deleted user",
+      displayName: author ? displayNameForViewer(author, minorNameCtx) : "Deleted user",
       avatarUrl: safeAvatarUrl(author?.avatarUrl ?? null),
     },
     reactionCount,
@@ -846,6 +1027,7 @@ export function toComment(
 export function toJoinRequest(
   r: JoinReqRow,
   user: UserRow | null,
+  minorNameCtx?: MinorNameViewerContext,
 ) {
   return {
     id: r.id,
@@ -854,7 +1036,7 @@ export function toJoinRequest(
     user: user
       ? {
           id: user.id,
-          displayName: displayName(user),
+          displayName: displayNameForViewer(user, minorNameCtx),
           avatarUrl: safeAvatarUrl(user.avatarUrl),
         }
       : null,

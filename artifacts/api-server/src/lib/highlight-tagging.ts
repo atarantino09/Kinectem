@@ -1,6 +1,6 @@
 import { db, highlightTags, users } from "@workspace/db";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { displayName } from "./spec-helpers";
+import { displayNameForViewer } from "./spec-helpers";
 import type { PostTaggedUserView } from "./spec-helpers";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,7 @@ import type { PostTaggedUserView } from "./spec-helpers";
 export async function loadHighlightTagViews(
   viewerId: string | null,
   highlights: { id: string; uploaderId: string | null }[],
+  minorNameCtx?: import("./spec-helpers").MinorNameViewerContext,
 ): Promise<Map<string, PostTaggedUserView[]>> {
   const result = new Map<string, PostTaggedUserView[]>();
   for (const h of highlights) result.set(h.id, []);
@@ -58,7 +59,7 @@ export async function loadHighlightTagViews(
     if (!arr) continue;
     arr.push({
       id: r.userId,
-      displayName: displayName(r.user),
+      displayName: displayNameForViewer(r.user, minorNameCtx),
       avatarUrl: r.user.avatarUrl ?? null,
       tagStatus: r.status as "approved" | "pending",
     });

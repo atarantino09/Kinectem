@@ -66,6 +66,8 @@ import {
   toComment,
   apiError,
   notFound,
+  buildMinorNameContext,
+  type MinorNameViewerContext,
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
@@ -249,6 +251,31 @@ router.get(
         teamId: r.team.id,
         orgId: r.org.id,
       }));
+      // Task #414 — own feed: viewer is the author/uploader for every
+      // row, so they're privileged for their own minor children, but a
+      // tag chip may surface another minor we need to mask.
+      const ownTaggedMinorIds = ownHls.length > 0
+        ? (
+            await db
+              .selectDistinct({ id: highlightTags.userId })
+              .from(highlightTags)
+              .innerJoin(users, eq(users.id, highlightTags.userId))
+              .where(
+                and(
+                  inArray(highlightTags.highlightId, ownHls.map((r) => r.h.id)),
+                  eq(users.isMinor, true),
+                ),
+              )
+          ).map((r) => r.id)
+        : [];
+      const ownMinorCtx = await buildMinorNameContext(
+        { id: me.id, role: req.realUser?.role ?? null },
+        [
+          ...ownArts.map((r) => r.author?.id).filter((x): x is string => !!x),
+          ...ownHls.map((r) => r.uploader?.id).filter((x): x is string => !!x),
+          ...ownTaggedMinorIds,
+        ],
+      );
       const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] = await Promise.all([
         loadPostStats(me.id, statKeys),
         loadPostShareStats(me.id, statKeys),
@@ -264,6 +291,7 @@ router.get(
         loadHighlightTagViews(
           me.id,
           ownHls.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+          ownMinorCtx,
         ),
         loadCurrentUserTags(me.id, {
           articleIds: ownArts.map((r) => r.a.id),
@@ -293,6 +321,7 @@ router.get(
             ...statsFor(stats, "article", r.a.id),
             ...shareStatsFor(shareStats, "article", r.a.id),
             currentUserTag: currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
+            minorNameCtx: ownMinorCtx,
           }),
         ),
         ...ownHlsVisible.map((r) =>
@@ -306,6 +335,7 @@ router.get(
             ...shareStatsFor(shareStats, "highlight", r.h.id),
             taggedUsers: highlightTagViews.get(r.h.id) ?? [],
             currentUserTag: currentUserTags.highlightTagByHighlightId.get(r.h.id) ?? null,
+            minorNameCtx: ownMinorCtx,
           }),
         ),
       ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -493,6 +523,39 @@ router.get(
       ...sharedArticleRows.map((r) => r.org.id),
       ...sharedHighlightRows.map((r) => r.org.id),
     ];
+    // Task #414 — collect every user id we may surface as an embed in
+    // this feed response (authors, uploaders, sharers, and tagged
+    // minors) so we can build a single viewer-aware masking context.
+    const allHlIds = [
+      ...hls.map((r) => r.h.id),
+      ...sharedHighlightRows.map((r) => r.h.id),
+    ];
+    const taggedMinorIds = allHlIds.length > 0
+      ? (
+          await db
+            .selectDistinct({ id: highlightTags.userId })
+            .from(highlightTags)
+            .innerJoin(users, eq(users.id, highlightTags.userId))
+            .where(
+              and(
+                inArray(highlightTags.highlightId, allHlIds),
+                eq(users.isMinor, true),
+              ),
+            )
+        ).map((r) => r.id)
+      : [];
+    const minorCtx = await buildMinorNameContext(
+      { id: me?.id ?? null, role: req.realUser?.role ?? null },
+      [
+        ...arts.map((r) => r.author?.id).filter((x): x is string => !!x),
+        ...hls.map((r) => r.uploader?.id).filter((x): x is string => !!x),
+        ...orgPostRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+        ...sharedArticleRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+        ...sharedHighlightRows.map((r) => r.uploader?.id).filter((x): x is string => !!x),
+        ...shareRows.map((r) => r.sharer?.id).filter((x): x is string => !!x),
+        ...taggedMinorIds,
+      ],
+    );
     const [stats, shareStats, canEditMap, authorRoleMap, adminOrgIds, highlightTagViews, currentUserTags] = await Promise.all([
       loadPostStats(me?.id ?? null, statKeys),
       loadPostShareStats(me?.id ?? null, shareStatKeys),
@@ -508,6 +571,7 @@ router.get(
             uploaderId: r.h.uploaderId,
           })),
         ],
+        minorCtx,
       ),
       loadCurrentUserTags(me?.id ?? null, {
         articleIds: [
@@ -565,6 +629,7 @@ router.get(
           ...statsFor(stats, "article", r.a.id),
           ...shareStatsFor(shareStats, "article", r.a.id),
           currentUserTag: currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
+          minorNameCtx: minorCtx,
         }),
       ),
       ...hls.filter((r) => !feedPendingHlIds.has(r.h.id)).map((r) => {
@@ -579,6 +644,7 @@ router.get(
           ...shareStatsFor(shareStats, "highlight", r.h.id),
           taggedUsers: highlightTagViews.get(r.h.id) ?? [],
           currentUserTag: currentUserTags.highlightTagByHighlightId.get(r.h.id) ?? null,
+          minorNameCtx: minorCtx,
         });
       }),
       ...orgPostRows.map((r) => {
@@ -590,6 +656,7 @@ router.get(
           canEdit: isAuthor || isOrgAdmin,
           canDelete: isAuthor,
           ...statsFor(stats, "org_post", r.p.id),
+          minorNameCtx: minorCtx,
         });
       }),
     ];
@@ -601,7 +668,9 @@ router.get(
       const key = `${sr.s.postKind}-${sr.s.postRefId}`;
       if (seenIds.has(key)) continue;
       seenIds.add(key);
-      const sharedBy = sr.sharer ? toPostAuthor(sr.sharer) : null;
+      const sharedBy = sr.sharer
+        ? toPostAuthor(sr.sharer, { minorNameCtx: minorCtx })
+        : null;
       const sharedAt = sr.s.createdAt.toISOString();
       if (sr.s.postKind === "article") {
         const row = sharedArticleById.get(sr.s.postRefId);
@@ -619,6 +688,7 @@ router.get(
             sharedAt,
             currentUserTag:
               currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
+            minorNameCtx: minorCtx,
           }),
         );
       } else if (sr.s.postKind === "highlight") {
@@ -639,6 +709,7 @@ router.get(
             sharedAt,
             currentUserTag:
               currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
+            minorNameCtx: minorCtx,
           }),
         );
       }
@@ -875,6 +946,11 @@ router.get(
           highlightIds: [],
         }),
       ]);
+      // Task #414 — single-post detail; mask author chip on minor recap.
+      const detailMinorCtx = await buildMinorNameContext(
+        { id: me?.id ?? null, role: req.realUser?.role ?? null },
+        row.author?.id ? [row.author.id] : [],
+      );
       res.json(
         articleToPost(row.a, {
           team: row.team,
@@ -887,6 +963,7 @@ router.get(
           ...shareStatsFor(shareStats, "article", row.a.id),
           currentUserTag:
             currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
+          minorNameCtx: detailMinorCtx,
         }),
       );
       return;
@@ -913,6 +990,11 @@ router.get(
       const stats = await loadPostStats(me?.id ?? null, [
         { kind: "org_post", refId: row.p.id },
       ]);
+      // Task #414 — org_post author chip masking.
+      const orgPostMinorCtx = await buildMinorNameContext(
+        { id: me?.id ?? null, role: req.realUser?.role ?? null },
+        row.author?.id ? [row.author.id] : [],
+      );
       res.json(
         orgPostToPost(row.p, {
           org: row.org,
@@ -920,6 +1002,7 @@ router.get(
           canEdit,
           canDelete,
           ...statsFor(stats, "org_post", row.p.id),
+          minorNameCtx: orgPostMinorCtx,
         }),
       );
       return;
@@ -951,12 +1034,34 @@ router.get(
     }
     // Uploader-only edit + delete on highlights.
     const isUploader = !!me && row.h.uploaderId === me.id;
+    // Task #414 — gather uploader + tagged minors for masking.
+    const hlTaggedMinorIds = (
+      await db
+        .selectDistinct({ id: highlightTags.userId })
+        .from(highlightTags)
+        .innerJoin(users, eq(users.id, highlightTags.userId))
+        .where(
+          and(
+            eq(highlightTags.highlightId, row.h.id),
+            eq(users.isMinor, true),
+          ),
+        )
+    ).map((r) => r.id);
+    const hlMinorCtx = await buildMinorNameContext(
+      { id: me?.id ?? null, role: req.realUser?.role ?? null },
+      [
+        ...(row.uploader?.id ? [row.uploader.id] : []),
+        ...hlTaggedMinorIds,
+      ],
+    );
     const [stats, shareStats, tagViews, currentUserTags] = await Promise.all([
       loadPostStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
       loadPostShareStats(me?.id ?? null, [{ kind: "highlight", refId: row.h.id }]),
-      loadHighlightTagViews(me?.id ?? null, [
-        { id: row.h.id, uploaderId: row.h.uploaderId },
-      ]),
+      loadHighlightTagViews(
+        me?.id ?? null,
+        [{ id: row.h.id, uploaderId: row.h.uploaderId }],
+        hlMinorCtx,
+      ),
       loadCurrentUserTags(me?.id ?? null, {
         articleIds: [],
         highlightIds: [row.h.id],
@@ -974,6 +1079,7 @@ router.get(
         taggedUsers: tagViews.get(row.h.id) ?? [],
         currentUserTag:
           currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
+        minorNameCtx: hlMinorCtx,
       }),
     );
   }),
@@ -1097,7 +1203,16 @@ router.get(
       .leftJoin(users, eq(postComments.authorId, users.id))
       .where(and(...conds))
       .orderBy(asc(postComments.createdAt));
-    res.json(paginate(rows.map((r) => toComment(r.c, r.author))));
+    // Task #414 — mask under-13 comment authors for non-privileged
+    // viewers (the post-owner / guardian view is unaffected because
+    // the linked-child relation puts them in the privileged set).
+    const commentMinorCtx = await buildMinorNameContext(
+      { id: me?.id ?? null, role: req.realUser?.role ?? null },
+      rows.map((r) => r.author?.id).filter((x): x is string => !!x),
+    );
+    res.json(
+      paginate(rows.map((r) => toComment(r.c, r.author, 0, false, commentMinorCtx))),
+    );
   }),
 );
 
@@ -1155,6 +1270,8 @@ router.post(
         message: `New comment is awaiting your approval`,
       });
     }
+    // Task #414 — `me` is the comment author looking at their own
+    // echo, so default (no-mask) ctx is correct here.
     res.status(201).json(toComment(c, me));
   }),
 );

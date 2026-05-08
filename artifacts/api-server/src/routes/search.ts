@@ -14,7 +14,12 @@ import {
   clearSessionCookie,
   SESSION_COOKIE,
 } from "../lib/auth";
-import { emptyPagination, safeAvatarUrl } from "../lib/spec-helpers";
+import {
+  buildMinorNameContext,
+  displayNameForViewer,
+  emptyPagination,
+  safeAvatarUrl,
+} from "../lib/spec-helpers";
 import {
   loadPostStats,
   statsFor,
@@ -55,12 +60,21 @@ router.get(
     // ilike + name match still uses its existing plan.
     const viewerId = req.sessionUser?.id ?? null;
     const userRows = filterOutMinors(userRowsRaw, viewerId).slice(0, 10);
+    // Task #414 — minors that survive the visibility filter (self,
+    // linked guardian, shared-team viewer) may still need their last
+    // name masked unless the viewer is privileged for that specific
+    // minor. We build a viewer-aware context over the surviving rows
+    // and route each render through `displayNameForViewer`.
+    const searchMinorCtx = await buildMinorNameContext(
+      { id: viewerId, role: req.realUser?.role ?? null },
+      userRows.map((u) => u.id),
+    );
     res.json({
       users: {
         data: userRows.map((u) => ({
           id: u.id,
           entityType: "user",
-          displayName: u.name,
+          displayName: displayNameForViewer(u, searchMinorCtx),
           avatarUrl: safeAvatarUrl(u.avatarUrl),
         })),
         pagination: emptyPagination(),

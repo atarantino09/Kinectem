@@ -60,6 +60,9 @@ import {
   MAX_AVATAR_DATA_URL_LENGTH,
   notFound,
   toPostAuthor,
+  buildMinorNameContext,
+  displayNameForViewer,
+  maskedDisplayName,
 } from "../lib/spec-helpers";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
@@ -118,15 +121,27 @@ router.get(
     // The viewer-aware filter still surfaces the minor to themselves and
     // to their linked guardian.
     rows = filterOutMinors(rows, req.sessionUser?.id ?? null);
+    // Task #414 — surviving minor rows (self / linked guardian / shared
+    // team) get full names; strangers see "Sam K." and a masked
+    // last-name field so the search row matches the post-author chip.
+    const searchMinorCtx = await buildMinorNameContext(
+      { id: req.sessionUser?.id ?? null, role: req.realUser?.role ?? null },
+      rows.filter((u) => u.isMinor).map((u) => u.id),
+    );
     res.json({
       data: rows.slice(0, 20).map((u) => {
+        const display = displayNameForViewer(u, searchMinorCtx);
+        const masked = display !== u.name;
         const { firstName, lastName } = splitName(u.name);
         return {
           id: u.id,
           entityType: "user",
-          displayName: u.name,
+          displayName: display,
           firstName,
-          lastName,
+          // Hide the full last name from strangers when the search row
+          // is a minor, so the masked card never leaks the very field
+          // we just stripped from `displayName`.
+          lastName: masked ? splitName(maskedDisplayName(u)).lastName : lastName,
           role: u.role,
           email: u.email ?? null,
           avatarUrl: safeAvatarUrl(u.avatarUrl),
@@ -881,6 +896,32 @@ router.get(
     const highlightRows = limited.filter(
       (row): row is Extract<MergedRow, { kind: "highlight" }> => row.kind === "highlight",
     );
+    // Task #414 — gather every minor user id surfaced in this profile
+    // posts response (the profile owner via `sharedBy`, recap authors,
+    // highlight uploaders, and any minor tagged in the highlights).
+    const profileTaggedMinorIds = highlightRows.length > 0
+      ? (
+          await db
+            .selectDistinct({ id: highlightTags.userId })
+            .from(highlightTags)
+            .innerJoin(users, eq(users.id, highlightTags.userId))
+            .where(
+              and(
+                inArray(highlightTags.highlightId, highlightRows.map((r) => r.h.id)),
+                eq(users.isMinor, true),
+              ),
+            )
+        ).map((r) => r.id)
+      : [];
+    const profileMinorCtx = await buildMinorNameContext(
+      { id: me?.id ?? null, role: req.realUser?.role ?? null },
+      [
+        u.id,
+        ...articleRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+        ...highlightRows.map((r) => r.author?.id).filter((x): x is string => !!x),
+        ...profileTaggedMinorIds,
+      ],
+    );
     const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
         loadPostStats(me?.id ?? null, statKeys),
@@ -893,6 +934,7 @@ router.get(
             id: row.h.id,
             uploaderId: row.h.uploaderId,
           })),
+          profileMinorCtx,
         ),
         loadCurrentUserTags(me?.id ?? null, {
           articleIds: articleRows.map((row) => row.a.id),
@@ -901,7 +943,9 @@ router.get(
       ]);
 
     const posts = limited.map((row) => {
-      const sharedBy = row.sharedAt ? toPostAuthor(u) : undefined;
+      const sharedBy = row.sharedAt
+        ? toPostAuthor(u, { minorNameCtx: profileMinorCtx })
+        : undefined;
       const sharedAt = row.sharedAt ? row.sharedAt.toISOString() : undefined;
       if (row.kind === "article") {
         const post = articleToPost(row.a, {
@@ -916,6 +960,7 @@ router.get(
           sharedAt,
           currentUserTag:
             currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
+          minorNameCtx: profileMinorCtx,
         });
         if (row.tagStatus === "pending") {
           return { ...post, tagStatus: "pending" as const };
@@ -938,6 +983,7 @@ router.get(
         sharedAt,
         currentUserTag:
           currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
+        minorNameCtx: profileMinorCtx,
       });
       // Mirror the article path: when the only reason this highlight
       // is on the profile is a pending tag on the viewed user, surface
