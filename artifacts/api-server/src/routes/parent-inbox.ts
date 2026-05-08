@@ -1118,6 +1118,24 @@ router.post(
     if (decision === "approved" && underlyingItem?.kind === "tag") {
       await applyApproveTagAction(refId);
     }
+    // Same flip for the `notification` shape of a tag event. The family
+    // inbox surfaces "X tagged your child in Y" twice — once as the
+    // generic `notifications` row (kind `post_tag`) and once as the
+    // `tag:` row sourced from `articleTags` / `highlightTags` while
+    // `status='pending'`. If the parent approves the notification row
+    // first, the underlying tag must still flip to `approved` or the
+    // duplicate `tag:` row keeps re-surfacing as "Pending consent" and
+    // the parent has to approve a second time. Mirrors the Remove path
+    // (which already declines via `loadPostTagFromNotification`).
+    if (
+      decision === "approved" &&
+      underlyingItem?.kind === "notification"
+    ) {
+      const parsed = await loadPostTagFromNotification(refId);
+      if (parsed) {
+        await applyApproveTagActionForChildPost(parsed, child.id);
+      }
+    }
 
     const now = new Date();
     await db
@@ -1376,6 +1394,48 @@ async function applyApproveTagAction(tagId: string): Promise<void> {
     .where(
       and(eq(highlightTags.id, tagId), eq(highlightTags.status, "pending")),
     );
+}
+
+// Sibling of `applyApproveTagAction` scoped by `(child, post)` rather
+// than by tag-row id. Used when the parent approves a `notification`
+// item whose underlying notifications.kind is `post_tag` — we don't
+// have the tag id directly there, only the post id parsed out of the
+// notification's `link`. Same conservative idempotent flip: only the
+// `pending` row is touched, `approved` is left alone, and `declined`
+// is left alone (parent approval should never silently revive a
+// previously-declined tag).
+async function applyApproveTagActionForChildPost(
+  parsed: { kind: PostKind; id: string },
+  childId: string,
+): Promise<void> {
+  const now = new Date();
+  if (parsed.kind === "article") {
+    await db
+      .update(articleTags)
+      .set({ status: "approved", updatedAt: now })
+      .where(
+        and(
+          eq(articleTags.userId, childId),
+          eq(articleTags.articleId, parsed.id),
+          eq(articleTags.status, "pending"),
+        ),
+      );
+    return;
+  }
+  if (parsed.kind === "highlight") {
+    await db
+      .update(highlightTags)
+      .set({ status: "approved", updatedAt: now })
+      .where(
+        and(
+          eq(highlightTags.userId, childId),
+          eq(highlightTags.highlightId, parsed.id),
+          eq(highlightTags.status, "pending"),
+        ),
+      );
+    return;
+  }
+  // org_post: no per-user tagging row to flip.
 }
 
 // Look up a notifications row by id and, if it represents a "tagged

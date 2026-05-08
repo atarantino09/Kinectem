@@ -2747,6 +2747,209 @@ describe("parent inbox: per-child unified notifications", () => {
       await db.delete(notifications).where(eq(notifications.id, notif.id));
     });
 
+    it("Approve on an article post_tag notification flips the underlying pending tag to approved so the duplicate `tag:` row stops re-surfacing (regression: child-tag double-approve bug)", async () => {
+      // The family inbox surfaces the same "X tagged your child in Y"
+      // event twice when the underlying tag is still pending — once as
+      // the generic `notification:<id>` row (kind `post_tag`) and once
+      // as the `tag:<tagId>` row sourced from `articleTags` filtered
+      // to status='pending'. Approving the notification row used to
+      // record the parent's verdict but leave the tag pending, so the
+      // duplicate `tag:` row would re-appear and the parent had to
+      // approve a second time. The fix mirrors the Remove path: when
+      // the approved item is `kind=notification` whose underlying
+      // notifications.kind is `post_tag`, also flip the matching
+      // (child, post) tag row from pending → approved.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Pending tag double-approve",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Pending tag double-approve"',
+          link: `/posts/article-${article.id}`,
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+
+      // Sanity: before any decision, the inbox returns BOTH the
+      // notification row AND the duplicate tag row.
+      const before = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const beforeKeys = (
+        before.body.data as Array<{ itemKey: string }>
+      ).map((i) => i.itemKey);
+      expect(beforeKeys).toContain(`notification:${notif.id}`);
+      expect(beforeKeys).toContain(`tag:${tag.id}`);
+
+      // Approve via the notification row (the bug path).
+      const approve = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `notification:${notif.id}`,
+          decision: "approved",
+        });
+      expect(approve.status).toBe(200);
+
+      // The underlying tag row must have flipped to approved — that
+      // is the fix.
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(tagAfter?.status).toBe("approved");
+
+      // And the inbox must no longer surface the duplicate `tag:` row.
+      // The notification row itself is still in the response (with a
+      // decision badge) until the section refreshes; we only assert
+      // the duplicate is gone.
+      const after = await lisa.get(
+        `/api/v1/users/me/children/${samiraId}/notifications`,
+      );
+      const afterKeys = (
+        after.body.data as Array<{ itemKey: string }>
+      ).map((i) => i.itemKey);
+      expect(afterKeys).not.toContain(`tag:${tag.id}`);
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("Approve on a highlight post_tag notification flips the underlying pending highlight tag to approved (regression: child-tag double-approve bug, highlight variant)", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [highlight] = await db
+        .insert(highlights)
+        .values({
+          teamId,
+          uploaderId: coachId,
+          title: "Pending highlight tag double-approve",
+          videoUrl: "https://example.com/clip.mp4",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(highlightTags)
+        .values({
+          highlightId: highlight.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "pending",
+        })
+        .returning();
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Pending highlight tag double-approve"',
+          link: `/posts/highlight-${highlight.id}`,
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const approve = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `notification:${notif.id}`,
+          decision: "approved",
+        });
+      expect(approve.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(highlightTags)
+        .where(eq(highlightTags.id, tag.id));
+      expect(tagAfter?.status).toBe("approved");
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
+    it("Approve on an article post_tag notification leaves a previously-declined tag declined (does not silently revive parent-declined or child-declined tags)", async () => {
+      // Conservative idempotency check: the approve flip is gated to
+      // pending → approved. A tag that the child or another parent
+      // has already declined must NOT be silently revived just
+      // because the notification row is approved later.
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const coachId = await findUserId("coach@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      const [article] = await db
+        .insert(articles)
+        .values({
+          teamId,
+          authorId: coachId,
+          title: "Already-declined tag",
+          body: "x",
+          status: "published",
+        })
+        .returning();
+      const [tag] = await db
+        .insert(articleTags)
+        .values({
+          articleId: article.id,
+          userId: samiraId,
+          taggerUserId: coachId,
+          status: "declined",
+        })
+        .returning();
+      const [notif] = await db
+        .insert(notifications)
+        .values({
+          userId: samiraId,
+          actorUserId: coachId,
+          kind: "post_tag",
+          message: 'Coach tagged you in "Already-declined tag"',
+          link: `/posts/article-${article.id}`,
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const approve = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({
+          itemKey: `notification:${notif.id}`,
+          decision: "approved",
+        });
+      expect(approve.status).toBe(200);
+
+      const [tagAfter] = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.id, tag.id));
+      expect(tagAfter?.status).toBe("declined");
+
+      await db.delete(notifications).where(eq(notifications.id, notif.id));
+    });
+
     it("Remove on a comment notification does not take down the underlying post (regression: per-notification fidelity, no escalation)", async () => {
       // Comment items surface as `kind=comment`, NOT `kind=notification`.
       // Removing one must hide ONLY the comment, leaving the post the
