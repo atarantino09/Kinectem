@@ -913,15 +913,30 @@ router.get(
             )
         ).map((r) => r.id)
       : [];
+    // Task #414 — Profile-page carveout: include the profile owner
+    // `u.id` in the privileged-target set so the minor's own name on
+    // their own profile (and on any post they re-shared via
+    // `sharedBy`) renders as the full name regardless of who is
+    // viewing. Visibility of the profile itself is already gated
+    // upstream (private-by-default for minors), so anyone reaching
+    // this handler is an approved viewer of the profile owner. Only
+    // *other* minors (recap co-authors, highlight uploaders, tag
+    // chips) get the masked treatment for stranger viewers.
     const profileMinorCtx = await buildMinorNameContext(
       { id: me?.id ?? null, role: req.realUser?.role ?? null },
       [
-        u.id,
         ...articleRows.map((r) => r.author?.id).filter((x): x is string => !!x),
         ...highlightRows.map((r) => r.author?.id).filter((x): x is string => !!x),
         ...profileTaggedMinorIds,
       ],
     );
+    const profileMinorCtxWithOwner: typeof profileMinorCtx = {
+      ...profileMinorCtx,
+      privilegedTargetIds: new Set<string>([
+        ...profileMinorCtx.privilegedTargetIds,
+        u.id,
+      ]),
+    };
     const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
         loadPostStats(me?.id ?? null, statKeys),
@@ -934,7 +949,7 @@ router.get(
             id: row.h.id,
             uploaderId: row.h.uploaderId,
           })),
-          profileMinorCtx,
+          profileMinorCtxWithOwner,
         ),
         loadCurrentUserTags(me?.id ?? null, {
           articleIds: articleRows.map((row) => row.a.id),
@@ -944,7 +959,7 @@ router.get(
 
     const posts = limited.map((row) => {
       const sharedBy = row.sharedAt
-        ? toPostAuthor(u, { minorNameCtx: profileMinorCtx })
+        ? toPostAuthor(u, { minorNameCtx: profileMinorCtxWithOwner })
         : undefined;
       const sharedAt = row.sharedAt ? row.sharedAt.toISOString() : undefined;
       if (row.kind === "article") {
@@ -960,7 +975,7 @@ router.get(
           sharedAt,
           currentUserTag:
             currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
-          minorNameCtx: profileMinorCtx,
+          minorNameCtx: profileMinorCtxWithOwner,
         });
         if (row.tagStatus === "pending") {
           return { ...post, tagStatus: "pending" as const };
@@ -983,7 +998,7 @@ router.get(
         sharedAt,
         currentUserTag:
           currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
-        minorNameCtx: profileMinorCtx,
+        minorNameCtx: profileMinorCtxWithOwner,
       });
       // Mirror the article path: when the only reason this highlight
       // is on the profile is a pending tag on the viewed user, surface

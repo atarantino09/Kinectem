@@ -37,6 +37,7 @@ import {
   apiError,
   safeAvatarUrl,
   notFound,
+  TRUSTED_MINOR_NAME_CONTEXT,
 } from "../lib/spec-helpers";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import {
@@ -89,12 +90,17 @@ router.get(
         orgId: r.org.id,
       })),
     );
+    // Task #414 — drafts list is restricted to the author + co-authors
+    // upstream, so the author chip never reaches a stranger viewer.
+    // Opt out of masking explicitly to document intent and to satisfy
+    // the now fail-safe `displayNameForViewer` default.
     const data = all.map((r) =>
       articleToPost(r.a, {
         team: r.team,
         org: r.org,
         author: r.author,
         authorRole: authorRoleMap.get(r.a.id) ?? null,
+        minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
     );
     res.json(paginate(data));
@@ -158,9 +164,13 @@ async function patchHighlight(
         .limit(1)
     : [null];
   if (!team || !org) return notFound(res);
-  const tagViews = await loadHighlightTagViews(me.id, [
-    { id: updated.id, uploaderId: updated.uploaderId },
-  ]);
+  // Task #414 — write-time PATCH echo: viewer is the uploader (`me`),
+  // so masking is not needed. Pass the bypass context explicitly.
+  const tagViews = await loadHighlightTagViews(
+    me.id,
+    [{ id: updated.id, uploaderId: updated.uploaderId }],
+    TRUSTED_MINOR_NAME_CONTEXT,
+  );
   return res.json(
     highlightToPost(updated, {
       team,
@@ -169,6 +179,7 @@ async function patchHighlight(
       canEdit: true,
       canDelete: true,
       taggedUsers: tagViews.get(updated.id) ?? [],
+      minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
     }),
   );
 }
@@ -240,12 +251,15 @@ async function patchOrgPost(
     ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
     : [null];
   if (!org) return notFound(res);
+  // Task #414 — write-time PATCH echo for an org_post; the caller is
+  // either the author or an org admin, both privileged. Bypass.
   return res.json(
     orgPostToPost(updated, {
       org,
       author,
       canEdit: true,
       canDelete: updated.authorId === me.id,
+      minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
     }),
   );
 }
@@ -446,6 +460,9 @@ router.patch(
         // with the per-viewer rule the read path enforces.
         canDelete: updated.authorId === me.id,
         authorRole: authorRoleMap.get(updated.id) ?? null,
+        // Task #414 — PATCH echo: viewer is the author or an org
+        // admin (both privileged), so bypass minor-name masking.
+        minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
     );
   }),
@@ -539,12 +556,14 @@ router.post(
         orgId: org.id,
       },
     ]);
+    // Task #414 — publish echo: author = me. Bypass.
     res.json(
       articleToPost(updated, {
         team,
         org,
         author: me,
         authorRole: publishRoleMap.get(updated.id) ?? null,
+        minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
     );
   }),

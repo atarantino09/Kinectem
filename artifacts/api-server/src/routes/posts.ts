@@ -67,6 +67,8 @@ import {
   apiError,
   notFound,
   buildMinorNameContext,
+  maskedDisplayName,
+  TRUSTED_MINOR_NAME_CONTEXT,
   type MinorNameViewerContext,
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
@@ -1272,7 +1274,9 @@ router.post(
     }
     // Task #414 — `me` is the comment author looking at their own
     // echo, so default (no-mask) ctx is correct here.
-    res.status(201).json(toComment(c, me));
+    // Task #414 — write-time POST echo: comment author = me = viewer.
+    // Bypass minor-name masking explicitly.
+    res.status(201).json(toComment(c, me, 0, false, TRUSTED_MINOR_NAME_CONTEXT));
   }),
 );
 
@@ -1730,12 +1734,14 @@ router.post(
       const authorRoleMap = await computeArticleAuthorRoleMap([
         { articleId: a.id, authorId: a.authorId, teamId: team.id, orgId: org.id },
       ]);
+      // Task #414 — write-time POST echo: article author = me. Bypass.
       res.status(201).json({
         ...articleToPost(a, {
           team,
           org,
           author: me,
           authorRole: authorRoleMap.get(a.id) ?? null,
+          minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
         }),
         approvalStatus: status,
         requiresApproval: status === "pending_approval",
@@ -1792,15 +1798,28 @@ router.post(
     // moderation queue) and the actor is excluded explicitly so
     // self-notifications never fire.
     if (!isOrgAdmin) {
+      // Task #414 — `actorDisplayName` is persisted verbatim into
+      // every recipient's `notifications.message` row by the helper
+      // and read back as-is. Recipients are *all* org owners/admins
+      // for `team.organizationId`, NOT just admins on the actor's
+      // team — so they may include org admins who are not privileged
+      // for this minor under the shared-roster rule. Until Task #415
+      // lands viewer-aware notification rendering, conservatively
+      // mask at write time when the actor is a minor so the stored
+      // text never leaks a minor's last name to a non-privileged
+      // org admin. Adult actors keep the full name.
       await notifyAdminsOfTeamHighlight({
         organizationId: org.id,
         teamName: team.name,
         highlightId: h.id,
         highlightTitle: h.title,
         actorUserId: me.id,
-        actorDisplayName: displayName(me),
+        actorDisplayName: me.isMinor
+          ? maskedDisplayName(me)
+          : displayName(me),
       });
     }
+    // Task #414 — write-time POST echo: highlight uploader = me. Bypass.
     res.status(201).json(
       highlightToPost(h, {
         team,
@@ -1812,6 +1831,7 @@ router.post(
         // client treats this as "loaded with no tags" instead of
         // "tags not loaded".
         taggedUsers: [],
+        minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
     );
   }),

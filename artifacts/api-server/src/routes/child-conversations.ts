@@ -39,6 +39,7 @@ import {
   apiError,
   safeAvatarUrl,
   notFound,
+  TRUSTED_MINOR_NAME_CONTEXT,
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
@@ -189,6 +190,10 @@ router.get(
           },
         ]),
       ]);
+      // Task #414 — viewer is a confirmed guardian of `child` (or a
+      // platform admin). The whole route is gated by
+      // `authorizeChildAccess`, so masking is not needed here per
+      // task scope (child-conversations is on the no-mask list).
       res.json(
         articleToPost(row.a, {
           team: row.team,
@@ -196,6 +201,7 @@ router.get(
           author: row.author,
           authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
+          minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
         }),
       );
       return;
@@ -223,6 +229,7 @@ router.get(
           org: row.org,
           author: row.author,
           ...statsFor(stats, "org_post", row.p.id),
+          minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
         }),
       );
       return;
@@ -239,9 +246,11 @@ router.get(
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
     const [stats, tagViews] = await Promise.all([
       loadPostStats(child.id, [{ kind: "highlight", refId: row.h.id }]),
-      loadHighlightTagViews(child.id, [
-        { id: row.h.id, uploaderId: row.h.uploaderId },
-      ]),
+      loadHighlightTagViews(
+        child.id,
+        [{ id: row.h.id, uploaderId: row.h.uploaderId }],
+        TRUSTED_MINOR_NAME_CONTEXT,
+      ),
     ]);
     res.json(
       highlightToPost(row.h, {
@@ -250,6 +259,7 @@ router.get(
         author: row.uploader,
         ...statsFor(stats, "highlight", row.h.id),
         taggedUsers: tagViews.get(row.h.id) ?? [],
+        minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
     );
   }),

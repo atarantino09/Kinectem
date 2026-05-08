@@ -188,13 +188,15 @@ export const ANON_MINOR_NAME_CONTEXT: MinorNameViewerContext = {
   privilegedTargetIds: new Set<string>(),
 };
 
-// Sentinel "trust the call site" context — used internally as the
-// default when a route hasn't been migrated to thread a real context
-// yet. Behaves like an admin: never masks. Only stranger-visible
-// routes (feed, search, follower lists, post detail, comments, tag
-// chips) need to opt in to a real context. Parent-inbox, admin
-// queues, child-conversations, and other already-privileged surfaces
-// keep their existing behavior with no code changes.
+// Sentinel "bypass masking" context — explicitly opted in by a call
+// site that knows its surface is already privileged (e.g. drafts only
+// shown to the author, child-conversations only shown to the linked
+// guardian, admin tooling, or write-time response echoes where the
+// viewer is the author). Behaves like an admin: never masks. NEVER
+// use this on a stranger-visible surface — the whole point of
+// flipping the default to `ANON_MINOR_NAME_CONTEXT` (Task #414) was
+// to make a missed call site fail-safe (over-mask) rather than
+// fail-open (leak a minor's last name).
 export const TRUSTED_MINOR_NAME_CONTEXT: MinorNameViewerContext = {
   viewerId: null,
   viewerRole: null,
@@ -225,7 +227,12 @@ export function shouldMaskMinorName(
 
 export function displayNameForViewer(
   u: Pick<UserRow, "id" | "name" | "isMinor">,
-  ctx: MinorNameViewerContext = TRUSTED_MINOR_NAME_CONTEXT,
+  // Task #414 — fail-safe default: when a call site forgets to pass a
+  // context, we mask. Locked / privileged surfaces (drafts, child-
+  // conversations, parent-inbox, masquerade, write-time echoes where
+  // the viewer is the author) MUST explicitly pass
+  // `TRUSTED_MINOR_NAME_CONTEXT` to opt out.
+  ctx: MinorNameViewerContext = ANON_MINOR_NAME_CONTEXT,
 ): string {
   return shouldMaskMinorName(u, ctx) ? maskedDisplayName(u) : u.name;
 }

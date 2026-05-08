@@ -103,8 +103,10 @@ describe("displayNameForViewer", () => {
     );
   });
 
-  it("returns the full name when no context is supplied (backwards-compat default)", () => {
-    expect(displayNameForViewer(minor())).toBe("Sam Karim");
+  it("masks when no context is supplied (Task #414 — fail-safe default)", () => {
+    // The default flipped from TRUSTED → ANON so that a missed call
+    // site over-masks rather than leaking a minor's last name.
+    expect(displayNameForViewer(minor())).toBe("Sam K.");
   });
 
   it("never masks adults regardless of context", () => {

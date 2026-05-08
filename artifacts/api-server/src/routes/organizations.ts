@@ -48,6 +48,7 @@ import {
   apiError,
   notFound,
   buildMinorNameContext,
+  TRUSTED_MINOR_NAME_CONTEXT,
 } from "../lib/spec-helpers";
 import {
   loadPostStats,
@@ -620,9 +621,15 @@ router.get(
             orgId: r.org.id,
           })),
         ),
+        // Task #414 — first call is used only to mine the set of
+        // minor tagged-user ids needed to build the masking ctx
+        // below. The result is immediately discarded in favor of
+        // `maskedHighlightTagViews`. Pass TRUSTED here so the result
+        // contains real ids/names even though no user ever sees it.
         loadHighlightTagViews(
           me?.id ?? null,
           hRows.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+          TRUSTED_MINOR_NAME_CONTEXT,
         ),
         loadCurrentUserTags(me?.id ?? null, {
           articleIds: rows.map((r) => r.a.id),
@@ -836,7 +843,10 @@ router.post(
         publishedAt: new Date(),
       })
       .returning();
-    res.status(201).json(orgPostToPost(p, { org, author: me }));
+    // Task #414 — write-time POST echo: viewer = author = me. Bypass.
+    res.status(201).json(
+      orgPostToPost(p, { org, author: me, minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT }),
+    );
   }),
 );
 
@@ -865,7 +875,17 @@ router.get(
         ),
       )
       .orderBy(desc(organizationJoinRequests.createdAt));
-    res.json(paginate(rows.map((r) => toJoinRequest(r.r, r.u))));
+    // Task #414 — admin viewing the join-request queue may see minor
+    // requesters whose name should be masked unless the admin is
+    // privileged for that specific minor (linked guardian or shared
+    // accepted-roster team). Build a viewer-aware ctx.
+    const joinReqMinorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      rows.map((r) => r.u?.id).filter((x): x is string => !!x),
+    );
+    res.json(
+      paginate(rows.map((r) => toJoinRequest(r.r, r.u, joinReqMinorCtx))),
+    );
   }),
 );
 
@@ -885,12 +905,17 @@ router.post(
         ),
       )
       .limit(1);
-    if (existing) return res.status(200).json(toJoinRequest(existing, me));
+    // Task #414 — write-time echo for the requester acting on their
+    // own join request. Viewer = subject = me. Bypass.
+    if (existing)
+      return res
+        .status(200)
+        .json(toJoinRequest(existing, me, TRUSTED_MINOR_NAME_CONTEXT));
     const [r] = await db
       .insert(organizationJoinRequests)
       .values({ organizationId: req.params.orgId, userId: me.id, status: "pending" })
       .returning();
-    res.status(201).json(toJoinRequest(r, me));
+    res.status(201).json(toJoinRequest(r, me, TRUSTED_MINOR_NAME_CONTEXT));
   }),
 );
 
@@ -940,7 +965,13 @@ async function decideJoinRequest(
       .onConflictDoNothing();
   }
   const [u] = await db.select().from(users).where(eq(users.id, r.userId)).limit(1);
-  res.json(toJoinRequest(updated, u ?? null));
+  // Task #414 — admin decision echo. Viewer is the deciding org admin
+  // and may not be privileged for a minor requester; build a real ctx.
+  const decideMinorCtx = await buildMinorNameContext(
+    { id: me.id, role: req.realUser?.role ?? null },
+    u ? [u.id] : [],
+  );
+  res.json(toJoinRequest(updated, u ?? null, decideMinorCtx));
 }
 
 router.post(
@@ -971,7 +1002,8 @@ router.delete(
       .set({ status: "withdrawn", decidedAt: new Date(), updatedAt: new Date() })
       .where(eq(organizationJoinRequests.id, r.id))
       .returning();
-    res.json(toJoinRequest(updated, me));
+    // Task #414 — withdraw echo: viewer = subject = me. Bypass.
+    res.json(toJoinRequest(updated, me, TRUSTED_MINOR_NAME_CONTEXT));
   }),
 );
 
@@ -1003,6 +1035,14 @@ router.get(
         orgId: r.org.id,
       })),
     );
+    // Task #414 — admin approval queue. Viewer is the org admin; mask
+    // minor recap authors unless the admin is privileged (admin role
+    // already short-circuits via bypass; non-admin org owners need the
+    // shared-team check).
+    const approvalMinorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      rows.map((r) => r.author?.id).filter((x): x is string => !!x),
+    );
     res.json(
       paginate(
         rows.map((r) => {
@@ -1011,6 +1051,7 @@ router.get(
             org: r.org,
             author: r.author,
             authorRole: approvalAuthorRoleMap.get(r.a.id) ?? null,
+            minorNameCtx: approvalMinorCtx,
           });
           return {
             id: post.id,
