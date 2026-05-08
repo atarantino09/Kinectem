@@ -259,6 +259,40 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     mutation: { onSuccess: invalidate },
   });
 
+  // Auto-mark this conversation read the moment it's opened. Optimistically
+  // zero out the per-conversation badge in the inbox list and decrement the
+  // global unread-messages count so the inbox dot and mobile mail dot update
+  // immediately. Re-fires when the user navigates between conversations.
+  const autoReadFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoReadFiredRef.current === conversationId) return;
+    autoReadFiredRef.current = conversationId;
+
+    const convsKey = getListConversationsQueryKey();
+    const unreadKey = getGetUnreadMessageCountQueryKey();
+    let droppedUnread = 0;
+    qc.setQueryData<typeof convsResp>(convsKey, (prev) => {
+      if (!prev) return prev;
+      const next = prev.data.map((c) => {
+        if (c.id !== conversationId) return c;
+        droppedUnread = c.unreadCount;
+        return { ...c, unreadCount: 0 };
+      });
+      return { ...prev, data: next };
+    });
+    if (droppedUnread > 0) {
+      qc.setQueryData<{ unreadCount: number } | undefined>(unreadKey, (prev) =>
+        prev
+          ? { ...prev, unreadCount: Math.max(0, prev.unreadCount - droppedUnread) }
+          : prev,
+      );
+    }
+    markRead.mutate({ conversationId });
+    // markRead is a stable mutation handle; we intentionally key on
+    // conversationId so switching conversations re-fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+
   const onSend = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = body.trim();
@@ -319,15 +353,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               Conversation
             </h3>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs font-bold"
-            onClick={() => markRead.mutate({ conversationId })}
-            data-testid="button-mark-read"
-          >
-            Mark read
-          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto pr-1">

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
+  markAllChildNotificationsRead,
   useGetUnreadNotificationCount,
   useGetChildrenNotificationsSummary,
   useListNotifications,
@@ -10,6 +11,8 @@ import {
   getGetUnreadNotificationCountQueryKey,
   getGetChildrenNotificationsSummaryQueryKey,
   getListNotificationsQueryKey,
+  type GetChildrenNotificationsSummary200,
+  type NotificationUnreadCount,
   type NotificationResponse,
 } from "@workspace/api-client-react";
 import {
@@ -106,8 +109,11 @@ export function NotificationsBell() {
   const { data: countData } = useGetUnreadNotificationCount();
   const { data: childrenSummary } = useGetChildrenNotificationsSummary();
   const { data: notifs, isLoading } = useListNotifications();
+  const [open, setOpen] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
+  // Guard so the auto-clear fires at most once per dropdown-open. Reset on close.
+  const clearedThisOpenRef = useRef(false);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetUnreadNotificationCountQueryKey() });
@@ -129,6 +135,67 @@ export function NotificationsBell() {
   const markAll = useMarkAllNotificationsAsRead({
     mutation: { onSuccess: invalidate },
   });
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      clearedThisOpenRef.current = false;
+      return;
+    }
+    if (clearedThisOpenRef.current) return;
+    clearedThisOpenRef.current = true;
+
+    // Optimistically zero the badges so the dot disappears the instant
+    // the dropdown opens. The mutations below reconcile via invalidate().
+    qc.setQueryData<NotificationUnreadCount | undefined>(
+      getGetUnreadNotificationCountQueryKey(),
+      (prev) => (prev ? { ...prev, unreadCount: 0 } : prev),
+    );
+    qc.setQueryData<GetChildrenNotificationsSummary200 | undefined>(
+      getGetChildrenNotificationsSummaryQueryKey(),
+      (prev) =>
+        prev
+          ? {
+              ...prev,
+              totalUnreadCount: 0,
+              data: prev.data.map((d) => ({ ...d, unreadCount: 0 })),
+            }
+          : prev,
+    );
+
+    // Fire mark-all for the user's own notifications unconditionally —
+    // the endpoint is idempotent and a no-op when nothing's unread, so
+    // we don't need to wait for the unread-count query to populate.
+    markAll.mutate();
+
+    // For the COPPA / children stream we need the per-child IDs to call
+    // the per-child mark-all endpoint. If the summary isn't cached yet,
+    // refetch it first and then mark each child's stream read.
+    const fireChildren = (rows: GetChildrenNotificationsSummary200["data"]) => {
+      if (rows.length === 0) return Promise.resolve();
+      return Promise.all(
+        rows.map((c) =>
+          markAllChildNotificationsRead(c.childId).catch(() => undefined),
+        ),
+      ).then(() => undefined);
+    };
+    const cached = qc.getQueryData<GetChildrenNotificationsSummary200>(
+      getGetChildrenNotificationsSummaryQueryKey(),
+    );
+    const ensureRows = cached?.data
+      ? Promise.resolve(cached.data)
+      : qc
+          .fetchQuery<GetChildrenNotificationsSummary200>({
+            queryKey: getGetChildrenNotificationsSummaryQueryKey(),
+          })
+          .then((r) => r?.data ?? [])
+          .catch(() => []);
+    void ensureRows.then(fireChildren).then(() => {
+      qc.invalidateQueries({
+        queryKey: getGetChildrenNotificationsSummaryQueryKey(),
+      });
+    });
+  };
 
   const ownUnread = countData?.unreadCount ?? 0;
   const childrenUnread = childrenSummary?.totalUnreadCount ?? 0;
@@ -255,7 +322,7 @@ export function NotificationsBell() {
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -277,15 +344,6 @@ export function NotificationsBell() {
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h4 className="font-black tracking-tight text-sm">Notifications</h4>
-          {ownUnread > 0 && (
-            <button
-              onClick={() => markAll.mutate()}
-              className="text-xs font-bold text-primary hover:underline"
-              data-testid="button-mark-all-read"
-            >
-              Mark all read
-            </button>
-          )}
         </div>
         {childrenUnread > 0 && (
           <button
