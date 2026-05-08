@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
-import { Home, Building2, Plus, UsersRound, User } from "lucide-react";
+import { Home, Building2, Plus, UsersRound, User, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,9 +13,10 @@ import { cn } from "@/lib/utils";
 type Props = {
   meId: string | undefined;
   canAuthorRecap: boolean;
+  isGuardian: boolean;
 };
 
-export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
+export function MobileBottomNav({ meId, canAuthorRecap, isGuardian }: Props) {
   const [location, setLocation] = useLocation();
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
 
@@ -33,6 +34,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
   // - Profile → /users/:meId (any sub-path).
   const orgsHref = meId ? "/organizations/mine" : "/login";
   const teamsHref = meId ? "/teams" : "/login";
+  const familyHref = "/family";
   const profileHref = meId ? `/users/${meId}` : "/login";
 
   const homeActive = isActive("/", true);
@@ -42,6 +44,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
   // the prefix); this is intentional so the section feels "sticky".
   const orgsActive = isActive("/organizations");
   const teamsActive = isActive("/teams");
+  const familyActive = isActive("/family");
   const profileActive = meId
     ? location.startsWith(`/users/${meId}`)
     : false;
@@ -138,6 +141,15 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
               Icon={UsersRound}
               active={teamsActive}
               testId="mobile-tab-teams"
+            />
+          )}
+          {isGuardian && (
+            <Item
+              href={familyHref}
+              label="Family"
+              Icon={Users}
+              active={familyActive}
+              testId="mobile-tab-family"
             />
           )}
           <Item
