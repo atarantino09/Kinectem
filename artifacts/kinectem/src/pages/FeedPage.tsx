@@ -1,23 +1,34 @@
-import { useState, useMemo, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { useMemo } from "react";
+import { Link } from "wouter";
 import {
   useGetLoggedInUser,
   useListFeed,
   useListUserOrganizations,
   useListUserTeams,
-  useListOrgTeams,
   queryOpts,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { UserAvatar } from "@/components/UserAvatar";
-import { Building2, ChevronRight, Users } from "lucide-react";
+import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 
+type SidebarTeam = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  orgName: string;
+};
+
+type SidebarOrg = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  teams: SidebarTeam[];
+};
+
 export default function FeedPage() {
-  const [, setLocation] = useLocation();
   const { data: me } = useGetLoggedInUser();
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
     query: queryOpts({ enabled: !!me?.id }),
@@ -25,25 +36,38 @@ export default function FeedPage() {
   const { data: myTeams } = useListUserTeams(me?.id ?? "", undefined, {
     query: queryOpts({ enabled: !!me?.id }),
   });
-  const memberTeamsByOrg = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }[]>();
-    for (const t of myTeams?.data ?? []) {
-      const arr = map.get(t.organization.id) ?? [];
-      arr.push({ id: t.teamId, name: t.teamName });
-      map.set(t.organization.id, arr);
-    }
-    return map;
-  }, [myTeams]);
-  const { data: feed, isLoading: feedLoading } = useListFeed();
-  const [openOrgId, setOpenOrgId] = useState<string | null>(null);
 
-  const handleOrgClick = (orgId: string) => {
-    if (openOrgId === orgId) {
-      setLocation(`/organizations/${orgId}`);
-    } else {
-      setOpenOrgId(orgId);
+  const { orgGroups, orphanTeams } = useMemo(() => {
+    const teamsByOrg = new Map<string, SidebarTeam[]>();
+    for (const t of myTeams?.data ?? []) {
+      const arr = teamsByOrg.get(t.organization.id) ?? [];
+      arr.push({
+        id: t.teamId,
+        name: t.teamName,
+        logoUrl: t.teamAvatarUrl ?? null,
+        orgName: t.organization.name,
+      });
+      teamsByOrg.set(t.organization.id, arr);
     }
-  };
+    const orgIds = new Set<string>();
+    const orgGroups: SidebarOrg[] = (myOrgs?.data ?? []).map((org) => {
+      orgIds.add(org.id);
+      return {
+        id: org.id,
+        name: org.name,
+        logoUrl: org.logoUrl ?? null,
+        teams: teamsByOrg.get(org.id) ?? [],
+      };
+    });
+    const orphanTeams: SidebarTeam[] = [];
+    for (const [orgId, teams] of teamsByOrg) {
+      if (!orgIds.has(orgId)) orphanTeams.push(...teams);
+    }
+    return { orgGroups, orphanTeams };
+  }, [myOrgs, myTeams]);
+
+  const hasSidebarItems = orgGroups.length > 0 || orphanTeams.length > 0;
+  const { data: feed, isLoading: feedLoading } = useListFeed();
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
 
@@ -90,29 +114,47 @@ export default function FeedPage() {
           </Card>
         )}
 
-        {myOrgs && myOrgs.data.length > 0 && (
+        {hasSidebarItems && (
           <Card className="rounded-xl border border-border shadow-sm">
             <CardContent className="p-4">
               <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
-                Your Organizations
+                Your Orgs and Teams
               </h4>
               <div className="space-y-1">
-                {myOrgs.data.map((org) => {
-                  const isOrgAdmin =
-                    org.role === "owner" || org.role === "admin";
-                  return (
-                    <OrgRow
-                      key={org.id}
+                {orgGroups.map((org) => (
+                  <div key={org.id}>
+                    <OrgLinkRow
                       orgId={org.id}
                       orgName={org.name}
-                      orgLogoUrl={org.logoUrl ?? null}
-                      isOpen={openOrgId === org.id}
-                      onClick={() => handleOrgClick(org.id)}
-                      isOrgAdmin={isOrgAdmin}
-                      memberTeams={memberTeamsByOrg.get(org.id) ?? []}
+                      orgLogoUrl={org.logoUrl}
                     />
-                  );
-                })}
+                    {org.teams.length > 0 && (
+                      <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
+                        {org.teams.map((t) => (
+                          <TeamLinkRow
+                            key={t.id}
+                            teamId={t.id}
+                            teamName={t.name}
+                            teamLogoUrl={t.logoUrl}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {orphanTeams.length > 0 && (
+                  <div className="space-y-0.5">
+                    {orphanTeams.map((t) => (
+                      <TeamLinkRow
+                        key={t.id}
+                        teamId={t.id}
+                        teamName={t.name}
+                        teamLogoUrl={t.logoUrl}
+                        subtitle={t.orgName}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -166,101 +208,64 @@ export default function FeedPage() {
   );
 }
 
-function OrgRow({
+function OrgLinkRow({
   orgId,
   orgName,
   orgLogoUrl,
-  isOpen,
-  onClick,
-  isOrgAdmin,
-  memberTeams,
 }: {
   orgId: string;
   orgName: string;
   orgLogoUrl: string | null;
-  isOpen: boolean;
-  onClick: () => void;
-  isOrgAdmin: boolean;
-  memberTeams: { id: string; name: string }[];
 }) {
-  const [logoFailed, setLogoFailed] = useState(false);
-  useEffect(() => {
-    setLogoFailed(false);
-  }, [orgLogoUrl]);
-  const { data: teamsResp } = useListOrgTeams(orgId, undefined, {
-    query: queryOpts({ enabled: isOpen && isOrgAdmin }),
-  });
-  const teams = isOrgAdmin
-    ? (teamsResp?.data ?? []).map((t) => ({ id: t.id, name: t.name }))
-    : memberTeams;
-  const isLoading = isOrgAdmin && teamsResp === undefined;
   return (
-    <div>
-      <button
-        type="button"
-        onClick={onClick}
-        data-testid={`button-org-${orgId}`}
-        className="w-full flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer py-1.5 px-1 rounded-md hover:bg-muted/50 text-left"
-        title={
-          isOpen
-            ? "Click again to open organization"
-            : "Click to view teams"
-        }
-      >
-        <ChevronRight
-          className={`w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0 ${
-            isOpen ? "rotate-90" : ""
-          }`}
+    <Link href={`/organizations/${orgId}`} data-testid={`link-org-${orgId}`}>
+      <div className="w-full flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer py-1.5 px-1 rounded-md hover:bg-muted/50">
+        <TeamAvatar
+          avatarUrl={orgLogoUrl}
+          displayName={orgName}
+          size="xs"
+          rounded="lg"
+          className="w-5 h-5 shrink-0"
+          fallbackClassName="bg-muted text-muted-foreground"
         />
-        {orgLogoUrl && !logoFailed ? (
-          <img
-            src={orgLogoUrl}
-            alt=""
-            onError={() => setLogoFailed(true)}
-            className="w-5 h-5 rounded-md object-cover bg-muted shrink-0"
-          />
-        ) : (
-          <div className="w-5 h-5 rounded-md bg-muted flex items-center justify-center shrink-0">
-            <Building2 className="w-3 h-3 text-muted-foreground" />
-          </div>
-        )}
         <span className="truncate flex-1">{orgName}</span>
-        {isOpen && teams.length > 0 && (
-          <span
-            data-testid={`badge-org-${orgId}-team-count`}
-            className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full"
-          >
-            {teams.length}
-          </span>
-        )}
-      </button>
-      {isOpen && (
-        <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
-          {isLoading ? (
-            <p className="text-xs text-muted-foreground py-1.5 italic">
-              Loading…
-            </p>
-          ) : teams.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-1.5 italic">
-              No teams yet
-            </p>
-          ) : (
-            teams.map((t) => (
-              <Link
-                key={t.id}
-                href={`/teams/${t.id}`}
-                data-testid={`link-team-${t.id}`}
-              >
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer py-1.5 px-1.5 rounded-md hover:bg-muted/50">
-                  <Users className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{t.name}</span>
-                </div>
-              </Link>
-            ))
+      </div>
+    </Link>
+  );
+}
+
+function TeamLinkRow({
+  teamId,
+  teamName,
+  teamLogoUrl,
+  subtitle,
+}: {
+  teamId: string;
+  teamName: string;
+  teamLogoUrl: string | null;
+  subtitle?: string;
+}) {
+  return (
+    <Link href={`/teams/${teamId}`} data-testid={`link-team-${teamId}`}>
+      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer py-1.5 px-1.5 rounded-md hover:bg-muted/50">
+        <TeamAvatar
+          avatarUrl={teamLogoUrl}
+          displayName={teamName}
+          size="xs"
+          rounded="lg"
+          className="w-5 h-5 shrink-0"
+          fallbackClassName="bg-muted text-muted-foreground"
+        />
+        <span className="truncate flex-1 min-w-0">
+          <span className="truncate">{teamName}</span>
+          {subtitle && (
+            <span className="ml-1 text-[10px] font-medium text-muted-foreground/80">
+              · {subtitle}
+            </span>
           )}
-        </div>
-      )}
-    </div>
+        </span>
+      </div>
+    </Link>
   );
 }
 
