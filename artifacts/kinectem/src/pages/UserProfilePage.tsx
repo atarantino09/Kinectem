@@ -18,6 +18,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { linkify } from "@/lib/linkify";
+import { friendlyAgeLabel } from "@/lib/format";
 import { useIsLg } from "@/hooks/use-mobile";
 import {
   Select,
@@ -452,14 +453,7 @@ export default function UserProfilePage() {
                 ? new Date(dobRaw)
                 : null;
           const dobValid = dobDate && !Number.isNaN(dobDate.getTime());
-          const dobLabel = dobValid
-            ? dobDate.toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                timeZone: "UTC",
-              })
-            : null;
+          const dobLabel = dobValid ? friendlyAgeLabel(dobDate) : null;
           const showInfo =
             user.bio || user.city || user.state || dobLabel;
           if (!showInfo) return null;
@@ -475,7 +469,7 @@ export default function UserProfilePage() {
                 className="text-sm font-medium text-muted-foreground"
                 data-testid="text-user-birthday"
               >
-                Born {dobLabel}
+                {dobLabel}
               </p>
             )}
             {/* Task #349 — Show "City, ST", just the city, or just the state
