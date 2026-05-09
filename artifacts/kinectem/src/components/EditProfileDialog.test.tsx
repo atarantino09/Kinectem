@@ -117,6 +117,25 @@ describe("EditProfileDialog — birthday + visibility (Tasks #431/#432)", () => 
     );
   });
 
+  it("user-flow: opens with empty DOB, picks Everyone, save is blocked with inline error (#432)", () => {
+    // Reproduces the real user flow Marcus hit: dialog opens with no
+    // DOB on file, the dropdown is now clickable (#432), they pick a
+    // tier without a date, and the save guard catches it.
+    render(<EditProfileDialog user={makeUser()} open onOpenChange={() => {}} />);
+    const trigger = screen.getByTestId("input-profile-dob-visibility");
+    expect(trigger).not.toBeDisabled();
+    fireEvent.click(trigger);
+    fireEvent.click(
+      screen.getByTestId("option-profile-dob-visibility-public"),
+    );
+    expect(trigger).toHaveTextContent("Everyone");
+    fireEvent.click(screen.getByTestId("button-save-profile"));
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("error-profile-dob")).toHaveTextContent(
+      "Add a birthday before sharing it.",
+    );
+  });
+
   it("sends both fields when the date is valid and visibility is set", () => {
     render(
       <EditProfileDialog
