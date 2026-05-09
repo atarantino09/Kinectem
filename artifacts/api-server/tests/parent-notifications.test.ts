@@ -18,6 +18,7 @@ import {
   messageChildHides,
   rosterEntries,
   teams,
+  teamFollowers,
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
@@ -664,6 +665,217 @@ describe("parent inbox: per-child unified notifications", () => {
         (d) => d.itemKey,
       );
       expect(keys).not.toContain(`roster:${entry.id}`);
+    });
+
+    it("approve on a pending roster entry flips it to accepted and auto-follows the team for child + parent", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const lisaId = await findUserId("lisa@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      // Wipe existing roster + follow rows for a clean slate.
+      await db
+        .delete(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, samiraId),
+          ),
+        );
+      await db
+        .delete(teamFollowers)
+        .where(
+          and(eq(teamFollowers.teamId, teamId), eq(teamFollowers.userId, samiraId)),
+        );
+      await db
+        .delete(teamFollowers)
+        .where(
+          and(eq(teamFollowers.teamId, teamId), eq(teamFollowers.userId, lisaId)),
+        );
+      const [entry] = await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId: samiraId,
+          role: "player",
+          status: "pending",
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey: `roster:${entry.id}`, decision: "approved" });
+      expect(res.status).toBe(200);
+      expect(res.body.decision).toBe("approved");
+
+      // Roster entry is now accepted.
+      const [after] = await db
+        .select()
+        .from(rosterEntries)
+        .where(eq(rosterEntries.id, entry.id));
+      expect(after?.status).toBe("accepted");
+
+      // Child + parent both auto-followed the team.
+      const childFollow = await db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(eq(teamFollowers.teamId, teamId), eq(teamFollowers.userId, samiraId)),
+        );
+      expect(childFollow.length).toBe(1);
+      const parentFollow = await db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(eq(teamFollowers.teamId, teamId), eq(teamFollowers.userId, lisaId)),
+        );
+      expect(parentFollow.length).toBe(1);
+
+      // The parent's verdict row also captured the prior `pending` status
+      // so an Undo can restore it.
+      const [readRow] = await db
+        .select()
+        .from(parentChildNotificationReads)
+        .where(
+          and(
+            eq(parentChildNotificationReads.parentId, lisaId),
+            eq(parentChildNotificationReads.childId, samiraId),
+            eq(parentChildNotificationReads.itemKey, `roster:${entry.id}`),
+          ),
+        );
+      expect(readRow?.decision).toBe("approved");
+      expect(readRow?.priorStatus).toBe("pending");
+    });
+
+    it("approve on an already-accepted roster entry is a no-op", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      await db
+        .delete(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, samiraId),
+          ),
+        );
+      const [entry] = await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId: samiraId,
+          role: "player",
+          status: "accepted",
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const res = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey: `roster:${entry.id}`, decision: "approved" });
+      expect(res.status).toBe(200);
+
+      const [after] = await db
+        .select()
+        .from(rosterEntries)
+        .where(eq(rosterEntries.id, entry.id));
+      expect(after?.status).toBe("accepted");
+    });
+
+    it("after parent-inbox approve, child's GET /users/:userId/teams reports the team as active", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      await db
+        .delete(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, samiraId),
+          ),
+        );
+      const [entry] = await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId: samiraId,
+          role: "player",
+          status: "pending",
+        })
+        .returning();
+
+      // Parent approves the invite from the family inbox.
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey: `roster:${entry.id}`, decision: "approved" });
+      expect(decideRes.status).toBe(200);
+
+      // Child's own teams list should now show the team as active —
+      // i.e. no `pending` entry survives — confirming the child no
+      // longer sees Accept / Decline prompts on My Teams etc.
+      const { agent: samira } = await loginAs(
+        (u) => u.email === "samira@kinectem.demo",
+      );
+      const teamsRes = await samira.get(`/api/v1/users/${samiraId}/teams`);
+      expect(teamsRes.status).toBe(200);
+      const data = teamsRes.body.data as Array<{
+        id: string;
+        status?: string;
+      }>;
+      const match = data.find((row) => row.id === teamId);
+      expect(match).toBeDefined();
+      expect(match?.status).toBe("active");
+      expect(data.some((row) => row.id === teamId && row.status === "pending"))
+        .toBe(false);
+    });
+
+    it("undo of a parent-approve on a roster entry restores it to pending", async () => {
+      const samiraId = await findUserId("samira@kinectem.demo");
+      const teamId = await getAnyTeamId();
+      await db
+        .delete(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, samiraId),
+          ),
+        );
+      const [entry] = await db
+        .insert(rosterEntries)
+        .values({
+          teamId,
+          userId: samiraId,
+          role: "player",
+          status: "pending",
+        })
+        .returning();
+
+      const { agent: lisa } = await loginAs(
+        (u) => u.email === "lisa@kinectem.demo",
+      );
+      const itemKey = `roster:${entry.id}`;
+      const decideRes = await lisa
+        .post(`/api/v1/users/me/children/${samiraId}/notifications/decision`)
+        .send({ itemKey, decision: "approved" });
+      expect(decideRes.status).toBe(200);
+
+      const undoRes = await lisa
+        .post(
+          `/api/v1/users/me/children/${samiraId}/notifications/unset-decision`,
+        )
+        .send({ itemKey });
+      expect(undoRes.status).toBe(200);
+      expect(undoRes.body.reverted).toBe("approved");
+
+      const [after] = await db
+        .select()
+        .from(rosterEntries)
+        .where(eq(rosterEntries.id, entry.id));
+      expect(after?.status).toBe("pending");
     });
 
     it("rejects unknown decision values", async () => {

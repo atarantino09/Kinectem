@@ -1103,6 +1103,11 @@ router.post(
       if (parsed) {
         priorStatus = await loadChildPostTagPriorStatus(parsed, child.id);
       }
+    } else if (underlyingItem?.kind === "roster") {
+      // Snapshot the roster entry's status before we mutate it so an
+      // Undo on a parent's Approve can flip `accepted` back to `pending`
+      // (the only reversible direction — Remove hard-deletes the row).
+      priorStatus = await loadRosterPriorStatus(refId, child.id);
     }
 
     if (decision === "removed" && underlyingItem) {
@@ -1135,6 +1140,25 @@ router.post(
       const parsed = await loadPostTagFromNotification(refId);
       if (parsed) {
         await applyApproveTagActionForChildPost(parsed, child.id);
+      }
+    }
+    // Parent approval on a roster item must finalize the invite — same
+    // semantics as the dedicated `POST /teams/:teamId/members/:memberId/accept`
+    // endpoint surfaced in the "Pending team invites" subsection. Without
+    // this, the `roster_entries` row stays `pending` and the child still
+    // sees Accept / Decline prompts on My Teams, the team header card,
+    // and the `roster_invite` notification deep link. Idempotent if the
+    // entry is already `accepted`. Wrapped in try/catch so a failure
+    // here can never bubble up and turn a successful decision into a
+    // 5xx — the parent's verdict row is still recorded by the caller.
+    if (decision === "approved" && underlyingItem?.kind === "roster") {
+      try {
+        await applyApproveRosterAction(refId, child.id);
+      } catch (err) {
+        req.log.warn(
+          { err, entryId: refId, childId: child.id },
+          "parent-inbox approve: roster accept side-effects failed",
+        );
       }
     }
 
@@ -1214,6 +1238,17 @@ router.post(
     }
     if (prior.decision === "removed") {
       await applyUnsetAction(
+        kind as ChildItemKind,
+        refId,
+        child.id,
+        prior.priorStatus ?? null,
+      );
+    } else if (prior.decision === "approved") {
+      // Most kinds: approve had no destructive side effect, so Undo
+      // just removes the verdict row. Exception: a roster `approved`
+      // flipped the entry to `accepted`, so an Undo must restore the
+      // prior `pending` status when feasible.
+      await applyUnsetApproveAction(
         kind as ChildItemKind,
         refId,
         child.id,
@@ -1365,6 +1400,91 @@ async function applyUnsetAction(
   // roster: hard-deleted, so reversal is not reliably possible. The
   // caller will simply clear the decision row and the item will come
   // back only if it still surfaces in the live stream.
+}
+
+// Snapshot the current status of a roster entry (scoped to this child)
+// so an Undo of an Approve can flip an `accepted` row back to whatever
+// it was before — typically `pending`. Returns null if the row no
+// longer exists or doesn't belong to this child (which protects against
+// a tampered-with itemKey reaching across children).
+async function loadRosterPriorStatus(
+  entryId: string,
+  childId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ status: rosterEntries.status, userId: rosterEntries.userId })
+    .from(rosterEntries)
+    .where(eq(rosterEntries.id, entryId))
+    .limit(1);
+  if (!row || row.userId !== childId) return null;
+  return row.status;
+}
+
+// Parent approval on a roster invite must finalize the child's
+// membership — same write + auto-follow side effects as
+// `POST /teams/:teamId/members/:memberId/accept`. Idempotent: a row
+// already `accepted` is a no-op (the verdict row alone is enough to
+// drop it from the inbox); a missing or non-pending row is silently
+// skipped. Scoped to the child's own roster entry to defeat any
+// tampered-with itemKey reaching across users.
+async function applyApproveRosterAction(
+  entryId: string,
+  childId: string,
+): Promise<void> {
+  const [entry] = await db
+    .select()
+    .from(rosterEntries)
+    .where(eq(rosterEntries.id, entryId))
+    .limit(1);
+  if (!entry) return;
+  if (entry.userId !== childId) return;
+  if (entry.status === "accepted") return;
+  if (entry.status !== "pending") return;
+  await db
+    .update(rosterEntries)
+    .set({ status: "accepted" })
+    .where(
+      and(eq(rosterEntries.id, entry.id), eq(rosterEntries.status, "pending")),
+    );
+  // Mirror the dedicated accept endpoint: auto-follow the team for the
+  // child and any linked guardian so the team appears in their feed
+  // without an extra Follow click. The helpers already swallow their
+  // own errors, but we still wrap the whole block defensively.
+  await ensureTeamFollowed(entry.userId, entry.teamId);
+  const [accepter] = await db
+    .select({ parentId: users.parentId })
+    .from(users)
+    .where(eq(users.id, entry.userId))
+    .limit(1);
+  if (accepter?.parentId) {
+    await ensureTeamFollowedAsGuardian(accepter.parentId, entry.teamId);
+  }
+}
+
+// Reverse the side effect of a prior Approve where one exists. Most
+// kinds had no mutation on Approve so this is a no-op; the only kind
+// that needs handling today is `roster`, where Approve flipped the
+// entry to `accepted` and Undo should restore the prior `pending`
+// status. Scoped to this child + only flips `accepted` rows so we
+// never overwrite a child-side state change in between.
+async function applyUnsetApproveAction(
+  kind: ChildItemKind,
+  refId: string,
+  childId: string,
+  priorStatus: string | null,
+): Promise<void> {
+  if (kind !== "roster") return;
+  if (priorStatus !== "pending") return;
+  await db
+    .update(rosterEntries)
+    .set({ status: "pending" })
+    .where(
+      and(
+        eq(rosterEntries.id, refId),
+        eq(rosterEntries.userId, childId),
+        eq(rosterEntries.status, "accepted"),
+      ),
+    );
 }
 
 // When a parent approves a tag for their child from the family inbox,
