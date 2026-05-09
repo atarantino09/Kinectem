@@ -40,6 +40,37 @@ import { ImageCropDialog } from "@/components/ImageCropDialog";
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+// Task #432 — Birthday is composed from three Select dropdowns rather
+// than a native date input (the native picker dropped values silently
+// on some browsers). Months are zero-padded so the value can be
+// concatenated directly into the YYYY-MM-DD payload. Days always show
+// 1–31 — invalid combos like Feb 31 are caught by the round-trip
+// validation in onSave. Years run from the current year back to 1900,
+// newest first so adults find their year quickly.
+const DOB_MONTHS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "01", label: "January" },
+  { value: "02", label: "February" },
+  { value: "03", label: "March" },
+  { value: "04", label: "April" },
+  { value: "05", label: "May" },
+  { value: "06", label: "June" },
+  { value: "07", label: "July" },
+  { value: "08", label: "August" },
+  { value: "09", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+];
+const DOB_DAYS: ReadonlyArray<string> = Array.from({ length: 31 }, (_, i) =>
+  String(i + 1).padStart(2, "0"),
+);
+const DOB_YEARS: ReadonlyArray<string> = (() => {
+  const now = new Date().getUTCFullYear();
+  const years: string[] = [];
+  for (let y = now; y >= 1900; y -= 1) years.push(String(y));
+  return years;
+})();
+
 async function uploadAvatarFile(file: File): Promise<string> {
   const upload = await requestUpload({
     fileName: file.name,
@@ -103,14 +134,25 @@ export function EditProfileDialog({
   // on the profile hero. Both default to empty when the user has none.
   const [city, setCity] = useState(user.city ?? "");
   const [state, setState] = useState(user.state ?? "");
-  // Task #422 — Birthday is editable from the profile UI. The server
-  // returns dateOfBirth as a YYYY-MM-DD string; native <input type="date">
-  // expects the same shape.
-  const dobToString = (v: PrivateUserResponse["dateOfBirth"]): string => {
-    if (!v) return "";
-    return String(v).slice(0, 10);
+  // Task #422 / #432 — Birthday is editable from the profile UI. We
+  // ditched <input type="date"> in favor of three independent
+  // Month/Day/Year selects because the native date picker silently
+  // dropped values on some browsers (the user's chosen date never made
+  // it into React state, so saves looked like "today's date" no-ops).
+  // Three controlled selects sidestep that whole class of bugs.
+  const dobParts = (
+    v: PrivateUserResponse["dateOfBirth"],
+  ): { m: string; d: string; y: string } => {
+    if (!v) return { m: "", d: "", y: "" };
+    const s = String(v).slice(0, 10);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!match) return { m: "", d: "", y: "" };
+    return { y: match[1], m: match[2], d: match[3] };
   };
-  const [dateOfBirth, setDateOfBirth] = useState(dobToString(user.dateOfBirth));
+  const initialDobParts = dobParts(user.dateOfBirth);
+  const [dobMonth, setDobMonth] = useState(initialDobParts.m);
+  const [dobDay, setDobDay] = useState(initialDobParts.d);
+  const [dobYear, setDobYear] = useState(initialDobParts.y);
   const [dateOfBirthError, setDateOfBirthError] = useState<string | undefined>(
     undefined,
   );
@@ -134,13 +176,6 @@ export function EditProfileDialog({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadGenRef = useRef(0);
-  // Task #432 follow-up — Some browsers/native date pickers don't fire a
-  // change event reliably until the input is blurred (most commonly when
-  // a user picks a date and immediately clicks Save without tabbing
-  // away). Holding a ref to the underlying <input type="date"> lets us
-  // re-read its current value at save time as a defensive fallback if
-  // local state somehow lags behind the DOM.
-  const dobInputRef = useRef<HTMLInputElement | null>(null);
   // Task #387 — Stage the picked file in the crop dialog before running
   // shrink + upload so users control framing on tall phone photos
   // instead of getting an awkward center-crop into the round avatar.
@@ -159,7 +194,12 @@ export function EditProfileDialog({
       setBio(user.bio ?? "");
       setCity(user.city ?? "");
       setState(user.state ?? "");
-      setDateOfBirth(dobToString(user.dateOfBirth));
+      {
+        const p = dobParts(user.dateOfBirth);
+        setDobMonth(p.m);
+        setDobDay(p.d);
+        setDobYear(p.y);
+      }
       setDateOfBirthError(undefined);
       setDateOfBirthVisibility(
         ((user as { dateOfBirthVisibility?: DobVisibility })
@@ -212,7 +252,12 @@ export function EditProfileDialog({
       setBio(user.bio ?? "");
       setCity(user.city ?? "");
       setState(user.state ?? "");
-      setDateOfBirth(dobToString(user.dateOfBirth));
+      {
+        const p = dobParts(user.dateOfBirth);
+        setDobMonth(p.m);
+        setDobDay(p.d);
+        setDobYear(p.y);
+      }
       setDateOfBirthError(undefined);
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
@@ -299,38 +344,25 @@ export function EditProfileDialog({
 
   const onSave = () => {
     setSaveError(null);
-    // Task #422 — Validate birthday client-side regardless of minor
-    // status: DOB is editable on every account (the server-side minor
-    // block only covers bio/city/state). Empty input clears the value
-    // (sent as null).
-    // Defensive: read straight from the DOM as a fallback in case the
-    // browser's date picker never fired onChange (seen on some native
-    // pickers when the user picks a date and immediately clicks Save
-    // without blurring the input first).
-    const liveDom = dobInputRef.current?.value ?? "";
-    const trimmedDob = (dateOfBirth || liveDom).trim();
-    // TEMP DEBUG (Task #432 repro): log what we're seeing right before
-    // the save guard. Remove once the "won't save" report is resolved.
-    // eslint-disable-next-line no-console
-    console.log("[EditProfile] onSave", {
-      stateDob: dateOfBirth,
-      liveDom,
-      trimmedDob,
-      visibility: dateOfBirthVisibility,
-    });
+    // Task #422 / #432 — Birthday is composed from three independent
+    // selects (Month / Day / Year). All three empty = clear the value;
+    // any partial combination = inline error; otherwise validate the
+    // composed date (rejecting impossible calendar dates like Feb 31
+    // and any future date) before sending YYYY-MM-DD to the server.
     let dobPayload: string | null = null;
-    if (trimmedDob) {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmedDob);
-      if (!m) {
-        setDateOfBirthError("Enter a valid date.");
-        return;
-      }
-      const y = Number(m[1]);
-      const mo = Number(m[2]);
-      const d = Number(m[3]);
+    const anyDobPart = dobMonth || dobDay || dobYear;
+    const allDobParts = dobMonth && dobDay && dobYear;
+    if (anyDobPart && !allDobParts) {
+      setDateOfBirthError("Pick a month, day, and year.");
+      return;
+    }
+    if (allDobParts) {
+      const y = Number(dobYear);
+      const mo = Number(dobMonth);
+      const d = Number(dobDay);
       // Round-trip through UTC components so impossible calendar dates
-      // like 2026-02-31 (which `new Date(...)` silently rolls forward)
-      // are rejected here instead of saving a shifted value.
+      // (Feb 31, Apr 31, etc.) are rejected here instead of saving a
+      // shifted value.
       const parsed = new Date(Date.UTC(y, mo - 1, d));
       if (
         Number.isNaN(parsed.getTime()) ||
@@ -338,14 +370,14 @@ export function EditProfileDialog({
         parsed.getUTCMonth() !== mo - 1 ||
         parsed.getUTCDate() !== d
       ) {
-        setDateOfBirthError("Enter a valid date.");
+        setDateOfBirthError("That date doesn't exist — check the day.");
         return;
       }
       if (parsed.getTime() > Date.now()) {
         setDateOfBirthError("Birthday can't be in the future.");
         return;
       }
-      dobPayload = trimmedDob;
+      dobPayload = `${dobYear}-${dobMonth}-${dobDay}`;
     }
     // Task #431/#432 — Refuse to send a non-private visibility alongside
     // a null DOB. The dropdown is always clickable (#432), so this guard
@@ -512,64 +544,103 @@ export function EditProfileDialog({
               via `dateOfBirthVisibility`; minor accounts are pinned
               to private server-side, so the picker is hidden. */}
           <div className="space-y-1.5">
-            <Label htmlFor="profile-dob" className="text-xs font-bold">
-              Birthday
-            </Label>
-            <div className={isMinor ? "" : "grid grid-cols-2 gap-3"}>
-              <Input
-                id="profile-dob"
-                type="date"
-                ref={dobInputRef}
-                value={dateOfBirth}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-                onBlur={(e) => {
-                  // Some native date pickers commit the chosen value on
-                  // blur rather than on every change; mirror it into
-                  // state so onSave never sees a stale empty string.
-                  if (e.target.value && e.target.value !== dateOfBirth) {
-                    setDateOfBirth(e.target.value);
-                  }
-                }}
-                data-testid="input-profile-dob"
-              />
-              {!isMinor && (
-                <Select
-                  value={dateOfBirthVisibility}
-                  onValueChange={(v) =>
-                    setDateOfBirthVisibility(v as DobVisibility)
-                  }
+            <Label className="text-xs font-bold">Birthday</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Select value={dobMonth} onValueChange={setDobMonth}>
+                <SelectTrigger
+                  data-testid="input-profile-dob-month"
+                  aria-label="Birthday month"
                 >
-                  <SelectTrigger
-                    id="profile-dob-visibility"
-                    data-testid="input-profile-dob-visibility"
-                    aria-label="Who can see your birthday"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {DOB_MONTHS.map((m) => (
                     <SelectItem
-                      value={UpdateUserRequestDateOfBirthVisibility.private}
-                      data-testid="option-profile-dob-visibility-private"
+                      key={m.value}
+                      value={m.value}
+                      data-testid={`option-profile-dob-month-${m.value}`}
                     >
-                      Only me
+                      {m.label}
                     </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={dobDay} onValueChange={setDobDay}>
+                <SelectTrigger
+                  data-testid="input-profile-dob-day"
+                  aria-label="Birthday day"
+                >
+                  <SelectValue placeholder="Day" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {DOB_DAYS.map((d) => (
                     <SelectItem
-                      value={UpdateUserRequestDateOfBirthVisibility.followers}
-                      data-testid="option-profile-dob-visibility-followers"
+                      key={d}
+                      value={d}
+                      data-testid={`option-profile-dob-day-${d}`}
                     >
-                      Followers
+                      {Number(d)}
                     </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={dobYear} onValueChange={setDobYear}>
+                <SelectTrigger
+                  data-testid="input-profile-dob-year"
+                  aria-label="Birthday year"
+                >
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {DOB_YEARS.map((y) => (
                     <SelectItem
-                      value={UpdateUserRequestDateOfBirthVisibility.public}
-                      data-testid="option-profile-dob-visibility-public"
+                      key={y}
+                      value={y}
+                      data-testid={`option-profile-dob-year-${y}`}
                     >
-                      Everyone
+                      {y}
                     </SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {!isMinor && (
+              <Select
+                value={dateOfBirthVisibility}
+                onValueChange={(v) =>
+                  setDateOfBirthVisibility(v as DobVisibility)
+                }
+              >
+                <SelectTrigger
+                  id="profile-dob-visibility"
+                  data-testid="input-profile-dob-visibility"
+                  aria-label="Who can see your birthday"
+                  className="mt-1"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    value={UpdateUserRequestDateOfBirthVisibility.private}
+                    data-testid="option-profile-dob-visibility-private"
+                  >
+                    Only me
+                  </SelectItem>
+                  <SelectItem
+                    value={UpdateUserRequestDateOfBirthVisibility.followers}
+                    data-testid="option-profile-dob-visibility-followers"
+                  >
+                    Followers
+                  </SelectItem>
+                  <SelectItem
+                    value={UpdateUserRequestDateOfBirthVisibility.public}
+                    data-testid="option-profile-dob-visibility-public"
+                  >
+                    Everyone
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {dateOfBirthError && (
               <p
                 className="text-xs font-medium text-destructive"

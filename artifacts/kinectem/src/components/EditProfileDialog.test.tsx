@@ -79,7 +79,7 @@ describe("EditProfileDialog — birthday + visibility (Tasks #431/#432)", () => 
     ).not.toBeInTheDocument();
   });
 
-  it("does not auto-reset visibility when the date is cleared (#432)", () => {
+  it("renders Month/Day/Year selects pre-filled from the user's existing DOB (#432)", () => {
     render(
       <EditProfileDialog
         user={makeUser({
@@ -90,13 +90,37 @@ describe("EditProfileDialog — birthday + visibility (Tasks #431/#432)", () => 
         onOpenChange={() => {}}
       />,
     );
-    const trigger = screen.getByTestId("input-profile-dob-visibility");
-    expect(trigger).toHaveTextContent("Everyone");
-    fireEvent.change(screen.getByTestId("input-profile-dob"), {
-      target: { value: "" },
-    });
-    expect(trigger).not.toBeDisabled();
-    expect(trigger).toHaveTextContent("Everyone");
+    expect(screen.getByTestId("input-profile-dob-month")).toHaveTextContent(
+      "May",
+    );
+    expect(screen.getByTestId("input-profile-dob-day")).toHaveTextContent("9");
+    expect(screen.getByTestId("input-profile-dob-year")).toHaveTextContent(
+      "2010",
+    );
+  });
+
+  it("blocks save when only some birthday parts are picked (#432)", () => {
+    render(<EditProfileDialog user={makeUser()} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByTestId("input-profile-dob-month"));
+    fireEvent.click(screen.getByTestId("option-profile-dob-month-05"));
+    fireEvent.click(screen.getByTestId("button-save-profile"));
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("error-profile-dob")).toHaveTextContent(
+      "Pick a month, day, and year.",
+    );
+  });
+
+  it("composes YYYY-MM-DD from the three selects and sends it (#432)", () => {
+    render(<EditProfileDialog user={makeUser()} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByTestId("input-profile-dob-month"));
+    fireEvent.click(screen.getByTestId("option-profile-dob-month-05"));
+    fireEvent.click(screen.getByTestId("input-profile-dob-day"));
+    fireEvent.click(screen.getByTestId("option-profile-dob-day-09"));
+    fireEvent.click(screen.getByTestId("input-profile-dob-year"));
+    fireEvent.click(screen.getByTestId("option-profile-dob-year-2010"));
+    fireEvent.click(screen.getByTestId("button-save-profile"));
+    expect(mutateMock).toHaveBeenCalledTimes(1);
+    expect(mutateMock.mock.calls[0][0].data.dateOfBirth).toBe("2010-05-09");
   });
 
   it("guards onSave: empty date + non-private visibility shows inline error and skips PATCH", () => {

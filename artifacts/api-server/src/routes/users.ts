@@ -410,14 +410,6 @@ router.patch(
     // Express 5's typed params widens to string | string[]; UUID route
     // params are always a single string here.
     const userIdParam = String(req.params.userId);
-    // TEMP DEBUG (Task #432 follow-up): log the raw body so we can see
-    // exactly what the client is sending for dateOfBirth /
-    // dateOfBirthVisibility. Remove once Marcus's "won't save" repro is
-    // confirmed.
-    req.log.info(
-      { userIdParam, body: req.body },
-      "PATCH /users/:userId body (debug)",
-    );
     const [existing] = await db
       .select()
       .from(users)
