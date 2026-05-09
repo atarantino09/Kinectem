@@ -1,4 +1,3 @@
-import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { PrivateUserResponse } from "@workspace/api-client-react";
@@ -66,21 +65,21 @@ function makeUser(
   } as PrivateUserResponse;
 }
 
-describe("EditProfileDialog — birthday + visibility (Task #431)", () => {
+describe("EditProfileDialog — birthday + visibility (Tasks #431/#432)", () => {
   beforeEach(() => {
     mutateMock.mockReset();
     toastMock.mockReset();
   });
 
-  it("disables the visibility dropdown and shows a hint when no date is set", () => {
+  it("keeps the visibility dropdown clickable even when no date is set (#432)", () => {
     render(<EditProfileDialog user={makeUser()} open onOpenChange={() => {}} />);
-    expect(screen.getByTestId("input-profile-dob-visibility")).toBeDisabled();
+    expect(screen.getByTestId("input-profile-dob-visibility")).not.toBeDisabled();
     expect(
-      screen.getByTestId("hint-profile-dob-visibility"),
-    ).toHaveTextContent("Add a birthday to choose who can see it.");
+      screen.queryByTestId("hint-profile-dob-visibility"),
+    ).not.toBeInTheDocument();
   });
 
-  it("auto-resets visibility to private if the date input is cleared", () => {
+  it("does not auto-reset visibility when the date is cleared (#432)", () => {
     render(
       <EditProfileDialog
         user={makeUser({
@@ -92,67 +91,30 @@ describe("EditProfileDialog — birthday + visibility (Task #431)", () => {
       />,
     );
     const trigger = screen.getByTestId("input-profile-dob-visibility");
-    expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveTextContent("Everyone");
     fireEvent.change(screen.getByTestId("input-profile-dob"), {
       target: { value: "" },
     });
-    expect(trigger).toBeDisabled();
-    expect(trigger).toHaveTextContent("Only me");
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).toHaveTextContent("Everyone");
   });
 
-  it("never PATCHes a non-private visibility when the date is empty", () => {
-    // Repro of the original bug: user starts with date + "Everyone",
-    // clears the date, then saves. With the fix the auto-reset effect
-    // forces visibility back to "private" before save, so the PATCH
-    // can never carry the inconsistent { dateOfBirth: null,
-    // dateOfBirthVisibility: "public" } pair that caused the bug.
+  it("guards onSave: empty date + non-private visibility shows inline error and skips PATCH", () => {
     render(
       <EditProfileDialog
         user={makeUser({
-          dateOfBirth: "2010-05-09",
+          dateOfBirth: null,
           dateOfBirthVisibility: "public",
         })}
         open
         onOpenChange={() => {}}
       />,
     );
-    fireEvent.change(screen.getByTestId("input-profile-dob"), {
-      target: { value: "" },
-    });
     fireEvent.click(screen.getByTestId("button-save-profile"));
-    expect(mutateMock).toHaveBeenCalledTimes(1);
-    const payload = mutateMock.mock.calls[0][0];
-    expect(payload.data.dateOfBirth).toBeNull();
-    expect(payload.data.dateOfBirthVisibility).toBe("private");
-  });
-
-  it("guards onSave: empty date + non-private visibility shows inline error and skips PATCH", () => {
-    // The auto-reset effect normally prevents this state from existing
-    // in the UI. Suppress the effect for this one test so we can
-    // exercise the defense-in-depth guard inside `onSave` directly.
-    const useEffectSpy = vi
-      .spyOn(React, "useEffect")
-      .mockImplementation(() => {});
-    try {
-      render(
-        <EditProfileDialog
-          user={makeUser({
-            dateOfBirth: null,
-            dateOfBirthVisibility: "public",
-          })}
-          open
-          onOpenChange={() => {}}
-        />,
-      );
-      fireEvent.click(screen.getByTestId("button-save-profile"));
-      expect(mutateMock).not.toHaveBeenCalled();
-      expect(screen.getByTestId("error-profile-dob")).toHaveTextContent(
-        "Add a birthday before sharing it.",
-      );
-    } finally {
-      useEffectSpy.mockRestore();
-    }
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("error-profile-dob")).toHaveTextContent(
+      "Add a birthday before sharing it.",
+    );
   });
 
   it("sends both fields when the date is valid and visibility is set", () => {

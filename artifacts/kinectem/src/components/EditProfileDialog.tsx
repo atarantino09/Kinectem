@@ -123,18 +123,12 @@ export function EditProfileDialog({
   const [dateOfBirthVisibility, setDateOfBirthVisibility] = useState<DobVisibility>(
     initialDobVisibility,
   );
-  // Task #431 — Birthday visibility only makes sense if there's a date to
-  // share. Auto-pin the dropdown back to "private" whenever the date input
-  // is empty so the row can never end up with a non-private tier and a
-  // null DOB (which previously saved silently and made it look like the
-  // birthday was never updated).
-  useEffect(() => {
-    if (!dateOfBirth.trim() && dateOfBirthVisibility !== "private") {
-      setDateOfBirthVisibility(
-        UpdateUserRequestDateOfBirthVisibility.private as DobVisibility,
-      );
-    }
-  }, [dateOfBirth, dateOfBirthVisibility]);
+  // Task #432 — Visibility dropdown stays clickable in either order
+  // (date-first or visibility-first). The save guard in `onSave` is
+  // what actually prevents the inconsistent { dateOfBirth: null,
+  // dateOfBirthVisibility: "public" } payload from going out, so the
+  // earlier auto-reset effect from #431 was removed — it silently
+  // undid the user's pick and made the field feel broken.
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -332,10 +326,10 @@ export function EditProfileDialog({
       }
       dobPayload = trimmedDob;
     }
-    // Task #431 — Defense in depth: even though the dropdown is disabled
-    // when the date is empty, refuse to send a non-private visibility
-    // alongside a null DOB. Keeps the row consistent if anything ever
-    // bypasses the disabled state.
+    // Task #431/#432 — Refuse to send a non-private visibility alongside
+    // a null DOB. The dropdown is always clickable (#432), so this guard
+    // is the actual enforcement: it surfaces an inline error and skips
+    // the PATCH instead of saving the inconsistent pair.
     if (!isMinor && !dobPayload && dateOfBirthVisibility !== "private") {
       setDateOfBirthError("Add a birthday before sharing it.");
       return;
@@ -515,7 +509,6 @@ export function EditProfileDialog({
                   onValueChange={(v) =>
                     setDateOfBirthVisibility(v as DobVisibility)
                   }
-                  disabled={!dateOfBirth.trim()}
                 >
                   <SelectTrigger
                     id="profile-dob-visibility"
@@ -553,14 +546,6 @@ export function EditProfileDialog({
                 data-testid="error-profile-dob"
               >
                 {dateOfBirthError}
-              </p>
-            )}
-            {!isMinor && !dateOfBirth.trim() && !dateOfBirthError && (
-              <p
-                className="text-xs text-muted-foreground"
-                data-testid="hint-profile-dob-visibility"
-              >
-                Add a birthday to choose who can see it.
               </p>
             )}
           </div>
