@@ -10,6 +10,7 @@
     "hello": "tsx ./src/hello.ts",
     "backfill-avatars": "tsx ./src/backfill-avatars.ts",
     "backfill-parent-team-follows": "tsx ./src/backfill-parent-team-follows.ts",
+    "backfill-self-team-follows": "tsx ./src/backfill-self-team-follows.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

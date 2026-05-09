@@ -9,6 +9,7 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 - `pnpm --filter @workspace/api-server run dev`: Start the Prism mock server.
 - `pnpm --filter @workspace/kinectem run dev`: Start the web application.
 - `pnpm --filter @workspace/scripts run backfill-parent-team-follows`: Backfill `team_followers` so every parent of a rostered child is auto-following that team (idempotent).
+- `pnpm --filter @workspace/scripts run backfill-self-team-follows`: Backfill `team_followers` so every user with an accepted roster entry is auto-following that team (idempotent).
 
 **Required Environment Variables**: _Populate as you build_
 
