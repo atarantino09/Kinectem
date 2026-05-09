@@ -35,7 +35,10 @@ import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { NoIndex } from "@/components/NoIndex";
 import {
   Building2,
+  Cake,
   ChevronDown,
+  FileText,
+  MapPin,
   MessageSquare,
   Shield,
   Tag,
@@ -460,30 +463,37 @@ export default function UserProfilePage() {
           return (
           <div className="px-6 pb-6 space-y-2">
             {user.bio && (
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl whitespace-pre-wrap">
-                {linkify(user.bio)}
-              </p>
+              <div className="flex items-start gap-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                <FileText className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <p className="whitespace-pre-wrap min-w-0">
+                  {linkify(user.bio)}
+                </p>
+              </div>
             )}
             {dobLabel && (
-              <p
-                className="text-sm font-medium text-muted-foreground"
+              <div
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
                 data-testid="text-user-birthday"
               >
-                {dobLabel}
-              </p>
+                <Cake className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{dobLabel}</span>
+              </div>
             )}
             {/* Task #349 — Show "City, ST", just the city, or just the state
                 depending on which fields the user has set. Hidden when both
                 are empty. */}
             {(user.city || user.state) && (
-              <p
-                className="text-sm font-medium text-muted-foreground"
+              <div
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
                 data-testid="text-user-location"
               >
-                {user.city && user.state
-                  ? `${user.city}, ${user.state}`
-                  : (user.city ?? user.state)}
-              </p>
+                <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  {user.city && user.state
+                    ? `${user.city}, ${user.state}`
+                    : (user.city ?? user.state)}
+                </span>
+              </div>
             )}
           </div>
           );
