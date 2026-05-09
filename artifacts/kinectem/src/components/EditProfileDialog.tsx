@@ -90,6 +90,11 @@ export function EditProfileDialog({
   const { toast } = useToast();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
+  // Task #423 — under-13 accounts can't set bio/website/city/state
+  // (server enforces via MINOR_BLOCKED). Hide those inputs entirely
+  // so saving the allowed fields (name, avatar) doesn't get rejected.
+  const isMinor = Boolean((user as { isMinor?: boolean }).isMinor);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [firstName, setFirstName] = useState(user.firstName);
   const [lastName, setLastName] = useState(user.lastName);
   const [bio, setBio] = useState(user.bio ?? "");
@@ -128,6 +133,7 @@ export function EditProfileDialog({
       setState(user.state ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
+      setSaveError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user.id]);
@@ -146,12 +152,19 @@ export function EditProfileDialog({
         handleOpenChange(false);
         onSaved?.();
       },
-      onError: () =>
+      onError: (e: unknown) => {
+        // Task #423 — surface the server's error message inline (e.g.
+        // MINOR_BLOCKED) so the Save button never silently no-ops.
+        const err = e as { body?: { error?: string }; message?: string };
+        const msg =
+          err?.body?.error ?? err?.message ?? "Try again in a moment.";
+        setSaveError(msg);
         toast({
           title: "Could not update",
-          description: "Try again in a moment.",
+          description: msg,
           variant: "destructive",
-        }),
+        });
+      },
     },
   });
 
@@ -168,6 +181,7 @@ export function EditProfileDialog({
       setState(user.state ?? "");
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
+      setSaveError(null);
       setCropSrc(null);
       setCropOpen(false);
     }
@@ -249,6 +263,21 @@ export function EditProfileDialog({
   };
 
   const onSave = () => {
+    setSaveError(null);
+    // Task #423 — minors aren't allowed to set bio/website/city/state on
+    // the server. Skip the website normalization and omit those fields
+    // entirely so the PATCH only carries fields a minor account can set.
+    if (isMinor) {
+      update.mutate({
+        userId: user.id,
+        data: {
+          firstName,
+          lastName,
+          avatarUrl,
+        },
+      });
+      return;
+    }
     // Task #293 — Normalize the website client-side using the same helper
     // the org form uses. Bare domains become `https://example.com`; obvious
     // garbage is surfaced inline instead of going to the server.
@@ -391,6 +420,16 @@ export function EditProfileDialog({
               />
             </div>
           </div>
+          {isMinor ? (
+            <p
+              className="text-xs font-medium text-muted-foreground"
+              data-testid="text-minor-fields-notice"
+            >
+              Bio, website, and location aren't available on under-13
+              accounts.
+            </p>
+          ) : (
+          <>
           <div className="space-y-1.5">
             <Label htmlFor="bio" className="text-xs font-bold">
               Bio
@@ -480,7 +519,17 @@ export function EditProfileDialog({
               </Select>
             </div>
           </div>
+          </>
+          )}
         </div>
+        {saveError && (
+          <p
+            className="text-xs font-medium text-destructive px-1"
+            data-testid="text-save-profile-error"
+          >
+            {saveError}
+          </p>
+        )}
         <DialogFooter>
           <Button
             variant="outline"
