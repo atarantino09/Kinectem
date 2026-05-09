@@ -855,11 +855,27 @@ router.get(
       me.id,
     );
     const visibleUserIds = new Set(userRowsVisible.map((u) => u.id));
-    const userSuggestions = userRows
+    const projectedRows = userRows
       .filter((r) => !excludedUserIds.has(r.user.id))
       .filter((r) => visibleUserIds.has(r.user.id))
-      .slice(0, SUGGESTION_LIMIT)
-      .map((r) => toPublicUser(r.user, { isOwnProfile: false, isFollowing: false }));
+      .slice(0, SUGGESTION_LIMIT);
+    // Task #421 — defense in depth: filterOutMinors above already drops
+    // strangers' minor rows, but the linked guardian's own child can
+    // still surface here. Build a viewer context so any minor that
+    // does land in the suggestion list is rendered with first-initial
+    // last name for non-privileged viewers (and the linked guardian
+    // continues to see the full name).
+    const suggestionMinorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      projectedRows.filter((r) => r.user.isMinor).map((r) => r.user.id),
+    );
+    const userSuggestions = projectedRows.map((r) =>
+      toPublicUser(r.user, {
+        isOwnProfile: false,
+        isFollowing: false,
+        minorNameCtx: suggestionMinorCtx,
+      }),
+    );
 
     res.json({
       organizations: orgSuggestions,

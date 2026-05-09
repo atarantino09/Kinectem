@@ -659,6 +659,47 @@ describe("Task #416 — minor name masking E2E", () => {
   // /teams/:teamId/followers — same shape; daniela's shared-roster
   // carve-out also unmasks her view.
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // /posts/follow-suggestions — Task #421. Defense in depth: the
+  // route's filterOutMinors already drops minor rows for strangers, so
+  // a non-privileged viewer's payload simply doesn't contain Samira at
+  // all. The linked guardian, however, can still be recommended their
+  // own child (filterOutMinors carves out parentId), and the new
+  // toPublicUser minorNameCtx must keep the full name flowing for the
+  // guardian. The masking branch is exercised at the unit level.
+  describe("/posts/follow-suggestions", () => {
+    it("never leaks the minor's surname to a stranger viewer", async () => {
+      const { agent: marcus } = await loginAs("marcus@kinectem.demo");
+      const res = await marcus.get(`/api/v1/follow-suggestions`);
+      expect(res.status).toBe(200);
+      expectNoLeak(res.body);
+      const hit = (
+        res.body.users as Array<{ id: string }>
+      ).find((u) => u.id === ids.samira);
+      expect(hit).toBeUndefined();
+    });
+
+    it("returns the full name to the linked guardian when their child is suggested", async () => {
+      const { agent: lisa } = await loginAs("lisa@kinectem.demo");
+      const res = await lisa.get(`/api/v1/follow-suggestions`);
+      expect(res.status).toBe(200);
+      const hit = (
+        res.body.users as Array<{
+          id: string;
+          firstName: string;
+          lastName: string;
+        }>
+      ).find((u) => u.id === ids.samira);
+      // The guardian may or may not be recommended their own child
+      // depending on follow graph state; if she does surface, her
+      // last name must be present in full (no first-initial mask).
+      if (hit) {
+        expect(hit.firstName).toBe("Samira");
+        expect(hit.lastName).toBe("Carter");
+      }
+    });
+  });
+
   describe("/teams/:teamId/followers", () => {
     // filterOutMinors only carves out self + linked parent on follower
     // listings — shared-team teammates do NOT get a carve-out here, so

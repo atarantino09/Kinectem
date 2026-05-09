@@ -374,9 +374,23 @@ export function toPublicUser(
     isFollowing?: boolean;
     followerCount?: number;
     followingCount?: number;
+    // Task #421 — when this minor row is being projected onto a
+    // stranger-visible surface (e.g. /posts/follow-suggestions card,
+    // follower lists), pass a viewer context so the last name is
+    // masked to its first initial. Privileged viewers (self, linked
+    // guardian, shared-roster teammate, admin) get the full name.
+    // Omitting this opt preserves the legacy "full name" behavior
+    // for surfaces that have already been audited (e.g. the user's
+    // own profile resource where the carve-out applies).
+    minorNameCtx?: MinorNameViewerContext;
   } = {},
 ) {
-  const { firstName, lastName } = splitName(u.name);
+  const masked =
+    opts.minorNameCtx !== undefined &&
+    shouldMaskMinorName(u, opts.minorNameCtx);
+  const { firstName, lastName } = splitName(
+    masked ? maskedDisplayName(u) : u.name,
+  );
   return {
     id: u.id,
     firstName,
