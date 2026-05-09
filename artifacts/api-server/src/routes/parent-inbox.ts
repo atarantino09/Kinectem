@@ -68,6 +68,7 @@ import {
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import {
   ensureOrgFollowedForTeam,
+  ensureTeamFollowed,
   ensureTeamFollowedAsGuardian,
 } from "../lib/team-follow";
 
@@ -1809,6 +1810,26 @@ router.post(
       })
       .returning();
     await ensureOrgFollowedForTeam(me.id, invite.teamId);
+    // Task #434 — auto-follow the team for the accepter and any linked
+    // parent so the team surfaces immediately on their feed/profile.
+    // Wrapped in try/catch so a failure here can never bubble up and
+    // turn a successful accept into a 5xx.
+    try {
+      await ensureTeamFollowed(me.id, invite.teamId);
+      const [meRow] = await db
+        .select({ parentId: users.parentId })
+        .from(users)
+        .where(eq(users.id, me.id))
+        .limit(1);
+      if (meRow?.parentId) {
+        await ensureTeamFollowedAsGuardian(meRow.parentId, invite.teamId);
+      }
+    } catch (err) {
+      req.log.warn(
+        { err, userId: me.id, teamId: invite.teamId },
+        "auto-follow on token-accept failed",
+      );
+    }
     await db
       .update(rosterInvites)
       .set({ status: "accepted" })

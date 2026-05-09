@@ -377,6 +377,194 @@ describe("Task #394 — parent auto-follows child's team", () => {
       );
   });
 
+  it("Task #434 — accepting via /teams/:teamId/members/:memberId/accept auto-follows the team for the user AND their linked parent (idempotent)", async () => {
+    const { teamId } = await getFootballTeam();
+    const samiraId = await findUserId("samira@kinectem.demo");
+    const lisaId = await findUserId("lisa@kinectem.demo");
+
+    // Reset Samira on this team and any prior follow rows for both
+    // Samira (the accepter) and Lisa (her parent).
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samiraId),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, samiraId),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(eq(teamFollowers.teamId, teamId), eq(teamFollowers.userId, lisaId)),
+      );
+
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const created = await coach
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: samiraId, position: "player" });
+    expect(created.status).toBe(201);
+    const entryId = created.body.id as string;
+
+    // Pending invite — accepter (Samira) is NOT yet a follower; only the
+    // parent half pre-follows via Task #394 at invite time.
+    expect(await countFollow(teamId, samiraId)).toBe(0);
+    expect(await countFollow(teamId, lisaId)).toBe(1);
+
+    const { agent: lisa } = await loginAs(
+      (u) => u.email === "lisa@kinectem.demo",
+    );
+    const accept = await lisa
+      .post(`/api/v1/teams/${teamId}/members/${entryId}/accept`)
+      .send({});
+    expect(accept.status).toBe(200);
+
+    // After accept: both Samira and Lisa are follower rows on this team.
+    expect(await countFollow(teamId, samiraId)).toBe(1);
+    expect(await countFollow(teamId, lisaId)).toBe(1);
+
+    // Re-accepting must not duplicate the follow rows.
+    const accept2 = await lisa
+      .post(`/api/v1/teams/${teamId}/members/${entryId}/accept`)
+      .send({});
+    expect(accept2.status).toBe(200);
+    expect(await countFollow(teamId, samiraId)).toBe(1);
+    expect(await countFollow(teamId, lisaId)).toBe(1);
+  });
+
+  it("Task #434 — accepting auto-follows the team for a parentless user (no parent insert needed)", async () => {
+    const { teamId } = await getFootballTeam();
+    const marcusId = await findUserId("marcus@kinectem.demo");
+
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, marcusId),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, marcusId),
+        ),
+      );
+
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const created = await coach
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: marcusId, position: "player" });
+    expect(created.status).toBe(201);
+    const entryId = created.body.id as string;
+
+    const { agent: marcus } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const accept = await marcus
+      .post(`/api/v1/teams/${teamId}/members/${entryId}/accept`)
+      .send({});
+    expect(accept.status).toBe(200);
+
+    expect(await countFollow(teamId, marcusId)).toBe(1);
+  });
+
+  it("Task #434 — token-accept of a non-player invite by a user with a linked parent auto-follows for both (idempotent)", async () => {
+    const { teamId } = await getFootballTeam();
+    const lisaId = await findUserId("lisa@kinectem.demo");
+
+    // Create a child of Lisa with a real email + password so they can
+    // log in and accept the token invite themselves. Use a unique email
+    // so the test is idempotent across runs.
+    const email = `task434-child-${Date.now()}@kinectem.demo`;
+    const { hashPassword } = await import("../src/lib/passwords");
+    const { DEMO_PASSWORD } = await import("../src/lib/seed");
+    const passwordHash = await hashPassword(DEMO_PASSWORD);
+    const [child] = await db
+      .insert(users)
+      .values({
+        name: "Task434 Child",
+        role: "athlete",
+        email,
+        passwordHash,
+        parentId: lisaId,
+      })
+      .returning();
+
+    const token = `task434-token-parent-${Date.now()}`;
+    await db.insert(rosterInvites).values({
+      token,
+      teamId,
+      invitedEmail: email,
+      role: "coach",
+      position: "assistant_coach",
+      status: "pending",
+    });
+
+    const { agent: childAgent } = await loginAs((u) => u.email === email);
+    const res = await childAgent
+      .post(`/api/v1/invites/${token}/accept`)
+      .send({});
+    expect(res.status).toBe(201);
+
+    expect(await countFollow(teamId, child.id)).toBe(1);
+    expect(await countFollow(teamId, lisaId)).toBe(1);
+  });
+
+  it("Task #434 — accepting a non-player token invite via /invites/:token/accept auto-follows the team for the accepter", async () => {
+    const { teamId } = await getFootballTeam();
+    const marcusId = await findUserId("marcus@kinectem.demo");
+
+    // Forge a non-player (coach) invite tied to Marcus's email so the
+    // token-accept branch creates a roster row for him directly.
+    const token = `task434-token-${Date.now()}`;
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, marcusId),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, marcusId),
+        ),
+      );
+    await db.insert(rosterInvites).values({
+      token,
+      teamId,
+      invitedEmail: "marcus@kinectem.demo",
+      role: "coach",
+      position: "assistant_coach",
+      status: "pending",
+    });
+
+    const { agent: marcus } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const res = await marcus.post(`/api/v1/invites/${token}/accept`).send({});
+    expect(res.status).toBe(201);
+
+    expect(await countFollow(teamId, marcusId)).toBe(1);
+  });
+
   it("requires no special auth for /users/:userId/teams (smoke check)", async () => {
     const lisaId = await findUserId("lisa@kinectem.demo");
     const res = await request(app).get(`/api/v1/users/${lisaId}/teams`);

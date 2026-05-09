@@ -52,6 +52,7 @@ import {
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
 import {
   ensureOrgFollowedForTeam,
+  ensureTeamFollowed,
   ensureTeamFollowedAsGuardian,
 } from "../lib/team-follow";
 import { normalizeWebsite } from "../lib/normalize-website";
@@ -658,6 +659,26 @@ router.post(
       .set({ status: "accepted" })
       .where(eq(rosterEntries.id, entry.id))
       .returning();
+    // Task #434 — auto-follow the team for the accepter and any linked
+    // parent so the team appears in their feed / profile without an
+    // extra Follow click. Wrapped in try/catch so a failure here can
+    // never bubble up and turn a successful accept into a 5xx.
+    try {
+      await ensureTeamFollowed(entry.userId, entry.teamId);
+      const [accepter] = await db
+        .select({ parentId: users.parentId })
+        .from(users)
+        .where(eq(users.id, entry.userId))
+        .limit(1);
+      if (accepter?.parentId) {
+        await ensureTeamFollowedAsGuardian(accepter.parentId, entry.teamId);
+      }
+    } catch (err) {
+      req.log.warn(
+        { err, userId: entry.userId, teamId: entry.teamId },
+        "auto-follow on accept failed",
+      );
+    }
     res.json(toTeamMember(updated, actor));
   }),
 );

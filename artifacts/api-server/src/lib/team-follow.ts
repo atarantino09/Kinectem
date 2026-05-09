@@ -42,6 +42,25 @@ export async function ensureOrgFollowedForTeam(userId: string, teamId: string): 
   }
 }
 
+// Auto-follow a team on the user's own behalf. Used when the user accepts
+// a roster invite (or is otherwise placed onto a team in an "accepted"
+// state) so they immediately see the team's posts in their feed without
+// having to click Follow. Idempotent + best-effort, mirroring the other
+// helpers in this file.
+export async function ensureTeamFollowed(
+  userId: string,
+  teamId: string,
+): Promise<void> {
+  try {
+    await db
+      .insert(teamFollowers)
+      .values({ teamId, userId })
+      .onConflictDoNothing();
+  } catch (err) {
+    logger.warn({ err, userId, teamId }, "ensureTeamFollowed failed");
+  }
+}
+
 // Auto-follow a team on behalf of a guardian when their child is rostered
 // on it. Mirrors `ensureOrgFollowedForTeam`: idempotent insert, best-effort
 // (warn-and-continue) so it never blocks the primary roster operation.
