@@ -54,18 +54,27 @@ async function countFollow(teamId: string, userId: string): Promise<number> {
 }
 
 describe("Task #394 — parent auto-follows child's team", () => {
-  it("auto-follows the parent when a coach adds a child to a team (and is idempotent)", async () => {
+  it("auto-follows the parent (and the added user themselves under #434) when a coach adds a child to a team — idempotent", async () => {
     const { teamId } = await getFootballTeam();
     const samiraId = await findUserId("samira@kinectem.demo");
     const lisaId = await findUserId("lisa@kinectem.demo");
 
-    // Reset Samira on this team and any prior follow row
+    // Reset Samira on this team and any prior follow rows for both
+    // Samira (Task #434 self-follow) and Lisa (Task #394 parent follow).
     await db
       .delete(rosterEntries)
       .where(
         and(
           eq(rosterEntries.teamId, teamId),
           eq(rosterEntries.userId, samiraId),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, samiraId),
         ),
       );
     await db
@@ -82,9 +91,11 @@ describe("Task #394 — parent auto-follows child's team", () => {
       .send({ userId: samiraId, position: "player" });
     expect(res.status).toBe(201);
 
+    expect(await countFollow(teamId, samiraId)).toBe(1);
     expect(await countFollow(teamId, lisaId)).toBe(1);
 
-    // Re-add (after reset) must not produce a duplicate follow row.
+    // Re-add (after roster reset) must not produce duplicate follow rows
+    // for either the user themselves or their linked parent.
     await db
       .delete(rosterEntries)
       .where(
@@ -97,10 +108,11 @@ describe("Task #394 — parent auto-follows child's team", () => {
       .post(`/api/v1/teams/${teamId}/members`)
       .send({ userId: samiraId, position: "player" });
     expect(res2.status).toBe(201);
+    expect(await countFollow(teamId, samiraId)).toBe(1);
     expect(await countFollow(teamId, lisaId)).toBe(1);
   });
 
-  it("does NOT auto-follow when the added user has no parent", async () => {
+  it("does NOT synthesize a parent follow when the added user has no parent (Task #434: still self-follows)", async () => {
     const { teamId } = await getFootballTeam();
     const marcusId = await findUserId("marcus@kinectem.demo");
 
@@ -112,6 +124,14 @@ describe("Task #394 — parent auto-follows child's team", () => {
           eq(rosterEntries.userId, marcusId),
         ),
       );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, marcusId),
+        ),
+      );
 
     const { agent: coach } = await loginAs(
       (u) => u.email === "coach@kinectem.demo",
@@ -121,15 +141,10 @@ describe("Task #394 — parent auto-follows child's team", () => {
       .send({ userId: marcusId, position: "player" });
     expect(res.status).toBe(201);
 
-    // Marcus is parent-less; no synthesized parent follow should appear.
-    const rows = await db
-      .select({ userId: teamFollowers.userId })
-      .from(teamFollowers)
-      .where(eq(teamFollowers.teamId, teamId));
-    // None of the followers should equal Marcus's parent (he has none).
-    // Sanity check that no spurious follow row was created for Marcus
-    // himself either.
-    expect(rows.find((r) => r.userId === marcusId)).toBeUndefined();
+    // Marcus is parent-less; the parent-side fan-out from #394 must not
+    // happen. But under Task #434 the added user themselves IS auto-
+    // followed even on direct-add.
+    expect(await countFollow(teamId, marcusId)).toBe(1);
   });
 
   it("auto-follows the parent on the email-invite branch (existing user with parent)", async () => {
@@ -415,9 +430,9 @@ describe("Task #394 — parent auto-follows child's team", () => {
     expect(created.status).toBe(201);
     const entryId = created.body.id as string;
 
-    // Pending invite — accepter (Samira) is NOT yet a follower; only the
-    // parent half pre-follows via Task #394 at invite time.
-    expect(await countFollow(teamId, samiraId)).toBe(0);
+    // Under Task #434, direct-add already auto-follows for the user
+    // themselves AND their linked parent — even at the pending stage.
+    expect(await countFollow(teamId, samiraId)).toBe(1);
     expect(await countFollow(teamId, lisaId)).toBe(1);
 
     const { agent: lisa } = await loginAs(

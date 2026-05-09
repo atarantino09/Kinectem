@@ -374,8 +374,19 @@ router.post(
       // If the added member is a minor with a linked guardian, auto-follow
       // the team on the parent's behalf so it surfaces under the parent's
       // profile Teams section (rendered as a `position: "parent"` row).
-      if (u.parentId) {
-        await ensureTeamFollowedAsGuardian(u.parentId, teamId);
+      // Task #434 — also auto-follow on the added user's own behalf so the
+      // team appears in their feed without an extra Follow click. Both
+      // best-effort.
+      try {
+        await ensureTeamFollowed(userId, teamId);
+        if (u.parentId) {
+          await ensureTeamFollowedAsGuardian(u.parentId, teamId);
+        }
+      } catch (err) {
+        req.log.warn(
+          { err, userId, teamId },
+          "auto-follow on direct-add failed",
+        );
       }
       // Task #414 — `message` is persisted into the recipient's bell
       // and read back as-is. Recipient is the invitee (a stranger to
@@ -775,8 +786,18 @@ router.post(
           })
           .returning();
         await ensureOrgFollowedForTeam(existingUser.id, teamId);
-        if (existingUser.parentId) {
-          await ensureTeamFollowedAsGuardian(existingUser.parentId, teamId);
+        // Task #434 — auto-follow on the invited user's own behalf in
+        // addition to the existing parent-side follow. Best-effort.
+        try {
+          await ensureTeamFollowed(existingUser.id, teamId);
+          if (existingUser.parentId) {
+            await ensureTeamFollowedAsGuardian(existingUser.parentId, teamId);
+          }
+        } catch (err) {
+          req.log.warn(
+            { err, userId: existingUser.id, teamId },
+            "auto-follow on email-invite failed",
+          );
         }
         // Task #414 — write-time mask when the inviter is a minor.
         // See identical comment on the direct-add path above.
