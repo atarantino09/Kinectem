@@ -138,12 +138,6 @@ export const GetUserByIdResponse = zod.union([
       firstName: zod.string(),
       lastName: zod.string(),
       bio: zod.string().max(getUserByIdResponseOneOneBioMax).nullish(),
-      website: zod
-        .string()
-        .nullish()
-        .describe(
-          "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-        ),
       city: zod
         .string()
         .nullish()
@@ -213,12 +207,6 @@ export const GetUserByIdResponse = zod.union([
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(getUserByIdResponseTwoBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -284,12 +272,6 @@ export const UpdateUserBody = zod.object({
       "ISO 8601 date (YYYY-MM-DD). Omit the field to leave the\nstored value untouched; pass `null` to clear an existing\nvalue. Future and impossible calendar dates are rejected\nwith 400.\n",
     ),
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
-  website: zod
-    .string()
-    .nullish()
-    .describe(
-      "Personal website \/ link. Bare domains like `example.com` are\naccepted and normalized to a full `https:\/\/…` URL by the\nserver before being stored. An empty string or null clears\nthe field. Non-http(s) URLs and obvious garbage are rejected\nwith a 400.\n",
-    ),
   city: zod
     .string()
     .max(updateUserBodyCityMax)
@@ -376,12 +358,6 @@ export const UpdateUserResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(updateUserResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -474,12 +450,6 @@ export const SetUserCoverPhotoResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(setUserCoverPhotoResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -565,12 +535,6 @@ export const DeleteUserCoverPhotoResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(deleteUserCoverPhotoResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -663,12 +627,6 @@ export const SetUserAvatarResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(setUserAvatarResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -754,12 +712,6 @@ export const DeleteUserAvatarResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(deleteUserAvatarResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -958,12 +910,6 @@ export const GetLoggedInUserResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(getLoggedInUserResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -4763,12 +4709,6 @@ export const ListFollowSuggestionsResponse = zod.object({
         .string()
         .max(listFollowSuggestionsResponseUsersItemBioMax)
         .nullish(),
-      website: zod
-        .string()
-        .nullish()
-        .describe(
-          "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-        ),
       city: zod
         .string()
         .nullish()
@@ -7173,12 +7113,6 @@ export const UpdateAdminUserResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(updateAdminUserResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -7263,12 +7197,6 @@ export const SoftDeleteAdminUserResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(softDeleteAdminUserResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -7353,12 +7281,6 @@ export const RestoreAdminUserResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(restoreAdminUserResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -7733,12 +7655,6 @@ export const AuthLoginResponse = zod
     firstName: zod.string(),
     lastName: zod.string(),
     bio: zod.string().max(authLoginResponseOneBioMax).nullish(),
-    website: zod
-      .string()
-      .nullish()
-      .describe(
-        "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-      ),
     city: zod
       .string()
       .nullish()
@@ -7911,12 +7827,6 @@ export const AuthTokenResponse = zod
           firstName: zod.string(),
           lastName: zod.string(),
           bio: zod.string().max(authTokenResponseTwoUserOneBioMax).nullish(),
-          website: zod
-            .string()
-            .nullish()
-            .describe(
-              "Personal website \/ link surfaced on the public profile.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia `UpdateUserRequest` are normalized server-side before\nbeing stored. Null when the user has not set one.\n",
-            ),
           city: zod
             .string()
             .nullish()

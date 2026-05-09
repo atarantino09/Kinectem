@@ -32,7 +32,6 @@ import {
 } from "@/components/ui/select";
 import { Camera, Loader2, Pencil, X } from "lucide-react";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
-import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { US_STATES } from "@/lib/usStates";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 
@@ -90,7 +89,7 @@ export function EditProfileDialog({
   const { toast } = useToast();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
-  // Task #423 — under-13 accounts can't set bio/website/city/state
+  // Task #423 — under-13 accounts can't set bio/city/state
   // (server enforces via MINOR_BLOCKED). Hide those inputs entirely
   // so saving the allowed fields (name, avatar) doesn't get rejected.
   const isMinor = Boolean((user as { isMinor?: boolean }).isMinor);
@@ -98,10 +97,6 @@ export function EditProfileDialog({
   const [firstName, setFirstName] = useState(user.firstName);
   const [lastName, setLastName] = useState(user.lastName);
   const [bio, setBio] = useState(user.bio ?? "");
-  const [website, setWebsite] = useState(user.website ?? "");
-  const [websiteError, setWebsiteError] = useState<string | undefined>(
-    undefined,
-  );
   // Task #349 — Optional city + 2-letter US state postal code surfaced
   // on the profile hero. Both default to empty when the user has none.
   const [city, setCity] = useState(user.city ?? "");
@@ -138,8 +133,6 @@ export function EditProfileDialog({
       setFirstName(user.firstName);
       setLastName(user.lastName);
       setBio(user.bio ?? "");
-      setWebsite(user.website ?? "");
-      setWebsiteError(undefined);
       setCity(user.city ?? "");
       setState(user.state ?? "");
       setDateOfBirth(dobToString(user.dateOfBirth));
@@ -188,8 +181,6 @@ export function EditProfileDialog({
       setFirstName(user.firstName);
       setLastName(user.lastName);
       setBio(user.bio ?? "");
-      setWebsite(user.website ?? "");
-      setWebsiteError(undefined);
       setCity(user.city ?? "");
       setState(user.state ?? "");
       setDateOfBirth(dobToString(user.dateOfBirth));
@@ -281,8 +272,8 @@ export function EditProfileDialog({
     setSaveError(null);
     // Task #422 — Validate birthday client-side regardless of minor
     // status: DOB is editable on every account (the server-side minor
-    // block only covers bio/website/city/state). Empty input clears the
-    // value (sent as null).
+    // block only covers bio/city/state). Empty input clears the value
+    // (sent as null).
     const trimmedDob = dateOfBirth.trim();
     let dobPayload: string | null = null;
     if (trimmedDob) {
@@ -314,9 +305,9 @@ export function EditProfileDialog({
       dobPayload = trimmedDob;
     }
     setDateOfBirthError(undefined);
-    // Task #423 — minors aren't allowed to set bio/website/city/state on
-    // the server. Skip the website normalization and omit those fields
-    // entirely so the PATCH only carries fields a minor account can set.
+    // Task #423 — minors aren't allowed to set bio/city/state on the
+    // server. Omit those fields entirely so the PATCH only carries
+    // fields a minor account can set.
     if (isMinor) {
       update.mutate({
         userId: user.id,
@@ -329,15 +320,6 @@ export function EditProfileDialog({
       });
       return;
     }
-    // Task #293 — Normalize the website client-side using the same helper
-    // the org form uses. Bare domains become `https://example.com`; obvious
-    // garbage is surfaced inline instead of going to the server.
-    const websiteResult = normalizeWebsite(website);
-    if (!websiteResult.ok) {
-      setWebsiteError(websiteResult.error);
-      return;
-    }
-    setWebsiteError(undefined);
     // Task #349 — Always include city/state so emptying either field on the
     // form clears the persisted value. City is trimmed and sent as null when
     // empty; state is sent as null when no option is selected.
@@ -348,9 +330,6 @@ export function EditProfileDialog({
         firstName,
         lastName,
         bio: bio.trim() ? bio : null,
-        // Always include website so the user can clear a previously-set
-        // value by emptying the input. Empty string clears it server-side.
-        website: websiteResult.value,
         city: trimmedCity ? trimmedCity : null,
         state: state ? (state as UpdateUserRequestState) : null,
         dateOfBirth: dobPayload,
@@ -500,8 +479,7 @@ export function EditProfileDialog({
               className="text-xs font-medium text-muted-foreground"
               data-testid="text-minor-fields-notice"
             >
-              Bio, website, and location aren't available on under-13
-              accounts.
+              Bio and location aren't available on under-13 accounts.
             </p>
           ) : (
           <>
@@ -518,31 +496,6 @@ export function EditProfileDialog({
               className="resize-none"
               data-testid="input-bio"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-website" className="text-xs font-bold">
-              Website
-            </Label>
-            <Input
-              id="profile-website"
-              type="text"
-              inputMode="url"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="example.com"
-              data-testid="input-profile-website"
-            />
-            {websiteError && (
-              <p
-                className="text-xs font-medium text-destructive"
-                data-testid="error-profile-website"
-              >
-                {websiteError}
-              </p>
-            )}
           </div>
           {/* Task #349 — Optional city + US state. Both clear when emptied. */}
           <div className="grid grid-cols-2 gap-3">

@@ -158,6 +158,14 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS website text;
 `;
 
+// Task #424 — Retire the personal website field on individual user
+// profiles. Team and organization website columns are unaffected. The
+// original task-293 user-website migration stays in MIGRATIONS for
+// history; this drop runs after it on every boot.
+const TASK_424_DROP_USER_WEBSITE = `
+ALTER TABLE users DROP COLUMN IF EXISTS website;
+`;
+
 // Task #349 — Add nullable city + 2-letter US state postal code columns
 // to users. Lets a user put a US location ("Austin, TX") on their
 // profile, rendered in the hero alongside bio + website. Mirrors the
@@ -576,6 +584,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-06-task-32-hash-guardian-tokens",
     sql: TASK_32_HASH_GUARDIAN_TOKENS,
+  },
+  {
+    name: "2026-05-09-task-424-drop-user-website",
+    sql: TASK_424_DROP_USER_WEBSITE,
   },
 ];
 

@@ -3713,7 +3713,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Want to grab some film review tomorrow?
+                    example: Awesome game today. Proud of the effort.
         "201":
           description: Guardian link created in pending status
           content:
@@ -4133,7 +4133,7 @@ paths:
                         format: uuid
                       reason:
                         type: string
-                        example: Inappropriate language
+                        example: Misleading content
                       note:
                         type: string
                         nullable: true
@@ -4779,7 +4779,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: coach@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -4831,15 +4831,15 @@ paths:
                 firstName:
                   type: string
                   minLength: 1
-                  example: Avery
+                  example: Riley
                 lastName:
                   type: string
                   minLength: 1
-                  example: Bennett
+                  example: Carter
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: maya@kinectem.demo
                 password:
                   type: string
                   minLength: 8
@@ -4941,7 +4941,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: coach@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5028,7 +5028,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: maya@kinectem.demo
+                  example: jordan@kinectem.demo
       responses:
         "200":
           description: Reset email sent if the address is registered.
@@ -5044,7 +5044,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Want to grab some film review tomorrow?
+                    example: Awesome game today. Proud of the effort.
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/password-reset/complete:
@@ -5376,7 +5376,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: maya@kinectem.demo
                 password:
                   type: string
       responses:
@@ -5439,7 +5439,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Awesome game today. Proud of the effort.
+                    example: Want to grab some film review tomorrow?
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
@@ -5499,7 +5499,7 @@ paths:
                   minLength: 1
                   maxLength: 80
                   description: Human label so the owner can tell keys apart later.
-                  example: Cardinal Track & Field
+                  example: North Valley Athletic Association
                 scopes:
                   type: array
                   description: |
@@ -5587,10 +5587,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Maya
+                      example: Samira
                     lastName:
                       type: string
-                      example: Reed
+                      example: Walker
                     role:
                       type: string
                       enum:
@@ -5601,19 +5601,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: coach@kinectem.demo
+                      example: marcus@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Volleyball
+                      example: Baseball
                     position:
                       type: string
                       nullable: true
-                      example: Outside Hitter
+                      example: Pitcher
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -6486,22 +6486,13 @@ components:
           nullable: true
           maxLength: 1000
           example: Speed, hands, and vision. Dedicated to outworking the competition.
-        website:
-          type: string
-          nullable: true
-          description: |
-            Personal website / link surfaced on the public profile.
-            Always a full `https://…` URL when set; bare domains submitted
-            via `UpdateUserRequest` are normalized server-side before
-            being stored. Null when the user has not set one.
-          example: https://westfield-warriors.example.com
         city:
           type: string
           nullable: true
           description: |
             Optional free-text city the user is based in (task #349).
             Surfaced on the profile alongside `state`. Null when not set.
-          example: Riverside
+          example: Westfield
         state:
           type: string
           nullable: true
@@ -6509,18 +6500,18 @@ components:
             Optional two-letter US state postal code (50 states + DC) the
             user is based in (task #349). Mirrors the same enum used by
             organizations. Null when not set.
-          example: NJ
+          example: FL
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
         coverPhotoUrl:
           type: string
           format: uri
           nullable: true
           description: Presigned S3 URL for the user's cover photo. Null if not set or suppressed for COPPA compliance.
-          example: https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1600&h=600&fit=crop
+          example: https://images.unsplash.com/photo-1486286701208-1d58e9338013?w=1600&h=600&fit=crop
         isOwnProfile:
           type: boolean
         isFollowing:
@@ -6596,7 +6587,7 @@ components:
             email:
               type: string
               format: email
-              example: coach@kinectem.demo
+              example: jordan@kinectem.demo
             dateOfBirth:
               type: string
               format: date
@@ -6639,11 +6630,11 @@ components:
         firstName:
           type: string
           maxLength: 100
-          example: Riley
+          example: Kai
         lastName:
           type: string
           maxLength: 100
-          example: Carter
+          example: Foster
         dateOfBirth:
           type: string
           format: date
@@ -6657,17 +6648,7 @@ components:
           type: string
           nullable: true
           maxLength: 1000
-          example: Three-sport athlete with a love for the game and the grind.
-        website:
-          type: string
-          nullable: true
-          description: |
-            Personal website / link. Bare domains like `example.com` are
-            accepted and normalized to a full `https://…` URL by the
-            server before being stored. An empty string or null clears
-            the field. Non-http(s) URLs and obvious garbage are rejected
-            with a 400.
-          example: https://kinectem.demo
+          example: Speed, hands, and vision. Dedicated to outworking the competition.
         city:
           type: string
           nullable: true
@@ -6675,7 +6656,7 @@ components:
           description: |
             Optional free-text city the user is based in (task #349).
             An empty string or null clears the field.
-          example: Westfield
+          example: Cedar Falls
         state:
           type: string
           nullable: true
@@ -6739,7 +6720,7 @@ components:
           type: string
           nullable: true
           maxLength: 50
-          example: U18
+          example: Freshman
         avatarUrl:
           type: string
           nullable: true
@@ -6752,7 +6733,7 @@ components:
             assets are stored as base64 `data:` URLs that can be many MB
             long; the server caps the length to match the asset upload
             size limit.
-          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
     SetAssetIdRequest:
       type: object
       required:
@@ -6971,12 +6952,12 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Cedar Falls
+          example: Riverside
         state:
           type: string
           maxLength: 100
           nullable: true
-          example: TX
+          example: IA
         postalCode:
           type: string
           minLength: 1
@@ -7002,12 +6983,12 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Westfield
+          example: Cedar Falls
         state:
           type: string
           maxLength: 100
           nullable: true
-          example: NJ
+          example: TX
         postalCode:
           type: string
           minLength: 1
@@ -7038,11 +7019,11 @@ components:
           nullable: true
         city:
           type: string
-          example: Lincoln
+          example: Westfield
         state:
           type: string
           nullable: true
-          example: NE
+          example: NJ
         postalCode:
           type: string
         country:
@@ -7113,14 +7094,14 @@ components:
           format: uuid
         name:
           type: string
-          example: Westfield Warriors
+          example: Lincoln High Football
         slug:
           type: string
-          example: riverside-soccer
+          example: lincoln-football
         description:
           type: string
           nullable: true
-          example: Building character, work ethic, and a love for the sport.
+          example: Youth athletic organization developing the next generation of athletes.
         website:
           type: string
           nullable: true
@@ -7133,11 +7114,11 @@ components:
         city:
           type: string
           nullable: true
-          example: Cedar Falls
+          example: Riverside
         state:
           type: string
           nullable: true
-          example: CA
+          example: FL
         zipCode:
           type: string
           nullable: true
@@ -7173,16 +7154,16 @@ components:
       properties:
         name:
           type: string
-          example: Westfield Warriors
+          example: Lincoln High Football
         slug:
           type: string
           pattern: ^[a-z0-9]+(-[a-z0-9]+)*$
           minLength: 3
           maxLength: 50
-          example: riverside-soccer
+          example: lincoln-football
         description:
           type: string
-          example: Building character, work ethic, and a love for the sport.
+          example: Youth athletic organization developing the next generation of athletes.
         website:
           type: string
           description: |
@@ -7193,7 +7174,7 @@ components:
         city:
           type: string
           minLength: 1
-          example: Bay Shore
+          example: Lincoln
         state:
           type: string
           description: Two-letter US state postal code (50 states + DC).
@@ -7262,10 +7243,10 @@ components:
       properties:
         name:
           type: string
-          example: Cardinal Track & Field
+          example: North Valley Athletic Association
         description:
           type: string
-          example: Youth athletic organization developing the next generation of athletes.
+          example: Competitive travel team focused on player development and teamwork.
         website:
           type: string
           description: |
@@ -7276,7 +7257,7 @@ components:
         city:
           type: string
           minLength: 1
-          example: Cedar Falls
+          example: Riverside
         state:
           type: string
           description: Two-letter US state postal code (50 states + DC).
@@ -7352,12 +7333,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Daniela Patel
+          example: Tyler Chen
         avatarUrl:
           type: string
           nullable: true
           format: uri
-          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
         role:
           type: string
           enum:
@@ -7440,7 +7421,7 @@ components:
         fileName:
           type: string
           maxLength: 255
-          example: team-photo.jpg
+          example: scoring-clip.mov
         fileType:
           type: string
         fileSize:
@@ -7493,7 +7474,7 @@ components:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1556009896-d3e35c4d2dc1?w=1200&h=800&fit=crop
+          example: https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1200&h=800&fit=crop
         urlExpiresAt:
           type: string
           format: date-time
@@ -7544,12 +7525,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Jordan Bennett
+          example: Maya Brooks
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
         followedAt:
           type: string
           format: date-time
@@ -7565,12 +7546,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Coach Davis
+          example: Jordan Bennett
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
         entityType:
           type: string
           enum:
@@ -7730,15 +7711,15 @@ components:
         title:
           type: string
           maxLength: 200
-          example: "Player profile: rising star at WR"
+          example: Saturday's win secures playoff spot
         description:
           type: string
           maxLength: 50000
-          example: Youth athletic organization developing the next generation of athletes.
+          example: Competitive travel team focused on player development and teamwork.
         body:
           type: string
           maxLength: 50000
-          example: Thanks to all the families who came out to support us.
+          example: Big shoutout to the seniors for leading by example.
         organizationId:
           type: string
           format: uuid
@@ -7789,11 +7770,11 @@ components:
         title:
           type: string
           maxLength: 200
-          example: Saturday's win secures playoff spot
+          example: Spring tryouts open next week
         body:
           type: string
           maxLength: 50000
-          example: Practice was a grind today. The work is paying off.
+          example: Thanks to all the families who came out to support us.
         photoUrls:
           type: array
           items:
@@ -7809,7 +7790,7 @@ components:
           type: string
           maxLength: 200
           nullable: true
-          example: "Player profile: rising star at WR"
+          example: Saturday's win secures playoff spot
         description:
           type: string
           maxLength: 50000
@@ -7818,12 +7799,12 @@ components:
             Caption / summary text. For highlights this maps to the
             short-form description; for game-recap articles it maps
             to the article summary. Ignored for org posts (use `body`).
-          example: Building character, work ethic, and a love for the sport.
+          example: Youth athletic organization developing the next generation of athletes.
         body:
           type: string
           maxLength: 50000
           nullable: true
-          example: Thanks to all the families who came out to support us.
+          example: Big shoutout to the seniors for leading by example.
         assetIds:
           type: array
           items:
@@ -7858,7 +7839,7 @@ components:
           description: |
             Highlight thumbnail URL. Only meaningful when editing a
             highlight; ignored for other post kinds.
-          example: https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1200&h=800&fit=crop
+          example: https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1200&h=800&fit=crop
         gameDate:
           type: string
           format: date-time
@@ -7887,12 +7868,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Marcus Rivera
+          example: Chris Nguyen
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
         authorRole:
           type: string
           nullable: true
@@ -7923,12 +7904,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Tyler Chen
+          example: Marcus Rivera
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
         tagStatus:
           type: string
           enum:
@@ -7997,12 +7978,12 @@ components:
         name:
           type: string
           nullable: true
-          example: Westfield Warriors
+          example: Lincoln High Football
         slug:
           type: string
           nullable: true
           description: URL slug for org or team contexts; omitted for user context.
-          example: riverside-soccer
+          example: lincoln-football
         orgSlug:
           type: string
           nullable: true
@@ -8021,7 +8002,7 @@ components:
           format: uri
           nullable: true
           description: Signed S3 URL resolved at read time for org/team avatars.
-          example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
         orgAvatarUrl:
           type: string
           format: uri
@@ -8044,7 +8025,7 @@ components:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1200&h=800&fit=crop
+          example: https://images.unsplash.com/photo-1517649763962-0c623066013b?w=1200&h=800&fit=crop
         displayOrder:
           type: integer
     PostResponse:
@@ -8073,15 +8054,15 @@ components:
         title:
           type: string
           nullable: true
-          example: Coach's notes from the championship
+          example: "Player profile: rising star at WR"
         description:
           type: string
           nullable: true
-          example: Building character, work ethic, and a love for the sport.
+          example: Youth athletic organization developing the next generation of athletes.
         body:
           type: string
           nullable: true
-          example: Practice was a grind today. The work is paying off.
+          example: Thanks to all the families who came out to support us.
         author:
           $ref: "#/components/schemas/PostAuthor"
         context:
@@ -8219,7 +8200,7 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Daniela Patel
+          example: Tyler Chen
     PostRevisionResponse:
       type: object
       required:
@@ -8233,15 +8214,15 @@ components:
         title:
           type: string
           nullable: true
-          example: Spring tryouts open next week
+          example: "Senior night recap: a perfect ending"
         description:
           type: string
           nullable: true
-          example: Youth athletic organization developing the next generation of athletes.
+          example: Competitive travel team focused on player development and teamwork.
         body:
           type: string
           nullable: true
-          example: Great game tonight, team! Proud of how everyone showed up.
+          example: Highlight reel from Friday's matchup is up — go check it out.
         editedBy:
           $ref: "#/components/schemas/PostRevisionEditor"
         createdAt:
@@ -8308,11 +8289,11 @@ components:
             Open-ended notification type. Known values today include `roster_invite`, `post_reaction`, `comment`, `follow`, `guardian_invite`, `consent_granted`, `consent_revoked`, plus moderation events. Treat unknown values as "generic notification" — new types may be added without a spec bump.
         title:
           type: string
-          example: "Senior night recap: a perfect ending"
+          example: Coach's notes from the championship
         body:
           type: string
           nullable: true
-          example: Big shoutout to the seniors for leading by example.
+          example: Great game tonight, team! Proud of how everyone showed up.
         data:
           type: object
           nullable: true
@@ -8417,7 +8398,7 @@ components:
             body:
               type: string
               maxLength: 10000
-              example: Highlight reel from Friday's matchup is up — go check it out.
+              example: Practice was a grind today. The work is paying off.
             assetIds:
               type: array
               items:
@@ -8431,7 +8412,7 @@ components:
         body:
           type: string
           maxLength: 10000
-          example: Thanks to all the families who came out to support us.
+          example: Big shoutout to the seniors for leading by example.
         assetIds:
           type: array
           items:
@@ -8455,12 +8436,12 @@ components:
             - organization
         displayName:
           type: string
-          example: Chris Nguyen
+          example: Coach Davis
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
     ConversationLastMessage:
       type: object
       required:
@@ -8474,12 +8455,12 @@ components:
           format: uuid
         senderDisplayName:
           type: string
-          example: Jordan Bennett
+          example: Maya Brooks
         bodyPreview:
           type: string
           nullable: true
           description: First 200 characters of the message body, or null if the message was deleted.
-          example: Want to grab some film review…
+          example: Practice moved to 4pm — pass…
         hasAttachments:
           type: boolean
         createdAt:
@@ -8530,7 +8511,7 @@ components:
           format: uuid
         fileName:
           type: string
-          example: scoring-clip.mov
+          example: team-photo.jpg
         mimeType:
           type: string
         size:
@@ -8540,7 +8521,7 @@ components:
           format: uri
           nullable: true
           description: Time-limited signed S3 URL. Null if the asset upload has not yet been confirmed.
-          example: https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1200&h=800&fit=crop
+          example: https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1200&h=800&fit=crop
     MessageResponse:
       type: object
       required:
@@ -8558,7 +8539,7 @@ components:
           format: uuid
         senderDisplayName:
           type: string
-          example: Jordan Bennett
+          example: Maya Brooks
         senderAvatarUrl:
           type: string
           format: uri
@@ -8566,7 +8547,7 @@ components:
         body:
           type: string
           nullable: true
-          example: Big shoutout to the seniors for leading by example.
+          example: Great game tonight, team! Proud of how everyone showed up.
         assets:
           type: array
           items:
@@ -8638,10 +8619,10 @@ components:
           format: uuid
         name:
           type: string
-          example: Cardinal Track & Field
+          example: North Valley Athletic Association
         slug:
           type: string
-          example: westfield-warriors
+          example: riverside-soccer
         logoUrl:
           type: string
           nullable: true
@@ -8659,7 +8640,7 @@ components:
           format: uuid
         name:
           type: string
-          example: Riverside Soccer Club
+          example: Cardinal Track & Field
         startDate:
           type: string
           format: date
@@ -8695,14 +8676,14 @@ components:
           $ref: "#/components/schemas/TeamOrganizationEmbed"
         name:
           type: string
-          example: Eastside Eagles
+          example: Westfield Warriors
         slug:
           type: string
-          example: westfield-warriors
+          example: riverside-soccer
         description:
           type: string
           nullable: true
-          example: Competitive travel team focused on player development and teamwork.
+          example: Building character, work ethic, and a love for the sport.
         website:
           type: string
           nullable: true
@@ -8715,11 +8696,11 @@ components:
         sport:
           type: string
           nullable: true
-          example: Lacrosse
+          example: Track & Field
         level:
           type: string
           nullable: true
-          example: JV
+          example: Travel
         gender:
           type: string
           nullable: true
@@ -8731,7 +8712,7 @@ components:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1551958219-acbc608c6377?w=600&h=600&fit=crop
+          example: https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=600&h=600&fit=crop
         bannerUrl:
           type: string
           format: uri
@@ -8747,7 +8728,7 @@ components:
               format: uuid
             name:
               type: string
-              example: North Valley Athletic Association
+              example: Riverside Soccer Club
             startDate:
               type: string
               format: date
@@ -8785,16 +8766,16 @@ components:
       properties:
         name:
           type: string
-          example: Lincoln High Football
+          example: Eastside Eagles
         slug:
           type: string
           minLength: 3
           maxLength: 50
           pattern: ^[a-z0-9]+(-[a-z0-9]+)*$
-          example: lincoln-football
+          example: westfield-warriors
         description:
           type: string
-          example: Youth athletic organization developing the next generation of athletes.
+          example: Competitive travel team focused on player development and teamwork.
         website:
           type: string
           description: |
@@ -8806,10 +8787,10 @@ components:
           example: https://westfield-warriors.example.com
         sport:
           type: string
-          example: Football
+          example: Volleyball
         level:
           type: string
-          example: U16
+          example: JV
         gender:
           type: string
           nullable: true
@@ -8829,7 +8810,7 @@ components:
           properties:
             name:
               type: string
-              example: Lincoln High Football
+              example: Eastside Eagles
             startDate:
               type: string
               format: date
@@ -8842,10 +8823,10 @@ components:
       properties:
         name:
           type: string
-          example: Cardinal Track & Field
+          example: North Valley Athletic Association
         description:
           type: string
-          example: Youth athletic organization developing the next generation of athletes.
+          example: Competitive travel team focused on player development and teamwork.
         website:
           type: string
           nullable: true
@@ -8858,10 +8839,10 @@ components:
           example: https://westfield-warriors.example.com
         sport:
           type: string
-          example: Lacrosse
+          example: Track & Field
         level:
           type: string
-          example: U16
+          example: JV
         gender:
           type: string
           nullable: true
@@ -8893,7 +8874,7 @@ components:
       properties:
         name:
           type: string
-          example: Lincoln High Football
+          example: Eastside Eagles
         startDate:
           type: string
           format: date
@@ -8906,7 +8887,7 @@ components:
       properties:
         name:
           type: string
-          example: Cardinal Track & Field
+          example: North Valley Athletic Association
         startDate:
           type: string
           format: date
@@ -8967,12 +8948,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Coach Davis
+          example: Jordan Bennett
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&h=600&fit=crop
+          example: https://images.unsplash.com/photo-1551958219-acbc608c6377?w=600&h=600&fit=crop
         teamId:
           type: string
           format: uuid
@@ -9087,7 +9068,7 @@ components:
           type: string
           format: email
           maxLength: 255
-          example: coach@kinectem.demo
+          example: marcus@kinectem.demo
         seasonId:
           type: string
           format: uuid
@@ -9126,7 +9107,7 @@ components:
         email:
           type: string
           format: email
-          example: maya@kinectem.demo
+          example: jordan@kinectem.demo
         position:
           type: string
           enum:
@@ -9164,7 +9145,7 @@ components:
               format: uuid
             displayName:
               type: string
-              example: Marcus Rivera
+              example: Chris Nguyen
         seasonId:
           type: string
           format: uuid
@@ -9271,11 +9252,11 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Jordan Bennett
+          example: Maya Brooks
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
     OrgSearchResult:
       type: object
       required:
@@ -9293,14 +9274,14 @@ components:
           format: uuid
         name:
           type: string
-          example: Riverside Soccer Club
+          example: Cardinal Track & Field
         slug:
           type: string
-          example: lincoln-football
+          example: westfield-warriors
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=400&h=400&fit=crop
+          example: https://images.unsplash.com/photo-1565992441121-4367c2967103?w=400&h=400&fit=crop
     TeamSearchResult:
       type: object
       required:
@@ -9320,14 +9301,14 @@ components:
           format: uuid
         name:
           type: string
-          example: Lincoln High Football
+          example: Eastside Eagles
         slug:
           type: string
-          example: lincoln-football
+          example: westfield-warriors
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=600&h=600&fit=crop
+          example: https://images.unsplash.com/photo-1526232761682-d26e03ac148e?w=600&h=600&fit=crop
         organizationName:
           type: string
         organizationSlug:
@@ -9391,11 +9372,11 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Tyler Chen
+          example: Marcus Rivera
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
     FeedContext:
       type: object
       required:
@@ -9414,11 +9395,11 @@ components:
         name:
           type: string
           nullable: true
-          example: North Valley Athletic Association
+          example: Riverside Soccer Club
         slug:
           type: string
           nullable: true
-          example: riverside-soccer
+          example: lincoln-football
         orgSlug:
           type: string
           nullable: true
@@ -9434,7 +9415,7 @@ components:
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
     FeedPostAsset:
       type: object
       required:
@@ -9451,7 +9432,7 @@ components:
         url:
           type: string
           format: uri
-          example: https://images.unsplash.com/photo-1517649763962-0c623066013b?w=1200&h=800&fit=crop
+          example: https://images.unsplash.com/photo-1543351611-58f69d7c1781?w=1200&h=800&fit=crop
         displayOrder:
           type: integer
           minimum: 0
@@ -9481,15 +9462,15 @@ components:
         title:
           type: string
           nullable: true
-          example: "Player profile: rising star at WR"
+          example: Saturday's win secures playoff spot
         description:
           type: string
           nullable: true
-          example: Building character, work ethic, and a love for the sport.
+          example: Youth athletic organization developing the next generation of athletes.
         body:
           type: string
           nullable: true
-          example: Thanks to all the families who came out to support us.
+          example: Big shoutout to the seniors for leading by example.
         bodyTruncated:
           type: boolean
           description: True when description or body was truncated in the feed page
@@ -9637,12 +9618,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Daniela Patel
+          example: Tyler Chen
         avatarUrl:
           type: string
           nullable: true
           description: Suppressed (null) for under-13 reactors unless the requester is self.
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
     PaginatedReactors:
       type: object
       required:
@@ -9665,7 +9646,7 @@ components:
           type: string
           minLength: 1
           maxLength: 500
-          example: Big shoutout to the seniors for leading by example.
+          example: Great game tonight, team! Proud of how everyone showed up.
     CommentAuthor:
       type: object
       required:
@@ -9680,11 +9661,11 @@ components:
           description: Null when the author's user row has been deleted.
         displayName:
           type: string
-          example: Marcus Rivera
+          example: Chris Nguyen
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
     CommentResponse:
       type: object
       required:
@@ -9705,7 +9686,7 @@ components:
           format: uuid
         body:
           type: string
-          example: Great game tonight, team! Proud of how everyone showed up.
+          example: Highlight reel from Friday's matchup is up — go check it out.
         author:
           $ref: "#/components/schemas/CommentAuthor"
         reactionCount:
@@ -9851,11 +9832,11 @@ components:
               format: uuid
             name:
               type: string
-              example: Lincoln High Football
+              example: Eastside Eagles
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
             organizationName:
               type: string
               nullable: true
@@ -9915,16 +9896,16 @@ components:
         title:
           type: string
           nullable: true
-          example: Spring tryouts open next week
+          example: "Senior night recap: a perfect ending"
         description:
           type: string
           nullable: true
-          example: Competitive travel team focused on player development and teamwork.
+          example: Building character, work ethic, and a love for the sport.
         body:
           type: string
           nullable: true
           description: May be truncated for long-form posts.
-          example: Great game tonight, team! Proud of how everyone showed up.
+          example: Highlight reel from Friday's matchup is up — go check it out.
         author:
           type: object
           nullable: true
@@ -9932,11 +9913,11 @@ components:
             displayName:
               type: string
               nullable: true
-              example: Jordan Bennett
+              example: Maya Brooks
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
         context:
           $ref: "#/components/schemas/FeedContext"
         ogImageUrl:
@@ -9991,11 +9972,11 @@ components:
               format: uuid
             displayName:
               type: string
-              example: Coach Davis
+              example: Jordan Bennett
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
         status:
           $ref: "#/components/schemas/JoinRequestStatus"
         decidedBy:
@@ -10068,7 +10049,7 @@ components:
           type: string
           format: email
           maxLength: 255
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         relationshipType:
           type: string
           enum:
@@ -10099,11 +10080,11 @@ components:
               format: uuid
             displayName:
               type: string
-              example: Maya Brooks
+              example: Daniela Patel
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
         relationshipType:
           type: string
           enum:
@@ -10153,11 +10134,11 @@ components:
               format: uuid
             displayName:
               type: string
-              example: Jordan Bennett
+              example: Maya Brooks
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
             dateOfBirth:
               type: string
               format: date
@@ -10202,12 +10183,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Coach Davis
+          example: Jordan Bennett
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
     ChildNotificationKind:
       type: string
       description: |
@@ -10249,11 +10230,11 @@ components:
           $ref: "#/components/schemas/ChildNotificationKind"
         title:
           type: string
-          example: "Player profile: rising star at WR"
+          example: Saturday's win secures playoff spot
         body:
           type: string
           nullable: true
-          example: Highlight reel from Friday's matchup is up — go check it out.
+          example: Practice was a grind today. The work is paying off.
         link:
           type: string
           nullable: true
@@ -10320,11 +10301,11 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Marcus Rivera
+          example: Chris Nguyen
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
         relationship:
           type: string
           description: Optional hint about why this contact is eligible (e.g., teammate, follower).
@@ -10360,11 +10341,11 @@ components:
           format: uuid
         name:
           type: string
-          example: Westfield Warriors
+          example: Lincoln High Football
         email:
           type: string
           nullable: true
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         role:
           type: string
           enum:
@@ -10389,17 +10370,17 @@ components:
           format: uuid
         firstName:
           type: string
-          example: Chris
+          example: Tyler
         lastName:
           type: string
-          example: Davis
+          example: Bennett
         displayName:
           type: string
-          example: Maya Brooks
+          example: Daniela Patel
         email:
           type: string
           nullable: true
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         role:
           type: string
           enum:
@@ -10421,30 +10402,30 @@ components:
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=faces
         sport:
           type: string
           nullable: true
-          example: Soccer
+          example: Football
         position:
           type: string
           nullable: true
-          example: Midfielder
+          example: Quarterback
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Class of 2025
+          example: Senior
         location:
           type: string
           nullable: true
-          example: Riverside, CA
+          example: Bay Shore, NY
         bio:
           type: string
           nullable: true
-          example: Class of 2026. Future is bright. Stay locked in.
+          example: Three-sport athlete with a love for the game and the grind.
         dateOfBirth:
           type: string
           format: date
@@ -10476,16 +10457,16 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Marcus
+          example: Quinn
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Rivera
+          example: Foster
         email:
           type: string
           format: email
-          example: coach@kinectem.demo
+          example: marcus@kinectem.demo
         password:
           type: string
           minLength: 8
@@ -10504,16 +10485,16 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Daniela
+          example: Jordan
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Davis
+          example: Bennett
         email:
           type: string
           format: email
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         role:
           type: string
           enum:
@@ -10524,31 +10505,31 @@ components:
         sport:
           type: string
           nullable: true
-          example: Lacrosse
+          example: Track & Field
         position:
           type: string
           nullable: true
-          example: Wide Receiver
+          example: Sprinter
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Class of 2026
+          example: Junior
         location:
           type: string
           nullable: true
-          example: Lincoln, NE
+          example: Westfield, NJ
         bio:
           type: string
           maxLength: 5000
           nullable: true
-          example: Coach by day, fan by night. Building champions on and off the field.
+          example: Speed, hands, and vision. Dedicated to outworking the competition.
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
         dateOfBirth:
           type: string
           nullable: true
@@ -10590,11 +10571,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Saturday's win secures playoff spot
+          example: Spring tryouts open next week
         body:
           type: string
           nullable: true
-          example: Practice was a grind today. The work is paying off.
+          example: Thanks to all the families who came out to support us.
         authorId:
           type: string
           format: uuid
@@ -10631,7 +10612,7 @@ components:
           type: string
           minLength: 1
           maxLength: 120
-          example: Misleading content
+          example: Spam or off-topic
         note:
           type: string
           maxLength: 2000
@@ -10671,11 +10652,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Spring tryouts open next week
+          example: "Senior night recap: a perfect ending"
         body:
           type: string
           nullable: true
-          example: Thanks to all the families who came out to support us.
+          example: Big shoutout to the seniors for leading by example.
         hiddenAt:
           type: string
           format: date-time
@@ -10712,7 +10693,7 @@ components:
           format: uuid
         reason:
           type: string
-          example: Misleading content
+          example: Spam or off-topic
         note:
           type: string
           nullable: true
@@ -10867,10 +10848,32 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Westfield Warriors
+                    example: Lincoln High Football
                   count:
                     type: integer
             followedUsers:
+              type: array
+              items:
+                type: object
+                required:
+                  - userId
+                  - name
+                  - count
+                properties:
+                  userId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                    nullable: true
+                    example: Cardinal Track & Field
+                  email:
+                    type: string
+                    nullable: true
+                    example: coach@kinectem.demo
+                  count:
+                    type: integer
+            postersThisWeek:
               type: array
               items:
                 type: object
@@ -10892,28 +10895,6 @@ components:
                     example: marcus@kinectem.demo
                   count:
                     type: integer
-            postersThisWeek:
-              type: array
-              items:
-                type: object
-                required:
-                  - userId
-                  - name
-                  - count
-                properties:
-                  userId:
-                    type: string
-                    format: uuid
-                  name:
-                    type: string
-                    nullable: true
-                    example: North Valley Athletic Association
-                  email:
-                    type: string
-                    nullable: true
-                    example: coach@kinectem.demo
-                  count:
-                    type: integer
     ApiKey:
       type: object
       required:
@@ -10931,7 +10912,7 @@ components:
         name:
           type: string
           description: Owner-supplied human label.
-          example: Cardinal Track & Field
+          example: North Valley Athletic Association
         prefix:
           type: string
           description: |

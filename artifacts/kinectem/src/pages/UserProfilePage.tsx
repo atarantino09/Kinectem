@@ -461,7 +461,7 @@ export default function UserProfilePage() {
               })
             : null;
           const showInfo =
-            user.bio || user.website || user.city || user.state || dobLabel;
+            user.bio || user.city || user.state || dobLabel;
           if (!showInfo) return null;
           return (
           <div className="px-6 pb-6 space-y-2">
@@ -490,17 +490,6 @@ export default function UserProfilePage() {
                   ? `${user.city}, ${user.state}`
                   : (user.city ?? user.state)}
               </p>
-            )}
-            {user.website && (
-              <a
-                href={user.website}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="text-sm font-bold text-primary hover:underline break-all"
-                data-testid="link-user-website"
-              >
-                {user.website.replace(/^https?:\/\//, "")}
-              </a>
             )}
           </div>
           );

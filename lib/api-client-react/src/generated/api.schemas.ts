@@ -105,15 +105,6 @@ export interface PublicUserResponse {
    */
   bio?: string | null;
   /**
-   * Personal website / link surfaced on the public profile.
-Always a full `https://…` URL when set; bare domains submitted
-via `UpdateUserRequest` are normalized server-side before
-being stored. Null when the user has not set one.
-
-   * @nullable
-   */
-  website?: string | null;
-  /**
    * Optional free-text city the user is based in (task #349).
 Surfaced on the profile alongside `state`. Null when not set.
 
@@ -319,16 +310,6 @@ with 400.
    * @nullable
    */
   bio?: string | null;
-  /**
-   * Personal website / link. Bare domains like `example.com` are
-accepted and normalized to a full `https://…` URL by the
-server before being stored. An empty string or null clears
-the field. Non-http(s) URLs and obvious garbage are rejected
-with a 400.
-
-   * @nullable
-   */
-  website?: string | null;
   /**
    * Optional free-text city the user is based in (task #349).
 An empty string or null clears the field.

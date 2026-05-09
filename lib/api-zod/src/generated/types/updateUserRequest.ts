@@ -102,16 +102,6 @@ with 400.
    */
   bio?: string | null;
   /**
-   * Personal website / link. Bare domains like `example.com` are
-accepted and normalized to a full `https://…` URL by the
-server before being stored. An empty string or null clears
-the field. Non-http(s) URLs and obvious garbage are rejected
-with a 400.
-
-   * @nullable
-   */
-  website?: string | null;
-  /**
    * Optional free-text city the user is based in (task #349).
 An empty string or null clears the field.
 

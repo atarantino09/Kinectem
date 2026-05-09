@@ -6546,14 +6546,6 @@ components:
           type: string
           nullable: true
           maxLength: 1000
-        website:
-          type: string
-          nullable: true
-          description: |
-            Personal website / link surfaced on the public profile.
-            Always a full `https://…` URL when set; bare domains submitted
-            via `UpdateUserRequest` are normalized server-side before
-            being stored. Null when the user has not set one.
         city:
           type: string
           nullable: true
@@ -6708,15 +6700,6 @@ components:
           type: string
           nullable: true
           maxLength: 1000
-        website:
-          type: string
-          nullable: true
-          description: |
-            Personal website / link. Bare domains like `example.com` are
-            accepted and normalized to a full `https://…` URL by the
-            server before being stored. An empty string or null clears
-            the field. Non-http(s) URLs and obvious garbage are rejected
-            with a 400.
         city:
           type: string
           nullable: true

@@ -328,71 +328,32 @@ describe("users routes — parent ↔ child permissions", () => {
     });
   });
 
-  // Task #293 — Extend the bare-domain website normalization from #290
-  // (orgs only) to user profiles. Mirrors the assertions on the org and
-  // team endpoints.
-  describe("website normalization (task #293)", () => {
-    it("normalizes a bare-domain website on profile edit", async () => {
+  // Task #424 — The personal website field has been retired. The
+  // property must no longer appear on user responses, and PATCH must
+  // reject it as an unknown property instead of silently storing it.
+  describe("website field retired (task #424)", () => {
+    it("does not include website on user responses", async () => {
       const { agent, user } = await loginAs(
         (u) => u.email === PARENT_EMAIL,
       );
 
-      // PATCH with a bare domain — server should prepend https://.
-      const patched = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "example.com" });
-      expect(patched.status).toBe(200);
-      expect(patched.body.website).toBe("https://example.com");
+      const fetched = await agent.get(`/api/v1/users/${user.id}`);
+      expect(fetched.status).toBe(200);
+      expect(fetched.body).not.toHaveProperty("website");
 
-      // GET reflects the saved value.
-      const fetched = await request(app).get(`/api/v1/users/${user.id}`);
-      expect(fetched.body.website).toBe("https://example.com");
+      const whoami = await agent.get(`/api/v1/auth/whoami`);
+      expect(whoami.status).toBe(200);
+      expect(whoami.body).not.toHaveProperty("website");
+    });
 
-      // PATCH with a www-prefixed bare domain — same treatment.
-      const www = await agent
+    it("rejects website on PATCH /users/:userId as an unknown property", async () => {
+      const { agent, user } = await loginAs(
+        (u) => u.email === PARENT_EMAIL,
+      );
+      const res = await agent
         .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "www.example.org" });
-      expect(www.status).toBe(200);
-      expect(www.body.website).toBe("https://www.example.org");
-
-      // Fully-qualified URL is left as-is.
-      const full = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "https://kinectem.com/about" });
-      expect(full.status).toBe(200);
-      expect(full.body.website).toBe("https://kinectem.com/about");
-
-      // Empty string clears.
-      const cleared = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "" });
-      expect(cleared.status).toBe(200);
-      expect(cleared.body.website ?? null).toBeNull();
-
-      // Explicit null clears.
-      const nulled = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: null });
-      expect(nulled.status).toBe(200);
-      expect(nulled.body.website ?? null).toBeNull();
-
-      // Garbage is rejected.
-      const garbage = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "not a url" });
-      expect(garbage.status).toBe(400);
-
-      // Non-http(s) protocols are rejected.
-      const badProto = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "ftp://example.com" });
-      expect(badProto.status).toBe(400);
-
-      // Whitespace-only is rejected (not silently treated as a clear).
-      const spaces = await agent
-        .patch(`/api/v1/users/${user.id}`)
-        .send({ website: "   " });
-      expect(spaces.status).toBe(400);
+        .send({ website: "https://example.com" });
+      expect(res.status).toBe(400);
     });
   });
 });

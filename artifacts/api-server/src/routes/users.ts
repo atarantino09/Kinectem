@@ -76,7 +76,6 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap, TAG_NOTIF_THROTTLE_MS } from "../lib/article-tagging";
-import { normalizeWebsite } from "../lib/normalize-website";
 import { filterOutMinors, rejectMinorProfileFields } from "../lib/coppa";
 
 const router: IRouter = Router();
@@ -434,18 +433,11 @@ router.patch(
       updates.name = `${body.firstName ?? cur.firstName} ${body.lastName ?? cur.lastName}`.trim();
     }
     if (body.bio !== undefined) updates.bio = body.bio;
-    // Task #293 — Personal website. Mirrors the org-website behavior added
-    // in #290: an explicit `null` clears, an empty string clears, a string
-    // is normalized via normalizeWebsite() (bare domains get a https://
-    // prefix), and obvious garbage is rejected with a 400.
-    if (body.website === null) {
-      updates.website = null;
-    } else if (typeof body.website === "string") {
-      const websiteResult = normalizeWebsite(body.website);
-      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
-      updates.website = websiteResult.value === "" ? null : websiteResult.value;
-    } else if (body.website !== undefined) {
-      return apiError(res, 400, "website must be a string or null");
+    // Task #424 — The personal website field has been retired. Reject
+    // any request that still tries to set it instead of silently
+    // dropping the value.
+    if (body.website !== undefined) {
+      return apiError(res, 400, "website is not a valid property");
     }
     // Task #349 — Optional city / 2-letter US state postal code on the
     // profile. Both clear on null or empty string. State is normalized

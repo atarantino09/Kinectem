@@ -309,12 +309,11 @@ export async function blockIfEitherMinor(
 }
 
 // Profile fields a minor account may NOT set (data-minimization).
-// `bio`, `website`, `city`, `state`, and `location` are free-text/PII
-// fields that should never appear on a minor profile. Only sport,
-// position, jersey number, grade, and avatar are allowed.
+// `bio`, `city`, `state`, and `location` are free-text/PII fields that
+// should never appear on a minor profile. Only sport, position, jersey
+// number, grade, and avatar are allowed.
 export const MINOR_BLOCKED_PROFILE_FIELDS = [
   "bio",
-  "website",
   "city",
   "state",
   "location",

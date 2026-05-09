@@ -148,10 +148,6 @@ export const users = pgTable("users", {
   location: text("location"),
   avatarUrl: text("avatar_url"),
   bio: text("bio"),
-  // Task #293 — Personal website / link on a user profile. Stored as a
-  // normalized URL (always http:// or https://). Bare domains entered
-  // by the user are promoted to https:// before being persisted.
-  website: text("website"),
   // Task #349 — Optional city / US state on a user profile. `state` is
   // stored as a 2-letter postal code (50 states + DC), mirroring the
   // shape used by organizations. Both columns are nullable; existing
