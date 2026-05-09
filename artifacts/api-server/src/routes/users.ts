@@ -155,9 +155,18 @@ router.get(
 router.get(
   "/users/:userId",
   asyncHandler(async (req, res) => {
-    const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
-    if (!u) return notFound(res);
-    if (u.deletedAt && req.realUser?.role !== "admin") return notFound(res);
+    // Express 5's typed params widens to string | string[]; UUID route
+    // params are always a single string here.
+    const userIdParam = String(req.params.userId);
+    const [u] = await db.select().from(users).where(eq(users.id, userIdParam)).limit(1);
+    if (!u) {
+      notFound(res);
+      return;
+    }
+    if (u.deletedAt && req.realUser?.role !== "admin") {
+      notFound(res);
+      return;
+    }
     const me = req.sessionUser;
     const isOwnProfile = me?.id === u.id;
 
@@ -368,6 +377,7 @@ router.get(
             followingCount,
           });
     res.json({ ...base, linkedAccounts });
+    return;
   }),
 );
 
@@ -375,13 +385,22 @@ router.patch(
   "/users/:userId",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
-    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!me) {
+      apiError(res, 401, "Not authenticated");
+      return;
+    }
+    // Express 5's typed params widens to string | string[]; UUID route
+    // params are always a single string here.
+    const userIdParam = String(req.params.userId);
     const [existing] = await db
       .select()
       .from(users)
-      .where(eq(users.id, req.params.userId))
+      .where(eq(users.id, userIdParam))
       .limit(1);
-    if (!existing) return notFound(res);
+    if (!existing) {
+      notFound(res);
+      return;
+    }
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
     // Soft-deleted users are hidden from non-admins — same rule GET uses.
     // Without this, a linked parent of a soft-deleted child could still
@@ -512,6 +531,7 @@ router.patch(
     // admin patches someone else's profile, the response shouldn't claim
     // it belongs to the caller. Matches the GET /users/:userId behavior.
     res.json(toPrivateUser(updated, { isOwnProfile: existing.id === me.id }));
+    return;
   }),
 );
 
@@ -540,8 +560,14 @@ router.get(
     // written recap about an old game lands at the top of the feed
     // instead of being buried next to the game it covers, and
     // highlights fall back to createdAt.
-    const [u] = await db.select().from(users).where(eq(users.id, req.params.userId)).limit(1);
-    if (!u) return notFound(res);
+    // Express 5's typed params widens to string | string[]; UUID route
+    // params are always a single string here.
+    const userIdParam = String(req.params.userId);
+    const [u] = await db.select().from(users).where(eq(users.id, userIdParam)).limit(1);
+    if (!u) {
+      notFound(res);
+      return;
+    }
 
     const me = req.sessionUser;
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
@@ -1011,6 +1037,7 @@ router.get(
       return post;
     });
     res.json(paginate(posts));
+    return;
   }),
 );
 
@@ -1022,12 +1049,12 @@ router.get(
       .from(rosterEntries)
       .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(rosterEntries.userId, req.params.userId));
+      .where(eq(rosterEntries.userId, String(req.params.userId)));
     const adminRows = await db
       .select({ org: organizations, role: organizationAdmins.role })
       .from(organizationAdmins)
       .innerJoin(organizations, eq(organizationAdmins.organizationId, organizations.id))
-      .where(eq(organizationAdmins.userId, req.params.userId));
+      .where(eq(organizationAdmins.userId, String(req.params.userId)));
     const followRows = await db
       .select({ org: organizations })
       .from(organizationFollowers)
@@ -1035,7 +1062,7 @@ router.get(
         organizations,
         eq(organizationFollowers.organizationId, organizations.id),
       )
-      .where(eq(organizationFollowers.userId, req.params.userId));
+      .where(eq(organizationFollowers.userId, String(req.params.userId)));
     const followedIds = new Set(followRows.map((r) => r.org.id));
     // The user's stored role per org from organization_admins (owner /
     // admin / member). Orgs the user is only on via a roster entry — i.e.
@@ -1075,9 +1102,8 @@ router.get(
     // the answer is viewer-relative; other callers get a 403 to avoid
     // leaking another user's authoring scope.
     const authorable =
-      typeof req.query.authorable === "string"
-        ? req.query.authorable === "true"
-        : req.query.authorable === true;
+      typeof req.query.authorable === "string" &&
+      req.query.authorable === "true";
     if (authorable) {
       if (!me) return apiError(res, 401, "Not authenticated");
       if (me.id !== targetId)
@@ -1302,6 +1328,7 @@ router.get(
       });
     }
     res.json(paginate(data));
+    return;
   }),
 );
 
