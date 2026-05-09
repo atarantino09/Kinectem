@@ -47,7 +47,7 @@
 // `Samira Carter` anywhere in the response body is caught loudly.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   db,
   users,
@@ -680,6 +680,32 @@ describe("Task #416 — minor name masking E2E", () => {
     });
 
     it("returns the full name to the linked guardian when their child is suggested", async () => {
+      // Force Samira deterministically into Lisa's suggestion list:
+      // (1) ensure Lisa does NOT already follow Samira (would exclude
+      // her), and (2) bump Samira's follower count above her peers so
+      // the popularity-ordered query surfaces her in the top 5.
+      await db
+        .delete(userFollowers)
+        .where(
+          and(
+            eq(userFollowers.followerUserId, ids.lisa),
+            eq(userFollowers.followingUserId, ids.samira),
+          ),
+        );
+      // Padding followers: pull a few seeded users and have them
+      // follow Samira so her count dominates. Re-uses marcus + coach
+      // + daniela who are already privileged in this test file.
+      for (const followerId of [ids.marcus, ids.coach, ids.daniela]) {
+        await db
+          .insert(userFollowers)
+          .values({
+            followingUserId: ids.samira,
+            followerUserId: followerId,
+            moderationStatus: "approved",
+          })
+          .onConflictDoNothing();
+      }
+
       const { agent: lisa } = await loginAs("lisa@kinectem.demo");
       const res = await lisa.get(`/api/v1/follow-suggestions`);
       expect(res.status).toBe(200);
@@ -690,13 +716,9 @@ describe("Task #416 — minor name masking E2E", () => {
           lastName: string;
         }>
       ).find((u) => u.id === ids.samira);
-      // The guardian may or may not be recommended their own child
-      // depending on follow graph state; if she does surface, her
-      // last name must be present in full (no first-initial mask).
-      if (hit) {
-        expect(hit.firstName).toBe("Samira");
-        expect(hit.lastName).toBe("Carter");
-      }
+      expect(hit, "expected Samira in Lisa's suggestion list").toBeDefined();
+      expect(hit!.firstName).toBe("Samira");
+      expect(hit!.lastName).toBe("Carter");
     });
   });
 
