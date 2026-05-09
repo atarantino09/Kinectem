@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { PrivateUserResponse } from "@workspace/api-client-react";
@@ -124,6 +125,34 @@ describe("EditProfileDialog — birthday + visibility (Task #431)", () => {
     const payload = mutateMock.mock.calls[0][0];
     expect(payload.data.dateOfBirth).toBeNull();
     expect(payload.data.dateOfBirthVisibility).toBe("private");
+  });
+
+  it("guards onSave: empty date + non-private visibility shows inline error and skips PATCH", () => {
+    // The auto-reset effect normally prevents this state from existing
+    // in the UI. Suppress the effect for this one test so we can
+    // exercise the defense-in-depth guard inside `onSave` directly.
+    const useEffectSpy = vi
+      .spyOn(React, "useEffect")
+      .mockImplementation(() => {});
+    try {
+      render(
+        <EditProfileDialog
+          user={makeUser({
+            dateOfBirth: null,
+            dateOfBirthVisibility: "public",
+          })}
+          open
+          onOpenChange={() => {}}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("button-save-profile"));
+      expect(mutateMock).not.toHaveBeenCalled();
+      expect(screen.getByTestId("error-profile-dob")).toHaveTextContent(
+        "Add a birthday before sharing it.",
+      );
+    } finally {
+      useEffectSpy.mockRestore();
+    }
   });
 
   it("sends both fields when the date is valid and visibility is set", () => {
