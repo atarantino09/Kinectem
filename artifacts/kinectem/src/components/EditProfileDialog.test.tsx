@@ -71,9 +71,12 @@ describe("EditProfileDialog — birthday + visibility (Task #431)", () => {
     toastMock.mockReset();
   });
 
-  it("disables the visibility dropdown when no date is set", () => {
+  it("disables the visibility dropdown and shows a hint when no date is set", () => {
     render(<EditProfileDialog user={makeUser()} open onOpenChange={() => {}} />);
     expect(screen.getByTestId("input-profile-dob-visibility")).toBeDisabled();
+    expect(
+      screen.getByTestId("hint-profile-dob-visibility"),
+    ).toHaveTextContent("Add a birthday to choose who can see it.");
   });
 
   it("auto-resets visibility to private if the date input is cleared", () => {

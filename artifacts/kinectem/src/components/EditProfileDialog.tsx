@@ -555,6 +555,14 @@ export function EditProfileDialog({
                 {dateOfBirthError}
               </p>
             )}
+            {!isMinor && !dateOfBirth.trim() && !dateOfBirthError && (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="hint-profile-dob-visibility"
+              >
+                Add a birthday to choose who can see it.
+              </p>
+            )}
           </div>
           {isMinor ? (
             <p
