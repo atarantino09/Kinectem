@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import {
   useGetLoggedInUser,
   useListFeed,
@@ -67,6 +68,9 @@ export default function FeedPage() {
   }, [myOrgs, myTeams]);
 
   const hasSidebarItems = orgGroups.length > 0 || orphanTeams.length > 0;
+  const [expandedOrgs, setExpandedOrgs] = useState<Record<string, boolean>>({});
+  const toggleOrg = (orgId: string) =>
+    setExpandedOrgs((prev) => ({ ...prev, [orgId]: !prev[orgId] }));
   const { data: feed, isLoading: feedLoading } = useListFeed();
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
@@ -121,27 +125,34 @@ export default function FeedPage() {
                 Your Orgs and Teams
               </h4>
               <div className="space-y-1">
-                {orgGroups.map((org) => (
-                  <div key={org.id}>
-                    <OrgLinkRow
-                      orgId={org.id}
-                      orgName={org.name}
-                      orgLogoUrl={org.logoUrl}
-                    />
-                    {org.teams.length > 0 && (
-                      <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
-                        {org.teams.map((t) => (
-                          <TeamLinkRow
-                            key={t.id}
-                            teamId={t.id}
-                            teamName={t.name}
-                            teamLogoUrl={t.logoUrl}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {orgGroups.map((org) => {
+                  const hasTeams = org.teams.length > 0;
+                  const isExpanded = !!expandedOrgs[org.id];
+                  return (
+                    <div key={org.id}>
+                      <OrgLinkRow
+                        orgId={org.id}
+                        orgName={org.name}
+                        orgLogoUrl={org.logoUrl}
+                        hasTeams={hasTeams}
+                        isExpanded={isExpanded}
+                        onToggle={() => toggleOrg(org.id)}
+                      />
+                      {hasTeams && isExpanded && (
+                        <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
+                          {org.teams.map((t) => (
+                            <TeamLinkRow
+                              key={t.id}
+                              teamId={t.id}
+                              teamName={t.name}
+                              teamLogoUrl={t.logoUrl}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {orphanTeams.length > 0 && (
                   <div className="space-y-0.5">
                     {orphanTeams.map((t) => (
@@ -212,25 +223,55 @@ function OrgLinkRow({
   orgId,
   orgName,
   orgLogoUrl,
+  hasTeams,
+  isExpanded,
+  onToggle,
 }: {
   orgId: string;
   orgName: string;
   orgLogoUrl: string | null;
+  hasTeams: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <Link href={`/organizations/${orgId}`} data-testid={`link-org-${orgId}`}>
-      <div className="w-full flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer py-1.5 px-1 rounded-md hover:bg-muted/50">
-        <TeamAvatar
-          avatarUrl={orgLogoUrl}
-          displayName={orgName}
-          size="xs"
-          rounded="lg"
-          className="w-5 h-5 shrink-0"
-          fallbackClassName="bg-muted text-muted-foreground"
-        />
-        <span className="truncate flex-1">{orgName}</span>
-      </div>
-    </Link>
+    <div className="w-full flex items-center gap-1 py-1.5 px-1 rounded-md hover:bg-muted/50">
+      {hasTeams ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={isExpanded ? `Collapse ${orgName}` : `Expand ${orgName}`}
+          aria-expanded={isExpanded}
+          data-testid={`toggle-org-${orgId}`}
+          className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5" />
+          )}
+        </button>
+      ) : (
+        <span className="shrink-0 w-[18px]" aria-hidden="true" />
+      )}
+      <Link
+        href={`/organizations/${orgId}`}
+        data-testid={`link-org-${orgId}`}
+        className="flex-1 min-w-0"
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer">
+          <TeamAvatar
+            avatarUrl={orgLogoUrl}
+            displayName={orgName}
+            size="xs"
+            rounded="lg"
+            className="w-5 h-5 shrink-0"
+            fallbackClassName="bg-muted text-muted-foreground"
+          />
+          <span className="truncate flex-1">{orgName}</span>
+        </div>
+      </Link>
+    </div>
   );
 }
 
