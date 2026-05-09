@@ -134,6 +134,13 @@ export function EditProfileDialog({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadGenRef = useRef(0);
+  // Task #432 follow-up — Some browsers/native date pickers don't fire a
+  // change event reliably until the input is blurred (most commonly when
+  // a user picks a date and immediately clicks Save without tabbing
+  // away). Holding a ref to the underlying <input type="date"> lets us
+  // re-read its current value at save time as a defensive fallback if
+  // local state somehow lags behind the DOM.
+  const dobInputRef = useRef<HTMLInputElement | null>(null);
   // Task #387 — Stage the picked file in the crop dialog before running
   // shrink + upload so users control framing on tall phone photos
   // instead of getting an awkward center-crop into the round avatar.
@@ -296,7 +303,21 @@ export function EditProfileDialog({
     // status: DOB is editable on every account (the server-side minor
     // block only covers bio/city/state). Empty input clears the value
     // (sent as null).
-    const trimmedDob = dateOfBirth.trim();
+    // Defensive: read straight from the DOM as a fallback in case the
+    // browser's date picker never fired onChange (seen on some native
+    // pickers when the user picks a date and immediately clicks Save
+    // without blurring the input first).
+    const liveDom = dobInputRef.current?.value ?? "";
+    const trimmedDob = (dateOfBirth || liveDom).trim();
+    // TEMP DEBUG (Task #432 repro): log what we're seeing right before
+    // the save guard. Remove once the "won't save" report is resolved.
+    // eslint-disable-next-line no-console
+    console.log("[EditProfile] onSave", {
+      stateDob: dateOfBirth,
+      liveDom,
+      trimmedDob,
+      visibility: dateOfBirthVisibility,
+    });
     let dobPayload: string | null = null;
     if (trimmedDob) {
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmedDob);
@@ -498,9 +519,18 @@ export function EditProfileDialog({
               <Input
                 id="profile-dob"
                 type="date"
+                ref={dobInputRef}
                 value={dateOfBirth}
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setDateOfBirth(e.target.value)}
+                onBlur={(e) => {
+                  // Some native date pickers commit the chosen value on
+                  // blur rather than on every change; mirror it into
+                  // state so onSave never sees a stale empty string.
+                  if (e.target.value && e.target.value !== dateOfBirth) {
+                    setDateOfBirth(e.target.value);
+                  }
+                }}
                 data-testid="input-profile-dob"
               />
               {!isMinor && (
