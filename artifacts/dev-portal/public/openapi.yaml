@@ -6698,7 +6698,11 @@ components:
         dateOfBirth:
           type: string
           format: date
-          description: ISO 8601 date (YYYY-MM-DD).
+          nullable: true
+          description: |
+            ISO 8601 date (YYYY-MM-DD). Pass `null` (or omit) to leave
+            the value untouched; pass `null` explicitly to clear an
+            existing value. Future dates are rejected with 400.
         bio:
           type: string
           nullable: true

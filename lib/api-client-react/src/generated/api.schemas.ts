@@ -305,8 +305,15 @@ export interface UpdateUserRequest {
   firstName?: string;
   /** @maxLength 100 */
   lastName?: string;
-  /** ISO 8601 date (YYYY-MM-DD). */
-  dateOfBirth?: string;
+  /**
+   * ISO 8601 date (YYYY-MM-DD). Omit the field to leave the
+stored value untouched; pass `null` to clear an existing
+value. Future and impossible calendar dates are rejected
+with 400.
+
+   * @nullable
+   */
+  dateOfBirth?: string | null;
   /**
    * @maxLength 1000
    * @nullable

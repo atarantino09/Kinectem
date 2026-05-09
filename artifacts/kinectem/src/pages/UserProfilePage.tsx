@@ -439,11 +439,43 @@ export default function UserProfilePage() {
           title={`${displayName} follows`}
           variant={{ kind: "user-following", userId }}
         />
-        {(user.bio || user.website || user.city || user.state) && (
+        {(() => {
+          // Task #422 — `dateOfBirth` only appears on the private response
+          // (self / linked guardian), so reading it here automatically
+          // respects the visibility rule: strangers never receive the
+          // field and therefore never see the row.
+          const dobRaw = (user as { dateOfBirth?: string | Date | null }).dateOfBirth;
+          const dobDate =
+            dobRaw instanceof Date
+              ? dobRaw
+              : typeof dobRaw === "string" && dobRaw
+                ? new Date(dobRaw)
+                : null;
+          const dobValid = dobDate && !Number.isNaN(dobDate.getTime());
+          const dobLabel = dobValid
+            ? dobDate.toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                timeZone: "UTC",
+              })
+            : null;
+          const showInfo =
+            user.bio || user.website || user.city || user.state || dobLabel;
+          if (!showInfo) return null;
+          return (
           <div className="px-6 pb-6 space-y-2">
             {user.bio && (
               <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl whitespace-pre-wrap">
                 {linkify(user.bio)}
+              </p>
+            )}
+            {dobLabel && (
+              <p
+                className="text-sm font-medium text-muted-foreground"
+                data-testid="text-user-birthday"
+              >
+                Born {dobLabel}
               </p>
             )}
             {/* Task #349 — Show "City, ST", just the city, or just the state
@@ -471,7 +503,8 @@ export default function UserProfilePage() {
               </a>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Affiliations stack: inline on mobile (between hero and posts),

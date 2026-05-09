@@ -279,8 +279,10 @@ export const UpdateUserBody = zod.object({
   lastName: zod.string().max(updateUserBodyLastNameMax).optional(),
   dateOfBirth: zod.coerce
     .date()
-    .optional()
-    .describe("ISO 8601 date (YYYY-MM-DD)."),
+    .nullish()
+    .describe(
+      "ISO 8601 date (YYYY-MM-DD). Omit the field to leave the\nstored value untouched; pass `null` to clear an existing\nvalue. Future and impossible calendar dates are rejected\nwith 400.\n",
+    ),
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
   website: zod
     .string()

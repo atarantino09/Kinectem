@@ -106,6 +106,17 @@ export function EditProfileDialog({
   // on the profile hero. Both default to empty when the user has none.
   const [city, setCity] = useState(user.city ?? "");
   const [state, setState] = useState(user.state ?? "");
+  // Task #422 — Birthday is editable from the profile UI. The server
+  // returns dateOfBirth as a YYYY-MM-DD string; native <input type="date">
+  // expects the same shape.
+  const dobToString = (v: PrivateUserResponse["dateOfBirth"]): string => {
+    if (!v) return "";
+    return String(v).slice(0, 10);
+  };
+  const [dateOfBirth, setDateOfBirth] = useState(dobToString(user.dateOfBirth));
+  const [dateOfBirthError, setDateOfBirthError] = useState<string | undefined>(
+    undefined,
+  );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -131,6 +142,8 @@ export function EditProfileDialog({
       setWebsiteError(undefined);
       setCity(user.city ?? "");
       setState(user.state ?? "");
+      setDateOfBirth(dobToString(user.dateOfBirth));
+      setDateOfBirthError(undefined);
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
       setSaveError(null);
@@ -179,6 +192,8 @@ export function EditProfileDialog({
       setWebsiteError(undefined);
       setCity(user.city ?? "");
       setState(user.state ?? "");
+      setDateOfBirth(dobToString(user.dateOfBirth));
+      setDateOfBirthError(undefined);
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
       setSaveError(null);
@@ -264,6 +279,41 @@ export function EditProfileDialog({
 
   const onSave = () => {
     setSaveError(null);
+    // Task #422 — Validate birthday client-side regardless of minor
+    // status: DOB is editable on every account (the server-side minor
+    // block only covers bio/website/city/state). Empty input clears the
+    // value (sent as null).
+    const trimmedDob = dateOfBirth.trim();
+    let dobPayload: string | null = null;
+    if (trimmedDob) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmedDob);
+      if (!m) {
+        setDateOfBirthError("Enter a valid date.");
+        return;
+      }
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      // Round-trip through UTC components so impossible calendar dates
+      // like 2026-02-31 (which `new Date(...)` silently rolls forward)
+      // are rejected here instead of saving a shifted value.
+      const parsed = new Date(Date.UTC(y, mo - 1, d));
+      if (
+        Number.isNaN(parsed.getTime()) ||
+        parsed.getUTCFullYear() !== y ||
+        parsed.getUTCMonth() !== mo - 1 ||
+        parsed.getUTCDate() !== d
+      ) {
+        setDateOfBirthError("Enter a valid date.");
+        return;
+      }
+      if (parsed.getTime() > Date.now()) {
+        setDateOfBirthError("Birthday can't be in the future.");
+        return;
+      }
+      dobPayload = trimmedDob;
+    }
+    setDateOfBirthError(undefined);
     // Task #423 — minors aren't allowed to set bio/website/city/state on
     // the server. Skip the website normalization and omit those fields
     // entirely so the PATCH only carries fields a minor account can set.
@@ -273,6 +323,7 @@ export function EditProfileDialog({
         data: {
           firstName,
           lastName,
+          dateOfBirth: dobPayload,
           avatarUrl,
         },
       });
@@ -302,6 +353,7 @@ export function EditProfileDialog({
         website: websiteResult.value,
         city: trimmedCity ? trimmedCity : null,
         state: state ? (state as UpdateUserRequestState) : null,
+        dateOfBirth: dobPayload,
         avatarUrl,
       },
     });
@@ -419,6 +471,29 @@ export function EditProfileDialog({
                 data-testid="input-last-name"
               />
             </div>
+          </div>
+          {/* Task #422 — Birthday is editable on every account
+              (under-13 included). Empty input clears the value. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="profile-dob" className="text-xs font-bold">
+              Birthday
+            </Label>
+            <Input
+              id="profile-dob"
+              type="date"
+              value={dateOfBirth}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              data-testid="input-profile-dob"
+            />
+            {dateOfBirthError && (
+              <p
+                className="text-xs font-medium text-destructive"
+                data-testid="error-profile-dob"
+              >
+                {dateOfBirthError}
+              </p>
+            )}
           </div>
           {isMinor ? (
             <p

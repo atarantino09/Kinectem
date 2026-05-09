@@ -480,6 +480,40 @@ router.patch(
     } else if (body.state !== undefined) {
       return apiError(res, 400, "state must be a string or null");
     }
+    // Task #422 — Birthday is editable from the profile UI. Accept an ISO
+    // YYYY-MM-DD date or null to clear. Reject future dates and obvious
+    // garbage with 400. We deliberately do NOT recompute `isMinor` here —
+    // the COPPA snapshot from signup stays put even if a user later
+    // corrects their DOB (out-of-scope per the task brief).
+    if (body.dateOfBirth === null) {
+      updates.dateOfBirth = null;
+    } else if (typeof body.dateOfBirth === "string") {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(body.dateOfBirth);
+      if (!m) {
+        return apiError(res, 400, "dateOfBirth must be an ISO date (YYYY-MM-DD)");
+      }
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+      // JS `new Date("2026-02-31")` silently rolls into March; round-trip
+      // the UTC components to reject impossible calendar dates like
+      // 2026-02-31, 2026-13-01, or 2026-00-10.
+      const dob = new Date(Date.UTC(year, month - 1, day));
+      if (
+        Number.isNaN(dob.getTime()) ||
+        dob.getUTCFullYear() !== year ||
+        dob.getUTCMonth() !== month - 1 ||
+        dob.getUTCDate() !== day
+      ) {
+        return apiError(res, 400, "dateOfBirth must be a valid date");
+      }
+      if (dob.getTime() > Date.now()) {
+        return apiError(res, 400, "dateOfBirth cannot be in the future");
+      }
+      updates.dateOfBirth = dob;
+    } else if (body.dateOfBirth !== undefined) {
+      return apiError(res, 400, "dateOfBirth must be a string or null");
+    }
     if (body.avatarUrl !== undefined) {
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {
         return apiError(res, 400, "avatarUrl must be a string or null");
