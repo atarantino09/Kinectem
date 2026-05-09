@@ -119,6 +119,20 @@ organizations. Null when not set.
   followerCount?: number;
   /** @minimum 0 */
   followingCount?: number;
+  /**
+   * Task #426 — Per-field birthday visibility. Returned to the
+viewer only when they satisfy the profile owner's chosen
+tier (`dateOfBirthVisibility`): `public` shows it to
+everyone, `followers` shows it to approved followers (plus
+self / linked guardian / admin), `private` (the default)
+shows it only to self / linked guardian / admin. Null when
+the viewer is not allowed or the field is unset. Minor
+accounts are forced to `private` regardless of the stored
+value.
+
+   * @nullable
+   */
+  dateOfBirth?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

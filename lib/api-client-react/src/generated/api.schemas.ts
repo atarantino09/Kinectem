@@ -133,6 +133,20 @@ organizations. Null when not set.
   followerCount?: number;
   /** @minimum 0 */
   followingCount?: number;
+  /**
+   * Task #426 — Per-field birthday visibility. Returned to the
+viewer only when they satisfy the profile owner's chosen
+tier (`dateOfBirthVisibility`): `public` shows it to
+everyone, `followers` shows it to approved followers (plus
+self / linked guardian / admin), `private` (the default)
+shows it only to self / linked guardian / admin. Null when
+the viewer is not allowed or the field is unset. Minor
+accounts are forced to `private` regardless of the stored
+value.
+
+   * @nullable
+   */
+  dateOfBirth?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -197,6 +211,26 @@ export const PrivateUserResponseAccountStatus = {
   disabled: "disabled",
 } as const;
 
+/**
+ * Task #426 — Who can see this user's birthday. `private`
+(default) limits it to self / linked guardian / admin;
+`followers` adds approved followers; `public` exposes
+it to everyone. Surfaced on the private view so the
+profile owner (and their linked guardian) can edit it
+from the Edit Profile dialog. Minor accounts are
+forced to `private` server-side regardless of the
+value stored in the database.
+
+ */
+export type PrivateUserResponseDateOfBirthVisibility =
+  (typeof PrivateUserResponseDateOfBirthVisibility)[keyof typeof PrivateUserResponseDateOfBirthVisibility];
+
+export const PrivateUserResponseDateOfBirthVisibility = {
+  private: "private",
+  followers: "followers",
+  public: "public",
+} as const;
+
 export type PrivateUserResponse = PublicUserResponse & {
   email: string;
   /** @nullable */
@@ -220,11 +254,36 @@ COPPA verifiable parental consent has not been finalized;
    * @nullable
    */
   parentId?: string | null;
+  /** Task #426 — Who can see this user's birthday. `private`
+(default) limits it to self / linked guardian / admin;
+`followers` adds approved followers; `public` exposes
+it to everyone. Surfaced on the private view so the
+profile owner (and their linked guardian) can edit it
+from the Edit Profile dialog. Minor accounts are
+forced to `private` server-side regardless of the
+value stored in the database.
+ */
+  dateOfBirthVisibility?: PrivateUserResponseDateOfBirthVisibility;
 };
 
 export type TokenIssueResponse = TokenRefreshResponse & {
   user: PrivateUserResponse;
 };
+
+/**
+ * Task #426 — Who can see this user's birthday. Omit to
+leave the stored value untouched. Minor accounts may only
+store `private` — sending any other value returns 400.
+
+ */
+export type UpdateUserRequestDateOfBirthVisibility =
+  (typeof UpdateUserRequestDateOfBirthVisibility)[keyof typeof UpdateUserRequestDateOfBirthVisibility];
+
+export const UpdateUserRequestDateOfBirthVisibility = {
+  private: "private",
+  followers: "followers",
+  public: "public",
+} as const;
 
 /**
  * Optional two-letter US state postal code (50 states + DC) the
@@ -305,6 +364,11 @@ with 400.
    * @nullable
    */
   dateOfBirth?: string | null;
+  /** Task #426 — Who can see this user's birthday. Omit to
+leave the stored value untouched. Minor accounts may only
+store `private` — sending any other value returns 400.
+ */
+  dateOfBirthVisibility?: UpdateUserRequestDateOfBirthVisibility;
   /**
    * @maxLength 1000
    * @nullable

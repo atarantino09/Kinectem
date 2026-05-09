@@ -383,6 +383,13 @@ export function toPublicUser(
     // for surfaces that have already been audited (e.g. the user's
     // own profile resource where the carve-out applies).
     minorNameCtx?: MinorNameViewerContext;
+    // Task #426 — When the viewer satisfies the profile owner's
+    // `dateOfBirthVisibility` tier, GET /users/:userId passes the
+    // ISO date string here so the public response includes it. Omit
+    // (or pass `null`) to keep birthday hidden — the default for
+    // every other surface that projects a public user (search,
+    // post-author cards, follower lists, etc.).
+    dateOfBirth?: string | null;
   } = {},
 ) {
   const masked =
@@ -414,6 +421,11 @@ export function toPublicUser(
     isMinor: !!u.isMinor,
     followerCount: opts.followerCount ?? 0,
     followingCount: opts.followingCount ?? 0,
+    // Task #426 — Birthday is opt-in per `dateOfBirthVisibility`. Only
+    // emitted when the calling route has resolved the viewer is
+    // allowed; everywhere else this is null so we never accidentally
+    // leak DOB through search / post-author / follower-list surfaces.
+    dateOfBirth: opts.dateOfBirth ?? null,
     createdAt: u.createdAt.toISOString(),
     updatedAt: u.createdAt.toISOString(),
   };
@@ -441,9 +453,15 @@ export function toPrivateUser(
       isFollowing: opts.isFollowing ?? false,
       followerCount: opts.followerCount,
       followingCount: opts.followingCount,
+      // Task #426 — Self / linked guardian always sees the actual
+      // birthday on the private response, regardless of the owner's
+      // chosen `dateOfBirthVisibility` tier (the tier only gates
+      // strangers viewing the public response).
+      dateOfBirth: u.dateOfBirth
+        ? u.dateOfBirth.toISOString().slice(0, 10)
+        : null,
     }),
     email: u.email ?? "",
-    dateOfBirth: u.dateOfBirth ? u.dateOfBirth.toISOString().slice(0, 10) : null,
     role: u.role,
     // Task #359 — surface so the web client can hide UI for blocked
     // actions the server also enforces. Falsy on legacy rows that
@@ -451,6 +469,11 @@ export function toPrivateUser(
     isMinor: !!u.isMinor,
     accountStatus: u.accountStatus ?? "active",
     parentId: u.parentId ?? null,
+    // Task #426 — Per-field birthday visibility. Minor accounts are
+    // forced to `private` server-side regardless of what is stored.
+    dateOfBirthVisibility: u.isMinor
+      ? "private"
+      : (u.dateOfBirthVisibility ?? "private"),
   };
 }
 

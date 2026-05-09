@@ -6524,6 +6524,20 @@ components:
         followingCount:
           type: integer
           minimum: 0
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Task #426 — Per-field birthday visibility. Returned to the
+            viewer only when they satisfy the profile owner's chosen
+            tier (`dateOfBirthVisibility`): `public` shows it to
+            everyone, `followers` shows it to approved followers (plus
+            self / linked guardian / admin), `private` (the default)
+            shows it only to self / linked guardian / admin. Null when
+            the viewer is not allowed or the field is unset. Minor
+            accounts are forced to `private` regardless of the stored
+            value.
         createdAt:
           type: string
           format: date-time
@@ -6623,6 +6637,21 @@ components:
               nullable: true
               description: |
                 The user's linked parent/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.
+            dateOfBirthVisibility:
+              type: string
+              enum:
+                - private
+                - followers
+                - public
+              description: |
+                Task #426 — Who can see this user's birthday. `private`
+                (default) limits it to self / linked guardian / admin;
+                `followers` adds approved followers; `public` exposes
+                it to everyone. Surfaced on the private view so the
+                profile owner (and their linked guardian) can edit it
+                from the Edit Profile dialog. Minor accounts are
+                forced to `private` server-side regardless of the
+                value stored in the database.
     UpdateUserRequest:
       type: object
       additionalProperties: false
@@ -6644,6 +6673,16 @@ components:
             stored value untouched; pass `null` to clear an existing
             value. Future and impossible calendar dates are rejected
             with 400.
+        dateOfBirthVisibility:
+          type: string
+          enum:
+            - private
+            - followers
+            - public
+          description: |
+            Task #426 — Who can see this user's birthday. Omit to
+            leave the stored value untouched. Minor accounts may only
+            store `private` — sending any other value returns 400.
         bio:
           type: string
           nullable: true

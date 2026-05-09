@@ -169,6 +169,12 @@ export const GetUserByIdResponse = zod.union([
         .number()
         .min(getUserByIdResponseOneOneFollowingCountMin)
         .optional(),
+      dateOfBirth: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -199,6 +205,12 @@ export const GetUserByIdResponse = zod.union([
           .nullish()
           .describe(
             "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+          ),
+        dateOfBirthVisibility: zod
+          .enum(["private", "followers", "public"])
+          .optional()
+          .describe(
+            "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
           ),
       }),
     ),
@@ -238,6 +250,12 @@ export const GetUserByIdResponse = zod.union([
       .number()
       .min(getUserByIdResponseTwoFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),
@@ -270,6 +288,12 @@ export const UpdateUserBody = zod.object({
     .nullish()
     .describe(
       "ISO 8601 date (YYYY-MM-DD). Omit the field to leave the\nstored value untouched; pass `null` to clear an existing\nvalue. Future and impossible calendar dates are rejected\nwith 400.\n",
+    ),
+  dateOfBirthVisibility: zod
+    .enum(["private", "followers", "public"])
+    .optional()
+    .describe(
+      "Task #426 — Who can see this user's birthday. Omit to\nleave the stored value untouched. Minor accounts may only\nstore `private` — sending any other value returns 400.\n",
     ),
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
   city: zod
@@ -389,6 +413,12 @@ export const UpdateUserResponse = zod
       .number()
       .min(updateUserResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -419,6 +449,12 @@ export const UpdateUserResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -481,6 +517,12 @@ export const SetUserCoverPhotoResponse = zod
       .number()
       .min(setUserCoverPhotoResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -511,6 +553,12 @@ export const SetUserCoverPhotoResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -566,6 +614,12 @@ export const DeleteUserCoverPhotoResponse = zod
       .number()
       .min(deleteUserCoverPhotoResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -596,6 +650,12 @@ export const DeleteUserCoverPhotoResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -658,6 +718,12 @@ export const SetUserAvatarResponse = zod
       .number()
       .min(setUserAvatarResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -688,6 +754,12 @@ export const SetUserAvatarResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -743,6 +815,12 @@ export const DeleteUserAvatarResponse = zod
       .number()
       .min(deleteUserAvatarResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -773,6 +851,12 @@ export const DeleteUserAvatarResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -941,6 +1025,12 @@ export const GetLoggedInUserResponse = zod
       .number()
       .min(getLoggedInUserResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -971,6 +1061,12 @@ export const GetLoggedInUserResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -4740,6 +4836,12 @@ export const ListFollowSuggestionsResponse = zod.object({
         .number()
         .min(listFollowSuggestionsResponseUsersItemFollowingCountMin)
         .optional(),
+      dateOfBirth: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -7144,6 +7246,12 @@ export const UpdateAdminUserResponse = zod
       .number()
       .min(updateAdminUserResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -7174,6 +7282,12 @@ export const UpdateAdminUserResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -7228,6 +7342,12 @@ export const SoftDeleteAdminUserResponse = zod
       .number()
       .min(softDeleteAdminUserResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -7258,6 +7378,12 @@ export const SoftDeleteAdminUserResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -7312,6 +7438,12 @@ export const RestoreAdminUserResponse = zod
       .number()
       .min(restoreAdminUserResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -7342,6 +7474,12 @@ export const RestoreAdminUserResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -7686,6 +7824,12 @@ export const AuthLoginResponse = zod
       .number()
       .min(authLoginResponseOneFollowingCountMin)
       .optional(),
+    dateOfBirth: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -7716,6 +7860,12 @@ export const AuthLoginResponse = zod
         .nullish()
         .describe(
           "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+        ),
+      dateOfBirthVisibility: zod
+        .enum(["private", "followers", "public"])
+        .optional()
+        .describe(
+          "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
     }),
   );
@@ -7858,6 +8008,12 @@ export const AuthTokenResponse = zod
             .number()
             .min(authTokenResponseTwoUserOneFollowingCountMin)
             .optional(),
+          dateOfBirth: zod.coerce
+            .date()
+            .nullish()
+            .describe(
+              "Task #426 — Per-field birthday visibility. Returned to the\nviewer only when they satisfy the profile owner's chosen\ntier (`dateOfBirthVisibility`): `public` shows it to\neveryone, `followers` shows it to approved followers (plus\nself \/ linked guardian \/ admin), `private` (the default)\nshows it only to self \/ linked guardian \/ admin. Null when\nthe viewer is not allowed or the field is unset. Minor\naccounts are forced to `private` regardless of the stored\nvalue.\n",
+            ),
           createdAt: zod.coerce.date(),
           updatedAt: zod.coerce.date(),
         })
@@ -7888,6 +8044,12 @@ export const AuthTokenResponse = zod
               .nullish()
               .describe(
                 "The user's linked parent\/guardian account ID, if any. Exposed so a viewer can detect they are this user's linked parent (used to show the Edit Profile button on a child's profile). Null for users without a linked parent.\n",
+              ),
+            dateOfBirthVisibility: zod
+              .enum(["private", "followers", "public"])
+              .optional()
+              .describe(
+                "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
               ),
           }),
         ),

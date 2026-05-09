@@ -81,6 +81,7 @@ are marked `deprecated: true` in this spec.
  * OpenAPI spec version: 0.1.0
  */
 import type { PrivateUserResponseAccountStatus } from "./privateUserResponseAccountStatus";
+import type { PrivateUserResponseDateOfBirthVisibility } from "./privateUserResponseDateOfBirthVisibility";
 import type { PrivateUserResponseRole } from "./privateUserResponseRole";
 import type { PublicUserResponse } from "./publicUserResponse";
 
@@ -107,4 +108,14 @@ COPPA verifiable parental consent has not been finalized;
    * @nullable
    */
   parentId?: string | null;
+  /** Task #426 — Who can see this user's birthday. `private`
+(default) limits it to self / linked guardian / admin;
+`followers` adds approved followers; `public` exposes
+it to everyone. Surfaced on the private view so the
+profile owner (and their linked guardian) can edit it
+from the Edit Profile dialog. Minor accounts are
+forced to `private` server-side regardless of the
+value stored in the database.
+ */
+  dateOfBirthVisibility?: PrivateUserResponseDateOfBirthVisibility;
 };

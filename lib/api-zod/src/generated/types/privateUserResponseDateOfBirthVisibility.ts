@@ -80,65 +80,23 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateUserRequestDateOfBirthVisibility } from "./updateUserRequestDateOfBirthVisibility";
-import type { UpdateUserRequestState } from "./updateUserRequestState";
 
-export interface UpdateUserRequest {
-  /** @maxLength 100 */
-  firstName?: string;
-  /** @maxLength 100 */
-  lastName?: string;
-  /**
-   * ISO 8601 date (YYYY-MM-DD). Omit the field to leave the
-stored value untouched; pass `null` to clear an existing
-value. Future and impossible calendar dates are rejected
-with 400.
+/**
+ * Task #426 — Who can see this user's birthday. `private`
+(default) limits it to self / linked guardian / admin;
+`followers` adds approved followers; `public` exposes
+it to everyone. Surfaced on the private view so the
+profile owner (and their linked guardian) can edit it
+from the Edit Profile dialog. Minor accounts are
+forced to `private` server-side regardless of the
+value stored in the database.
 
-   * @nullable
-   */
-  dateOfBirth?: Date | null;
-  /** Task #426 — Who can see this user's birthday. Omit to
-leave the stored value untouched. Minor accounts may only
-store `private` — sending any other value returns 400.
  */
-  dateOfBirthVisibility?: UpdateUserRequestDateOfBirthVisibility;
-  /**
-   * @maxLength 1000
-   * @nullable
-   */
-  bio?: string | null;
-  /**
-   * Optional free-text city the user is based in (task #349).
-An empty string or null clears the field.
+export type PrivateUserResponseDateOfBirthVisibility =
+  (typeof PrivateUserResponseDateOfBirthVisibility)[keyof typeof PrivateUserResponseDateOfBirthVisibility];
 
-   * @maxLength 100
-   * @nullable
-   */
-  city?: string | null;
-  /**
-   * Optional two-letter US state postal code (50 states + DC) the
-user is based in (task #349). An empty string or null clears
-the field.
-
-   * @nullable
-   */
-  state?: UpdateUserRequestState;
-  /**
-   * @maxLength 50
-   * @nullable
-   */
-  level?: string | null;
-  /**
-   * URL of the user's profile picture. Must reference a confirmed
-asset previously uploaded by the caller via the upload + confirm
-flow, or null to remove the current avatar. The server enforces
-ownership and confirmation, so arbitrary external URLs are
-rejected with 400. No fixed maxLength is set because uploaded
-assets are stored as base64 `data:` URLs that can be many MB
-long; the server caps the length to match the asset upload
-size limit.
-
-   * @nullable
-   */
-  avatarUrl?: string | null;
-}
+export const PrivateUserResponseDateOfBirthVisibility = {
+  private: "private",
+  followers: "followers",
+  public: "public",
+} as const;

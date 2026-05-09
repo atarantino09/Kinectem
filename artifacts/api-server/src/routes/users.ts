@@ -361,6 +361,24 @@ router.get(
     // mistake them for the user themselves and render self-only UI.
     const isLinkedParentViewer =
       !!me && !!u.parentId && u.parentId === me.id;
+    // Task #426 — Per-field birthday visibility. Self / linked guardian
+    // always see the real DOB (handled by toPrivateUser). For everyone
+    // else the public response only carries `dateOfBirth` when the
+    // viewer satisfies the owner's chosen tier. Minor accounts are
+    // forced to `private` regardless of stored value.
+    const dobVisibility = u.isMinor
+      ? "private"
+      : (u.dateOfBirthVisibility ?? "private");
+    const isPlatformAdminViewer = req.realUser?.role === "admin";
+    const viewerCanSeeDob =
+      isOwnProfile ||
+      isLinkedParentViewer ||
+      isPlatformAdminViewer ||
+      dobVisibility === "public" ||
+      (dobVisibility === "followers" && isFollowing);
+    const dobIso = u.dateOfBirth
+      ? u.dateOfBirth.toISOString().slice(0, 10)
+      : null;
     const base =
       isOwnProfile || isLinkedParentViewer
         ? toPrivateUser(u, {
@@ -374,6 +392,7 @@ router.get(
             isFollowing,
             followerCount,
             followingCount,
+            dateOfBirth: viewerCanSeeDob ? dobIso : null,
           });
     res.json({ ...base, linkedAccounts });
     return;
@@ -505,6 +524,34 @@ router.patch(
       updates.dateOfBirth = dob;
     } else if (body.dateOfBirth !== undefined) {
       return apiError(res, 400, "dateOfBirth must be a string or null");
+    }
+    // Task #426 — Per-field birthday visibility. Adults can pick any
+    // tier; minors are pinned to `private` (the server rejects any
+    // attempt to relax it, regardless of who is editing).
+    if (body.dateOfBirthVisibility !== undefined) {
+      const allowed = ["private", "followers", "public"] as const;
+      if (
+        typeof body.dateOfBirthVisibility !== "string" ||
+        !allowed.includes(body.dateOfBirthVisibility as (typeof allowed)[number])
+      ) {
+        return apiError(
+          res,
+          400,
+          "dateOfBirthVisibility must be private, followers, or public",
+        );
+      }
+      if (
+        existing.isMinor &&
+        body.dateOfBirthVisibility !== "private"
+      ) {
+        return apiError(
+          res,
+          400,
+          "Minor accounts cannot share birthday beyond linked guardians",
+        );
+      }
+      updates.dateOfBirthVisibility = body.dateOfBirthVisibility as
+        (typeof allowed)[number];
     }
     if (body.avatarUrl !== undefined) {
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {

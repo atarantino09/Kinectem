@@ -516,6 +516,25 @@ CREATE INDEX IF NOT EXISTS users_guardian_confirm_token_hash_idx
 ALTER TABLE users DROP COLUMN IF EXISTS guardian_confirm_token;
 `;
 
+// Task #426 — Per-field birthday visibility. Adds the
+// `date_of_birth_visibility` enum + column on `users`. Default is
+// `private` for every existing row, matching today's behavior where
+// birthday is only visible to self / linked guardian.
+const TASK_426_DOB_VISIBILITY = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'date_of_birth_visibility'
+  ) THEN
+    CREATE TYPE date_of_birth_visibility AS ENUM ('private','followers','public');
+  END IF;
+END$migration$;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS date_of_birth_visibility date_of_birth_visibility
+    NOT NULL DEFAULT 'private';
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -576,6 +595,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-06-task-32-hash-guardian-tokens",
     sql: TASK_32_HASH_GUARDIAN_TOKENS,
+  },
+  {
+    name: "2026-05-09-task-426-dob-visibility",
+    sql: TASK_426_DOB_VISIBILITY,
   },
 ];
 

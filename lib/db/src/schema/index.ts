@@ -69,6 +69,20 @@ export const profileVisibilityEnum = pgEnum("profile_visibility", [
   "private",
 ]);
 
+// Task #426 — Per-user visibility tier for the `dateOfBirth` field. The
+// overall profile-visibility enum gates the whole profile; this column
+// is a separate, narrower control specifically for sharing birthday
+// (e.g. an adult who keeps `profileVisibility = public` but only wants
+// approved followers to see their birthday). `private` is the default
+// for everyone — birthday is only ever visible to self / linked
+// guardian / platform admin in that mode. Minor accounts are forced to
+// `private` on the server regardless of what is sent.
+export const dateOfBirthVisibilityEnum = pgEnum("date_of_birth_visibility", [
+  "private",
+  "followers",
+  "public",
+]);
+
 // Task #367 — Status of a photo-of-minor takedown request submitted by
 // a guardian. While `pending` the targeted post is hidden from every
 // listing.
@@ -189,6 +203,13 @@ export const users = pgTable("users", {
   profileVisibility: profileVisibilityEnum("profile_visibility")
     .notNull()
     .default("public"),
+  // Task #426 — Per-field visibility for `dateOfBirth`. Defaults to
+  // `private` for every account; minors are forced to `private` on the
+  // server even if a different value is sent. See `dateOfBirthVisibilityEnum`
+  // for the full discussion.
+  dateOfBirthVisibility: dateOfBirthVisibilityEnum("date_of_birth_visibility")
+    .notNull()
+    .default("private"),
   // Stamped when a guardian (or the user themselves) submits a
   // right-to-delete request. The hard-delete script keys off this
   // column once the cooling-off window passes.

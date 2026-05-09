@@ -8,6 +8,8 @@ import {
   confirmUpload,
   type PrivateUserResponse,
   type UpdateUserRequestState,
+  UpdateUserRequestDateOfBirthVisibility,
+  type UpdateUserRequestDateOfBirthVisibility as DobVisibility,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -112,6 +114,15 @@ export function EditProfileDialog({
   const [dateOfBirthError, setDateOfBirthError] = useState<string | undefined>(
     undefined,
   );
+  // Task #426 — Per-field birthday visibility. Default to the value
+  // already on the row (server defaults to "private"). Minor accounts
+  // are pinned to "private" server-side, so the picker is hidden.
+  const initialDobVisibility: DobVisibility =
+    ((user as { dateOfBirthVisibility?: DobVisibility }).dateOfBirthVisibility ??
+      UpdateUserRequestDateOfBirthVisibility.private) as DobVisibility;
+  const [dateOfBirthVisibility, setDateOfBirthVisibility] = useState<DobVisibility>(
+    initialDobVisibility,
+  );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -137,6 +148,11 @@ export function EditProfileDialog({
       setState(user.state ?? "");
       setDateOfBirth(dobToString(user.dateOfBirth));
       setDateOfBirthError(undefined);
+      setDateOfBirthVisibility(
+        ((user as { dateOfBirthVisibility?: DobVisibility })
+          .dateOfBirthVisibility ??
+          UpdateUserRequestDateOfBirthVisibility.private) as DobVisibility,
+      );
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
       setSaveError(null);
@@ -320,6 +336,9 @@ export function EditProfileDialog({
       });
       return;
     }
+    // Task #426 — Adults can pick a per-field birthday tier; the server
+    // also enforces this. Always include so flipping back to private
+    // persists.
     // Task #349 — Always include city/state so emptying either field on the
     // form clears the persisted value. City is trimmed and sent as null when
     // empty; state is sent as null when no option is selected.
@@ -333,6 +352,7 @@ export function EditProfileDialog({
         city: trimmedCity ? trimmedCity : null,
         state: state ? (state as UpdateUserRequestState) : null,
         dateOfBirth: dobPayload,
+        dateOfBirthVisibility,
         avatarUrl,
       },
     });
@@ -452,19 +472,60 @@ export function EditProfileDialog({
             </div>
           </div>
           {/* Task #422 — Birthday is editable on every account
-              (under-13 included). Empty input clears the value. */}
+              (under-13 included). Empty input clears the value.
+              Task #426 — Adults additionally pick who can see it
+              via `dateOfBirthVisibility`; minor accounts are pinned
+              to private server-side, so the picker is hidden. */}
           <div className="space-y-1.5">
             <Label htmlFor="profile-dob" className="text-xs font-bold">
               Birthday
             </Label>
-            <Input
-              id="profile-dob"
-              type="date"
-              value={dateOfBirth}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setDateOfBirth(e.target.value)}
-              data-testid="input-profile-dob"
-            />
+            <div className={isMinor ? "" : "grid grid-cols-2 gap-3"}>
+              <Input
+                id="profile-dob"
+                type="date"
+                value={dateOfBirth}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                data-testid="input-profile-dob"
+              />
+              {!isMinor && (
+                <Select
+                  value={dateOfBirthVisibility}
+                  onValueChange={(v) =>
+                    setDateOfBirthVisibility(v as DobVisibility)
+                  }
+                >
+                  <SelectTrigger
+                    id="profile-dob-visibility"
+                    data-testid="input-profile-dob-visibility"
+                    aria-label="Who can see your birthday"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      value={UpdateUserRequestDateOfBirthVisibility.private}
+                      data-testid="option-profile-dob-visibility-private"
+                    >
+                      Only me
+                    </SelectItem>
+                    <SelectItem
+                      value={UpdateUserRequestDateOfBirthVisibility.followers}
+                      data-testid="option-profile-dob-visibility-followers"
+                    >
+                      Followers
+                    </SelectItem>
+                    <SelectItem
+                      value={UpdateUserRequestDateOfBirthVisibility.public}
+                      data-testid="option-profile-dob-visibility-public"
+                    >
+                      Everyone
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             {dateOfBirthError && (
               <p
                 className="text-xs font-medium text-destructive"
