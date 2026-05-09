@@ -123,6 +123,18 @@ export function EditProfileDialog({
   const [dateOfBirthVisibility, setDateOfBirthVisibility] = useState<DobVisibility>(
     initialDobVisibility,
   );
+  // Task #431 — Birthday visibility only makes sense if there's a date to
+  // share. Auto-pin the dropdown back to "private" whenever the date input
+  // is empty so the row can never end up with a non-private tier and a
+  // null DOB (which previously saved silently and made it look like the
+  // birthday was never updated).
+  useEffect(() => {
+    if (!dateOfBirth.trim() && dateOfBirthVisibility !== "private") {
+      setDateOfBirthVisibility(
+        UpdateUserRequestDateOfBirthVisibility.private as DobVisibility,
+      );
+    }
+  }, [dateOfBirth, dateOfBirthVisibility]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -320,6 +332,14 @@ export function EditProfileDialog({
       }
       dobPayload = trimmedDob;
     }
+    // Task #431 — Defense in depth: even though the dropdown is disabled
+    // when the date is empty, refuse to send a non-private visibility
+    // alongside a null DOB. Keeps the row consistent if anything ever
+    // bypasses the disabled state.
+    if (!isMinor && !dobPayload && dateOfBirthVisibility !== "private") {
+      setDateOfBirthError("Add a birthday before sharing it.");
+      return;
+    }
     setDateOfBirthError(undefined);
     // Task #423 — minors aren't allowed to set bio/city/state on the
     // server. Omit those fields entirely so the PATCH only carries
@@ -495,6 +515,7 @@ export function EditProfileDialog({
                   onValueChange={(v) =>
                     setDateOfBirthVisibility(v as DobVisibility)
                   }
+                  disabled={!dateOfBirth.trim()}
                 >
                   <SelectTrigger
                     id="profile-dob-visibility"
