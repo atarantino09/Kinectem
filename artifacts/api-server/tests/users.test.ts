@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { Agent } from "supertest";
+import { eq } from "drizzle-orm";
+import { db, users, userFollowers } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
 const ADMIN_EMAIL = "andrew@kinectem.com";
 const PARENT_EMAIL = "lisa@kinectem.demo";
 const CHILD_EMAIL = "samira@kinectem.demo";
 const STRANGER_EMAIL = "marcus@kinectem.demo";
+const FOLLOWER_EMAIL = "jordan@kinectem.demo";
+const OWNER_EMAIL = "tyler@kinectem.demo";
+const OWNER_DOB = "1995-06-15";
 
 async function uploadAsset(
   agent: Agent,
@@ -88,7 +93,9 @@ describe("users routes — parent ↔ child permissions", () => {
       expect(res.body).not.toHaveProperty("parentId");
       expect(res.body).not.toHaveProperty("email");
       expect(res.body).not.toHaveProperty("role");
-      expect(res.body).not.toHaveProperty("dateOfBirth");
+      // The public response always carries the `dateOfBirth` slot; for a
+      // stranger viewing a minor it must be null (Task #426 / #433).
+      expect(res.body.dateOfBirth).toBeNull();
     });
   });
 
@@ -355,5 +362,262 @@ describe("users routes — parent ↔ child permissions", () => {
         .send({ website: "https://example.com" });
       expect(res.status).toBe(400);
     });
+  });
+});
+
+// Task #433 — Per-viewer × per-tier birthday visibility coverage. The
+// server gates DOB on the public response via `viewerCanSeeDob` in
+// `src/routes/users.ts`. These cases lock in the matrix so a future
+// refactor can't silently leak minor birthdays or hide adult ones.
+describe("GET /users/:userId — dateOfBirth visibility matrix", () => {
+  async function setOwnerDob(
+    visibility: "private" | "followers" | "public",
+  ): Promise<string> {
+    const { agent, user } = await loginAs((u) => u.email === OWNER_EMAIL);
+    const res = await agent
+      .patch(`/api/v1/users/${user.id}`)
+      .send({ dateOfBirth: OWNER_DOB, dateOfBirthVisibility: visibility });
+    expect(res.status).toBe(200);
+    return user.id;
+  }
+
+  async function approveFollow(
+    follower: Agent,
+    targetUserId: string,
+  ): Promise<void> {
+    const res = await follower.post(`/api/v1/users/${targetUserId}/follow`);
+    expect([200, 201]).toContain(res.status);
+  }
+
+  describe("adult owner", () => {
+    it("public visibility: stranger sees the DOB", async () => {
+      const ownerId = await setOwnerDob("public");
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === STRANGER_EMAIL,
+      );
+      const res = await stranger.get(`/api/v1/users/${ownerId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.dateOfBirth).toBe(OWNER_DOB);
+    });
+
+    it("followers visibility: stranger does NOT see the DOB", async () => {
+      const ownerId = await setOwnerDob("followers");
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === STRANGER_EMAIL,
+      );
+      const res = await stranger.get(`/api/v1/users/${ownerId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.dateOfBirth).toBeNull();
+    });
+
+    it("followers visibility: an approved follower DOES see the DOB", async () => {
+      const ownerId = await setOwnerDob("followers");
+      const { agent: follower } = await loginAs(
+        (u) => u.email === FOLLOWER_EMAIL,
+      );
+      await approveFollow(follower, ownerId);
+      const res = await follower.get(`/api/v1/users/${ownerId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.isFollowing).toBe(true);
+      expect(res.body.dateOfBirth).toBe(OWNER_DOB);
+    });
+
+    it("private visibility: stranger does NOT see the DOB", async () => {
+      const ownerId = await setOwnerDob("private");
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === STRANGER_EMAIL,
+      );
+      const res = await stranger.get(`/api/v1/users/${ownerId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.dateOfBirth).toBeNull();
+    });
+
+    it("private visibility: an approved follower still does NOT see the DOB", async () => {
+      const ownerId = await setOwnerDob("private");
+      const { agent: follower } = await loginAs(
+        (u) => u.email === FOLLOWER_EMAIL,
+      );
+      await approveFollow(follower, ownerId);
+      const res = await follower.get(`/api/v1/users/${ownerId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.isFollowing).toBe(true);
+      expect(res.body.dateOfBirth).toBeNull();
+    });
+
+    it("owner always sees their own DOB regardless of tier", async () => {
+      for (const tier of ["private", "followers", "public"] as const) {
+        const ownerId = await setOwnerDob(tier);
+        const { agent: owner } = await loginAs(
+          (u) => u.email === OWNER_EMAIL,
+        );
+        const res = await owner.get(`/api/v1/users/${ownerId}`);
+        expect(res.status).toBe(200);
+        expect(res.body.isOwnProfile).toBe(true);
+        expect(res.body.dateOfBirth).toBe(OWNER_DOB);
+        expect(res.body.dateOfBirthVisibility).toBe(tier);
+      }
+    });
+
+    it("platform admin always sees the DOB regardless of tier", async () => {
+      const ownerId = await setOwnerDob("private");
+      const { agent: admin } = await loginAs((u) => u.email === ADMIN_EMAIL);
+      const res = await admin.get(`/api/v1/users/${ownerId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.dateOfBirth).toBe(OWNER_DOB);
+    });
+  });
+
+  describe("minor owner", () => {
+    async function makeSamiraAMinor(): Promise<string> {
+      const { user: samira } = await loginAs(
+        (u) => u.email === CHILD_EMAIL,
+      );
+      await db
+        .update(users)
+        .set({
+          isMinor: true,
+          profileVisibility: "followers",
+          // Pretend the owner picked the loosest tier — the server must
+          // still pin minor accounts to "private" on the wire.
+          dateOfBirthVisibility: "public",
+        })
+        .where(eq(users.id, samira.id));
+      return samira.id;
+    }
+
+    it("self sees own DOB on the private response", async () => {
+      const childId = await makeSamiraAMinor();
+      const { agent: child } = await loginAs(
+        (u) => u.email === CHILD_EMAIL,
+      );
+      const res = await child.get(`/api/v1/users/${childId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.isOwnProfile).toBe(true);
+      expect(res.body.dateOfBirth).toBe("2014-03-12");
+      // Minor accounts are server-pinned to `private` regardless of stored value.
+      expect(res.body.dateOfBirthVisibility).toBe("private");
+    });
+
+    it("linked guardian sees the child's DOB on the private response", async () => {
+      const childId = await makeSamiraAMinor();
+      const { agent: parent } = await loginAs(
+        (u) => u.email === PARENT_EMAIL,
+      );
+      const res = await parent.get(`/api/v1/users/${childId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.isOwnProfile).toBe(false);
+      expect(res.body).toHaveProperty("parentId");
+      expect(res.body.dateOfBirth).toBe("2014-03-12");
+    });
+
+    it("platform admin sees the minor's DOB", async () => {
+      const childId = await makeSamiraAMinor();
+      const { agent: admin } = await loginAs((u) => u.email === ADMIN_EMAIL);
+      const res = await admin.get(`/api/v1/users/${childId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.dateOfBirth).toBe("2014-03-12");
+    });
+
+    it("strangers can't see the minor profile at all (404), so DOB is unreachable", async () => {
+      const childId = await makeSamiraAMinor();
+      const { agent: stranger } = await loginAs(
+        (u) => u.email === STRANGER_EMAIL,
+      );
+      const res = await stranger.get(`/api/v1/users/${childId}`);
+      expect(res.status).toBe(404);
+    });
+
+    it("approved followers of the minor still do NOT see DOB", async () => {
+      const childId = await makeSamiraAMinor();
+      // An adult coach approved-follows the minor (insert directly to
+      // bypass the COPPA guardian-approval flow that normally gates
+      // follow requests on minors).
+      const { user: coach, agent: coachAgent } = await loginAs(
+        (u) => u.email === "coach@kinectem.demo",
+      );
+      await db
+        .insert(userFollowers)
+        .values({
+          followerUserId: coach.id,
+          followingUserId: childId,
+          moderationStatus: "approved",
+        })
+        .onConflictDoNothing();
+      const res = await coachAgent.get(`/api/v1/users/${childId}`);
+      expect(res.status).toBe(200);
+      expect(res.body.isFollowing).toBe(true);
+      // Minor accounts force `private`, so the followers tier never
+      // unlocks the birthday — even for an approved follower.
+      expect(res.body.dateOfBirth).toBeNull();
+    });
+  });
+});
+
+// Task #433 — Adding the per-viewer DOB checks above must not break the
+// existing access matrix on GET /users/:userId/posts (the Posts tab on
+// a profile). These regression cases lock in the status codes so a
+// future tweak to the visibility helper can't silently change who can
+// see a profile's posts.
+describe("GET /users/:userId/posts — viewer access regression", () => {
+  it("adult owner: self, stranger, and approved follower all get 200", async () => {
+    const { agent: owner, user: ownerUser } = await loginAs(
+      (u) => u.email === OWNER_EMAIL,
+    );
+    const selfRes = await owner.get(`/api/v1/users/${ownerUser.id}/posts`);
+    expect(selfRes.status).toBe(200);
+
+    const { agent: stranger } = await loginAs(
+      (u) => u.email === STRANGER_EMAIL,
+    );
+    const strangerRes = await stranger.get(
+      `/api/v1/users/${ownerUser.id}/posts`,
+    );
+    expect(strangerRes.status).toBe(200);
+
+    const { agent: follower } = await loginAs(
+      (u) => u.email === FOLLOWER_EMAIL,
+    );
+    const followRes = await follower.post(
+      `/api/v1/users/${ownerUser.id}/follow`,
+    );
+    expect([200, 201]).toContain(followRes.status);
+    const followerPosts = await follower.get(
+      `/api/v1/users/${ownerUser.id}/posts`,
+    );
+    expect(followerPosts.status).toBe(200);
+  });
+
+  it("restricted minor: stranger gets 404, self / linked guardian / admin get 200", async () => {
+    const { user: child } = await loginAs((u) => u.email === CHILD_EMAIL);
+    await db
+      .update(users)
+      .set({ isMinor: true, profileVisibility: "followers" })
+      .where(eq(users.id, child.id));
+
+    const { agent: stranger } = await loginAs(
+      (u) => u.email === STRANGER_EMAIL,
+    );
+    const strangerRes = await stranger.get(
+      `/api/v1/users/${child.id}/posts`,
+    );
+    expect(strangerRes.status).toBe(404);
+
+    const { agent: childAgent } = await loginAs(
+      (u) => u.email === CHILD_EMAIL,
+    );
+    const selfRes = await childAgent.get(
+      `/api/v1/users/${child.id}/posts`,
+    );
+    expect(selfRes.status).toBe(200);
+
+    const { agent: parent } = await loginAs(
+      (u) => u.email === PARENT_EMAIL,
+    );
+    const parentRes = await parent.get(`/api/v1/users/${child.id}/posts`);
+    expect(parentRes.status).toBe(200);
+
+    const { agent: admin } = await loginAs((u) => u.email === ADMIN_EMAIL);
+    const adminRes = await admin.get(`/api/v1/users/${child.id}/posts`);
+    expect(adminRes.status).toBe(200);
   });
 });
