@@ -34,6 +34,10 @@ import { timeAgo } from "@/lib/format";
 export function OrgAdminPanel({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
   const [approvedDialogOpen, setApprovedDialogOpen] = useState(false);
+  const [declinedDialogOpen, setDeclinedDialogOpen] = useState(false);
+  const [declinedAuthorName, setDeclinedAuthorName] = useState<string | null>(
+    null,
+  );
   const { data: jrResp } = useListOrgJoinRequests(orgId);
   const { data: paResp } = useListOrgPostApprovals(orgId);
 
@@ -66,7 +70,12 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
     },
   });
   const declinePA = useDeclineOrgPostApproval({
-    mutation: { onSuccess: invalidatePA },
+    mutation: {
+      onSuccess: () => {
+        invalidatePA();
+        setDeclinedDialogOpen(true);
+      },
+    },
   });
 
   return (
@@ -91,6 +100,33 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
             variant="brand"
             onClick={() => setApprovedDialogOpen(false)}
             data-testid="btn-recap-approved-dismiss"
+          >
+            OK
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={declinedDialogOpen} onOpenChange={setDeclinedDialogOpen}>
+      <DialogContent
+        className="sm:max-w-md"
+        data-testid="dialog-recap-declined"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-black tracking-tight">
+            Recap not approved
+          </DialogTitle>
+          <DialogDescription>
+            This recap will not appear on the team page or the organization
+            page. {declinedAuthorName ?? "the author"} will receive a
+            notification of the decision.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="brand"
+            onClick={() => setDeclinedDialogOpen(false)}
+            data-testid="btn-recap-declined-dismiss"
           >
             OK
           </Button>
@@ -264,9 +300,11 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                       size="sm"
                       variant="outline"
                       className="font-bold h-8 gap-1"
-                      onClick={() =>
-                        declinePA.mutate({ orgId, approvalId: a.id })
-                      }
+                      onClick={() => {
+                        const name = a.post?.author?.displayName?.trim();
+                        setDeclinedAuthorName(name && name.length > 0 ? name : null);
+                        declinePA.mutate({ orgId, approvalId: a.id });
+                      }}
                       disabled={declinePA.isPending}
                     >
                       <X className="w-3 h-3" />
