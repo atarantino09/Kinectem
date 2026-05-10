@@ -223,6 +223,7 @@ export default function PostPage() {
       });
       setEditing(false);
       refreshApprovalsAndPost();
+      setLocation(`/organizations/${orgIdForApprovals}`);
       toast({ title: "Recap approved" });
     } catch (err) {
       toast({
