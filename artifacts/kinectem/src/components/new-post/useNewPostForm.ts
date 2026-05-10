@@ -10,6 +10,7 @@ import {
   getListFeedQueryKey,
   getListOrgPostsQueryKey,
   getListPostTagsQueryKey,
+  getListTeamPendingPostsQueryKey,
   getListTeamPostsQueryKey,
   getListUserPostsQueryKey,
   type CreatePostRequest,
@@ -149,6 +150,10 @@ export function useNewPostForm({
       promises.push(
         qc.invalidateQueries({
           queryKey: getListTeamPostsQueryKey(opts.teamId),
+          refetchType: "all",
+        }),
+        qc.invalidateQueries({
+          queryKey: getListTeamPendingPostsQueryKey(opts.teamId),
           refetchType: "all",
         }),
       );
