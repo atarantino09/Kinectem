@@ -101,6 +101,18 @@ export function useNewPostForm({
   const [loadedKind, setLoadedKind] = useState<
     "article" | "highlight" | "org_post" | null
   >(null);
+  // Task #447 — when a non-admin author submits a recap, the server
+  // creates it in `pending_approval` status and surfaces that via the
+  // POST response's `requiresApproval` flag. We hold off on the
+  // post-submit redirect and open a confirmation dialog explaining
+  // the recap is awaiting org admin approval; the dialog's dismiss
+  // action runs the saved navigation. Admin-authored recaps publish
+  // immediately and skip this path entirely (existing toast +
+  // redirect).
+  const [pendingApprovalOpen, setPendingApprovalOpen] = useState(false);
+  const [pendingApprovalNavTo, setPendingApprovalNavTo] = useState<string | null>(
+    null,
+  );
 
   // Refresh every list the new or updated post should appear in so
   // the destination page (feed, profile, team page) renders against
@@ -645,6 +657,26 @@ export function useNewPostForm({
               ? result.context.id
               : null,
         });
+        // Task #447 — server marks non-admin recap submissions as
+        // `pending_approval` and echoes `requiresApproval: true` on
+        // the create response. In that case, replace the "Posted!"
+        // toast + immediate redirect with a confirmation dialog so
+        // the author understands their recap isn't yet visible on
+        // the team page; the dismiss action runs the saved
+        // navigation. Highlights and admin-authored recaps publish
+        // immediately and keep the existing toast + redirect.
+        const navTo = initialTeamId
+          ? `/teams/${initialTeamId}`
+          : `/posts/${result.id}`;
+        const requiresApproval =
+          (result as { requiresApproval?: boolean }).requiresApproval === true;
+        if (requiresApproval) {
+          setPendingApprovalNavTo(navTo);
+          setPendingApprovalOpen(true);
+          // Tag warnings are highlight-only; pending_approval is
+          // article-only — no need to surface tagWarning here.
+          return;
+        }
         toast({ title: "Posted!" });
         if (tagWarning) {
           toast({
@@ -653,9 +685,7 @@ export function useNewPostForm({
             variant: "destructive",
           });
         }
-        setLocation(
-          initialTeamId ? `/teams/${initialTeamId}` : `/posts/${result.id}`,
-        );
+        setLocation(navTo);
       }
     } catch {
       toast({ title: "Failed to post", variant: "destructive" });
@@ -785,6 +815,20 @@ export function useNewPostForm({
     setVideoUrl,
     setGameDate,
     setTagRoster,
+    // Task #447 — pending-approval confirmation dialog state. The
+    // page renders an AlertDialog bound to `pendingApprovalOpen`;
+    // dismissing it runs `onDismissPendingApproval`, which performs
+    // the post-submit navigation that was deferred when the recap
+    // came back as `pending_approval`.
+    pendingApprovalOpen,
+    setPendingApprovalOpen,
+    onDismissPendingApproval: () => {
+      setPendingApprovalOpen(false);
+      if (pendingApprovalNavTo) {
+        setLocation(pendingApprovalNavTo);
+        setPendingApprovalNavTo(null);
+      }
+    },
     // actions
     onPublish,
     onSaveDraft,

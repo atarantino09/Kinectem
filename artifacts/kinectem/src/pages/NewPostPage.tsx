@@ -183,6 +183,38 @@ export default function NewPostPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Task #447 — Confirmation that a non-admin author's recap
+          is awaiting org admin approval. Replaces the silent
+          "Posted!" toast in the pending_approval branch so authors
+          know why the recap isn't yet visible on the team page.
+          Dismiss runs the existing post-submit navigation (team
+          page or post detail). */}
+      <AlertDialog
+        open={form.pendingApprovalOpen}
+        onOpenChange={(next) => {
+          if (!next) form.onDismissPendingApproval();
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-recap-pending-approval">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Recap submitted for approval</AlertDialogTitle>
+            <AlertDialogDescription>
+              Thanks! Your game recap was submitted and is now waiting
+              for an organization admin to approve it. It won't appear
+              on the team page until they do.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction
+              onClick={() => form.onDismissPendingApproval()}
+              data-testid="button-recap-pending-approval-dismiss"
+            >
+              Got it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <main className="max-w-3xl mx-auto px-4 py-8">
         <Card className="rounded-xl border border-border shadow-sm">
           <CardContent className="p-6">
