@@ -63,6 +63,7 @@ export function PostHeaderBar({
           size="sm"
           onClick={onCancel}
           className="font-bold"
+          data-testid="button-cancel-post-editor"
         >
           <ArrowLeft className="w-4 h-4 mr-2" /> Cancel
         </Button>
