@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -9,6 +10,7 @@ import {
   useDeclineOrgPostApproval,
   getListOrgJoinRequestsQueryKey,
   getListOrgPostApprovalsQueryKey,
+  getListOrgPostsQueryKey,
   getListFeedQueryKey,
   getListMembersQueryKey,
   getGetOrganizationByIdQueryKey,
@@ -18,11 +20,20 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Check, X, Shield } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 
 export function OrgAdminPanel({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
+  const [approvedDialogOpen, setApprovedDialogOpen] = useState(false);
   const { data: jrResp } = useListOrgJoinRequests(orgId);
   const { data: paResp } = useListOrgPostApprovals(orgId);
 
@@ -36,6 +47,7 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
   };
   const invalidatePA = () => {
     qc.invalidateQueries({ queryKey: getListOrgPostApprovalsQueryKey(orgId) });
+    qc.invalidateQueries({ queryKey: getListOrgPostsQueryKey(orgId) });
     qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
   };
 
@@ -46,13 +58,45 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
     mutation: { onSuccess: invalidateJR },
   });
   const approvePA = useApproveOrgPostApproval({
-    mutation: { onSuccess: invalidatePA },
+    mutation: {
+      onSuccess: () => {
+        invalidatePA();
+        setApprovedDialogOpen(true);
+      },
+    },
   });
   const declinePA = useDeclineOrgPostApproval({
     mutation: { onSuccess: invalidatePA },
   });
 
   return (
+    <>
+    <Dialog open={approvedDialogOpen} onOpenChange={setApprovedDialogOpen}>
+      <DialogContent
+        className="sm:max-w-md"
+        data-testid="dialog-recap-approved"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-black tracking-tight">
+            Recap approved
+          </DialogTitle>
+          <DialogDescription>
+            This article will now appear on the team page and the
+            organization page.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="brand"
+            onClick={() => setApprovedDialogOpen(false)}
+            data-testid="btn-recap-approved-dismiss"
+          >
+            OK
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <section className="space-y-4">
       <div className="flex items-center gap-2">
         <Shield className="w-4 h-4 text-primary" />
@@ -212,5 +256,6 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
         </CardContent>
       </Card>
     </section>
+    </>
   );
 }
