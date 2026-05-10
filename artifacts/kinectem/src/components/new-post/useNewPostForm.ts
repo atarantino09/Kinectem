@@ -47,7 +47,17 @@ type DraftPayload = {
   // user on the right page (team vs. home) and refresh the right
   // per-author / per-team lists.
   author?: { id?: string | null } | null;
-  context?: { type?: string | null; id?: string | null } | null;
+  context?: {
+    type?: string | null;
+    id?: string | null;
+    name?: string | null;
+    slug?: string | null;
+    avatarUrl?: string | null;
+    orgId?: string | null;
+    orgName?: string | null;
+    orgSlug?: string | null;
+    orgAvatarUrl?: string | null;
+  } | null;
   // Per-viewer flag set by GET /posts/:id — true only when the
   // requester is the original author. Drives the in-editor Delete
   // affordance (co-authors / coaches / org admins do not get it).
@@ -97,6 +107,27 @@ export function useNewPostForm({
   // Owning org id (org_post only) for delete navigation and cache
   // invalidation of the org-page posts list.
   const [loadedOrgId, setLoadedOrgId] = useState<string | null>(null);
+  // Display info for the loaded post's team / parent org context.
+  // Captured so the editor can render a "Posted in" section linking
+  // back to the team and org pages (task #465). Null on the create
+  // and draft paths, where there's no published context to link to.
+  const [loadedTeamName, setLoadedTeamName] = useState<string | null>(null);
+  const [loadedTeamSlug, setLoadedTeamSlug] = useState<string | null>(null);
+  const [loadedTeamAvatarUrl, setLoadedTeamAvatarUrl] = useState<
+    string | null
+  >(null);
+  // Parent-org id captured from a team-context post so the editor's
+  // "Posted in" section (task #465) can link to the org page even
+  // though `loadedOrgId` above is reserved for org-post owning-org
+  // tracking (delete navigation + cache invalidation).
+  const [loadedParentOrgId, setLoadedParentOrgId] = useState<string | null>(
+    null,
+  );
+  const [loadedOrgName, setLoadedOrgName] = useState<string | null>(null);
+  const [loadedOrgSlug, setLoadedOrgSlug] = useState<string | null>(null);
+  const [loadedOrgAvatarUrl, setLoadedOrgAvatarUrl] = useState<
+    string | null
+  >(null);
   // Loaded post kind — drives PATCH body shape and delete navigation.
   // `null` until a post has been loaded into the editor.
   const [loadedKind, setLoadedKind] = useState<
@@ -372,6 +403,35 @@ export function useNewPostForm({
             ? d.context.id
             : null,
         );
+        // Capture team/org display info for the "Posted in" section
+        // on the edit page (task #465). For team contexts the parent
+        // org info also rides along on `context`; for organization
+        // contexts the org details live directly on `context`.
+        if (d.context?.type === "team") {
+          setLoadedTeamName(d.context.name ?? null);
+          setLoadedTeamSlug(d.context.slug ?? null);
+          setLoadedTeamAvatarUrl(d.context.avatarUrl ?? null);
+          setLoadedParentOrgId(d.context.orgId ?? null);
+          setLoadedOrgName(d.context.orgName ?? null);
+          setLoadedOrgSlug(d.context.orgSlug ?? null);
+          setLoadedOrgAvatarUrl(d.context.orgAvatarUrl ?? null);
+        } else if (d.context?.type === "organization") {
+          setLoadedTeamName(null);
+          setLoadedTeamSlug(null);
+          setLoadedTeamAvatarUrl(null);
+          setLoadedParentOrgId(null);
+          setLoadedOrgName(d.context.name ?? null);
+          setLoadedOrgSlug(d.context.slug ?? null);
+          setLoadedOrgAvatarUrl(d.context.avatarUrl ?? null);
+        } else {
+          setLoadedTeamName(null);
+          setLoadedTeamSlug(null);
+          setLoadedTeamAvatarUrl(null);
+          setLoadedParentOrgId(null);
+          setLoadedOrgName(null);
+          setLoadedOrgSlug(null);
+          setLoadedOrgAvatarUrl(null);
+        }
         // Per-viewer flag from GET /posts/:id — only meaningful on
         // the editId path (already-published article). Drafts won't
         // surface canDelete.
@@ -805,6 +865,21 @@ export function useNewPostForm({
     // post-type toggle) when the loaded post is a highlight or a
     // standalone org Update. `null` for brand-new composer sessions.
     loadedKind,
+    // Display info for the "Posted in" section on the edit-post
+    // page (task #465). All null on draft / brand-new composer
+    // sessions, where there's no published context to link to.
+    loadedTeamId,
+    loadedTeamName,
+    loadedTeamSlug,
+    loadedTeamAvatarUrl,
+    // For the "Posted in" org row: prefer the parent-org id captured
+    // from a team-context post, otherwise fall back to the owning org
+    // id used by org_post edits. Either way the link target is the
+    // same org page, just sourced from different context shapes.
+    loadedOrgId: loadedParentOrgId ?? loadedOrgId,
+    loadedOrgName,
+    loadedOrgSlug,
+    loadedOrgAvatarUrl,
     publishing: createPost.isPending,
     // delete-from-editor surface
     canDelete,

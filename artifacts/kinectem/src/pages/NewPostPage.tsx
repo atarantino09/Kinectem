@@ -244,6 +244,14 @@ export default function NewPostPage() {
               rosterTagTeamId={rosterTeamId || null}
               rosterMembers={rosterMembers}
               rosterLoading={rosterLoading}
+              loadedTeamId={form.loadedTeamId}
+              loadedTeamName={form.loadedTeamName}
+              loadedTeamSlug={form.loadedTeamSlug}
+              loadedTeamAvatarUrl={form.loadedTeamAvatarUrl}
+              loadedOrgId={form.loadedOrgId}
+              loadedOrgName={form.loadedOrgName}
+              loadedOrgSlug={form.loadedOrgSlug}
+              loadedOrgAvatarUrl={form.loadedOrgAvatarUrl}
               taggedUserIds={form.taggedUserIds}
               onTaggedUserIdsChange={form.setTaggedUserIds}
               saving={form.saving}

@@ -12,7 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileText, Info, Play, Save, X } from "lucide-react";
-import { UserAvatar } from "@/components/UserAvatar";
+import { Link } from "wouter";
+import { TeamAvatar, UserAvatar } from "@/components/UserAvatar";
 import { MediaSection } from "./MediaSection";
 import {
   RosterTagPicker,
@@ -57,6 +58,17 @@ interface PostFormFieldsProps {
   rosterTagTeamId?: string | null;
   rosterMembers?: RosterPickerMember[];
   rosterLoading?: boolean;
+  // "Posted in" section data (task #465). Only the edit-published
+  // path passes these; create / draft sessions leave them undefined
+  // so the section is hidden. Team fields are null for org Updates.
+  loadedTeamId?: string | null;
+  loadedTeamName?: string | null;
+  loadedTeamSlug?: string | null;
+  loadedTeamAvatarUrl?: string | null;
+  loadedOrgId?: string | null;
+  loadedOrgName?: string | null;
+  loadedOrgSlug?: string | null;
+  loadedOrgAvatarUrl?: string | null;
   taggedUserIds?: string[];
   onTaggedUserIdsChange?: (next: string[]) => void;
   saving: boolean;
@@ -96,6 +108,14 @@ export function PostFormFields({
   rosterTagTeamId = null,
   rosterMembers = [],
   rosterLoading = false,
+  loadedTeamId = null,
+  loadedTeamName = null,
+  loadedTeamSlug = null,
+  loadedTeamAvatarUrl = null,
+  loadedOrgId = null,
+  loadedOrgName = null,
+  loadedOrgSlug = null,
+  loadedOrgAvatarUrl = null,
   taggedUserIds = [],
   onTaggedUserIdsChange,
   saving,
@@ -157,6 +177,57 @@ export function PostFormFields({
             >
               <Play className="w-4 h-4" /> Highlight
             </button>
+          </div>
+        </div>
+      )}
+
+      {isEditingPublished && (loadedTeamId || loadedOrgId) && (
+        // Task #465 — surface the team and parent org as clickable
+        // links so the author can jump back to the team / org page
+        // from the editor. Hidden on draft / brand-new composer
+        // sessions (no published context). Org Updates show only
+        // the org row.
+        <div data-testid="section-edit-post-posted-in">
+          <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+            Posted in
+          </Label>
+          <div className="mt-2 space-y-1.5">
+            {loadedTeamId && (
+              <Link
+                href={`/teams/${loadedTeamSlug || loadedTeamId}`}
+                className="flex items-center gap-2 text-sm hover:underline"
+                data-testid="link-edit-post-team"
+              >
+                <TeamAvatar
+                  avatarUrl={loadedTeamAvatarUrl ?? loadedOrgAvatarUrl ?? null}
+                  displayName={loadedTeamName ?? "Team"}
+                  size="sm"
+                  className="shrink-0"
+                  fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                />
+                <span className="font-semibold truncate">
+                  {loadedTeamName ?? "Team"}
+                </span>
+              </Link>
+            )}
+            {loadedOrgId && (
+              <Link
+                href={`/organizations/${loadedOrgSlug || loadedOrgId}`}
+                className="flex items-center gap-2 text-sm hover:underline"
+                data-testid="link-edit-post-org"
+              >
+                <TeamAvatar
+                  avatarUrl={loadedOrgAvatarUrl ?? null}
+                  displayName={loadedOrgName ?? "Organization"}
+                  size="sm"
+                  className="shrink-0"
+                  fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                />
+                <span className="font-semibold truncate">
+                  {loadedOrgName ?? "Organization"}
+                </span>
+              </Link>
+            )}
           </div>
         </div>
       )}
