@@ -97,11 +97,20 @@ export function TeamRosterTabs({
     ]);
   };
 
+  // After accept/decline, the viewer's recap-authoring rights may have
+  // changed (e.g. accepting an invite where their position is "author"
+  // unlocks the global Create-menu's "Game Recap" item). Refresh the
+  // cached `whoami` so the Layout re-evaluates `canAuthorRecap`
+  // without requiring a hard reload.
+  const invalidateRoster = async () => {
+    await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ["whoami"] })]);
+  };
+
   const acceptInvite = useAcceptTeamInvite({
-    mutation: { onSuccess: () => invalidate() },
+    mutation: { onSuccess: () => invalidateRoster() },
   });
   const declineInvite = useDeclineTeamInvite({
-    mutation: { onSuccess: () => invalidate() },
+    mutation: { onSuccess: () => invalidateRoster() },
   });
   const withdrawInvite = useWithdrawRosterInvite({
     mutation: { onSuccess: () => invalidate() },

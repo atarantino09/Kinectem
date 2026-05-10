@@ -114,6 +114,12 @@ export function EditRosterMemberDialog({
     await Promise.all([
       qc.invalidateQueries({ queryKey: getListTeamMembersQueryKey(teamId) }),
       qc.invalidateQueries({ queryKey: getListRosterInvitesQueryKey(teamId) }),
+      // A position change to/from "author" toggles recap-authoring
+      // rights. If the editor changed their own row, refresh
+      // `whoami` so the Layout's Create menu updates without a
+      // hard reload. (For other users, their browser will pick it
+      // up on the next whoami fetch — see task scope.)
+      qc.invalidateQueries({ queryKey: ["whoami"] }),
     ]);
   };
 

@@ -12,6 +12,11 @@ interface TeamPostsSectionProps {
   // (player, coach, staff, author, etc.). Drives the broader "Post
   // Highlight" CTA — `isAdmin` keeps the existing recap-only gate.
   isTeamMember: boolean;
+  // True when the viewer can author a game recap on this team —
+  // i.e. org admin, team coach (coach/assistant_coach/admin position),
+  // or any accepted member with `position = "author"`. Mirrors the
+  // server-side `canCreateRecap` rule.
+  canPostRecap: boolean;
   posts: PostResponse[];
 }
 
@@ -19,6 +24,7 @@ export function TeamPostsSection({
   teamId,
   isAdmin,
   isTeamMember,
+  canPostRecap,
   posts,
 }: TeamPostsSectionProps) {
   const canPostHighlight = isAdmin || isTeamMember;
@@ -42,7 +48,7 @@ export function TeamPostsSection({
               </Button>
             </Link>
           )}
-          {isAdmin && (
+          {canPostRecap && (
             <Link href={`/posts/new?type=long&teamId=${teamId}`}>
               <Button
                 variant="brand"
@@ -65,7 +71,7 @@ export function TeamPostsSection({
                 Share the first highlight from this team.
               </span>
             )}
-            {isAdmin && (
+            {canPostRecap && (
               <span className="block mt-1">
                 Be the first to write a game recap.
               </span>
