@@ -144,7 +144,7 @@ export default function NewPostPage() {
         saving={form.saving}
         publishing={form.publishing}
         savedAt={form.savedAt}
-        onCancel={() => form.setLocation(form.cancelTo)}
+        onCancel={form.requestCancel}
         onSaveDraft={form.onSaveDraft}
         canDelete={form.canDelete}
         onRequestDelete={() => form.setConfirmDeleteOpen(true)}

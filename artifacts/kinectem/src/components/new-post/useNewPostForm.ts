@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -252,6 +252,123 @@ export function useNewPostForm({
   const [canDelete, setCanDelete] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  // Unsaved-changes guard (task #466). We snapshot the editable form
+  // fields and compare to a baseline that's reset whenever the post
+  // is loaded, auto-saved, manually saved, published, or deleted.
+  // While `isDirty` is true: the browser's beforeunload prompt fires
+  // for hard refresh / tab close, a global capture-phase click
+  // listener intercepts in-app `<a>` navigations (covers wouter Links
+  // including the new "Posted in" header and any other in-editor
+  // link), and the Cancel button uses `requestCancel` to confirm
+  // before leaving. Programmatic navigations after a successful
+  // submit mark the form pristine first so they don't re-prompt.
+  // Snapshot intentionally excludes `teamId` and `postType` — those
+  // get mutated by system-driven flows that aren't really "user
+  // edits": teamId is auto-populated when the user has exactly one
+  // authorable team (see NewPostPage), and postType is synced from
+  // the loaded post. The task spec scopes dirty tracking to the
+  // editable content fields the author actually types into:
+  // title / body / date / tags / media.
+  const buildSnapshot = (v: {
+    title: string;
+    body: string;
+    gameDate: string;
+    tagRoster: boolean;
+    photos: string[];
+    videoUrl: string;
+    taggedUserIds: string[];
+  }) => JSON.stringify(v);
+  const initialSnapshot = buildSnapshot({
+    title: "",
+    body: "",
+    gameDate: todayLocalIso(),
+    tagRoster: true,
+    photos: [],
+    videoUrl: "",
+    taggedUserIds: [],
+  });
+  const [baseline, setBaseline] = useState<string>(initialSnapshot);
+  const currentSnapshot = buildSnapshot({
+    title,
+    body,
+    gameDate,
+    tagRoster,
+    photos,
+    videoUrl,
+    taggedUserIds,
+  });
+  const isDirty = currentSnapshot !== baseline;
+  const dirtyRef = useRef(isDirty);
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
+  const snapshotRef = useRef(currentSnapshot);
+  useEffect(() => {
+    snapshotRef.current = currentSnapshot;
+  }, [currentSnapshot]);
+  const confirmDiscard = useCallback(() => {
+    if (!dirtyRef.current) return true;
+    return window.confirm(
+      "You have unsaved changes — leave anyway?",
+    );
+  }, []);
+
+  // Native browser prompt for hard refresh / tab close while dirty.
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // In-app link guard. Capture-phase click listener fires before
+  // wouter's anchor handler, so we can prompt and either cancel the
+  // navigation (preventDefault + stopImmediatePropagation) or let it
+  // through. Modifier-clicks, target=_blank, downloads, hash-only
+  // and cross-origin links are ignored — they aren't really
+  // "navigating away" from the editor in a way that loses state.
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!dirtyRef.current) return;
+      if (e.defaultPrevented) return;
+      if (e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const a = target?.closest("a");
+      if (!a) return;
+      const linkTarget = a.getAttribute("target");
+      if (linkTarget && linkTarget !== "" && linkTarget !== "_self") return;
+      if (a.hasAttribute("download")) return;
+      const href = a.getAttribute("href");
+      if (!href) return;
+      if (/^(mailto:|tel:|javascript:)/i.test(href)) return;
+      if (href.startsWith("#")) return;
+      try {
+        const url = new URL(href, window.location.href);
+        if (url.origin !== window.location.origin) return;
+      } catch {
+        return;
+      }
+      const ok = window.confirm(
+        "You have unsaved changes — leave anyway?",
+      );
+      if (!ok) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      } else {
+        // Accept loss for this navigation; clearing dirty stops a
+        // follow-up beforeunload (if the link triggers a real reload)
+        // and keeps any chained handlers from re-prompting.
+        setBaseline(snapshotRef.current);
+      }
+    };
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, []);
+
   // Build the ISO datetime sent to the API. Noon UTC keeps the
   // calendar date stable across timezones. Returning null when the
   // tag-roster checkbox is off skips the auto-tag fan-out.
@@ -315,7 +432,20 @@ export function useNewPostForm({
         map[t.taggedEntityId] = t.id;
       }
       setOriginalTaggedById(map);
-      setTaggedUserIds(Object.keys(map));
+      const ids = Object.keys(map);
+      setTaggedUserIds(ids);
+      // Roll the freshly-loaded tag selection into the dirty
+      // baseline so the post-load tag fetch doesn't flip the form
+      // to "dirty" before the author has touched anything.
+      setBaseline((prev) => {
+        try {
+          const parsed = JSON.parse(prev);
+          parsed.taggedUserIds = ids;
+          return JSON.stringify(parsed);
+        } catch {
+          return prev;
+        }
+      });
     } catch {
       // ignore — picker just starts empty
     }
@@ -444,6 +574,31 @@ export function useNewPostForm({
         if (initialEditId && (kind === "article" || kind === "highlight")) {
           void refreshLoadedTags(d.id);
         }
+        // Reset the dirty baseline to the just-loaded values so
+        // navigating away immediately after load doesn't prompt.
+        // Computed directly from the response (rather than reading
+        // post-setState values, which haven't flushed yet) so the
+        // baseline is exact. taggedUserIds is patched in by
+        // refreshLoadedTags above.
+        const loadedSnapshot = buildSnapshot({
+          title: d.title ?? "",
+          body:
+            kind === "highlight"
+              ? (d.description ?? "")
+              : (d.body ?? ""),
+          gameDate: hasDate
+            ? d.gameDate!.slice(0, 10)
+            : todayLocalIso(),
+          tagRoster: hasDate,
+          photos:
+            Array.isArray(d.photoUrls) && d.photoUrls.length > 0
+              ? d.photoUrls
+              : imageUrls,
+          videoUrl:
+            d.videoUrl ?? (videoAsset?.url ? String(videoAsset.url) : ""),
+          taggedUserIds: [],
+        });
+        setBaseline(loadedSnapshot);
       })
       .catch(() => {
         toast({
@@ -462,6 +617,11 @@ export function useNewPostForm({
     if (!draftId || isEditingPublished) return;
     if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     debouncedRef.current = window.setTimeout(async () => {
+      // Capture the snapshot we're about to persist BEFORE the await
+      // so any keystrokes that land while the PATCH is in flight
+      // correctly leave the form dirty (we shouldn't credit the user
+      // for changes we didn't actually save).
+      const sentSnapshot = snapshotRef.current;
       try {
         setSaving(true);
         await customFetch(`/api/v1/posts/${draftId}`, {
@@ -470,6 +630,7 @@ export function useNewPostForm({
           body: buildPatchBody(),
         });
         setSavedAt(new Date());
+        setBaseline(sentSnapshot);
       } catch {
         // ignore
       } finally {
@@ -529,6 +690,9 @@ export function useNewPostForm({
       toast({ title: "Add a title", variant: "destructive" });
       return;
     }
+    // Capture the snapshot we're about to persist BEFORE awaits so a
+    // mid-flight keystroke correctly leaves the form dirty.
+    const sentSnapshot = snapshotRef.current;
     try {
       if (isEditingPublished && editId) {
         // Editing an already-published post: PATCH only — do NOT
@@ -645,6 +809,9 @@ export function useNewPostForm({
         } else {
           toast({ title: "Saved" });
         }
+        // Mark pristine before navigating so the unsaved-changes
+        // guard doesn't prompt on the post-submit redirect.
+        setBaseline(sentSnapshot);
         // Return to wherever the editor was launched from when a
         // safe internal `from` path was supplied (e.g. the feed,
         // a profile, a team page). Fall back to the post detail
@@ -667,6 +834,7 @@ export function useNewPostForm({
           teamId: loadedTeamId ?? initialTeamId ?? null,
         });
         toast({ title: "Published!" });
+        setBaseline(sentSnapshot);
         setLocation(
           initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`,
         );
@@ -736,6 +904,7 @@ export function useNewPostForm({
         const requiresApproval =
           (result as { requiresApproval?: boolean }).requiresApproval === true;
         if (requiresApproval) {
+          setBaseline(sentSnapshot);
           setPendingApprovalNavTo(navTo);
           setPendingApprovalOpen(true);
           // Tag warnings are highlight-only; pending_approval is
@@ -743,6 +912,7 @@ export function useNewPostForm({
           return;
         }
         toast({ title: "Posted!" });
+        setBaseline(sentSnapshot);
         if (tagWarning) {
           toast({
             title: tagWarning,
@@ -767,6 +937,7 @@ export function useNewPostForm({
       toast({ title: "Nothing to save yet", variant: "destructive" });
       return;
     }
+    const sentSnapshot = snapshotRef.current;
     try {
       setSaving(true);
       if (draftId) {
@@ -778,6 +949,7 @@ export function useNewPostForm({
         setDraftId(result.id);
       }
       setSavedAt(new Date());
+      setBaseline(sentSnapshot);
       toast({ title: "Draft saved" });
     } catch {
       toast({ title: "Couldn't save draft", variant: "destructive" });
@@ -810,6 +982,8 @@ export function useNewPostForm({
         orgId: loadedOrgId,
       });
       qc.removeQueries({ queryKey: ["post", editId] });
+      // Mark pristine so the post-delete redirect doesn't prompt.
+      setBaseline(snapshotRef.current);
       toast({ title: "Post deleted" });
       // Land somewhere sensible: team-scoped highlights / articles
       // bounce back to the team page, org Updates bounce back to
@@ -917,5 +1091,19 @@ export function useNewPostForm({
       safeInternalPath(initialFrom) ??
       (initialTeamId ? `/teams/${initialTeamId}` : "/"),
     setLocation,
+    // Unsaved-changes guard surface (task #466). The Cancel button
+    // isn't an `<a>` so the global click guard can't catch it; the
+    // page wires its onClick to `requestCancel`, which prompts on
+    // dirty and otherwise navigates to `cancelTo`.
+    isDirty,
+    confirmDiscard,
+    requestCancel: () => {
+      const target =
+        safeInternalPath(initialFrom) ??
+        (initialTeamId ? `/teams/${initialTeamId}` : "/");
+      if (!confirmDiscard()) return;
+      setBaseline(snapshotRef.current);
+      setLocation(target);
+    },
   };
 }
