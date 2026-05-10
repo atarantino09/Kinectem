@@ -186,6 +186,89 @@ describe("posts", () => {
   });
 
   // ----------------------------------------------------------------
+  // Task #458 — Author bell on approve / decline
+  // ----------------------------------------------------------------
+
+  it("author receives a bell notification when an admin approves or declines their pending recap", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
+    const marcus = (usersList.body.data ?? usersList.body)[0];
+    expect(marcus).toBeDefined();
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcus.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    // --- Approve path ---
+    const approvedDraft = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Approve me recap",
+      body: "Body of the approve-me recap",
+      status: "draft",
+    });
+    expect(approvedDraft.status).toBe(201);
+    const approvedPostId: string = approvedDraft.body.id;
+    const pubA = await marcusLogin.agent.post(
+      `/api/v1/posts/${approvedPostId}/publish`,
+    );
+    expect(pubA.status).toBe(200);
+    const approve = await adminLogin.agent.post(
+      `/api/v1/organizations/${org.id}/post-approvals/${approvedPostId}/approve`,
+    );
+    expect(approve.status).toBe(200);
+
+    const inboxApproved = await marcusLogin.agent.get("/api/v1/notifications");
+    const approvedNotif = inboxApproved.body.data.find(
+      (n: { type: string; data: { link?: string } | null }) =>
+        n.type === "recap_approved" && n.data?.link === `/posts/${approvedPostId}`,
+    );
+    expect(approvedNotif).toBeDefined();
+    expect(approvedNotif.title).toContain("Approve me recap");
+    expect(approvedNotif.isRead).toBe(false);
+
+    // --- Decline path ---
+    const declinedDraft = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Decline me recap",
+      body: "Body of the decline-me recap",
+      status: "draft",
+    });
+    expect(declinedDraft.status).toBe(201);
+    const declinedPostId: string = declinedDraft.body.id;
+    const pubD = await marcusLogin.agent.post(
+      `/api/v1/posts/${declinedPostId}/publish`,
+    );
+    expect(pubD.status).toBe(200);
+    const decline = await adminLogin.agent.post(
+      `/api/v1/organizations/${org.id}/post-approvals/${declinedPostId}/decline`,
+    );
+    expect(decline.status).toBe(200);
+
+    const inboxDeclined = await marcusLogin.agent.get("/api/v1/notifications");
+    const declinedNotif = inboxDeclined.body.data.find(
+      (n: { type: string; data: { link?: string } | null }) =>
+        n.type === "recap_declined" &&
+        n.data?.link === `/posts/new?editId=${declinedPostId}`,
+    );
+    expect(declinedNotif).toBeDefined();
+    expect(declinedNotif.title).toContain("Decline me recap");
+    expect(declinedNotif.isRead).toBe(false);
+  });
+
+  // ----------------------------------------------------------------
   // Task #452 — Pending recaps section for team authors
   // ----------------------------------------------------------------
 

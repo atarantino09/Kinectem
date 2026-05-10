@@ -41,6 +41,7 @@ import {
   toMember,
   toTeam,
   articleToPost,
+  articlePostId,
   highlightToPost,
   orgPostToPost,
   paginate,
@@ -1207,6 +1208,31 @@ async function transitionApproval(
         articleId: a.id,
         articleTitle: a.title,
         actorUserId: taggerUserId,
+      });
+    }
+  }
+  // Task #458 — notify the recap author of the admin's decision so they
+  // don't have to refresh the team page to discover their pending recap
+  // disappeared. Skip when the author is the admin acting on themselves
+  // (they already know), and skip when there's no author on file.
+  if (a.authorId && a.authorId !== me.id) {
+    const title = a.title?.trim() ? a.title.trim() : "your recap";
+    const prefixedId = articlePostId(a.id);
+    if (next === "published") {
+      await db.insert(notifications).values({
+        userId: a.authorId,
+        kind: "recap_approved",
+        message: `Your recap "${title}" was approved.`,
+        link: `/posts/${prefixedId}`,
+        actorUserId: me.id,
+      });
+    } else {
+      await db.insert(notifications).values({
+        userId: a.authorId,
+        kind: "recap_declined",
+        message: `Your recap "${title}" was declined.`,
+        link: `/posts/new?editId=${prefixedId}`,
+        actorUserId: me.id,
       });
     }
   }

@@ -48,6 +48,13 @@ import { useToast } from "@/hooks/use-toast";
 //   roster_invite_for_child  -> `/family?childId=...&entryId=...&teamId=...`
 //                               source: routes/teams.ts; also handled inline below
 //                               (Accept / Decline buttons on the row).
+//   recap_approved           -> `/posts/<articlePostId>` (the published recap)
+//                               source: routes/organizations.ts
+//                               (POST /organizations/:orgId/post-approvals/:id/approve)
+//   recap_declined           -> `/posts/new?editId=<articlePostId>`
+//                               (the recap composer with the declined draft loaded)
+//                               source: routes/organizations.ts
+//                               (POST /organizations/:orgId/post-approvals/:id/decline)
 //   guardian_expired         -> `/family?childId=<childId>` (NOT the
 //                               inserted `/guardian?childId=...` link).
 //                               The bell intentionally rewrites this to
