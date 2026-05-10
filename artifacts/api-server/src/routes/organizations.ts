@@ -23,6 +23,7 @@ import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canManageOrganization,
+  canCreateRecap,
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
   getOrgRole,
@@ -555,6 +556,91 @@ router.get(
           .from(rosterEntries)
           .where(eq(rosterEntries.teamId, t.id));
         return toTeam(t, org, { memberCount: count });
+      }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+// Task #452 — "Waiting for approval" section on the team page.
+// Authors with recap-creation rights on this team (org owner/admin,
+// team coach, or accepted roster member with `position = "author"`)
+// can list the team's currently-pending recaps so they can find and
+// edit their own submissions before an org admin approves them.
+// Anyone else gets 403; pending recaps never leak into the public
+// /teams/:teamId/posts feed (which filters on status="published").
+router.get(
+  "/teams/:teamId/posts/pending",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    const allowed = await canCreateRecap(me.id, team);
+    if (!allowed)
+      return apiError(res, 403, "Only authors can view pending recaps");
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, team.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const rows = await db
+      .select({ a: articles, team: teams, org: organizations, author: users })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(
+        and(
+          eq(articles.status, "pending_approval"),
+          eq(articles.teamId, teamId),
+          isNull(articles.hiddenAt),
+        ),
+      )
+      .orderBy(desc(articles.createdAt))
+      .limit(50);
+    const [canEditMap, authorRoleMap] = await Promise.all([
+      computeArticleCanEditMap(
+        me.id,
+        rows.map((r) => ({
+          articleId: r.a.id,
+          authorId: r.a.authorId,
+          orgId: r.org.id,
+        })),
+      ),
+      computeArticleAuthorRoleMap(
+        rows.map((r) => ({
+          articleId: r.a.id,
+          authorId: r.a.authorId,
+          teamId: r.team.id,
+          orgId: r.org.id,
+        })),
+      ),
+    ]);
+    // Mask minor authors for stranger viewers, mirroring the public
+    // team-feed behavior. Authors viewing their own pending submission
+    // remain unmasked via the self-bypass in buildMinorNameContext.
+    const minorIds = rows
+      .map((r) => r.author?.id)
+      .filter((x): x is string => !!x);
+    const minorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      minorIds,
+    );
+    const data = rows.map((r) =>
+      articleToPost(r.a, {
+        team: r.team,
+        org: r.org,
+        author: r.author,
+        canEdit: canEditMap.get(r.a.id) ?? false,
+        authorRole: authorRoleMap.get(r.a.id) ?? null,
+        minorNameCtx: minorCtx,
       }),
     );
     res.json(paginate(data));

@@ -185,6 +185,141 @@ describe("posts", () => {
     expect(approve.body.status).toBe("approved");
   });
 
+  // ----------------------------------------------------------------
+  // Task #452 — Pending recaps section for team authors
+  // ----------------------------------------------------------------
+
+  it("authors can list pending recaps for their team; non-authors get 403; pending recaps don't leak into the public team feed; PATCH preserves pending status; admin queue reflects edits", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    // Add Marcus as roster `author` so he has recap-create rights.
+    const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
+    const marcus = (usersList.body.data ?? usersList.body)[0];
+    expect(marcus).toBeDefined();
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcus.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    // canAuthorRecaps surfaces on the team detail for the author.
+    const teamDetail = await marcusLogin.agent.get(`/api/v1/teams/${jv.id}`);
+    expect(teamDetail.status).toBe(200);
+    expect(teamDetail.body.canAuthorRecaps).toBe(true);
+
+    // Marcus drafts + publishes — non-admin author goes pending.
+    const draft = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Pending recap original title",
+      description: "Original summary",
+      body: "Original body",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    const pub = await marcusLogin.agent.post(
+      `/api/v1/posts/${draft.body.id}/publish`,
+    );
+    expect(pub.status).toBe(200);
+
+    // Author can list it via the new pending endpoint.
+    const pendingList = await marcusLogin.agent.get(
+      `/api/v1/teams/${jv.id}/posts/pending`,
+    );
+    expect(pendingList.status).toBe(200);
+    const mine = pendingList.body.data.find(
+      (p: { id: string }) => p.id === draft.body.id,
+    );
+    expect(mine).toBeDefined();
+    expect(mine.title).toBe("Pending recap original title");
+
+    // Pending recap must NOT appear in the public team feed.
+    const publicFeed = await marcusLogin.agent.get(
+      `/api/v1/teams/${jv.id}/posts`,
+    );
+    expect(publicFeed.status).toBe(200);
+    expect(
+      publicFeed.body.data.find(
+        (p: { id: string }) => p.id === draft.body.id,
+      ),
+    ).toBeUndefined();
+
+    // Non-author (a plain athlete with no roster on this team) gets 403.
+    const stranger = await loginAs(
+      (u) => u.email === "daniela@kinectem.demo",
+    );
+    const strangerView = await stranger.agent.get(
+      `/api/v1/teams/${jv.id}/posts/pending`,
+    );
+    expect(strangerView.status).toBe(403);
+    const strangerTeam = await stranger.agent.get(`/api/v1/teams/${jv.id}`);
+    expect(strangerTeam.body.canAuthorRecaps).toBe(false);
+
+    // Author edits the pending recap. PATCH must succeed and the
+    // status must remain pending_approval (no auto-publish, no
+    // bounce back to draft).
+    const patch = await marcusLogin.agent
+      .patch(`/api/v1/posts/${draft.body.id}`)
+      .send({
+        title: "Pending recap edited title",
+        description: "Edited summary",
+        body: "Edited body",
+      });
+    expect(patch.status).toBe(200);
+
+    // Still pending: shows up in pending list with new content,
+    // never in the public feed.
+    const pendingAfter = await marcusLogin.agent.get(
+      `/api/v1/teams/${jv.id}/posts/pending`,
+    );
+    const mineAfter = pendingAfter.body.data.find(
+      (p: { id: string }) => p.id === draft.body.id,
+    );
+    expect(mineAfter).toBeDefined();
+    expect(mineAfter.title).toBe("Pending recap edited title");
+    const publicAfter = await marcusLogin.agent.get(
+      `/api/v1/teams/${jv.id}/posts`,
+    );
+    expect(
+      publicAfter.body.data.find(
+        (p: { id: string }) => p.id === draft.body.id,
+      ),
+    ).toBeUndefined();
+
+    // Admin approval queue reflects the edited content.
+    const queue = await adminLogin.agent.get(
+      `/api/v1/organizations/${org.id}/post-approvals`,
+    );
+    expect(queue.status).toBe(200);
+    const queued = queue.body.data.find(
+      (e: { post: { id: string } }) => e.post.id === draft.body.id,
+    );
+    expect(queued).toBeDefined();
+    expect(queued.post.title).toBe("Pending recap edited title");
+
+    // Approving removes it from the pending list on next read.
+    const approve = await adminLogin.agent.post(
+      `/api/v1/organizations/${org.id}/post-approvals/${draft.body.id}/approve`,
+    );
+    expect(approve.status).toBe(200);
+    const pendingFinal = await marcusLogin.agent.get(
+      `/api/v1/teams/${jv.id}/posts/pending`,
+    );
+    expect(
+      pendingFinal.body.data.find(
+        (p: { id: string }) => p.id === draft.body.id,
+      ),
+    ).toBeUndefined();
+  });
+
   it("forbids non-admins from viewing or transitioning the approval queue", async () => {
     const { org } = await getOrgAndTeam();
     const { agent } = await loginAs((u) => u.email === "marcus@kinectem.demo");

@@ -3409,6 +3409,39 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /teams/{teamId}/posts/pending:
+    get:
+      operationId: listTeamPendingPosts
+      summary: List pending-approval recaps for a team (authors only)
+      description: >
+        Returns game recaps for the team currently in `pending_approval`.
+        Restricted to viewers with author capability on the team — i.e.
+        org owners/admins of the parent org, team coaches, or accepted
+        roster members holding `position = "author"`. Anyone else gets
+        403. Used by the team page to show authors a "Waiting for
+        approval" section above the regular feed so they can find and
+        edit their own pending submissions.
+      tags:
+        - Teams
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated pending recaps for the team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPostsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /teams/{teamId}/avatar:
     put:
       operationId: setTeamAvatar
@@ -8848,6 +8881,16 @@ components:
           minimum: 0
         isFollowing:
           type: boolean
+        canAuthorRecaps:
+          type: boolean
+          description: >
+            Server-derived flag: true when the requester can author a
+            game recap on this team. Mirrors the server-side
+            `canCreateRecap` rule (org owner/admin of the parent org,
+            team coach, or accepted roster member with
+            `position = "author"`). Drives the team page's "Create
+            Game Recap" affordance and the visibility of the
+            "Waiting for approval" pending-recaps section.
         createdAt:
           type: string
           format: date-time

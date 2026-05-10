@@ -21,7 +21,7 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
+import { canManageOrganization, isTeamMember, canManageTeam, canCreateRecap } from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -172,7 +172,20 @@ router.get(
         .limit(1);
       isFollowing = !!f;
     }
-    res.json(toTeam(t, org, { memberCount: count, followerCount, isFollowing }));
+    // Server-derived authoring capability: drives the team page's
+    // "Create Game Recap" affordance and the "Waiting for approval"
+    // pending-recaps section. Mirrors the same `canCreateRecap` rule
+    // POST /posts uses to gate recap creation, so the client never
+    // duplicates the permission logic.
+    const canAuthorRecaps = me ? await canCreateRecap(me.id, t) : false;
+    res.json(
+      toTeam(t, org, {
+        memberCount: count,
+        followerCount,
+        isFollowing,
+        canAuthorRecaps,
+      }),
+    );
   }),
 );
 

@@ -326,6 +326,7 @@ export * from "./listTeamFollowersParams";
 export * from "./listTeamMembersParams";
 export * from "./listTeamMembersPosition";
 export * from "./listTeamMembersStatus";
+export * from "./listTeamPendingPostsParams";
 export * from "./listTeamPostsParams";
 export * from "./listTeamSeasonsParams";
 export * from "./listUserChildren200";

@@ -226,6 +226,7 @@ import type {
   ListSeedUsers200Item,
   ListTeamFollowersParams,
   ListTeamMembersParams,
+  ListTeamPendingPostsParams,
   ListTeamPostsParams,
   ListTeamSeasonsParams,
   ListUserChildren200,
@@ -13257,6 +13258,134 @@ export function useListTeamPosts<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListTeamPostsQueryOptions(teamId, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns game recaps for the team currently in `pending_approval`. Restricted to viewers with author capability on the team — i.e. org owners/admins of the parent org, team coaches, or accepted roster members holding `position = "author"`. Anyone else gets 403. Used by the team page to show authors a "Waiting for approval" section above the regular feed so they can find and edit their own pending submissions.
+
+ * @summary List pending-approval recaps for a team (authors only)
+ */
+export const getListTeamPendingPostsUrl = (
+  teamId: string,
+  params?: ListTeamPendingPostsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/teams/${teamId}/posts/pending?${stringifiedParams}`
+    : `/api/v1/teams/${teamId}/posts/pending`;
+};
+
+export const listTeamPendingPosts = async (
+  teamId: string,
+  params?: ListTeamPendingPostsParams,
+  options?: RequestInit,
+): Promise<PaginatedPostsResponse> => {
+  return customFetch<PaginatedPostsResponse>(
+    getListTeamPendingPostsUrl(teamId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListTeamPendingPostsQueryKey = (
+  teamId: string,
+  params?: ListTeamPendingPostsParams,
+) => {
+  return [
+    `/api/v1/teams/${teamId}/posts/pending`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListTeamPendingPostsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTeamPendingPosts>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  teamId: string,
+  params?: ListTeamPendingPostsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTeamPendingPosts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListTeamPendingPostsQueryKey(teamId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listTeamPendingPosts>>
+  > = ({ signal }) =>
+    listTeamPendingPosts(teamId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!teamId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTeamPendingPosts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTeamPendingPostsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTeamPendingPosts>>
+>;
+export type ListTeamPendingPostsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary List pending-approval recaps for a team (authors only)
+ */
+
+export function useListTeamPendingPosts<
+  TData = Awaited<ReturnType<typeof listTeamPendingPosts>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  teamId: string,
+  params?: ListTeamPendingPostsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTeamPendingPosts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTeamPendingPostsQueryOptions(
+    teamId,
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -106,20 +106,12 @@ export default function TeamPage() {
     allMembersForGate.some(
       (m) => m.userId === me.id && m.status === "active",
     );
-  // Mirrors the server-side `canCreateRecap` rule: org admins, team
-  // coaches (coach-level positions), and accepted members holding the
-  // explicit "author" position can publish a long-form recap on this
-  // team. Drives the "Create Game Recap" CTA in TeamPostsSection.
-  const canPostRecap =
-    isAdmin ||
-    (!!me?.id &&
-      allMembersForGate.some(
-        (m) =>
-          m.userId === me.id &&
-          m.status === "active" &&
-          (COACH_LEVEL_POSITIONS.includes((m.position ?? "").toLowerCase()) ||
-            (m.position ?? "").toLowerCase() === "author"),
-      ));
+  // Server-derived authoring capability for this team — single source
+  // of truth for both the "Create Game Recap" CTA and the "Waiting
+  // for approval" pending-recaps section in TeamPostsSection. Mirrors
+  // the server's `canCreateRecap` rule (org owner/admin, team coach,
+  // or accepted roster member with `position = "author"`).
+  const canPostRecap = !!team?.canAuthorRecaps;
 
   const { data: invitesResp } = useListRosterInvites(teamId, undefined, {
     query: queryOpts({ enabled: !!teamId && canManage }),

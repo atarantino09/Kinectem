@@ -1940,6 +1940,9 @@ before being stored. Null when the team has not set one.
   /** @minimum 0 */
   followerCount: number;
   isFollowing: boolean;
+  /** Server-derived flag: true when the requester can author a game recap on this team. Mirrors the server-side `canCreateRecap` rule (org owner/admin of the parent org, team coach, or accepted roster member with `position = "author"`). Drives the team page's "Create Game Recap" affordance and the visibility of the "Waiting for approval" pending-recaps section.
+   */
+  canAuthorRecaps?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -3808,6 +3811,18 @@ export type ListPendingTags200 = {
 };
 
 export type ListTeamPostsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListTeamPendingPostsParams = {
   /**
    * @maxLength 500
    */

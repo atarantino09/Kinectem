@@ -560,7 +560,12 @@ export function toMember(u: UserRow, role: "owner" | "admin" | "member", joinedA
 export function toTeam(
   t: TeamRow,
   org: OrgRow,
-  opts: { followerCount?: number; isFollowing?: boolean; memberCount?: number } = {},
+  opts: {
+    followerCount?: number;
+    isFollowing?: boolean;
+    memberCount?: number;
+    canAuthorRecaps?: boolean;
+  } = {},
 ) {
   return {
     id: t.id,
@@ -589,6 +594,7 @@ export function toTeam(
       : null,
     followerCount: opts.followerCount ?? opts.memberCount ?? 0,
     isFollowing: opts.isFollowing ?? false,
+    canAuthorRecaps: opts.canAuthorRecaps ?? false,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.createdAt.toISOString(),
   };
