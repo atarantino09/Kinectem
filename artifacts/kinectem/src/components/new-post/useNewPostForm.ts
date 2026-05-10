@@ -838,7 +838,9 @@ export function useNewPostForm({
     onPublish,
     onSaveDraft,
     onDelete,
-    cancelTo: initialTeamId ? `/teams/${initialTeamId}` : "/",
+    cancelTo:
+      safeInternalPath(initialFrom) ??
+      (initialTeamId ? `/teams/${initialTeamId}` : "/"),
     setLocation,
   };
 }
