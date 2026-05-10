@@ -48,6 +48,8 @@ import {
   type StatsKind,
 } from "../lib/post-stats";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import { notifyAdminsOfPendingPostApproval } from "../lib/notifications";
+import { displayName, maskedDisplayName } from "../lib/spec-helpers";
 
 const router: IRouter = Router();
 
@@ -548,6 +550,26 @@ router.post(
       ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
       : [null];
     if (!team || !org) return notFound(res);
+    // Task #455 — fan out a bell to every org owner/admin when this
+    // publish flips the article into pending_approval. Admin-authored
+    // publishes go straight to "published" and are skipped. We also
+    // require the prior status to NOT already be pending_approval so
+    // re-publishing an article that is already in the queue (e.g. a
+    // co-author hitting publish again) doesn't fan out a duplicate
+    // bell — the task spec explicitly forbids duplicate "pending"
+    // notifications on subsequent edits.
+    if (newStatus === "pending_approval" && a.status !== "pending_approval") {
+      await notifyAdminsOfPendingPostApproval({
+        organizationId: org.id,
+        teamName: team.name,
+        articleId: updated.id,
+        articleTitle: updated.title,
+        actorUserId: me.id,
+        actorDisplayName: me.isMinor
+          ? maskedDisplayName(me)
+          : displayName(me),
+      });
+    }
     const publishRoleMap = await computeArticleAuthorRoleMap([
       {
         articleId: updated.id,

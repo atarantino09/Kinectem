@@ -186,6 +186,271 @@ describe("posts", () => {
   });
 
   // ----------------------------------------------------------------
+  // Task #455 — Notify admins when a recap enters pending_approval
+  //
+  // When a non-admin author submits a long-form recap (POST /posts
+  // long-form, or via publishing a draft), every owner / admin of
+  // the team's organization gets a bell notification linking to the
+  // org page (where OrgAdminPanel lives). Admin-authored recaps
+  // publish straight through and skip the fan-out, and minor actors
+  // are masked at write time so a non-privileged admin's row never
+  // leaks the minor's last name. The actor never self-notifies.
+  // ----------------------------------------------------------------
+
+  it("non-admin POSTing a long-form recap fans out a pending-approval bell to every org owner/admin", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
+    const marcus = (usersList.body.data ?? usersList.body)[0];
+    expect(marcus).toBeDefined();
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcus.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    const create = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Pending fan-out recap",
+      body: "Awaiting an admin's review.",
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.approvalStatus).toBe("pending_approval");
+    const newPostId: string = create.body.id;
+
+    // Sam (org owner) gets the bell.
+    const ownerInbox = await adminLogin.agent.get("/api/v1/notifications");
+    const ownerNotif = ownerInbox.body.data.find(
+      (n: { type: string; title: string; data?: { link?: string } | null }) =>
+        n.type === "team_post_pending_approval" &&
+        n.title.includes("Pending fan-out recap"),
+    );
+    expect(ownerNotif).toBeDefined();
+    expect(ownerNotif.title).toContain("Marcus Rivera");
+    expect(ownerNotif.title).toContain(jv.name);
+    expect(ownerNotif.data?.link).toBe(`/organizations/${org.id}`);
+    expect(ownerNotif.isRead).toBe(false);
+
+    // Coach Davis is an org admin on Westfield — he gets the same bell.
+    const peerInbox = await coachLogin.agent.get("/api/v1/notifications");
+    const peerNotif = peerInbox.body.data.find(
+      (n: { type: string; title: string }) =>
+        n.type === "team_post_pending_approval" &&
+        n.title.includes("Pending fan-out recap"),
+    );
+    expect(peerNotif).toBeDefined();
+
+    // Marcus (the actor) never self-notifies.
+    const selfInbox = await marcusLogin.agent.get("/api/v1/notifications");
+    const selfNotif = selfInbox.body.data.find(
+      (n: { type: string; title: string }) =>
+        n.type === "team_post_pending_approval" &&
+        n.title.includes("Pending fan-out recap"),
+    );
+    expect(selfNotif).toBeUndefined();
+
+    // Sanity: the post id round-trips so the queue link is still useful.
+    expect(newPostId).toMatch(/^article-/);
+  });
+
+  it("admin POSTing a long-form recap does NOT fan out a pending-approval bell", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org, team } = await getOrgAndTeam();
+
+    const create = await adminLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: team.id,
+      title: "Owner direct-publish recap",
+      body: "Should publish straight through with no pending bell.",
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.approvalStatus).toBe("published");
+
+    // Co-admin Coach Davis must NOT see a pending-approval bell for
+    // an owner-authored recap (the whole fan-out is suppressed).
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const peerInbox = await coachLogin.agent.get("/api/v1/notifications");
+    const peerNotif = peerInbox.body.data.find(
+      (n: { type: string; title: string }) =>
+        n.type === "team_post_pending_approval" &&
+        n.title.includes("Owner direct-publish recap"),
+    );
+    expect(peerNotif).toBeUndefined();
+  });
+
+  it("publishing a non-admin draft into pending_approval also fans out the bell", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
+    const marcus = (usersList.body.data ?? usersList.body)[0];
+    expect(marcus).toBeDefined();
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcus.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    const draft = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Draft-publish fan-out recap",
+      body: "Drafted first, published second.",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    expect(draft.body.approvalStatus).toBe("draft");
+    const draftId: string = draft.body.id;
+
+    // Drafts must NOT fan out — wait until publish.
+    const ownerBeforePub = await adminLogin.agent.get("/api/v1/notifications");
+    expect(
+      ownerBeforePub.body.data.find(
+        (n: { type: string; title: string }) =>
+          n.type === "team_post_pending_approval" &&
+          n.title.includes("Draft-publish fan-out recap"),
+      ),
+    ).toBeUndefined();
+
+    const pub = await marcusLogin.agent.post(
+      `/api/v1/posts/${draftId}/publish`,
+    );
+    expect(pub.status).toBe(200);
+
+    const ownerAfterPub = await adminLogin.agent.get("/api/v1/notifications");
+    const ownerNotif = ownerAfterPub.body.data.find(
+      (n: { type: string; title: string; data?: { link?: string } | null }) =>
+        n.type === "team_post_pending_approval" &&
+        n.title.includes("Draft-publish fan-out recap"),
+    );
+    expect(ownerNotif).toBeDefined();
+    expect(ownerNotif.title).toContain("Marcus Rivera");
+    expect(ownerNotif.data?.link).toBe(`/organizations/${org.id}`);
+  });
+
+  it("re-publishing an already-pending recap does NOT fan out a duplicate pending-approval bell", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
+    const marcus = (usersList.body.data ?? usersList.body)[0];
+    expect(marcus).toBeDefined();
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcus.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    const draft = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Republish dedupe recap",
+      body: "Should only ping admins once.",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    const draftId: string = draft.body.id;
+
+    const firstPub = await marcusLogin.agent.post(
+      `/api/v1/posts/${draftId}/publish`,
+    );
+    expect(firstPub.status).toBe(200);
+
+    // A second publish on the now-pending recap is a non-transition;
+    // the bell fan-out must not fire again.
+    const secondPub = await marcusLogin.agent.post(
+      `/api/v1/posts/${draftId}/publish`,
+    );
+    expect(secondPub.status).toBe(200);
+
+    const ownerInbox = await adminLogin.agent.get("/api/v1/notifications");
+    const matchingBells = ownerInbox.body.data.filter(
+      (n: { type: string; title: string }) =>
+        n.type === "team_post_pending_approval" &&
+        n.title.includes("Republish dedupe recap"),
+    );
+    expect(matchingBells.length).toBe(1);
+  });
+
+  it("a minor actor's last name is masked in the pending-approval bell", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
+    const marcus = (usersList.body.data ?? usersList.body)[0];
+    expect(marcus).toBeDefined();
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcus.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    // Flip Marcus to a minor for the duration of this test so the
+    // write-time mask kicks in. Restored after the assertions.
+    await db
+      .update(users)
+      .set({ isMinor: true })
+      .where(eq(users.id, marcus.id));
+    try {
+      const create = await marcusLogin.agent.post("/api/v1/posts").send({
+        postType: "long",
+        organizationId: org.id,
+        teamId: jv.id,
+        title: "Minor-authored pending recap",
+        body: "Minor's last name must not leak into the admin's bell row.",
+      });
+      expect(create.status).toBe(201);
+      expect(create.body.approvalStatus).toBe("pending_approval");
+
+      const ownerInbox = await adminLogin.agent.get("/api/v1/notifications");
+      const ownerNotif = ownerInbox.body.data.find(
+        (n: { type: string; title: string }) =>
+          n.type === "team_post_pending_approval" &&
+          n.title.includes("Minor-authored pending recap"),
+      );
+      expect(ownerNotif).toBeDefined();
+      // Masked: "Marcus R." (first name + last initial), full last name absent.
+      expect(ownerNotif.title).toContain("Marcus R.");
+      expect(ownerNotif.title).not.toContain("Rivera");
+    } finally {
+      await db
+        .update(users)
+        .set({ isMinor: false })
+        .where(eq(users.id, marcus.id));
+    }
+  });
+
+  // ----------------------------------------------------------------
   // Task #458 — Author bell on approve / decline
   // ----------------------------------------------------------------
 

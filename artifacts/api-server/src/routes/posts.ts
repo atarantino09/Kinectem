@@ -75,7 +75,10 @@ import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStat
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
-import { notifyAdminsOfTeamHighlight } from "../lib/notifications";
+import {
+  notifyAdminsOfTeamHighlight,
+  notifyAdminsOfPendingPostApproval,
+} from "../lib/notifications";
 import {
   blockMinorAction,
   filterOutMinors,
@@ -1742,6 +1745,25 @@ router.post(
           articleId: a.id,
           articleTitle: a.title,
           actorUserId: me.id,
+        });
+      }
+
+      // Task #455 — fan out a bell to every org owner/admin so they
+      // see the new pending recap in their queue without having to
+      // visit /organizations/:id by hand. Only fires on the transition
+      // into pending_approval (drafts skip; admin-authored recaps
+      // publish straight through and skip too). Mirrors the highlight
+      // fan-out's mask-at-write rule for minor actors.
+      if (status === "pending_approval") {
+        await notifyAdminsOfPendingPostApproval({
+          organizationId: org.id,
+          teamName: team.name,
+          articleId: a.id,
+          articleTitle: a.title,
+          actorUserId: me.id,
+          actorDisplayName: me.isMinor
+            ? maskedDisplayName(me)
+            : displayName(me),
         });
       }
 
