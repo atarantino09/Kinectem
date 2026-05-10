@@ -398,6 +398,19 @@ export default function PostPage() {
           <Icon className="w-3 h-3 mr-1 inline" />
           {label}
         </Badge>
+        {post.context.type === "team" &&
+          post.context.orgId &&
+          post.context.orgName && (
+            <Link href={`/organizations/${post.context.orgId}`}>
+              <Badge
+                variant="outline"
+                className="font-bold cursor-pointer"
+                data-testid="link-post-context-organization"
+              >
+                {post.context.orgName}
+              </Badge>
+            </Link>
+          )}
         {post.context.name && (
           <Link
             href={
