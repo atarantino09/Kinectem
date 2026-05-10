@@ -201,6 +201,19 @@ export function CreateOrgDialog({
       ]);
       reset();
       onOpenChange(false);
+      // Task #443 — leave a one-shot signal so the org page can show
+      // a celebratory "next step is to create teams" popup once,
+      // keyed by the new org id and consumed on first read so a
+      // refresh or revisit doesn't re-trigger it.
+      try {
+        sessionStorage.setItem(
+          `kinectem:welcome-org:${org.id}`,
+          trimmedName,
+        );
+      } catch {
+        // sessionStorage may be unavailable (private mode, etc.) —
+        // the popup is a nice-to-have, so swallow and continue.
+      }
       setLocation(`/organizations/${org.id}`);
     } catch {
       toast({ title: "Failed to create organization", variant: "destructive" });

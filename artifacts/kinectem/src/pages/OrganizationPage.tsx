@@ -19,6 +19,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Building2,
   ChevronDown,
   Pencil,
@@ -56,6 +64,23 @@ export default function OrganizationPage() {
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  // Task #443 — celebratory popup shown once right after a successful
+  // org create. CreateOrgDialog stashes the org name under
+  // `kinectem:welcome-org:<orgId>` and we consume it on mount so a
+  // refresh / revisit can never re-trigger the modal.
+  const [welcomeOrgName, setWelcomeOrgName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!orgId) return;
+    let name: string | null = null;
+    try {
+      const key = `kinectem:welcome-org:${orgId}`;
+      name = sessionStorage.getItem(key);
+      if (name != null) sessionStorage.removeItem(key);
+    } catch {
+      // sessionStorage unavailable; nothing to show.
+    }
+    if (name) setWelcomeOrgName(name);
+  }, [orgId]);
   const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
@@ -103,6 +128,48 @@ export default function OrganizationPage() {
         open={createTeamOpen}
         onOpenChange={setCreateTeamOpen}
       />
+      <Dialog
+        open={welcomeOrgName !== null && isOrgManager}
+        onOpenChange={(v) => {
+          if (!v) setWelcomeOrgName(null);
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          data-testid="dialog-welcome-org"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-black tracking-tight">
+              Congratulations on creating {welcomeOrgName}!
+            </DialogTitle>
+            <DialogDescription>
+              Next step: create teams and invite coaches, players, and
+              parents so they can start sharing updates and highlights.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setWelcomeOrgName(null)}
+              data-testid="btn-welcome-org-dismiss"
+            >
+              Maybe later
+            </Button>
+            <Button
+              type="button"
+              variant="brand"
+              onClick={() => {
+                setWelcomeOrgName(null);
+                setCreateTeamOpen(true);
+              }}
+              data-testid="btn-welcome-org-create-team"
+            >
+              Create your first team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <NewOrgPostDialog
         orgId={orgId}
         orgName={organization.name}
