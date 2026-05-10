@@ -1,15 +1,24 @@
 import { useParams, Link, useSearch, useLocation } from "wouter";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
+  getGetPostQueryKey,
   getListFeedQueryKey,
+  getListOrgPostApprovalsQueryKey,
   getListOrgPostsQueryKey,
   getListTeamPostsQueryKey,
   getListUserPostsQueryKey,
+  useApproveOrgPostApproval,
+  useDeclineOrgPostApproval,
   useDeletePost,
+  useListOrgPostApprovals,
+  useUpdatePost,
+  type PostApprovalResponse,
   type PostResponse,
 } from "@workspace/api-client-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { NoIndex } from "@/components/NoIndex";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +81,15 @@ export default function PostPage() {
     return v && v.length > 0 ? v : null;
   }, [search]);
 
+  // Inline edit state for the admin-on-pending-recap flow. Initialized
+  // from the post payload after it loads (see useEffect below). We
+  // keep the buffer separate from `postQuery.data` so Cancel can revert
+  // without round-tripping the network.
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editBody, setEditBody] = useState("");
+
   const postQuery = useQuery<PostResponse>({
     queryKey: asChildId
       ? ["child-post", asChildId, postId]
@@ -95,6 +113,146 @@ export default function PostPage() {
   const post = postQuery.data;
   const isLoading = postQuery.isLoading;
   const error = postQuery.error;
+
+  // Task #451 — surface the org post-approvals queue when the viewer
+  // can edit this post and the post belongs to an org-scoped team. We
+  // gate on `canEdit` so we don't issue a doomed 403 for every random
+  // viewer; org admins (and authors who happen to also be admins) get
+  // a 200 and we look for this post's row in the response. Non-team
+  // posts (org posts, user-context highlights) skip the query entirely
+  // — they don't go through the approvals queue.
+  const orgIdForApprovals =
+    post && !asChildId && post.canEdit && post.context?.type === "team"
+      ? (post.context.orgId ?? null)
+      : null;
+  const approvalsQuery = useListOrgPostApprovals(
+    orgIdForApprovals ?? "",
+    undefined,
+    {
+      query: {
+        queryKey: getListOrgPostApprovalsQueryKey(orgIdForApprovals ?? ""),
+        enabled: !!orgIdForApprovals,
+        // 403 here just means the viewer isn't an org admin; don't
+        // hammer the endpoint retrying.
+        retry: false,
+      },
+    },
+  );
+  const pendingApproval: PostApprovalResponse | null = useMemo(() => {
+    if (!post) return null;
+    const rows = approvalsQuery.data?.data ?? [];
+    return rows.find((r) => r.postId === post.id) ?? null;
+  }, [approvalsQuery.data, post]);
+  const isAdminOnPending = !!pendingApproval;
+
+  // Sync the edit buffer with the post payload whenever a fresh copy
+  // arrives (initial load, post-save refetch). We avoid clobbering the
+  // buffer mid-edit so an in-flight refetch can't overwrite the
+  // admin's typing.
+  useEffect(() => {
+    if (!post || editing) return;
+    setEditTitle(post.title ?? "");
+    setEditDescription(post.description ?? "");
+    setEditBody(post.body ?? "");
+  }, [post, editing]);
+
+  const updatePost = useUpdatePost();
+  const approveApproval = useApproveOrgPostApproval();
+  const declineApproval = useDeclineOrgPostApproval();
+
+  const hasUnsavedEdits =
+    editing &&
+    !!post &&
+    (editTitle !== (post.title ?? "") ||
+      editDescription !== (post.description ?? "") ||
+      editBody !== (post.body ?? ""));
+
+  const refreshApprovalsAndPost = () => {
+    if (orgIdForApprovals) {
+      qc.invalidateQueries({
+        queryKey: getListOrgPostApprovalsQueryKey(orgIdForApprovals),
+      });
+    }
+    if (postId) {
+      qc.invalidateQueries({ queryKey: getGetPostQueryKey(postId) });
+      qc.invalidateQueries({ queryKey: ["post", postId] });
+    }
+    qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+    if (post?.context?.type === "team" && post.context.id) {
+      qc.invalidateQueries({
+        queryKey: getListTeamPostsQueryKey(post.context.id),
+      });
+    }
+    if (post?.context?.type === "organization" && post.context.id) {
+      qc.invalidateQueries({
+        queryKey: getListOrgPostsQueryKey(post.context.id),
+      });
+    }
+  };
+
+  const handleSaveEdits = async () => {
+    if (!post) return;
+    try {
+      await updatePost.mutateAsync({
+        postId: post.id,
+        data: {
+          title: editTitle.trim() ? editTitle : null,
+          description: editDescription.trim() ? editDescription : null,
+          body: editBody.trim() ? editBody : null,
+        },
+      });
+      setEditing(false);
+      refreshApprovalsAndPost();
+      toast({ title: "Changes saved" });
+    } catch (err) {
+      toast({
+        title: "Couldn't save changes",
+        description:
+          err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveFromPost = async () => {
+    if (!pendingApproval || !orgIdForApprovals) return;
+    try {
+      await approveApproval.mutateAsync({
+        orgId: orgIdForApprovals,
+        approvalId: pendingApproval.id,
+      });
+      setEditing(false);
+      refreshApprovalsAndPost();
+      toast({ title: "Recap approved" });
+    } catch (err) {
+      toast({
+        title: "Couldn't approve recap",
+        description:
+          err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeclineFromPost = async () => {
+    if (!pendingApproval || !orgIdForApprovals) return;
+    try {
+      await declineApproval.mutateAsync({
+        orgId: orgIdForApprovals,
+        approvalId: pendingApproval.id,
+      });
+      setEditing(false);
+      refreshApprovalsAndPost();
+      toast({ title: "Recap declined" });
+    } catch (err) {
+      toast({
+        title: "Couldn't decline recap",
+        description:
+          err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -260,12 +418,79 @@ export default function PostPage() {
         )}
       </div>
 
-      {post.title && (
-        <h1 className="text-4xl font-black tracking-tight leading-tight">
-          {post.title}
-        </h1>
+      {isAdminOnPending && (
+        <div
+          className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3"
+          data-testid="post-approval-bar"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-amber-900">
+              Pending recap approval
+            </p>
+            <p className="text-xs text-amber-900/80">
+              {hasUnsavedEdits
+                ? "Save your changes before approving this recap."
+                : "Approve to publish this recap, or decline to send it back to draft."}
+            </p>
+          </div>
+          <div className="flex gap-2 self-end sm:self-auto shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold"
+              disabled={
+                declineApproval.isPending || approveApproval.isPending
+              }
+              onClick={handleDeclineFromPost}
+              data-testid="btn-post-page-decline"
+            >
+              Decline
+            </Button>
+            <Button
+              variant="brand"
+              size="sm"
+              className="font-bold"
+              disabled={
+                hasUnsavedEdits ||
+                approveApproval.isPending ||
+                declineApproval.isPending ||
+                updatePost.isPending
+              }
+              onClick={handleApproveFromPost}
+              data-testid="btn-post-page-approve"
+              title={
+                hasUnsavedEdits
+                  ? "Save your changes before approving"
+                  : undefined
+              }
+            >
+              Approve
+            </Button>
+          </div>
+        </div>
       )}
-      {post.title && !isShort && (
+
+      {editing && isAdminOnPending ? (
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+            Title
+          </label>
+          <Input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            className="text-2xl font-black h-auto py-2"
+            placeholder="Recap title"
+            data-testid="input-post-edit-title"
+          />
+        </div>
+      ) : (
+        post.title && (
+          <h1 className="text-4xl font-black tracking-tight leading-tight">
+            {post.title}
+          </h1>
+        )
+      )}
+      {((editing && isAdminOnPending) || post.title) && !isShort && (
         <hr
           className="border-t border-border"
           data-testid="divider-post-title"
@@ -310,7 +535,51 @@ export default function PostPage() {
             {post.isEdited && " • edited"}
           </p>
         </div>
-        {post.canEdit && (
+        {isAdminOnPending ? (
+          editing ? (
+            <div
+              className="inline-flex gap-2"
+              data-testid="post-inline-edit-actions"
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold rounded-full"
+                onClick={() => {
+                  setEditing(false);
+                  setEditTitle(post.title ?? "");
+                  setEditDescription(post.description ?? "");
+                  setEditBody(post.body ?? "");
+                }}
+                disabled={updatePost.isPending}
+                data-testid="button-post-edit-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="brand"
+                size="sm"
+                className="font-bold rounded-full"
+                onClick={handleSaveEdits}
+                disabled={updatePost.isPending || !hasUnsavedEdits}
+                data-testid="button-post-edit-save"
+              >
+                {updatePost.isPending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold rounded-full"
+              onClick={() => setEditing(true)}
+              data-testid="button-edit-post-inline"
+            >
+              <Pencil className="w-3.5 h-3.5 mr-1.5" />
+              Edit
+            </Button>
+          )
+        ) : post.canEdit && (
           post.canDelete ? (
             // Original author: Edit + chevron dropdown that includes
             // "Delete post". Co-authors / coaches / org admins (who
@@ -452,19 +721,61 @@ export default function PostPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {post.description && (
-        <Card className="rounded-xl border border-border">
-          <CardContent className="p-5">
-            <p className="text-base leading-relaxed text-muted-foreground">
-              {linkify(post.description)}
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {editing && isAdminOnPending ? (
+        <>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+              Description
+            </label>
+            <Textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={3}
+              placeholder="Short summary or caption"
+              data-testid="textarea-post-edit-description"
+            />
+          </div>
+          {!isShort && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                Body
+              </label>
+              <Textarea
+                value={editBody}
+                onChange={(e) => setEditBody(e.target.value)}
+                rows={12}
+                placeholder="Write the full recap…"
+                data-testid="textarea-post-edit-body"
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {post.description && (
+            <Card className="rounded-xl border border-border">
+              <CardContent className="p-5">
+                <p className="text-base leading-relaxed text-muted-foreground">
+                  {linkify(post.description)}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
-      {post.body && !isShort && (
-        <Card className="rounded-xl border border-border">
-          <CardContent className="p-5">
+          {post.body && !isShort && (
+            <Card className="rounded-xl border border-border">
+              <CardContent className="p-5">
+                <div className="prose prose-slate max-w-none">
+                  {post.body.split("\n").map((para, i) => (
+                    <p key={i} className="text-base leading-relaxed">
+                      {linkify(para)}
+                    </p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {post.body && isShort && (
             <div className="prose prose-slate max-w-none">
               {post.body.split("\n").map((para, i) => (
                 <p key={i} className="text-base leading-relaxed">
@@ -472,17 +783,8 @@ export default function PostPage() {
                 </p>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
-      {post.body && isShort && (
-        <div className="prose prose-slate max-w-none">
-          {post.body.split("\n").map((para, i) => (
-            <p key={i} className="text-base leading-relaxed">
-              {linkify(para)}
-            </p>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {videoAsset?.url && (

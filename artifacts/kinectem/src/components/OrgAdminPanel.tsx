@@ -209,10 +209,24 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
             </p>
           ) : (
             <div className="space-y-2">
-              {approvals.map((a: PostApprovalResponse) => (
+              {approvals.map((a: PostApprovalResponse) => {
+                // Show a quick excerpt of the recap body so admins can
+                // triage without clicking through. Fall back to the
+                // description when the body is empty. Whitespace is
+                // collapsed so multi-line drafts don't push the row
+                // open. The truncated CSS keeps it to one visible line;
+                // the "Read more" affordance routes the admin to the
+                // post page when there's any preview text at all (we
+                // can't reliably detect overflow without measuring).
+                const previewSource =
+                  (a.post?.body && a.post.body.trim().length > 0
+                    ? a.post.body
+                    : a.post?.description) ?? "";
+                const preview = previewSource.replace(/\s+/g, " ").trim();
+                return (
                 <div
                   key={a.id}
-                  className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-2 rounded-lg bg-muted/40"
+                  className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 p-2 rounded-lg bg-muted/40"
                   data-testid={`post-approval-${a.id}`}
                 >
                   <div className="flex-1 min-w-0">
@@ -221,8 +235,28 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                         {a.post?.title ?? `Post ${a.postId.slice(0, 8)}…`}
                       </p>
                     </Link>
-                    <p className="text-[11px] text-muted-foreground">
+                    {preview && (
+                      <p
+                        className="text-xs text-muted-foreground truncate mt-0.5"
+                        data-testid={`text-post-approval-preview-${a.id}`}
+                      >
+                        {preview}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
                       Submitted {timeAgo(a.createdAt)}
+                      {preview && (
+                        <>
+                          {" · "}
+                          <Link
+                            href={`/posts/${a.postId}`}
+                            className="font-bold text-foreground hover:underline"
+                            data-testid={`link-post-approval-readmore-${a.id}`}
+                          >
+                            Read more
+                          </Link>
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="flex gap-1 self-end sm:self-auto shrink-0">
@@ -250,7 +284,8 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
