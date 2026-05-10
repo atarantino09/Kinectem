@@ -384,13 +384,13 @@ export function InviteRosterDialog({
         <Tabs defaultValue="search" className="mt-2">
           <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="search" className="font-bold">
-              <UserCheck className="w-4 h-4 mr-2" /> Existing
+              <UserCheck className="w-4 h-4 mr-2" /> Existing user
             </TabsTrigger>
             <TabsTrigger value="email" className="font-bold">
-              <Mail className="w-4 h-4 mr-2" /> Email
+              <Mail className="w-4 h-4 mr-2" /> Email invite
             </TabsTrigger>
             <TabsTrigger value="bulk" className="font-bold" data-testid="tab-bulk-invite">
-              <Users className="w-4 h-4 mr-2" /> Bulk
+              <Users className="w-4 h-4 mr-2" /> Bulk invite
             </TabsTrigger>
           </TabsList>
 
