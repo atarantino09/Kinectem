@@ -183,7 +183,7 @@ export function CreateTeamDialog({
       await qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(orgId) });
       reset();
       onOpenChange(false);
-      setLocation(`/teams/${team.id}`);
+      setLocation(`/teams/${team.id}?roster=1`);
     } catch {
       toast({ title: "Failed to create team", variant: "destructive" });
     }
