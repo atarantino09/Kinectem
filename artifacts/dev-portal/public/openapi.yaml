@@ -6457,6 +6457,16 @@ paths:
     post:
       operationId: acceptInviteForChild
       summary: Accept a roster invite on behalf of a guardian-managed child
+      description: >
+        Add a child to the team's roster via a player invite token. The
+        request body has two shapes (oneOf):
+
+        * `{ childId }` — link an existing child already attached to the
+          requesting guardian (`users.parentId = me.id`). Idempotent: if
+          the child already has a roster entry on this team in any
+          status, returns 409 with code `ALREADY_ON_ROSTER`.
+        * `{ firstName, lastName }` — create a brand-new child account
+          owned by the requesting guardian and place them on the roster.
       tags: [Invites]
       parameters:
         - name: token
@@ -6469,10 +6479,33 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              oneOf:
+                - type: object
+                  required: [childId]
+                  properties:
+                    childId:
+                      type: string
+                      format: uuid
+                  additionalProperties: false
+                - type: object
+                  required: [firstName, lastName]
+                  properties:
+                    firstName:
+                      type: string
+                      minLength: 1
+                    lastName:
+                      type: string
+                      minLength: 1
+                  additionalProperties: false
       responses:
         '200':
+          description: Invite accepted for the child.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '201':
           description: Invite accepted for the child.
           content:
             application/json:
@@ -6483,8 +6516,18 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            The selected child is already on this team's roster. Response
+            body is the standard error envelope with `code: "ALREADY_ON_ROSTER"`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # -------------------------------------------------------------------------
   # Posts — co-authors, publish, reaction alias
