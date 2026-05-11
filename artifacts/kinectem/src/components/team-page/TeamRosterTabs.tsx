@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useToast } from "@/hooks/use-toast";
+import { useIsLg } from "@/hooks/use-mobile";
 import { formatDate } from "@/lib/format";
 import {
   Shield,
@@ -85,6 +86,7 @@ export function TeamRosterTabs({
 }: TeamRosterTabsProps) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const isLg = useIsLg();
   const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(
     () => new Set<string>(),
   );
@@ -303,6 +305,184 @@ export function TeamRosterTabs({
     );
   };
 
+  const renderParentList = (parents: ParentRef[]) => (
+    <div className="space-y-1.5">
+      {parents.map((p) => (
+        <Link key={p.id} href={`/users/${p.id}`}>
+          <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
+            <UserAvatar
+              avatarUrl={p.avatarUrl}
+              displayName={p.displayName}
+              size="xs"
+              fallbackClassName="bg-blue-100 text-blue-700"
+            />
+            <span className="font-semibold">{p.displayName}</span>
+            <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none font-bold uppercase tracking-wider text-[10px]">
+              Parent
+            </Badge>
+            {p.email && (
+              <span className="text-xs text-muted-foreground truncate">
+                {p.email}
+              </span>
+            )}
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+
+  const renderPlayerCard = (m: RosterMember) => {
+    const parents = m.parents ?? [];
+    const isExpanded = expandedPlayers.has(m.id);
+    const hasParents = parents.length > 0;
+    return (
+      <div
+        key={m.id}
+        data-testid={`row-player-${m.id}`}
+        data-roster-entry-id={m.id}
+        className="px-4 py-3 border-b border-border last:border-b-0"
+      >
+        <div className="flex items-start gap-3">
+          <Link href={`/users/${m.userId}`}>
+            <div className="cursor-pointer">
+              <UserAvatar
+                avatarUrl={m.avatarUrl}
+                displayName={m.displayName}
+                size="sm"
+                fallbackClassName="bg-slate-900 text-primary-foreground"
+              />
+            </div>
+          </Link>
+          <div className="flex-1 min-w-0">
+            <Link href={`/users/${m.userId}`}>
+              <div className="font-semibold cursor-pointer hover:text-primary truncate">
+                {m.displayName}
+              </div>
+            </Link>
+            <div className="mt-1 flex items-center gap-2 text-xs">
+              <span
+                className="font-bold tabular-nums"
+                data-testid={`text-jersey-${m.id}`}
+              >
+                {m.jerseyNumber == null ? (
+                  <span className="text-muted-foreground font-normal">—</span>
+                ) : (
+                  `#${m.jerseyNumber}`
+                )}
+              </span>
+              {renderStatusBadge(m.status === "pending")}
+              {hasParents && (
+                <button
+                  type="button"
+                  onClick={() => togglePlayerExpand(m.id)}
+                  className="ml-1 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                  data-testid={`btn-expand-${m.id}`}
+                >
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  <span>
+                    {parents.length} parent{parents.length > 1 ? "s" : ""}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0">{renderActions(m)}</div>
+        </div>
+        {isExpanded && hasParents && (
+          <div
+            className="mt-3 ml-11 rounded-md bg-muted/30 p-2"
+            data-testid={`row-parents-${m.id}`}
+          >
+            {renderParentList(parents)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderStaffCard = (m: RosterMember) => (
+    <div
+      key={m.id}
+      data-testid={`row-staff-${m.id}`}
+      data-roster-entry-id={m.id}
+      className="px-4 py-3 border-b border-border last:border-b-0"
+    >
+      <div className="flex items-start gap-3">
+        <Link href={`/users/${m.userId}`}>
+          <div className="cursor-pointer">
+            <UserAvatar
+              avatarUrl={m.avatarUrl}
+              displayName={m.displayName}
+              size="sm"
+              fallbackClassName="bg-slate-900 text-primary-foreground"
+            />
+          </div>
+        </Link>
+        <div className="flex-1 min-w-0">
+          <Link href={`/users/${m.userId}`}>
+            <div className="font-semibold cursor-pointer hover:text-primary truncate">
+              {m.displayName}
+            </div>
+          </Link>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+            <span className="capitalize">
+              {m.position?.replace(/_/g, " ") ?? "—"}
+            </span>
+            {renderStatusBadge(m.status === "pending")}
+            {m.joinedAt && (
+              <span className="text-muted-foreground">
+                Joined {formatDate(m.joinedAt)}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0">{renderActions(m)}</div>
+      </div>
+    </div>
+  );
+
+  const renderInviteCard = (i: RosterInvite) => {
+    const label = i.email ?? "this person";
+    return (
+      <div
+        key={i.id}
+        data-testid={`row-invite-${i.id}`}
+        data-roster-entry-id={i.id}
+        className="px-4 py-3 border-b border-border last:border-b-0"
+      >
+        <div className="flex items-start gap-3">
+          <Mail className="w-4 h-4 mt-1 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold truncate">{i.email ?? "—"}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="capitalize">
+                {i.position?.replace(/_/g, " ") ?? "—"}
+              </span>
+              {i.invitedBy?.displayName && (
+                <span>· Invited by {i.invitedBy.displayName}</span>
+              )}
+              {i.createdAt && <span>· {formatDate(i.createdAt)}</span>}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive shrink-0"
+            onClick={() => onRevoke(i.id, label)}
+            disabled={withdrawInvite.isPending}
+            data-testid={`btn-revoke-${i.id}`}
+          >
+            <X className="w-3 h-3 mr-1" /> Revoke
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const renderPlayerRow = (m: RosterMember) => {
     const parents = m.parents ?? [];
     const isExpanded = expandedPlayers.has(m.id);
@@ -370,29 +550,7 @@ export function TeamRosterTabs({
           >
             <TableCell />
             <TableCell colSpan={5} className="py-2">
-              <div className="space-y-1.5">
-                {parents.map((p) => (
-                  <Link key={p.id} href={`/users/${p.id}`}>
-                    <div className="flex items-center gap-3 cursor-pointer hover:text-primary text-sm">
-                      <UserAvatar
-                        avatarUrl={p.avatarUrl}
-                        displayName={p.displayName}
-                        size="xs"
-                        fallbackClassName="bg-blue-100 text-blue-700"
-                      />
-                      <span className="font-semibold">{p.displayName}</span>
-                      <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none font-bold uppercase tracking-wider text-[10px]">
-                        Parent
-                      </Badge>
-                      {p.email && (
-                        <span className="text-xs text-muted-foreground">
-                          {p.email}
-                        </span>
-                      )}
-                    </div>
-                  </Link>
-                ))}
-              </div>
+              {renderParentList(parents)}
             </TableCell>
           </TableRow>
         )}
@@ -475,7 +633,7 @@ export function TeamRosterTabs({
               <div className="px-5 py-8 text-center text-sm text-muted-foreground">
                 No players on the roster yet.
               </div>
-            ) : (
+            ) : isLg ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -489,6 +647,8 @@ export function TeamRosterTabs({
                 </TableHeader>
                 <TableBody>{players.map(renderPlayerRow)}</TableBody>
               </Table>
+            ) : (
+              <div>{players.map(renderPlayerCard)}</div>
             )}
           </CardContent>
         </Card>
@@ -517,7 +677,7 @@ export function TeamRosterTabs({
                 <Shield className="w-4 h-4" />
                 No coaches or staff listed.
               </div>
-            ) : (
+            ) : isLg ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -530,6 +690,8 @@ export function TeamRosterTabs({
                 </TableHeader>
                 <TableBody>{staff.map(renderStaffRow)}</TableBody>
               </Table>
+            ) : (
+              <div>{staff.map(renderStaffCard)}</div>
             )}
           </CardContent>
         </Card>
@@ -563,6 +725,8 @@ export function TeamRosterTabs({
                   <Mail className="w-4 h-4" />
                   No invitations are waiting on a response.
                 </div>
+              ) : !isLg ? (
+                <div>{invites.map(renderInviteCard)}</div>
               ) : (
                 <Table>
                   <TableHeader>
