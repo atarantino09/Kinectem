@@ -441,7 +441,7 @@ export function InviteRosterDialog({
         </DialogHeader>
 
         {(generateLink.isPending || fullLink || linkErrored) && (
-          <div className="mt-2 rounded-xl border border-border p-3 space-y-2">
+          <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-xl border border-border p-3 space-y-2">
             <div className="flex items-center gap-2">
               <Link2 className="w-3.5 h-3.5 text-primary" />
               <h3 className="font-black tracking-tight text-sm">
