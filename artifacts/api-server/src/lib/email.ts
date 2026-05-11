@@ -9,20 +9,61 @@ export type EmailMessage = {
 
 const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
 
-function getConfig() {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  return { apiKey, from };
+// Resolve SendGrid credentials, preferring the Replit "sendgrid" connector
+// and falling back to plain env vars (local dev, CI, tests). Per the
+// connector docs the proxy-issued token can rotate, so we DO NOT cache —
+// every send fetches fresh credentials.
+async function resolveCredentials(): Promise<
+  { apiKey: string; from: string } | null
+> {
+  const envKey = process.env.SENDGRID_API_KEY;
+  const envFrom = process.env.EMAIL_FROM;
+  if (envKey && envFrom) return { apiKey: envKey, from: envFrom };
+
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY
+    ? `repl ${process.env.REPL_IDENTITY}`
+    : process.env.WEB_REPL_RENEWAL
+      ? `depl ${process.env.WEB_REPL_RENEWAL}`
+      : null;
+  if (!hostname || !xReplitToken) return null;
+
+  try {
+    const res = await fetch(
+      `https://${hostname}/api/v2/connection?include_secrets=true&connector_names=sendgrid`,
+      { headers: { Accept: "application/json", "X-Replit-Token": xReplitToken } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      items?: Array<{ settings?: { api_key?: string; from_email?: string } }>;
+    };
+    const settings = data.items?.[0]?.settings;
+    const apiKey = settings?.api_key ?? envKey;
+    const from = settings?.from_email ?? envFrom;
+    if (!apiKey || !from) return null;
+    return { apiKey, from };
+  } catch (err) {
+    logger.warn({ err }, "Failed to fetch SendGrid credentials from Replit connector proxy");
+    if (envKey && envFrom) return { apiKey: envKey, from: envFrom };
+    return null;
+  }
 }
 
+// Sync best-effort check for callers that need to gate UI/branching
+// (e.g. article-tagging.ts) without doing async work. True if either the
+// env-var path is fully populated OR the Replit connector proxy is
+// reachable in this environment.
 export function isEmailConfigured(): boolean {
-  const { apiKey, from } = getConfig();
-  return Boolean(apiKey && from);
+  if (process.env.SENDGRID_API_KEY && process.env.EMAIL_FROM) return true;
+  const hasConnector =
+    Boolean(process.env.REPLIT_CONNECTORS_HOSTNAME) &&
+    Boolean(process.env.REPL_IDENTITY ?? process.env.WEB_REPL_RENEWAL);
+  return hasConnector;
 }
 
 export async function sendEmail(message: EmailMessage): Promise<void> {
-  const { apiKey, from } = getConfig();
-  if (!apiKey || !from) {
+  const creds = await resolveCredentials();
+  if (!creds) {
     logger.warn(
       { to: message.to, subject: message.subject },
       "Email not sent: SENDGRID_API_KEY and/or EMAIL_FROM are not configured.",
@@ -32,7 +73,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
 
   const body = {
     personalizations: [{ to: [{ email: message.to }] }],
-    from: { email: from },
+    from: { email: creds.from },
     subject: message.subject,
     content: [
       { type: "text/plain", value: message.text },
@@ -45,7 +86,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   const res = await fetch(SENDGRID_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${creds.apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
