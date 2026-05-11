@@ -55,6 +55,15 @@ import { useToast } from "@/hooks/use-toast";
 //                               (the recap composer with the declined draft loaded)
 //                               source: routes/organizations.ts
 //                               (POST /organizations/:orgId/post-approvals/:id/decline)
+//   team_archived            -> `/teams/<teamId>` (the team page now
+//                               shows the archived banner)
+//                               source: lib/notifications.ts
+//                               (notifyTeamArchived, called from
+//                               routes/teams.ts archive route).
+//   team_unarchived          -> `/teams/<teamId>` (team page is
+//                               active again)
+//                               source: lib/notifications.ts
+//                               (notifyTeamUnarchived).
 //   guardian_expired         -> `/family?childId=<childId>` (NOT the
 //                               inserted `/guardian?childId=...` link).
 //                               The bell intentionally rewrites this to

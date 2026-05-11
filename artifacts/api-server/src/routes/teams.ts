@@ -63,6 +63,7 @@ import {
   ensureTeamFollowed,
   ensureTeamFollowedAsGuardian,
 } from "../lib/team-follow";
+import { notifyTeamArchived, notifyTeamUnarchived } from "../lib/notifications";
 import { normalizeWebsite } from "../lib/normalize-website";
 
 const router: IRouter = Router();
@@ -1095,6 +1096,12 @@ router.post(
           teamName: team.name,
         }),
       });
+      await notifyTeamArchived({
+        teamId: updated.id,
+        organizationId: updated.organizationId,
+        teamName: updated.name,
+        actorUserId: ownerId,
+      });
     }
     const [org] = await db
       .select()
@@ -1133,6 +1140,12 @@ router.post(
           organizationId: team.organizationId,
           teamName: team.name,
         }),
+      });
+      await notifyTeamUnarchived({
+        teamId: updated.id,
+        organizationId: updated.organizationId,
+        teamName: updated.name,
+        actorUserId: ownerId,
       });
     }
     const [org] = await db

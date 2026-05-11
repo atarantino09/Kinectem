@@ -1,4 +1,10 @@
-import { db, notifications, organizationAdmins } from "@workspace/db";
+import {
+  db,
+  notifications,
+  organizationAdmins,
+  rosterEntries,
+  teamFollowers,
+} from "@workspace/db";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { highlightPostId } from "./spec-helpers";
 
@@ -96,4 +102,101 @@ export async function notifyAdminsOfPendingPostApproval(args: {
       actorUserId: args.actorUserId,
     })),
   );
+}
+
+export const TEAM_ARCHIVED_NOTIF_KIND = "team_archived";
+export const TEAM_UNARCHIVED_NOTIF_KIND = "team_unarchived";
+
+// Task #473 — When a team owner archives (or unarchives) a team, fan out
+// an in-app notification to everyone with a meaningful relationship to
+// it: accepted roster members, opt-in team followers, and the team's
+// org admins/owners. Without this they only discover the change when a
+// write action fails or they happen to revisit the team page. The link
+// always points at `/teams/<teamId>` so the recipient lands on the page
+// that now renders the archived banner. Recipients are deduped (a coach
+// who is also a follower receives one row, not two) and the actor is
+// excluded — owners don't notify themselves about their own action.
+async function fanOutTeamArchiveNotification(args: {
+  teamId: string;
+  organizationId: string;
+  teamName: string | null;
+  actorUserId: string;
+  kind: typeof TEAM_ARCHIVED_NOTIF_KIND | typeof TEAM_UNARCHIVED_NOTIF_KIND;
+}): Promise<void> {
+  const [rosterRows, followerRows, adminRows] = await Promise.all([
+    db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, args.teamId),
+          eq(rosterEntries.status, "accepted"),
+          ne(rosterEntries.userId, args.actorUserId),
+        ),
+      ),
+    db
+      .select({ userId: teamFollowers.userId })
+      .from(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, args.teamId),
+          ne(teamFollowers.userId, args.actorUserId),
+        ),
+      ),
+    db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, args.organizationId),
+          inArray(organizationAdmins.role, [...ADMIN_ROLES]),
+          ne(organizationAdmins.userId, args.actorUserId),
+        ),
+      ),
+  ]);
+  const recipients = Array.from(
+    new Set(
+      [...rosterRows, ...followerRows, ...adminRows].map((r) => r.userId),
+    ),
+  );
+  if (recipients.length === 0) return;
+  const teamLabel = args.teamName?.trim() ? args.teamName.trim() : "A team";
+  const message =
+    args.kind === TEAM_ARCHIVED_NOTIF_KIND
+      ? `${teamLabel} has been archived. It is now read-only.`
+      : `${teamLabel} has been unarchived and is active again.`;
+  const link = `/teams/${args.teamId}`;
+  await db.insert(notifications).values(
+    recipients.map((userId) => ({
+      userId,
+      kind: args.kind,
+      message,
+      link,
+      actorUserId: args.actorUserId,
+    })),
+  );
+}
+
+export async function notifyTeamArchived(args: {
+  teamId: string;
+  organizationId: string;
+  teamName: string | null;
+  actorUserId: string;
+}): Promise<void> {
+  await fanOutTeamArchiveNotification({
+    ...args,
+    kind: TEAM_ARCHIVED_NOTIF_KIND,
+  });
+}
+
+export async function notifyTeamUnarchived(args: {
+  teamId: string;
+  organizationId: string;
+  teamName: string | null;
+  actorUserId: string;
+}): Promise<void> {
+  await fanOutTeamArchiveNotification({
+    ...args,
+    kind: TEAM_UNARCHIVED_NOTIF_KIND,
+  });
 }
