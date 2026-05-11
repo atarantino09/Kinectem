@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ChildSetupCard,
   type AddedChild,
+  type LinkedChildOption,
 } from "@/components/invite-accept/ChildSetupCard";
 import { InviteHeaderCard } from "@/components/invite-accept/InviteHeaderCard";
 import { InviteBenefitsCard } from "@/components/invite-accept/InviteBenefitsCard";
@@ -23,6 +24,18 @@ interface InviteEnvelope {
   };
   team: { id: string; name: string };
   organization: { id: string; name: string };
+}
+
+interface MyChildRow {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+}
+
+interface TeamMembershipRow {
+  userId: string;
+  position?: string | null;
 }
 
 export default function InviteAcceptPage() {
@@ -44,6 +57,11 @@ export default function InviteAcceptPage() {
   const [savingChild, setSavingChild] = useState(false);
   const [children, setChildren] = useState<AddedChild[]>([]);
 
+  const [linkedChildren, setLinkedChildren] = useState<LinkedChildOption[]>([]);
+  const [linkedChildrenLoaded, setLinkedChildrenLoaded] = useState(false);
+  const [alreadyOnTeam, setAlreadyOnTeam] = useState<Set<string>>(new Set());
+  const [addingChildId, setAddingChildId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!token) return;
     customFetch<InviteEnvelope>(`/api/v1/invites/${token}`)
@@ -51,6 +69,45 @@ export default function InviteAcceptPage() {
       .catch((e) => setError((e as Error).message ?? "Invite not found"))
       .finally(() => setLoading(false));
   }, [token]);
+
+  // Once the parent triggers child-setup, fetch their linked children plus
+  // the team's existing roster so we can show "On team" state correctly.
+  useEffect(() => {
+    if (!needsChildSetup || !envelope || !me) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [kidsRes, rosterRes] = await Promise.all([
+          customFetch<{ data: MyChildRow[] }>("/api/v1/users/me/children"),
+          customFetch<{ data: TeamMembershipRow[] }>(
+            `/api/v1/teams/${envelope.team.id}/members?limit=200`,
+          ).catch(() => ({ data: [] as TeamMembershipRow[] })),
+        ]);
+        if (cancelled) return;
+        setLinkedChildren(
+          (kidsRes.data ?? []).map((c) => ({
+            id: c.id,
+            firstName: c.firstName ?? "",
+            lastName: c.lastName ?? "",
+            avatarUrl: c.avatarUrl ?? null,
+          })),
+        );
+        setAlreadyOnTeam(
+          new Set((rosterRes.data ?? []).map((r) => r.userId)),
+        );
+        setLinkedChildrenLoaded(true);
+      } catch {
+        if (!cancelled) {
+          setLinkedChildren([]);
+          setAlreadyOnTeam(new Set());
+          setLinkedChildrenLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsChildSetup, envelope, me]);
 
   const isPlayerInvite = envelope?.invite.position === "player";
   const childHint = envelope?.invite.invitedName ?? "";
@@ -88,6 +145,45 @@ export default function InviteAcceptPage() {
     }
   };
 
+  const onAddExistingChild = async (childId: string) => {
+    setAddingChildId(childId);
+    try {
+      const r = await customFetch<{ child: AddedChild }>(
+        `/api/v1/invites/${token}/children`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ childId }),
+        },
+      );
+      setChildren((prev) => [...prev, r.child]);
+      setAlreadyOnTeam((prev) => {
+        const next = new Set(prev);
+        next.add(childId);
+        return next;
+      });
+      toast({ title: `Added ${r.child.firstName} to the roster` });
+    } catch (err) {
+      // If the server says the child is already rostered (e.g. our local
+      // `alreadyOnTeam` set was stale), treat it as a non-error: just flip
+      // the row to its "On team" state and surface a neutral toast.
+      const code = (err as { code?: string } | null)?.code;
+      const message = (err as Error)?.message ?? "Failed to add child";
+      if (code === "ALREADY_ON_ROSTER" || /already on/i.test(message)) {
+        setAlreadyOnTeam((prev) => {
+          const next = new Set(prev);
+          next.add(childId);
+          return next;
+        });
+        toast({ title: "This child is already on the team's roster." });
+      } else {
+        toast({ title: message, variant: "destructive" });
+      }
+    } finally {
+      setAddingChildId(null);
+    }
+  };
+
   const onAddChild = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) {
@@ -108,6 +204,26 @@ export default function InviteAcceptPage() {
         },
       );
       setChildren((prev) => [...prev, r.child]);
+      // Surface the brand-new child in the chooser too, marked as on-team,
+      // so the parent sees a single consistent list as they add more.
+      setLinkedChildren((prev) =>
+        prev.some((c) => c.id === r.child.id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: r.child.id,
+                firstName: r.child.firstName,
+                lastName: r.child.lastName,
+                avatarUrl: r.child.avatarUrl ?? null,
+              },
+            ],
+      );
+      setAlreadyOnTeam((prev) => {
+        const next = new Set(prev);
+        next.add(r.child.id);
+        return next;
+      });
       setFirstName("");
       setLastName("");
       toast({ title: `Added ${r.child.firstName} to the roster` });
@@ -173,11 +289,16 @@ export default function InviteAcceptPage() {
       {needsChildSetup && (
         <ChildSetupCard
           children={children}
+          linkedChildren={linkedChildren}
+          linkedChildrenLoaded={linkedChildrenLoaded}
+          alreadyOnTeam={alreadyOnTeam}
           firstName={firstName}
           lastName={lastName}
           saving={savingChild}
+          addingChildId={addingChildId}
           onFirstNameChange={setFirstName}
           onLastNameChange={setLastName}
+          onAddExistingChild={onAddExistingChild}
           onSubmit={onAddChild}
           onFinish={() => navigate(`/teams/${envelope.team.id}`)}
         />

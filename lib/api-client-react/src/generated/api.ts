@@ -93,6 +93,7 @@ import type {
 
 import type {
   AcceptInviteForChild200,
+  AcceptInviteForChild201,
   AcceptInviteForChildBody,
   AddMemberRequest,
   AddPostCoAuthor201,
@@ -22064,6 +22065,14 @@ export function useGetInviteByToken<
 }
 
 /**
+ * Add a child to the team's roster via a player invite token. The request body has two shapes (oneOf):
+* `{ childId }` — link an existing child already attached to the
+  requesting guardian (`users.parentId = me.id`). Idempotent: if
+  the child already has a roster entry on this team in any
+  status, returns 409 with code `ALREADY_ON_ROSTER`.
+* `{ firstName, lastName }` — create a brand-new child account
+  owned by the requesting guardian and place them on the roster.
+
  * @summary Accept a roster invite on behalf of a guardian-managed child
  */
 export const getAcceptInviteForChildUrl = (token: string) => {
@@ -22074,8 +22083,8 @@ export const acceptInviteForChild = async (
   token: string,
   acceptInviteForChildBody: AcceptInviteForChildBody,
   options?: RequestInit,
-): Promise<AcceptInviteForChild200> => {
-  return customFetch<AcceptInviteForChild200>(
+): Promise<AcceptInviteForChild200 | AcceptInviteForChild201> => {
+  return customFetch<AcceptInviteForChild200 | AcceptInviteForChild201>(
     getAcceptInviteForChildUrl(token),
     {
       ...options,
@@ -22088,7 +22097,11 @@ export const acceptInviteForChild = async (
 
 export const getAcceptInviteForChildMutationOptions = <
   TError = ErrorType<
-    BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ErrorResponse
   >,
   TContext = unknown,
 >(options?: {
@@ -22132,7 +22145,11 @@ export type AcceptInviteForChildMutationResult = NonNullable<
 export type AcceptInviteForChildMutationBody =
   BodyType<AcceptInviteForChildBody>;
 export type AcceptInviteForChildMutationError = ErrorType<
-  BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | ErrorResponse
 >;
 
 /**
@@ -22140,7 +22157,11 @@ export type AcceptInviteForChildMutationError = ErrorType<
  */
 export const useAcceptInviteForChild = <
   TError = ErrorType<
-    BadRequestResponse | UnauthorizedResponse | NotFoundResponse
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ErrorResponse
   >,
   TContext = unknown,
 >(options?: {

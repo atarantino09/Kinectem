@@ -82,6 +82,7 @@ are marked `deprecated: true` in this spec.
  */
 
 export * from "./acceptInviteForChild200";
+export * from "./acceptInviteForChild201";
 export * from "./acceptInviteForChildBody";
 export * from "./addMemberRequest";
 export * from "./addMemberRequestRole";

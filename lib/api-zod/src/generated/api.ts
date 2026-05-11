@@ -9248,13 +9248,29 @@ export const GetInviteByTokenParams = zod.object({
 export const GetInviteByTokenResponse = zod.record(zod.string(), zod.unknown());
 
 /**
+ * Add a child to the team's roster via a player invite token. The request body has two shapes (oneOf):
+* `{ childId }` — link an existing child already attached to the
+  requesting guardian (`users.parentId = me.id`). Idempotent: if
+  the child already has a roster entry on this team in any
+  status, returns 409 with code `ALREADY_ON_ROSTER`.
+* `{ firstName, lastName }` — create a brand-new child account
+  owned by the requesting guardian and place them on the roster.
+
  * @summary Accept a roster invite on behalf of a guardian-managed child
  */
 export const AcceptInviteForChildParams = zod.object({
   token: zod.coerce.string(),
 });
 
-export const AcceptInviteForChildBody = zod.record(zod.string(), zod.unknown());
+export const AcceptInviteForChildBody = zod.union([
+  zod.object({
+    childId: zod.string().uuid(),
+  }),
+  zod.object({
+    firstName: zod.string().min(1),
+    lastName: zod.string().min(1),
+  }),
+]);
 
 export const AcceptInviteForChildResponse = zod.record(
   zod.string(),

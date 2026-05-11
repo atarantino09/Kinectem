@@ -81,13 +81,4 @@ are marked `deprecated: true` in this spec.
  * OpenAPI spec version: 0.1.0
  */
 
-export type AcceptInviteForChildBody =
-  | {
-      childId: string;
-    }
-  | {
-      /** @minLength 1 */
-      firstName: string;
-      /** @minLength 1 */
-      lastName: string;
-    };
+export type AcceptInviteForChild201 = { [key: string]: unknown };

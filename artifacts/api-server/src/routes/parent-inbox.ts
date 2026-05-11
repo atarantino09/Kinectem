@@ -1973,21 +1973,72 @@ router.post(
     if (invite.position !== "player") {
       return apiError(res, 400, "Only player invites support adding children");
     }
-    const firstName = String(req.body?.firstName ?? "").trim();
-    const lastName = String(req.body?.lastName ?? "").trim();
-    if (!firstName || !lastName) {
-      return apiError(res, 400, "firstName and lastName required");
+
+    // Branch on body shape: pick an existing linked child, or create new.
+    const rawChildId = typeof req.body?.childId === "string"
+      ? req.body.childId.trim()
+      : "";
+
+    let child: typeof users.$inferSelect;
+    let childFirstName: string;
+    let childLastName: string;
+
+    if (rawChildId) {
+      const [existing] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, rawChildId))
+        .limit(1);
+      if (!existing || existing.parentId !== me.id) {
+        // Don't leak whether the child exists under another guardian.
+        return apiError(res, 404, "Child not found");
+      }
+      // Idempotent: if the child already has a roster row on this team
+      // (any status), surface a clear "already on roster" response
+      // instead of duplicating the row.
+      const [dupe] = await db
+        .select({ id: rosterEntries.id })
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, invite.teamId),
+            eq(rosterEntries.userId, existing.id),
+          ),
+        )
+        .limit(1);
+      if (dupe) {
+        return apiError(
+          res,
+          409,
+          "This child is already on the team's roster.",
+          { code: "ALREADY_ON_ROSTER" },
+        );
+      }
+      child = existing;
+      const [first, ...rest] = existing.name.split(" ");
+      childFirstName = first ?? existing.name;
+      childLastName = rest.join(" ");
+    } else {
+      const firstName = String(req.body?.firstName ?? "").trim();
+      const lastName = String(req.body?.lastName ?? "").trim();
+      if (!firstName || !lastName) {
+        return apiError(res, 400, "firstName and lastName required");
+      }
+      const [created] = await db
+        .insert(users)
+        .values({
+          name: `${firstName} ${lastName}`,
+          role: "athlete",
+          email: null,
+          parentId: me.id,
+          requireTagConsent: true,
+        })
+        .returning();
+      child = created;
+      childFirstName = firstName;
+      childLastName = lastName;
     }
-    const [child] = await db
-      .insert(users)
-      .values({
-        name: `${firstName} ${lastName}`,
-        role: "athlete",
-        email: null,
-        parentId: me.id,
-        requireTagConsent: true,
-      })
-      .returning();
+
     const [entry] = await db
       .insert(rosterEntries)
       .values({
@@ -2007,8 +2058,8 @@ router.post(
     res.status(201).json({
       child: {
         id: child.id,
-        firstName,
-        lastName,
+        firstName: childFirstName,
+        lastName: childLastName,
         avatarUrl: safeAvatarUrl(child.avatarUrl),
       },
       member: toTeamMember(entry, child),

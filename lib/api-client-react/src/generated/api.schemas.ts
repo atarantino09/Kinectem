@@ -4521,9 +4521,20 @@ export type UpdateTagConsent200 = { [key: string]: unknown };
 
 export type GetInviteByToken200 = { [key: string]: unknown };
 
-export type AcceptInviteForChildBody = { [key: string]: unknown };
+export type AcceptInviteForChildBody =
+  | {
+      childId: string;
+    }
+  | {
+      /** @minLength 1 */
+      firstName: string;
+      /** @minLength 1 */
+      lastName: string;
+    };
 
 export type AcceptInviteForChild200 = { [key: string]: unknown };
+
+export type AcceptInviteForChild201 = { [key: string]: unknown };
 
 export type ListPostCoAuthors200DataItem = { [key: string]: unknown };
 
