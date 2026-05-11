@@ -5,6 +5,7 @@ import {
   useAddTeamMember,
   useCreateRosterInvite,
   createRosterInvite,
+  useGetOrCreateTeamJoinLink,
   useListTeamMembers,
   useListRosterInvites,
   getListTeamMembersQueryKey,
@@ -42,6 +43,8 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
+  Link2,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
@@ -117,6 +120,62 @@ export function InviteRosterDialog({
 
   const addMember = useAddTeamMember();
   const createInvite = useCreateRosterInvite();
+
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [linkErrored, setLinkErrored] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const generateLink = useGetOrCreateTeamJoinLink({
+    mutation: {
+      onSuccess: (resp) => {
+        setLinkToken(resp.token);
+        setLinkErrored(false);
+      },
+      onError: () => {
+        setLinkToken(null);
+        setLinkErrored(true);
+      },
+    },
+  });
+
+  // Auto-load the existing join link when the dialog opens. Endpoint is
+  // get-or-create — it reuses the single email-less rosterInvite for the
+  // team, so this won't mint duplicates. Guarded by a ref so React
+  // StrictMode's double-invoke doesn't fire the request twice.
+  const autoFetchedRef = useRef<string | null>(null);
+  const generateMutate = generateLink.mutate;
+  useEffect(() => {
+    if (!open) {
+      autoFetchedRef.current = null;
+      setLinkToken(null);
+      setLinkErrored(false);
+      setCopied(false);
+      return;
+    }
+    if (autoFetchedRef.current === teamId) return;
+    autoFetchedRef.current = teamId;
+    setLinkToken(null);
+    setLinkErrored(false);
+    setCopied(false);
+    generateMutate({ teamId });
+  }, [open, teamId, generateMutate]);
+
+  const fullLink = linkToken
+    ? `${window.location.origin}${import.meta.env.BASE_URL}invites/${linkToken}`
+    : null;
+
+  const onCopyLink = () => {
+    if (!fullLink) return;
+    navigator.clipboard
+      .writeText(fullLink)
+      .then(() => {
+        setCopied(true);
+        toast({ title: "Link copied" });
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() =>
+        toast({ title: "Couldn't copy link", variant: "destructive" }),
+      );
+  };
 
   const { data: membersResp } = useListTeamMembers(teamId, undefined, {
     query: queryOpts({ enabled: open }),
@@ -380,6 +439,60 @@ export function InviteRosterDialog({
             Add an existing Kinectem user, send a single email invite, or paste a list of emails to invite the whole team at once.
           </DialogDescription>
         </DialogHeader>
+
+        {(generateLink.isPending || fullLink || linkErrored) && (
+          <div className="mt-2 rounded-xl border border-border p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Link2 className="w-3.5 h-3.5 text-primary" />
+              <h3 className="font-black tracking-tight text-sm">
+                Shareable join link
+              </h3>
+            </div>
+            {fullLink ? (
+              <>
+                <div className="flex gap-2">
+                  <code
+                    className="flex-1 text-xs bg-muted px-3 py-2 rounded-lg truncate"
+                    data-testid="text-invite-share-link"
+                  >
+                    {fullLink}
+                  </code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onCopyLink}
+                    className="gap-1 font-bold"
+                    data-testid="button-copy-invite-share-link"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Anyone with this link can request to join the team.
+                </p>
+              </>
+            ) : linkErrored ? (
+              <p className="text-xs text-muted-foreground">
+                Shareable link isn't available for this team.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading join link…
+              </p>
+            )}
+          </div>
+        )}
 
         <Tabs defaultValue="search" className="mt-2">
           <TabsList className="grid grid-cols-3 w-full">
