@@ -1933,6 +1933,19 @@ before being stored. Null when the team has not set one.
    */
   bannerUrl?: string | null;
   /**
+   * When the team was archived (soft state), or null if active.
+Set by `POST /teams/:teamId/archive` and cleared by
+`/unarchive`. Both endpoints are restricted to the org
+owner. While set, the team is hidden from non-managers on
+every public read (search, suggestions, org-team list,
+user-team list, and the team-detail GET itself returns 404)
+and content writes (new posts, roster invites, follow
+toggles) are blocked.
+
+   * @nullable
+   */
+  archivedAt?: string | null;
+  /**
    * The team's current active season, or null if none.
    * @nullable
    */
@@ -3647,6 +3660,19 @@ export type ListOrgTeamsParams = {
    * @minLength 2
    */
   search?: string;
+  includeTotal?: IncludeTotalParameter;
+};
+
+export type ListArchivedOrgTeamsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
   includeTotal?: IncludeTotalParameter;
 };
 

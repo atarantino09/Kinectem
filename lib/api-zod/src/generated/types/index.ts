@@ -286,6 +286,7 @@ export * from "./listAdminUsersIncludeDeleted";
 export * from "./listAdminUsersParams";
 export * from "./listAdminUsersRole";
 export * from "./listApiKeys200";
+export * from "./listArchivedOrgTeamsParams";
 export * from "./listChildConversationMessages200";
 export * from "./listChildConversationMessages200DataItem";
 export * from "./listChildNotificationsParams";

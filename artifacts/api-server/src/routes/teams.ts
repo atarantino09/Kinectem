@@ -9,19 +9,27 @@ import {
   rosterEntries,
   rosterInvites,
   notifications,
+  adminActivityLog,
 } from "@workspace/db";
 import {
   and,
   desc,
   eq,
   inArray,
+  isNull,
   sql,
 } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
-import { canManageOrganization, isTeamMember, canManageTeam, canCreateRecap } from "../lib/permissions";
+import {
+  canManageOrganization,
+  isTeamMember,
+  canManageTeam,
+  canCreateRecap,
+  getOrgRole,
+} from "../lib/permissions";
 import {
   createSession,
   destroySession,
@@ -152,6 +160,19 @@ router.get(
       .where(eq(organizations.id, t.organizationId))
       .limit(1);
     if (!org) return notFound(res);
+    // Task #472 — archived teams are invisible to non-managers. Owners
+    // and admins of the parent org still get the row back so they can
+    // open the page to unarchive it; everyone else (anonymous, plain
+    // members, followers) gets a 404 indistinguishable from a deleted
+    // team. We do this check after the org lookup so we can use the
+    // existing `canManageOrganization` helper.
+    if (t.archivedAt) {
+      const me = req.sessionUser;
+      const canSeeArchived = me
+        ? await canManageOrganization(me.id, org.id)
+        : false;
+      if (!canSeeArchived) return notFound(res);
+    }
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(rosterEntries)
@@ -356,6 +377,11 @@ router.post(
     if (!t) return notFound(res);
     if (!(await canManageTeam(me.id, t)))
       return apiError(res, 403, "Team coaches or org admins only");
+    // Task #472 — archived teams are read-only. Block roster additions
+    // so managers don't accidentally invite someone to a team that's
+    // about to disappear from the user-facing surfaces.
+    if (t.archivedAt)
+      return apiError(res, 409, "Team is archived", { code: "team_archived" });
     const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!u) return notFound(res);
     const positionRaw = String(req.body?.position ?? "player");
@@ -741,6 +767,11 @@ router.post(
     if (!t) return notFound(res);
     if (!(await canManageTeam(me.id, t)))
       return apiError(res, 403, "Team coaches or org admins only");
+    // Task #472 — block new email invites on an archived team. Mirrors
+    // the direct-add block above; an archived team should not be able
+    // to accumulate fresh pending invitees.
+    if (t.archivedAt)
+      return apiError(res, 409, "Team is archived", { code: "team_archived" });
     const email = String(req.body?.email ?? "").trim();
     if (!email) return apiError(res, 400, "email required");
     const positionRaw = String(req.body?.position ?? "player");
@@ -983,6 +1014,138 @@ router.get(
     });
 
     res.json({ data });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #472 — Archive / unarchive a team.
+//
+// Owner-only on purpose: archiving hides the team across the whole product
+// and blocks writes, so it sits at the same level of authority as deleting
+// the team. Org admins can do most other team admin (edit, manage roster,
+// approve recaps) but explicitly NOT this — the UI shows them a disabled
+// button with a "Only the org owner can archive a team" hint, and the
+// server returns the same forbid with `code: "owner_only"` so a hand-rolled
+// request gets the same answer.
+//
+// Both endpoints are idempotent. Each archive/unarchive transition writes a
+// row to `admin_activity_log` so the org has a paper trail; we insert the
+// row inline here rather than going through `logAdminAction` because the
+// helper's typed action union does not include team archive/unarchive
+// actions and widening that union would touch unrelated admin flows.
+// ---------------------------------------------------------------------------
+
+async function loadTeamForArchiveAction(
+  req: Request,
+  res: Parameters<typeof apiError>[0],
+): Promise<{ team: typeof teams.$inferSelect; ownerId: string } | null> {
+  const me = req.sessionUser;
+  if (!me) {
+    apiError(res, 401, "Not authenticated");
+    return null;
+  }
+  const teamId = String(req.params.teamId);
+  const [t] = await db
+    .select()
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  if (!t) {
+    notFound(res);
+    return null;
+  }
+  const role = await getOrgRole(me.id, t.organizationId);
+  if (role === "owner") return { team: t, ownerId: me.id };
+  if (role === "admin" || role === "member") {
+    apiError(
+      res,
+      403,
+      "Only the org owner can archive a team",
+      { code: "owner_only" },
+    );
+    return null;
+  }
+  // Not a member of the org at all → opaque 404 so we don't leak the
+  // team's existence to drive-by callers.
+  notFound(res);
+  return null;
+}
+
+router.post(
+  "/teams/:teamId/archive",
+  asyncHandler(async (req, res) => {
+    const ctx = await loadTeamForArchiveAction(req, res);
+    if (!ctx) return undefined;
+    const { team, ownerId } = ctx;
+    let updated = team;
+    if (!team.archivedAt) {
+      const [row] = await db
+        .update(teams)
+        .set({ archivedAt: new Date(), archivedByUserId: ownerId })
+        .where(eq(teams.id, team.id))
+        .returning();
+      updated = row ?? team;
+      await db.insert(adminActivityLog).values({
+        adminUserId: ownerId,
+        actionType: "archive_team",
+        targetType: "team",
+        targetId: team.id,
+        metadata: JSON.stringify({
+          organizationId: team.organizationId,
+          teamName: team.name,
+        }),
+      });
+    }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, updated.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rosterEntries)
+      .where(eq(rosterEntries.teamId, updated.id));
+    return res.json(toTeam(updated, org, { memberCount: count }));
+  }),
+);
+
+router.post(
+  "/teams/:teamId/unarchive",
+  asyncHandler(async (req, res) => {
+    const ctx = await loadTeamForArchiveAction(req, res);
+    if (!ctx) return undefined;
+    const { team, ownerId } = ctx;
+    let updated = team;
+    if (team.archivedAt) {
+      const [row] = await db
+        .update(teams)
+        .set({ archivedAt: null, archivedByUserId: null })
+        .where(eq(teams.id, team.id))
+        .returning();
+      updated = row ?? team;
+      await db.insert(adminActivityLog).values({
+        adminUserId: ownerId,
+        actionType: "unarchive_team",
+        targetType: "team",
+        targetId: team.id,
+        metadata: JSON.stringify({
+          organizationId: team.organizationId,
+          teamName: team.name,
+        }),
+      });
+    }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, updated.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rosterEntries)
+      .where(eq(rosterEntries.teamId, updated.id));
+    return res.json(toTeam(updated, org, { memberCount: count }));
   }),
 );
 

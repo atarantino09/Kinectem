@@ -595,6 +595,13 @@ export function toTeam(
     followerCount: opts.followerCount ?? opts.memberCount ?? 0,
     isFollowing: opts.isFollowing ?? false,
     canAuthorRecaps: opts.canAuthorRecaps ?? false,
+    // Task #472 — soft-archive timestamp. Always serialized so clients
+    // can tell an active team (null) from one that's been archived
+    // (ISO timestamp). Non-managers won't see archived teams in the
+    // first place — the team-detail GET 404s and every list endpoint
+    // filters them out — so this field is most useful on the
+    // org-managers' "Archived teams" section.
+    archivedAt: t.archivedAt ? t.archivedAt.toISOString() : null,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.createdAt.toISOString(),
   };

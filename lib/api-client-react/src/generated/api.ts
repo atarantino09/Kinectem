@@ -196,6 +196,7 @@ import type {
   ListAdminUsers200,
   ListAdminUsersParams,
   ListApiKeys200,
+  ListArchivedOrgTeamsParams,
   ListChildConversationMessages200,
   ListChildNotificationsParams,
   ListChildPendingTeamInvites200,
@@ -9076,6 +9077,355 @@ export const useDeleteTeam = <
 > => {
   return useMutation(getDeleteTeamMutationOptions(options));
 };
+
+/**
+ * Soft-archives a team. Hides it from non-managers on every read and
+discovery surface and blocks new posts, invites, and follows.
+Authorized only for the org owner of the team's organization;
+org admins (non-owners) get a 403 with `code: "owner_only"` so
+the UI can render an inline "Only the org owner can archive a
+team" note. Idempotent — archiving an already-archived team
+returns the current team.
+
+ * @summary Archive a team (org owner only)
+ */
+export const getArchiveTeamUrl = (teamId: string) => {
+  return `/api/v1/teams/${teamId}/archive`;
+};
+
+export const archiveTeam = async (
+  teamId: string,
+  options?: RequestInit,
+): Promise<TeamResponse> => {
+  return customFetch<TeamResponse>(getArchiveTeamUrl(teamId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getArchiveTeamMutationOptions = <
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archiveTeam>>,
+    TError,
+    { teamId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof archiveTeam>>,
+  TError,
+  { teamId: string },
+  TContext
+> => {
+  const mutationKey = ["archiveTeam"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof archiveTeam>>,
+    { teamId: string }
+  > = (props) => {
+    const { teamId } = props ?? {};
+
+    return archiveTeam(teamId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ArchiveTeamMutationResult = NonNullable<
+  Awaited<ReturnType<typeof archiveTeam>>
+>;
+
+export type ArchiveTeamMutationError = ErrorType<
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Archive a team (org owner only)
+ */
+export const useArchiveTeam = <
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archiveTeam>>,
+    TError,
+    { teamId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof archiveTeam>>,
+  TError,
+  { teamId: string },
+  TContext
+> => {
+  return useMutation(getArchiveTeamMutationOptions(options));
+};
+
+/**
+ * Restores an archived team to its previous public state. Same
+owner-only authorization as `/archive` (admins → 403
+`owner_only`). Idempotent.
+
+ * @summary Unarchive a team (org owner only)
+ */
+export const getUnarchiveTeamUrl = (teamId: string) => {
+  return `/api/v1/teams/${teamId}/unarchive`;
+};
+
+export const unarchiveTeam = async (
+  teamId: string,
+  options?: RequestInit,
+): Promise<TeamResponse> => {
+  return customFetch<TeamResponse>(getUnarchiveTeamUrl(teamId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getUnarchiveTeamMutationOptions = <
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unarchiveTeam>>,
+    TError,
+    { teamId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unarchiveTeam>>,
+  TError,
+  { teamId: string },
+  TContext
+> => {
+  const mutationKey = ["unarchiveTeam"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unarchiveTeam>>,
+    { teamId: string }
+  > = (props) => {
+    const { teamId } = props ?? {};
+
+    return unarchiveTeam(teamId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnarchiveTeamMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unarchiveTeam>>
+>;
+
+export type UnarchiveTeamMutationError = ErrorType<
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Unarchive a team (org owner only)
+ */
+export const useUnarchiveTeam = <
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unarchiveTeam>>,
+    TError,
+    { teamId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unarchiveTeam>>,
+  TError,
+  { teamId: string },
+  TContext
+> => {
+  return useMutation(getUnarchiveTeamMutationOptions(options));
+};
+
+/**
+ * Returns the org's archived teams. Authorized for org owner /
+admins only; everyone else gets 403. Used by the
+"Archived teams" section on the Organization page.
+
+ * @summary List archived teams for an organization (managers only)
+ */
+export const getListArchivedOrgTeamsUrl = (
+  orgId: string,
+  params?: ListArchivedOrgTeamsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/organizations/${orgId}/teams/archived?${stringifiedParams}`
+    : `/api/v1/organizations/${orgId}/teams/archived`;
+};
+
+export const listArchivedOrgTeams = async (
+  orgId: string,
+  params?: ListArchivedOrgTeamsParams,
+  options?: RequestInit,
+): Promise<PaginatedTeams> => {
+  return customFetch<PaginatedTeams>(
+    getListArchivedOrgTeamsUrl(orgId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListArchivedOrgTeamsQueryKey = (
+  orgId: string,
+  params?: ListArchivedOrgTeamsParams,
+) => {
+  return [
+    `/api/v1/organizations/${orgId}/teams/archived`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListArchivedOrgTeamsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listArchivedOrgTeams>>,
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+>(
+  orgId: string,
+  params?: ListArchivedOrgTeamsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listArchivedOrgTeams>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListArchivedOrgTeamsQueryKey(orgId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listArchivedOrgTeams>>
+  > = ({ signal }) =>
+    listArchivedOrgTeams(orgId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!orgId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listArchivedOrgTeams>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListArchivedOrgTeamsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listArchivedOrgTeams>>
+>;
+export type ListArchivedOrgTeamsQueryError = ErrorType<
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | InternalServerErrorResponse
+>;
+
+/**
+ * @summary List archived teams for an organization (managers only)
+ */
+
+export function useListArchivedOrgTeams<
+  TData = Awaited<ReturnType<typeof listArchivedOrgTeams>>,
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+>(
+  orgId: string,
+  params?: ListArchivedOrgTeamsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listArchivedOrgTeams>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListArchivedOrgTeamsQueryOptions(
+    orgId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Create a season for a team

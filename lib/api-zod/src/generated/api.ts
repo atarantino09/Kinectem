@@ -3806,6 +3806,12 @@ export const ListOrgTeamsResponse = zod.object({
         .describe(
           "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
         ),
+      archivedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
+        ),
       currentSeason: zod
         .object({
           id: zod.string().uuid().optional(),
@@ -3879,6 +3885,12 @@ export const GetTeamByIdResponse = zod.object({
     .nullish()
     .describe(
       "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
     ),
   currentSeason: zod
     .object({
@@ -3965,6 +3977,12 @@ export const UpdateTeamResponse = zod.object({
     .describe(
       "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
     ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
+    ),
   currentSeason: zod
     .object({
       id: zod.string().uuid().optional(),
@@ -3993,6 +4011,268 @@ export const UpdateTeamResponse = zod.object({
  */
 export const DeleteTeamParams = zod.object({
   teamId: zod.coerce.string().uuid(),
+});
+
+/**
+ * Soft-archives a team. Hides it from non-managers on every read and
+discovery surface and blocks new posts, invites, and follows.
+Authorized only for the org owner of the team's organization;
+org admins (non-owners) get a 403 with `code: "owner_only"` so
+the UI can render an inline "Only the org owner can archive a
+team" note. Idempotent — archiving an already-archived team
+returns the current team.
+
+ * @summary Archive a team (org owner only)
+ */
+export const ArchiveTeamParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+export const archiveTeamResponseFollowerCountMin = 0;
+
+export const ArchiveTeamResponse = zod.object({
+  id: zod.string().uuid(),
+  organization: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    slug: zod.string(),
+    logoUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+      ),
+  }),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  website: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional team website \/ link surfaced on the team page.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia the create \/ update endpoints are normalized server-side\nbefore being stored. Null when the team has not set one.\n",
+    ),
+  sport: zod.string().nullish(),
+  level: zod.string().nullish(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
+  avatarUrl: zod.string().url().nullish(),
+  bannerUrl: zod
+    .string()
+    .url()
+    .nullish()
+    .describe(
+      "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
+    ),
+  currentSeason: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      name: zod.string().optional(),
+      startDate: zod.coerce.date().nullish(),
+      endDate: zod.coerce.date().nullish(),
+      status: zod.enum(["active", "completed"]).optional(),
+      createdAt: zod.coerce.date().optional(),
+    })
+    .nullish()
+    .describe("The team's current active season, or null if none."),
+  followerCount: zod.number().min(archiveTeamResponseFollowerCountMin),
+  isFollowing: zod.boolean(),
+  canAuthorRecaps: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Server-derived flag: true when the requester can author a game recap on this team. Mirrors the server-side `canCreateRecap` rule (org owner\/admin of the parent org, team coach, or accepted roster member with `position = \"author\"`). Drives the team page\'s \"Create Game Recap\" affordance and the visibility of the \"Waiting for approval\" pending-recaps section.\n',
+    ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * Restores an archived team to its previous public state. Same
+owner-only authorization as `/archive` (admins → 403
+`owner_only`). Idempotent.
+
+ * @summary Unarchive a team (org owner only)
+ */
+export const UnarchiveTeamParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+export const unarchiveTeamResponseFollowerCountMin = 0;
+
+export const UnarchiveTeamResponse = zod.object({
+  id: zod.string().uuid(),
+  organization: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    slug: zod.string(),
+    logoUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+      ),
+  }),
+  name: zod.string(),
+  slug: zod.string(),
+  description: zod.string().nullish(),
+  website: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional team website \/ link surfaced on the team page.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia the create \/ update endpoints are normalized server-side\nbefore being stored. Null when the team has not set one.\n",
+    ),
+  sport: zod.string().nullish(),
+  level: zod.string().nullish(),
+  gender: zod.enum(["boys", "girls", "coed"]).nullish(),
+  avatarUrl: zod.string().url().nullish(),
+  bannerUrl: zod
+    .string()
+    .url()
+    .nullish()
+    .describe(
+      "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
+    ),
+  currentSeason: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      name: zod.string().optional(),
+      startDate: zod.coerce.date().nullish(),
+      endDate: zod.coerce.date().nullish(),
+      status: zod.enum(["active", "completed"]).optional(),
+      createdAt: zod.coerce.date().optional(),
+    })
+    .nullish()
+    .describe("The team's current active season, or null if none."),
+  followerCount: zod.number().min(unarchiveTeamResponseFollowerCountMin),
+  isFollowing: zod.boolean(),
+  canAuthorRecaps: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Server-derived flag: true when the requester can author a game recap on this team. Mirrors the server-side `canCreateRecap` rule (org owner\/admin of the parent org, team coach, or accepted roster member with `position = \"author\"`). Drives the team page\'s \"Create Game Recap\" affordance and the visibility of the \"Waiting for approval\" pending-recaps section.\n',
+    ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * Returns the org's archived teams. Authorized for org owner /
+admins only; everyone else gets 403. Used by the
+"Archived teams" section on the Organization page.
+
+ * @summary List archived teams for an organization (managers only)
+ */
+export const ListArchivedOrgTeamsParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const listArchivedOrgTeamsQueryCursorMax = 500;
+
+export const listArchivedOrgTeamsQueryLimitDefault = 20;
+export const listArchivedOrgTeamsQueryLimitMax = 50;
+
+export const listArchivedOrgTeamsQueryIncludeTotalDefault = false;
+
+export const ListArchivedOrgTeamsQueryParams = zod.object({
+  cursor: zod.coerce
+    .string()
+    .max(listArchivedOrgTeamsQueryCursorMax)
+    .optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listArchivedOrgTeamsQueryLimitMax)
+    .default(listArchivedOrgTeamsQueryLimitDefault),
+  includeTotal: zod.coerce
+    .boolean()
+    .default(listArchivedOrgTeamsQueryIncludeTotalDefault),
+});
+
+export const listArchivedOrgTeamsResponseDataItemFollowerCountMin = 0;
+
+export const ListArchivedOrgTeamsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      organization: zod.object({
+        id: zod.string().uuid(),
+        name: zod.string(),
+        slug: zod.string(),
+        logoUrl: zod
+          .string()
+          .nullish()
+          .describe(
+            "Optional URL of the organization's uploaded logo. Absent or null when no logo has been uploaded.",
+          ),
+      }),
+      name: zod.string(),
+      slug: zod.string(),
+      description: zod.string().nullish(),
+      website: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional team website \/ link surfaced on the team page.\nAlways a full `https:\/\/…` URL when set; bare domains submitted\nvia the create \/ update endpoints are normalized server-side\nbefore being stored. Null when the team has not set one.\n",
+        ),
+      sport: zod.string().nullish(),
+      level: zod.string().nullish(),
+      gender: zod.enum(["boys", "girls", "coed"]).nullish(),
+      avatarUrl: zod.string().url().nullish(),
+      bannerUrl: zod
+        .string()
+        .url()
+        .nullish()
+        .describe(
+          "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+        ),
+      archivedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
+        ),
+      currentSeason: zod
+        .object({
+          id: zod.string().uuid().optional(),
+          name: zod.string().optional(),
+          startDate: zod.coerce.date().nullish(),
+          endDate: zod.coerce.date().nullish(),
+          status: zod.enum(["active", "completed"]).optional(),
+          createdAt: zod.coerce.date().optional(),
+        })
+        .nullish()
+        .describe("The team's current active season, or null if none."),
+      followerCount: zod
+        .number()
+        .min(listArchivedOrgTeamsResponseDataItemFollowerCountMin),
+      isFollowing: zod.boolean(),
+      canAuthorRecaps: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Server-derived flag: true when the requester can author a game recap on this team. Mirrors the server-side `canCreateRecap` rule (org owner\/admin of the parent org, team coach, or accepted roster member with `position = \"author\"`). Drives the team page\'s \"Create Game Recap\" affordance and the visibility of the \"Waiting for approval\" pending-recaps section.\n',
+        ),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
 });
 
 /**
@@ -4794,6 +5074,12 @@ export const ListFollowSuggestionsResponse = zod.object({
         .nullish()
         .describe(
           "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+        ),
+      archivedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
         ),
       currentSeason: zod
         .object({
@@ -5809,6 +6095,12 @@ export const SetTeamAvatarResponse = zod.object({
     .nullish()
     .describe(
       "The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.",
+    ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "When the team was archived (soft state), or null if active.\nSet by `POST \/teams\/:teamId\/archive` and cleared by\n`\/unarchive`. Both endpoints are restricted to the org\nowner. While set, the team is hidden from non-managers on\nevery public read (search, suggestions, org-team list,\nuser-team list, and the team-detail GET itself returns 404)\nand content writes (new posts, roster invites, follow\ntoggles) are blocked.\n",
     ),
   currentSeason: zod
     .object({

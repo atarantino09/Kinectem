@@ -31,6 +31,11 @@ export const adminActionTypeEnum = pgEnum("admin_action_type", [
   "reset_password",
   "masquerade_start",
   "masquerade_stop",
+  // Task #472 — Org-owner archive / unarchive of a team. Recorded in
+  // admin_activity_log so the org has a paper trail; the route handler
+  // writes the row inline (logAdminAction is admin-typed only).
+  "archive_team",
+  "unarchive_team",
 ]);
 export const adminTargetTypeEnum = pgEnum("admin_target_type", [
   "user",
@@ -39,6 +44,8 @@ export const adminTargetTypeEnum = pgEnum("admin_target_type", [
   "org_post",
   "comment",
   "report",
+  // Task #472 — target_type for archive/unarchive_team rows.
+  "team",
 ]);
 
 // Task #359 — COPPA Phase 1. Phase 2 (#363) adds `pending_revocation`
@@ -376,6 +383,15 @@ export const teams = pgTable("teams", {
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Task #472 — Soft "archive" state. `archivedAt IS NOT NULL` is the
+  // archived flag; `archivedByUserId` records the org owner who took
+  // the action. Hidden from non-managers on every read/discovery
+  // surface; writes (new posts/invites/follows) are blocked.
+  archivedAt: timestamp("archived_at"),
+  archivedByUserId: uuid("archived_by_user_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
 });
 
 export const teamFollowers = pgTable("team_followers", {

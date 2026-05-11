@@ -1303,19 +1303,26 @@ router.get(
       isParent = !!child && child.parentId === me.id;
     }
     const showPending = isSelf || isRealAdmin || isParent;
+    // Task #472 — exclude archived teams from the user's profile
+    // teams list. Org owners/admins can still find the team via the
+    // Organization page's "Archived teams" section; we don't want
+    // archived teams to show up on a player or coach's profile.
+    const rosterFilter = showPending
+      ? and(
+          eq(rosterEntries.userId, targetId),
+          isNull(teams.archivedAt),
+        )
+      : and(
+          eq(rosterEntries.userId, targetId),
+          eq(rosterEntries.status, "accepted"),
+          isNull(teams.archivedAt),
+        );
     const rows = await db
       .select({ r: rosterEntries, t: teams, org: organizations })
       .from(rosterEntries)
       .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(
-        showPending
-          ? eq(rosterEntries.userId, targetId)
-          : and(
-              eq(rosterEntries.userId, targetId),
-              eq(rosterEntries.status, "accepted"),
-            ),
-      );
+      .where(rosterFilter);
     const data: Array<Record<string, unknown>> = [];
     const seenTeamIds = new Set<string>();
     for (const r of rows) {
@@ -1366,6 +1373,8 @@ router.get(
           eq(teamFollowers.userId, targetId),
           eq(child.parentId, targetId),
           eq(rosterEntries.status, "accepted"),
+          // Task #472 — synthetic "via child" rows also drop archived teams.
+          isNull(teams.archivedAt),
         ),
       );
     const viaChildSeen = new Set<string>();

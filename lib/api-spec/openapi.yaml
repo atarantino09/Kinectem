@@ -2344,6 +2344,97 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /teams/{teamId}/archive:
+    post:
+      operationId: archiveTeam
+      summary: Archive a team (org owner only)
+      description: |
+        Soft-archives a team. Hides it from non-managers on every read and
+        discovery surface and blocks new posts, invites, and follows.
+        Authorized only for the org owner of the team's organization;
+        org admins (non-owners) get a 403 with `code: "owner_only"` so
+        the UI can render an inline "Only the org owner can archive a
+        team" note. Idempotent — archiving an already-archived team
+        returns the current team.
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '200':
+          description: Updated team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /teams/{teamId}/unarchive:
+    post:
+      operationId: unarchiveTeam
+      summary: Unarchive a team (org owner only)
+      description: |
+        Restores an archived team to its previous public state. Same
+        owner-only authorization as `/archive` (admins → 403
+        `owner_only`). Idempotent.
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '200':
+          description: Updated team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /organizations/{orgId}/teams/archived:
+    get:
+      operationId: listArchivedOrgTeams
+      summary: List archived teams for an organization (managers only)
+      description: |
+        Returns the org's archived teams. Authorized for org owner /
+        admins only; everyone else gets 403. Used by the
+        "Archived teams" section on the Organization page.
+      tags:
+        - Teams
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeTotal'
+      responses:
+        '200':
+          description: Archived teams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeams'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   # ------------------------------------------------------------------
   # Team Season endpoints
   # ------------------------------------------------------------------
@@ -8850,6 +8941,19 @@ components:
           format: uri
           nullable: true
           description: The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When the team was archived (soft state), or null if active.
+            Set by `POST /teams/:teamId/archive` and cleared by
+            `/unarchive`. Both endpoints are restricted to the org
+            owner. While set, the team is hidden from non-managers on
+            every public read (search, suggestions, org-team list,
+            user-team list, and the team-detail GET itself returns 404)
+            and content writes (new posts, roster invites, follow
+            toggles) are blocked.
         currentSeason:
           type: object
           nullable: true

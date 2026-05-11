@@ -3,16 +3,37 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetOrCreateTeamJoinLink,
   useListRosterInvites,
+  useArchiveTeam,
+  useUnarchiveTeam,
   getListRosterInvitesQueryKey,
+  getGetTeamByIdQueryKey,
+  getListOrgTeamsQueryKey,
+  getListArchivedOrgTeamsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Shield, Copy } from "lucide-react";
+import { Link2, Shield, Copy, Archive } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 
-export function TeamAdminPanel({ teamId }: { teamId: string }) {
+export function TeamAdminPanel({
+  teamId,
+  isOwner,
+  isArchived,
+  organizationId,
+}: {
+  teamId: string;
+  isOwner: boolean;
+  isArchived: boolean;
+  organizationId: string;
+}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [linkToken, setLinkToken] = useState<string | null>(null);
@@ -45,6 +66,35 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
     generateMutate({ teamId });
   }, [teamId, generateMutate]);
 
+  const invalidateAfterArchive = () => {
+    qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
+    qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(organizationId) });
+    qc.invalidateQueries({
+      queryKey: getListArchivedOrgTeamsQueryKey(organizationId),
+    });
+  };
+  const archive = useArchiveTeam({
+    mutation: {
+      onSuccess: () => {
+        invalidateAfterArchive();
+        toast({ title: "Team archived" });
+      },
+      onError: () =>
+        toast({ title: "Couldn't archive team", variant: "destructive" }),
+    },
+  });
+  const unarchive = useUnarchiveTeam({
+    mutation: {
+      onSuccess: () => {
+        invalidateAfterArchive();
+        toast({ title: "Team unarchived" });
+      },
+      onError: () =>
+        toast({ title: "Couldn't unarchive team", variant: "destructive" }),
+    },
+  });
+  const archivePending = archive.isPending || unarchive.isPending;
+
   const fullLink = linkToken
     ? `${window.location.origin}${import.meta.env.BASE_URL}invites/${linkToken}`
     : null;
@@ -62,6 +112,58 @@ export function TeamAdminPanel({ teamId }: { teamId: string }) {
         <Shield className="w-4 h-4 text-primary" />
         <h2 className="text-xl font-black tracking-tight">Admin Tools</h2>
       </div>
+
+      <Card className="rounded-xl border border-border">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="font-black tracking-tight text-sm flex items-center gap-2">
+                <Archive className="w-3.5 h-3.5" />
+                {isArchived ? "Team Archived" : "Archive Team"}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isArchived
+                  ? "This team is hidden from members and discovery. Unarchive to restore it."
+                  : "Hides the team from members and discovery. Writes are blocked until unarchived."}
+              </p>
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant={isArchived ? "brand" : "outline"}
+                      size="sm"
+                      disabled={!isOwner || archivePending}
+                      onClick={() => {
+                        if (!isOwner) return;
+                        if (isArchived) unarchive.mutate({ teamId });
+                        else archive.mutate({ teamId });
+                      }}
+                      data-testid={
+                        isArchived
+                          ? "button-unarchive-team"
+                          : "button-archive-team"
+                      }
+                    >
+                      {archivePending
+                        ? "Working…"
+                        : isArchived
+                          ? "Unarchive"
+                          : "Archive"}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!isOwner && (
+                  <TooltipContent>
+                    Only the org owner can archive a team
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="rounded-xl border border-border">
         <CardContent className="p-4 space-y-3">

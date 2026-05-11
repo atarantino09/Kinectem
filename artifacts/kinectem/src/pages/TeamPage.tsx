@@ -82,6 +82,7 @@ export default function TeamPage() {
   // only fired for managers — non-managers would get a 403 since
   // pending-invite emails are PII restricted to staff.
   const isAdmin = org?.role === "owner" || org?.role === "admin";
+  const isOwner = org?.role === "owner";
   const COACH_LEVEL_POSITIONS = ["coach", "assistant_coach", "admin"];
   const allMembersForGate = (membersResp?.data ?? []) as RosterMember[];
   const canManage =
@@ -177,6 +178,15 @@ export default function TeamPage() {
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
       {teamHasMinorMembers ? <NoIndex /> : null}
       <div className="space-y-6 min-w-0">
+        {team.archivedAt && (
+          <div
+            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900"
+            data-testid="banner-team-archived"
+          >
+            This team is archived. It is hidden from members and discovery, and
+            new posts, follows, and roster changes are blocked.
+          </div>
+        )}
         <TeamHeaderCard
           team={team}
           isAdmin={isAdmin}
@@ -225,7 +235,14 @@ export default function TeamPage() {
           />
         )}
 
-        {expanded === "admin" && isAdmin && <TeamAdminPanel teamId={teamId} />}
+        {expanded === "admin" && isAdmin && (
+          <TeamAdminPanel
+            teamId={teamId}
+            isOwner={isOwner}
+            isArchived={!!team.archivedAt}
+            organizationId={team.organization.id}
+          />
+        )}
       </div>
 
       {isLg && (

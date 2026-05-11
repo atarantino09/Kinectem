@@ -2053,6 +2053,11 @@ router.post(
       )
       .limit(1);
     if (!adminRow) return apiError(res, 403, "Not a team admin");
+    // Task #472 — archived teams cannot mint or refresh join links.
+    // Existing tokens stay valid in the DB but admins can't share new
+    // ones until the team is unarchived.
+    if (team.archivedAt)
+      return apiError(res, 409, "Team is archived", { code: "team_archived" });
     // Reuse a pending email-less player invite for this team if one exists,
     // so admins always share a stable parent-onboarding link.
     const [existing] = await db

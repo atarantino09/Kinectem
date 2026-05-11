@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetOrganizationById,
   useListOrgTeams,
+  useListArchivedOrgTeams,
+  queryOpts,
   useListOrgPosts,
   useListMembers,
   useFollowOrg,
@@ -27,6 +29,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Archive,
   Building2,
   ChevronDown,
   Pencil,
@@ -85,6 +88,17 @@ export default function OrganizationPage() {
   const { data: me } = useGetLoggedInUser();
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
+  const { data: archivedTeamsResp } = useListArchivedOrgTeams(
+    orgId,
+    undefined,
+    {
+      query: queryOpts({
+        enabled:
+          !!orgId &&
+          (organization?.role === "owner" || organization?.role === "admin"),
+      }),
+    },
+  );
   const { data: postsResp } = useListOrgPosts(orgId);
   const { data: membersResp } = useListMembers(orgId);
   const followOrg = useFollowOrg();
@@ -116,6 +130,7 @@ export default function OrganizationPage() {
   }
 
   const teams = teamsResp?.data ?? [];
+  const archivedTeams = archivedTeamsResp?.data ?? [];
   const posts = postsResp?.data ?? [];
   const members = membersResp?.data ?? [];
   const isOrgManager =
@@ -333,6 +348,54 @@ export default function OrganizationPage() {
           </div>
 
           {isOrgManager && <OrgAdminPanel orgId={orgId} />}
+
+          {isOrgManager && archivedTeams.length > 0 && (
+            <section data-testid="section-archived-teams">
+              <div className="flex items-center gap-2 mb-3">
+                <Archive className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-xl font-black tracking-tight">
+                  Archived teams
+                </h2>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] uppercase tracking-wider font-bold"
+                >
+                  {archivedTeams.length}
+                </Badge>
+              </div>
+              <Card className="rounded-xl border border-border">
+                <CardContent className="p-2">
+                  <div className="flex flex-col divide-y divide-border">
+                    {archivedTeams.map((t) => (
+                      <Link key={t.id} href={`/teams/${t.id}`}>
+                        <div
+                          className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40 rounded-lg cursor-pointer"
+                          data-testid={`card-archived-team-${t.id}`}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-bold text-sm truncate">
+                              {t.name}
+                            </p>
+                            {t.sport && (
+                              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
+                                {t.sport}
+                              </p>
+                            )}
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+                          >
+                            Archived
+                          </Badge>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+          )}
 
           {/* Teams: inline on mobile, in rail on lg+. The hook ensures
               only one instance mounts at a time so testids stay unique. */}

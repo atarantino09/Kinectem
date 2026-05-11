@@ -520,6 +520,44 @@ ALTER TABLE users DROP COLUMN IF EXISTS guardian_confirm_token;
 // `date_of_birth_visibility` enum + column on `users`. Default is
 // `private` for every existing row, matching today's behavior where
 // birthday is only visible to self / linked guardian.
+// Task #472 — Archive/unarchive teams. Adds nullable archive columns to
+// `teams` and the admin enum values needed to record archive/unarchive
+// in admin_activity_log. Idempotent.
+const TASK_472_TEAM_ARCHIVE = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'admin_action_type' AND e.enumlabel = 'archive_team'
+  ) THEN
+    ALTER TYPE admin_action_type ADD VALUE 'archive_team';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'admin_action_type' AND e.enumlabel = 'unarchive_team'
+  ) THEN
+    ALTER TYPE admin_action_type ADD VALUE 'unarchive_team';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'admin_target_type' AND e.enumlabel = 'team'
+  ) THEN
+    ALTER TYPE admin_target_type ADD VALUE 'team';
+  END IF;
+END$migration$;
+
+ALTER TABLE teams
+  ADD COLUMN IF NOT EXISTS archived_at timestamp,
+  ADD COLUMN IF NOT EXISTS archived_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS teams_archived_at_idx
+  ON teams (archived_at)
+  WHERE archived_at IS NOT NULL;
+`;
+
 const TASK_426_DOB_VISIBILITY = `
 DO $migration$
 BEGIN
@@ -599,6 +637,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-09-task-426-dob-visibility",
     sql: TASK_426_DOB_VISIBILITY,
+  },
+  {
+    name: "2026-05-11-task-472-team-archive",
+    sql: TASK_472_TEAM_ARCHIVE,
   },
 ];
 

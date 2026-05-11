@@ -16,7 +16,7 @@ import {
   notifications,
   organizationJoinRequests,
 } from "@workspace/db";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -546,10 +546,55 @@ router.get(
       .where(eq(organizations.id, req.params.orgId))
       .limit(1);
     if (!org) return notFound(res);
+    // Task #472 — the public/main org-teams list never includes
+    // archived teams, regardless of viewer. Org owners and admins see
+    // archived teams in the dedicated `/organizations/:orgId/teams/archived`
+    // endpoint that powers the "Archived teams" section on the
+    // Organization page.
     const teamRows = await db
       .select()
       .from(teams)
-      .where(eq(teams.organizationId, org.id));
+      .where(
+        and(eq(teams.organizationId, org.id), isNull(teams.archivedAt)),
+      );
+    const data = await Promise.all(
+      teamRows.map(async (t) => {
+        const [{ count }] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(rosterEntries)
+          .where(eq(rosterEntries.teamId, t.id));
+        return toTeam(t, org, { memberCount: count });
+      }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+// Task #472 — Archived teams for the org. Owner/admin only; everyone
+// else gets 403. Used by the "Archived teams" section on the
+// Organization page so org managers can find and unarchive a team
+// without the platform-admin tools.
+router.get(
+  "/organizations/:orgId/teams/archived",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Org owner or admin only");
+    }
+    const teamRows = await db
+      .select()
+      .from(teams)
+      .where(
+        and(eq(teams.organizationId, org.id), isNotNull(teams.archivedAt)),
+      )
+      .orderBy(desc(teams.archivedAt));
     const data = await Promise.all(
       teamRows.map(async (t) => {
         const [{ count }] = await db
@@ -1380,11 +1425,16 @@ router.post(
     // Task #359 — minors cannot create public team-follow edges.
     if (blockMinorAction(res, me, "follow_team")) return;
     const [target] = await db
-      .select({ id: teams.id })
+      .select({ id: teams.id, archivedAt: teams.archivedAt })
       .from(teams)
       .where(eq(teams.id, req.params.teamId))
       .limit(1);
     if (!target) return notFound(res);
+    // Task #472 — block new follow edges on archived teams. Existing
+    // follows are intentionally left untouched so the unarchive path
+    // restores the team's previous follower set without a backfill.
+    if (target.archivedAt)
+      return apiError(res, 409, "Team is archived", { code: "team_archived" });
     await db
       .insert(teamFollowers)
       .values({ teamId: req.params.teamId, userId: me.id })

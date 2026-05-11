@@ -80,63 +80,19 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { TeamOrganizationEmbed } from "./teamOrganizationEmbed";
-import type { TeamResponseCurrentSeason } from "./teamResponseCurrentSeason";
-import type { TeamResponseGender } from "./teamResponseGender";
+import type { CursorParameter } from "./cursorParameter";
+import type { IncludeTotalParameter } from "./includeTotalParameter";
+import type { LimitParameter } from "./limitParameter";
 
-export interface TeamResponse {
-  id: string;
-  organization: TeamOrganizationEmbed;
-  name: string;
-  slug: string;
-  /** @nullable */
-  description?: string | null;
+export type ListArchivedOrgTeamsParams = {
   /**
-   * Optional team website / link surfaced on the team page.
-Always a full `https://…` URL when set; bare domains submitted
-via the create / update endpoints are normalized server-side
-before being stored. Null when the team has not set one.
-
-   * @nullable
+   * @maxLength 500
    */
-  website?: string | null;
-  /** @nullable */
-  sport?: string | null;
-  /** @nullable */
-  level?: string | null;
-  /** @nullable */
-  gender?: TeamResponseGender;
-  /** @nullable */
-  avatarUrl?: string | null;
+  cursor?: CursorParameter;
   /**
-   * The team's background photo shown behind the org logo on the team page hero. Unique per team. May be a data URL or a CDN URL.
-   * @nullable
+   * @minimum 1
+   * @maximum 50
    */
-  bannerUrl?: string | null;
-  /**
-   * When the team was archived (soft state), or null if active.
-Set by `POST /teams/:teamId/archive` and cleared by
-`/unarchive`. Both endpoints are restricted to the org
-owner. While set, the team is hidden from non-managers on
-every public read (search, suggestions, org-team list,
-user-team list, and the team-detail GET itself returns 404)
-and content writes (new posts, roster invites, follow
-toggles) are blocked.
-
-   * @nullable
-   */
-  archivedAt?: Date | null;
-  /**
-   * The team's current active season, or null if none.
-   * @nullable
-   */
-  currentSeason?: TeamResponseCurrentSeason;
-  /** @minimum 0 */
-  followerCount: number;
-  isFollowing: boolean;
-  /** Server-derived flag: true when the requester can author a game recap on this team. Mirrors the server-side `canCreateRecap` rule (org owner/admin of the parent org, team coach, or accepted roster member with `position = "author"`). Drives the team page's "Create Game Recap" affordance and the visibility of the "Waiting for approval" pending-recaps section.
-   */
-  canAuthorRecaps?: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
+  limit?: LimitParameter;
+  includeTotal?: IncludeTotalParameter;
+};

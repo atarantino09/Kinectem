@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, users, organizations, teams } from "@workspace/db";
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, isNull, or } from "drizzle-orm";
 import { filterOutMinors } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
@@ -53,7 +53,12 @@ router.get(
         .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
         .limit(20),
       db.select().from(organizations).where(ilike(organizations.name, `%${q}%`)).limit(10),
-      db.select().from(teams).where(ilike(teams.name, `%${q}%`)).limit(10),
+      // Task #472 — archived teams must not surface in cross-entity search.
+      db
+        .select()
+        .from(teams)
+        .where(and(ilike(teams.name, `%${q}%`), isNull(teams.archivedAt)))
+        .limit(10),
     ]);
     // Task #359 — minor accounts must not be discoverable via cross-
     // entity search. We filter post-query so the (possibly indexed)

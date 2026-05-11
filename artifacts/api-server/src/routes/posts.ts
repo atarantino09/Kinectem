@@ -817,6 +817,8 @@ router.get(
       .from(teams)
       .innerJoin(organizations, eq(organizations.id, teams.organizationId))
       .leftJoin(teamFollowers, eq(teamFollowers.teamId, teams.id))
+      // Task #472 — never recommend archived teams.
+      .where(isNull(teams.archivedAt))
       .groupBy(teams.id, organizations.id)
       .orderBy(
         desc(sql<number>`count(${teamFollowers.userId})`),
@@ -1671,6 +1673,12 @@ router.post(
         ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
         : [null];
       if (!team || !org) return notFound(res);
+      // Task #472 — block new recaps on archived teams. Authors can
+      // still see existing posts (the team-feed read paths intentionally
+      // do not filter by team archived state, only the team-detail
+      // surface itself does), but they cannot create new ones.
+      if (team.archivedAt)
+        return apiError(res, 409, "Team is archived", { code: "team_archived" });
       const allowed = await canCreateRecap(me.id, team);
       if (!allowed)
         return apiError(res, 403, "Only admins, coaches, and authors can create game recaps");
