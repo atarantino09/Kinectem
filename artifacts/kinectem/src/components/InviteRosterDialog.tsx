@@ -450,9 +450,9 @@ export function InviteRosterDialog({
             </div>
             {fullLink ? (
               <>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center min-w-0">
                   <code
-                    className="flex-1 text-xs bg-muted px-3 py-2 rounded-lg truncate"
+                    className="block sm:flex-1 min-w-0 max-w-full text-xs bg-muted px-3 py-2 rounded-lg truncate"
                     data-testid="text-invite-share-link"
                   >
                     {fullLink}
@@ -462,7 +462,7 @@ export function InviteRosterDialog({
                     size="sm"
                     variant="outline"
                     onClick={onCopyLink}
-                    className="gap-1 font-bold"
+                    className="gap-1 font-bold self-start sm:self-auto shrink-0"
                     data-testid="button-copy-invite-share-link"
                   >
                     {copied ? (
