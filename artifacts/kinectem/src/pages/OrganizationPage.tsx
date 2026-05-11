@@ -349,62 +349,20 @@ export default function OrganizationPage() {
 
           {isOrgManager && <OrgAdminPanel orgId={orgId} />}
 
-          {isOrgManager && archivedTeams.length > 0 && (
-            <section data-testid="section-archived-teams">
-              <div className="flex items-center gap-2 mb-3">
-                <Archive className="w-4 h-4 text-muted-foreground" />
-                <h2 className="text-xl font-black tracking-tight">
-                  Archived teams
-                </h2>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] uppercase tracking-wider font-bold"
-                >
-                  {archivedTeams.length}
-                </Badge>
-              </div>
-              <Card className="rounded-xl border border-border">
-                <CardContent className="p-2">
-                  <div className="flex flex-col divide-y divide-border">
-                    {archivedTeams.map((t) => (
-                      <Link key={t.id} href={`/teams/${t.id}`}>
-                        <div
-                          className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40 rounded-lg cursor-pointer"
-                          data-testid={`card-archived-team-${t.id}`}
-                        >
-                          <div className="min-w-0">
-                            <p className="font-bold text-sm truncate">
-                              {t.name}
-                            </p>
-                            {t.sport && (
-                              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
-                                {t.sport}
-                              </p>
-                            )}
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] uppercase tracking-wider font-bold shrink-0"
-                          >
-                            Archived
-                          </Badge>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
-          )}
-
-          {/* Teams: inline on mobile, in rail on lg+. The hook ensures
-              only one instance mounts at a time so testids stay unique. */}
+          {/* Teams + archived: inline on mobile, in rail on lg+. The
+              hook ensures only one instance mounts at a time so testids
+              stay unique. */}
           {!isLg && (
-            <TeamsRail
-              teams={teams}
-              canManage={isOrgManager}
-              onAddTeam={() => setCreateTeamOpen(true)}
-            />
+            <div className="space-y-4">
+              <TeamsRail
+                teams={teams}
+                canManage={isOrgManager}
+                onAddTeam={() => setCreateTeamOpen(true)}
+              />
+              {isOrgManager && archivedTeams.length > 0 && (
+                <ArchivedTeamsCard teams={archivedTeams} />
+              )}
+            </div>
           )}
 
           {/* Members preview */}
@@ -491,12 +449,15 @@ export default function OrganizationPage() {
 
         {/* Right rail (lg+ only — on mobile this renders inline above) */}
         {isLg && (
-          <aside className="lg:sticky lg:top-20 lg:self-start">
+          <aside className="lg:sticky lg:top-20 lg:self-start space-y-4">
             <TeamsRail
               teams={teams}
               canManage={isOrgManager}
               onAddTeam={() => setCreateTeamOpen(true)}
             />
+            {isOrgManager && archivedTeams.length > 0 && (
+              <ArchivedTeamsCard teams={archivedTeams} />
+            )}
           </aside>
         )}
       </div>
@@ -648,6 +609,57 @@ function TeamsRail({
           )}
         </>
       )}
+    </Card>
+  );
+}
+
+function ArchivedTeamsCard({ teams }: { teams: TeamRailItem[] }) {
+  return (
+    <Card
+      className="rounded-xl border border-border shadow-sm overflow-hidden"
+      data-testid="section-archived-teams"
+    >
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-2 min-w-0">
+          <Archive className="w-5 h-5 text-muted-foreground shrink-0" />
+          <h2 className="text-base font-black tracking-tight truncate">
+            Archived teams
+          </h2>
+          <Badge
+            variant="outline"
+            className="text-[10px] uppercase tracking-wider font-bold"
+          >
+            {teams.length}
+          </Badge>
+        </div>
+      </div>
+      <CardContent className="p-2">
+        <div className="flex flex-col divide-y divide-border">
+          {teams.map((t) => (
+            <Link key={t.id} href={`/teams/${t.id}`}>
+              <div
+                className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40 rounded-lg cursor-pointer"
+                data-testid={`card-archived-team-${t.id}`}
+              >
+                <div className="min-w-0">
+                  <p className="font-bold text-sm truncate">{t.name}</p>
+                  {t.sport && (
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
+                      {t.sport}
+                    </p>
+                  )}
+                </div>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+                >
+                  Archived
+                </Badge>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </CardContent>
     </Card>
   );
 }
