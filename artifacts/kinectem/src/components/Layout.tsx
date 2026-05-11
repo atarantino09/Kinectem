@@ -193,6 +193,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <MobileTopBar
           meId={currentUser?.id}
           unreadCount={unreadCount}
+          isGuardian={whoami?.isGuardian === true}
           onOpenNav={() => setMobileNavOpen(true)}
         />
       ) : (
@@ -327,7 +328,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <MobileBottomNav
           meId={currentUser?.id}
           canAuthorRecap={canAuthorRecap}
-          isGuardian={whoami?.isGuardian === true}
         />
       )}
     </div>

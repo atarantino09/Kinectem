@@ -1,17 +1,20 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { Bell, Mail, Menu, Search } from "lucide-react";
+import { Bell, Mail, Menu, Search, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
   meId: string | undefined;
   unreadCount: number;
+  isGuardian: boolean;
   onOpenNav: () => void;
 };
 
-export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
-  const [, setLocation] = useLocation();
+export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props) {
+  const [location, setLocation] = useLocation();
+  const familyActive =
+    location === "/family" || location.startsWith("/family/");
 
   return (
     <header
@@ -49,6 +52,20 @@ export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {isGuardian && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Family"
+              aria-current={familyActive ? "page" : undefined}
+              data-testid="mobile-top-family"
+              data-active={familyActive ? "true" : undefined}
+              onClick={() => setLocation("/family")}
+              className={cn(familyActive && "bg-secondary text-secondary-foreground")}
+            >
+              <Users className="w-5 h-5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
