@@ -210,7 +210,14 @@ export default function TeamPage() {
         {/* Roster rail: inline above sections on mobile/tablet, in
             right rail on lg+. Only one instance mounts at a time so
             test ids stay unique. */}
-        {!isLg && <TeamRosterRail players={players} staff={staff} />}
+        {!isLg && (
+          <TeamRosterRail
+            players={players}
+            staff={staff}
+            canManage={canManage}
+            onOpenInvite={() => setInviteOpen(true)}
+          />
+        )}
 
         {expanded === "posts" && (
           <TeamPostsSection

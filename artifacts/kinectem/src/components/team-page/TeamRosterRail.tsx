@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Users } from "lucide-react";
+import { Users, UserPlus } from "lucide-react";
 import type { RosterMember } from "./TeamRosterTabs";
 
 type RailTab = "players" | "staff";
@@ -12,9 +12,16 @@ type RailTab = "players" | "staff";
 interface TeamRosterRailProps {
   players: RosterMember[];
   staff: RosterMember[];
+  canManage?: boolean;
+  onOpenInvite?: () => void;
 }
 
-export function TeamRosterRail({ players, staff }: TeamRosterRailProps) {
+export function TeamRosterRail({
+  players,
+  staff,
+  canManage = false,
+  onOpenInvite,
+}: TeamRosterRailProps) {
   const [tab, setTab] = useState<RailTab>("players");
   const list = tab === "players" ? players : staff;
   const emptyMessage =
@@ -39,6 +46,17 @@ export function TeamRosterRail({ players, staff }: TeamRosterRailProps) {
             {list.length}
           </Badge>
         </div>
+        {canManage && onOpenInvite && (
+          <Button
+            type="button"
+            size="sm"
+            className="font-bold shrink-0"
+            onClick={onOpenInvite}
+            data-testid="btn-rail-invite-roster"
+          >
+            <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Invite
+          </Button>
+        )}
       </div>
 
       <div
