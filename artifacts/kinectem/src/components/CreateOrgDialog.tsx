@@ -31,7 +31,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  isUnsupportedHeicImage,
+  UnsupportedImageFormatError,
 } from "@/lib/shrinkImage";
+import { apiErrorMessage } from "@/lib/api-errors";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
@@ -101,8 +105,19 @@ export function CreateOrgDialog({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    // Some pickers (Android share sheets in particular) hand us files
+    // with an empty `type` even though they're images, so only reject
+    // when type is explicitly non-image.
+    if (file.type && !file.type.startsWith("image/")) {
       toast({ title: "Please pick an image file", variant: "destructive" });
+      return;
+    }
+    if (isUnsupportedHeicImage(file)) {
+      toast({
+        title: "iPhone HEIC photos aren't supported",
+        description: "Save the photo as JPG or PNG and try again.",
+        variant: "destructive",
+      });
       return;
     }
     if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
@@ -128,12 +143,35 @@ export function CreateOrgDialog({
   };
 
   const onCroppedConfirm = async (cropped: File) => {
+    // Sentinel used to bubble a "we already toasted, just keep the
+    // crop dialog open" signal out of this handler without firing the
+    // generic fallback toast in the catch block.
+    class HandledLogoError extends Error {}
     try {
       const dataUrl = await shrinkImageToDataUrl(cropped);
+      // Pre-flight against the server's body limit so the user sees
+      // a friendly message instead of a request that gets dropped or
+      // returns a confusing 413 mid-flight.
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        toast({
+          title: "That photo is too large",
+          description: "Try a smaller image (under ~10 MB).",
+          variant: "destructive",
+        });
+        throw new HandledLogoError("logo data URL exceeds DATA_URL_MAX_LENGTH");
+      }
       setLogoUrl(dataUrl);
       setCropSrc(null);
     } catch (err) {
-      toast({ title: "Couldn't process that image", variant: "destructive" });
+      if (err instanceof UnsupportedImageFormatError) {
+        toast({
+          title: "This photo format isn't supported",
+          description: "Try saving it as a JPG or PNG.",
+          variant: "destructive",
+        });
+      } else if (!(err instanceof HandledLogoError)) {
+        toast({ title: "Couldn't process that image", variant: "destructive" });
+      }
       throw err;
     }
   };
@@ -215,8 +253,12 @@ export function CreateOrgDialog({
         // the popup is a nice-to-have, so swallow and continue.
       }
       setLocation(`/organizations/${org.id}`);
-    } catch {
-      toast({ title: "Failed to create organization", variant: "destructive" });
+    } catch (err) {
+      const detail = apiErrorMessage(err);
+      toast({
+        title: detail ?? "Failed to create organization",
+        variant: "destructive",
+      });
     }
   };
 

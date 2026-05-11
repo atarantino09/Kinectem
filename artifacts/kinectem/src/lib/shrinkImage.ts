@@ -19,6 +19,34 @@ export const SHRINK_MAX_DIMENSION = 1024;
 export const SHRINK_OUTPUT_QUALITY = 0.85;
 export const SHRINK_SKIP_BYTES = 200 * 1024;
 export const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+// Server's express.json limit is 25mb. Base64-encoded data URLs add
+// ~33% overhead, so cap the *encoded* string well below that to leave
+// room for the rest of the JSON body and any header bloat.
+export const DATA_URL_MAX_LENGTH = 20 * 1024 * 1024;
+
+// HEIC / HEIF photos straight off an iPhone aren't decodable by
+// non-Safari browsers (Chrome, Firefox, Android WebView), and even
+// Safari's `createImageBitmap` support is patchy. Detect by MIME type
+// AND extension so we can give the user a clear "use JPG/PNG" message
+// instead of a silent failure deeper in the canvas pipeline.
+export function isUnsupportedHeicImage(file: File): boolean {
+  const type = (file.type || "").toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  if (type === "image/heic-sequence" || type === "image/heif-sequence") return true;
+  // Some pickers (especially older Android share sheets) hand us the
+  // file with an empty `type` — fall back to the extension.
+  const name = (file.name || "").toLowerCase();
+  if (/\.(heic|heif)$/.test(name)) return true;
+  return false;
+}
+
+export class UnsupportedImageFormatError extends Error {
+  readonly name = "UnsupportedImageFormatError";
+  constructor(message = "This photo format isn't supported. Try a JPG or PNG.") {
+    super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
 
 type DrawableImage = ImageBitmap | HTMLImageElement;
 
@@ -60,6 +88,9 @@ async function loadImage(
 }
 
 export async function shrinkImage(file: File): Promise<File> {
+  if (isUnsupportedHeicImage(file)) {
+    throw new UnsupportedImageFormatError();
+  }
   if (file.type === "image/gif") return file;
   if (file.size <= SHRINK_SKIP_BYTES) return file;
   if (typeof document === "undefined") return file;
@@ -68,6 +99,12 @@ export async function shrinkImage(file: File): Promise<File> {
   try {
     loaded = await loadImage(file);
   } catch {
+    // Decoder refused this file (exotic format, RAW, etc). Preserve
+    // the historical "return original" fallback so existing call
+    // sites that don't try/catch keep working — server-side type
+    // checks / size limits reject anything truly unusable. Call sites
+    // that need a hard error should pre-check via `isUnsupportedHeicImage`
+    // (HEIC/HEIF on non-Safari is the common mobile failure mode).
     return file;
   }
 

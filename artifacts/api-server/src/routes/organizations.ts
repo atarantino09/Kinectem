@@ -109,27 +109,41 @@ const US_ZIP_PATTERN = /^\d{5}(-\d{4})?$/;
 router.post(
   "/organizations",
   asyncHandler(async (req, res) => {
+    // Task #487 — Surface the *reason* for any rejection in the server
+    // logs so the next mobile bug report is debuggable from logs alone.
+    // Uses `req.log` so each line carries the request id automatically.
+    const reject = (
+      status: number,
+      field: string,
+      message: string,
+    ) => {
+      req.log.warn(
+        { event: "create_organization_rejected", status, field },
+        `POST /organizations rejected: ${field} — ${message}`,
+      );
+      return apiError(res, status, message);
+    };
     const me = req.sessionUser;
-    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!me) return reject(401, "session", "Not authenticated");
     const name = String(req.body?.name ?? "").trim();
-    if (!name) return apiError(res, 400, "name required");
+    if (!name) return reject(400, "name", "name required");
     const city = String(req.body?.city ?? "").trim();
-    if (!city) return apiError(res, 400, "city required");
+    if (!city) return reject(400, "city", "city required");
     const stateRaw = String(req.body?.state ?? "").trim().toUpperCase();
-    if (!stateRaw) return apiError(res, 400, "state required");
+    if (!stateRaw) return reject(400, "state", "state required");
     if (!US_STATE_CODES.has(stateRaw)) {
-      return apiError(
-        res,
+      return reject(
         400,
+        "state",
         "state must be a 2-letter US state code (e.g. NJ)",
       );
     }
     const zipCode = String(req.body?.zipCode ?? "").trim();
-    if (!zipCode) return apiError(res, 400, "zipCode required");
+    if (!zipCode) return reject(400, "zipCode", "zipCode required");
     if (!US_ZIP_PATTERN.test(zipCode)) {
-      return apiError(
-        res,
+      return reject(
         400,
+        "zipCode",
         "zipCode must be a US zip (5 digits or 5+4 like 12345-6789)",
       );
     }
@@ -138,36 +152,53 @@ router.post(
     let websiteValue: string | undefined;
     if (req.body?.website != null && req.body.website !== "") {
       const websiteResult = normalizeWebsite(req.body.website);
-      if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
+      if (!websiteResult.ok) return reject(400, "website", websiteResult.error);
       websiteValue = websiteResult.value || undefined;
     }
-    const [org] = await db
-      .insert(organizations)
-      .values({
-        name,
-        description: req.body?.description ?? undefined,
-        city,
-        state: stateRaw,
-        zipCode,
-        website: websiteValue,
-        logoUrl: req.body?.logoUrl ?? undefined,
-        createdById: me.id,
-      })
-      .returning();
-    // The creator becomes the org's sole owner. The role column was
-    // added in task #208; before that the table held only admins and
-    // "owner" was implicit (first row in the admins table).
-    await db
-      .insert(organizationAdmins)
-      .values({ organizationId: org.id, userId: me.id, role: "owner" })
-      .onConflictDoNothing();
-    await db
-      .insert(organizationFollowers)
-      .values({ organizationId: org.id, userId: me.id })
-      .onConflictDoNothing();
-    res
-      .status(201)
-      .json(toOrganization(org, { isMember: true, role: "owner", isFollowing: true }));
+    // Wrap the create flow so unexpected DB errors get logged with the
+    // same structured shape as the validation rejections above. Without
+    // this the request would 500 via the global error handler with no
+    // route-specific context, making mobile bug reports hard to triage.
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          name,
+          description: req.body?.description ?? undefined,
+          city,
+          state: stateRaw,
+          zipCode,
+          website: websiteValue,
+          logoUrl: req.body?.logoUrl ?? undefined,
+          createdById: me.id,
+        })
+        .returning();
+      // The creator becomes the org's sole owner. The role column was
+      // added in task #208; before that the table held only admins and
+      // "owner" was implicit (first row in the admins table).
+      await db
+        .insert(organizationAdmins)
+        .values({ organizationId: org.id, userId: me.id, role: "owner" })
+        .onConflictDoNothing();
+      await db
+        .insert(organizationFollowers)
+        .values({ organizationId: org.id, userId: me.id })
+        .onConflictDoNothing();
+      return res
+        .status(201)
+        .json(toOrganization(org, { isMember: true, role: "owner", isFollowing: true }));
+    } catch (err) {
+      req.log.error(
+        {
+          event: "create_organization_failed",
+          status: 500,
+          field: "db",
+          err,
+        },
+        "POST /organizations failed during insert",
+      );
+      throw err;
+    }
   }),
 );
 
