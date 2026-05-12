@@ -18,7 +18,7 @@ export function AuthAside() {
       <div className="relative space-y-6">
         <h1 className="font-black tracking-tight text-4xl leading-tight">
           The Platform That Makes Your Organization{" "}
-          <span className="brand-gradient-text">Shine</span>
+          <span className="brand-gradient-text-shine">Shine</span>
         </h1>
         <p className="text-white/85 text-lg leading-relaxed max-w-lg">
           Kinectem gives youth sports organizations a powerful home base —
