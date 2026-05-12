@@ -25,20 +25,6 @@ export function AuthAside() {
           showcase your team's wins, give every player a digital storybook and
           online resume, and attract the next wave of talent to your program.
         </p>
-        <div className="flex items-center gap-3 text-sm text-white/80">
-          <div className="flex -space-x-2">
-            <div className="w-8 h-8 rounded-full bg-amber-300 border-2 border-violet-600 flex items-center justify-center text-xs font-black text-amber-900">
-              DO
-            </div>
-            <div className="w-8 h-8 rounded-full bg-emerald-300 border-2 border-violet-600 flex items-center justify-center text-xs font-black text-emerald-900">
-              TC
-            </div>
-            <div className="w-8 h-8 rounded-full bg-pink-300 border-2 border-violet-600 flex items-center justify-center text-xs font-black text-pink-900">
-              MR
-            </div>
-          </div>
-          <span>Joined by 12,400+ athletes this season</span>
-        </div>
       </div>
 
       <div className="relative text-xs text-white/70">
