@@ -17,11 +17,13 @@ export function AuthAside() {
 
       <div className="relative space-y-6">
         <h1 className="font-black tracking-tight text-4xl leading-tight">
-          Where the next generation of athletes gets seen.
+          The Platform That Makes Your Organization{" "}
+          <span className="brand-gradient-text">Shine</span>
         </h1>
-        <p className="text-white/85 text-lg leading-relaxed max-w-md">
-          Follow your team, share highlights, and connect with coaches, parents,
-          and journalists — all in one place.
+        <p className="text-white/85 text-lg leading-relaxed max-w-lg">
+          Kinectem gives youth sports organizations a powerful home base —
+          showcase your team's wins, give every player a digital storybook and
+          online resume, and attract the next wave of talent to your program.
         </p>
         <div className="flex items-center gap-3 text-sm text-white/80">
           <div className="flex -space-x-2">
