@@ -573,6 +573,17 @@ ALTER TABLE users
     NOT NULL DEFAULT 'private';
 `;
 
+// Task #504 — Per-user sports list backing the multi-select picker on
+// EditProfileDialog (Task #500). Composite PK (user_id, sport) is the
+// natural dedupe so no surrogate id or separate unique index. Idempotent.
+const TASK_504_USER_SPORTS = `
+CREATE TABLE IF NOT EXISTS user_sports (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  sport   text NOT NULL,
+  PRIMARY KEY (user_id, sport)
+);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -641,6 +652,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-11-task-472-team-archive",
     sql: TASK_472_TEAM_ARCHIVE,
+  },
+  {
+    name: "2026-05-13-task-504-user-sports",
+    sql: TASK_504_USER_SPORTS,
   },
 ];
 

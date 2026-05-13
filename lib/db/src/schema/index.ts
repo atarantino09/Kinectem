@@ -367,6 +367,15 @@ export const userFollowers = pgTable("user_followers", {
   decidedAt: timestamp("decided_at"),
 }, (t) => ({ pk: primaryKey({ columns: [t.followingUserId, t.followerUserId] }) }));
 
+// Task #504 — Per-user sports list backing the multi-select picker on
+// EditProfileDialog (Task #500). Self-only on read + write at the
+// route layer; the composite primary key is the natural dedupe so no
+// surrogate id and no separate unique index are needed.
+export const userSports = pgTable("user_sports", {
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  sport: text("sport").notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.sport] }) }));
+
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),

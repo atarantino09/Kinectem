@@ -16,6 +16,7 @@ import {
   highlightTags,
   postShares,
   takedownRequests,
+  userSports,
 } from "@workspace/db";
 import {
   aliasedTable,
@@ -396,6 +397,64 @@ router.get(
           });
     res.json({ ...base, linkedAccounts });
     return;
+  }),
+);
+
+// Task #504 — Per-user sports list. Self-only on read + write (matches
+// the spec's `(self only)` summary and the EditProfileDialog UI gate
+// from Task #500). 403 (never 404) for any other caller. Replace
+// semantics on PUT: delete-then-insert in a single transaction so a
+// failed insert cannot leave the user with an empty list. The
+// `maxItems: 5` cap on the request body is enforced by the OpenAPI
+// validator before the handler runs.
+router.get(
+  "/users/:userId/sports",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) {
+      apiError(res, 401, "Not authenticated");
+      return;
+    }
+    const userIdParam = String(req.params.userId);
+    if (me.id !== userIdParam) {
+      apiError(res, 403, "Forbidden");
+      return;
+    }
+    const rows = await db
+      .select({ sport: userSports.sport })
+      .from(userSports)
+      .where(eq(userSports.userId, userIdParam))
+      .orderBy(userSports.sport);
+    res.json({ sports: rows.map((r) => r.sport) });
+  }),
+);
+
+router.put(
+  "/users/:userId/sports",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) {
+      apiError(res, 401, "Not authenticated");
+      return;
+    }
+    const userIdParam = String(req.params.userId);
+    if (me.id !== userIdParam) {
+      apiError(res, 403, "Forbidden");
+      return;
+    }
+    const sports: string[] = Array.isArray(req.body?.sports)
+      ? (req.body.sports as string[])
+      : [];
+    await db.transaction(async (tx) => {
+      await tx.delete(userSports).where(eq(userSports.userId, userIdParam));
+      if (sports.length > 0) {
+        await tx
+          .insert(userSports)
+          .values(sports.map((s) => ({ userId: userIdParam, sport: s })))
+          .onConflictDoNothing();
+      }
+    });
+    res.json({ sports: [...sports].sort() });
   }),
 );
 
