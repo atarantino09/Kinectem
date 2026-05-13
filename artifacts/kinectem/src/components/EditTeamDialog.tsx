@@ -30,17 +30,7 @@ import {
 } from "@/lib/shrinkImage";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { TeamPhotoCropDialog } from "@/components/TeamPhotoCropDialog";
-
-const SPORTS = [
-  "Soccer",
-  "Basketball",
-  "Baseball",
-  "Football",
-  "Volleyball",
-  "Lacrosse",
-  "Hockey",
-  "Track & Field",
-];
+import { SPORTS } from "@/lib/sports";
 
 type TeamLike = {
   id: string;
@@ -320,6 +310,11 @@ export function EditTeamDialog({
                     <SelectValue placeholder="Pick sport" />
                   </SelectTrigger>
                   <SelectContent>
+                    {sport && !SPORTS.includes(sport) && (
+                      <SelectItem key={sport} value={sport}>
+                        {sport}
+                      </SelectItem>
+                    )}
                     {SPORTS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}

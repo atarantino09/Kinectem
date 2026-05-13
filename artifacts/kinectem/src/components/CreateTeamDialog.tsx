@@ -30,6 +30,7 @@ import {
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 import { TeamPhotoCropDialog } from "@/components/TeamPhotoCropDialog";
+import { SPORTS } from "@/lib/sports";
 
 function slugify(s: string) {
   return s
@@ -39,17 +40,6 @@ function slugify(s: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 50);
 }
-
-const SPORTS = [
-  "Soccer",
-  "Basketball",
-  "Baseball",
-  "Football",
-  "Volleyball",
-  "Lacrosse",
-  "Hockey",
-  "Track & Field",
-];
 
 export function CreateTeamDialog({
   orgId,
