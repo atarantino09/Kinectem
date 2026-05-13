@@ -228,7 +228,12 @@ export function CreateTeamDialog({
                   <SelectTrigger data-testid="select-team-sport">
                     <SelectValue placeholder="Pick sport" />
                   </SelectTrigger>
-                  <SelectContent>
+                  {/* position="popper" makes Radix honor the
+                      --radix-select-content-available-height var that
+                      shadcn's SelectContent caps at, so the full ~41-
+                      entry SPORTS list scrolls inside the viewport on
+                      both desktop and mobile instead of overflowing. */}
+                  <SelectContent position="popper" className="max-h-[min(60vh,24rem)]">
                     {SPORTS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
