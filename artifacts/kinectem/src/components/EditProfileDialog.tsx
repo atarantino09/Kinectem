@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useUpdateUser,
+  useGetUserSports,
+  useUpdateUserSports,
   getGetUserByIdQueryKey,
+  getGetUserSportsQueryKey,
   getGetLoggedInUserQueryKey,
   requestUpload,
   confirmUpload,
@@ -32,10 +35,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Camera, Loader2, Pencil, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Camera, ChevronDown, Loader2, Pencil, Plus, Trophy, X } from "lucide-react";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { US_STATES } from "@/lib/usStates";
+import { SPORTS } from "@/lib/sports";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
+
+const MAX_USER_SPORTS = 5;
 
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -171,6 +186,21 @@ export function EditProfileDialog({
   // dateOfBirthVisibility: "public" } payload from going out, so the
   // earlier auto-reset effect from #431 was removed — it silently
   // undid the user's pick and made the field feel broken.
+  // Task #500 — per-user sports list (multi-select, max 5). Endpoint is
+  // self-only on the server, so we only fetch and only render the picker
+  // when the dialog is open for the user's own profile.
+  const sportsQuery = useGetUserSports(user.id, {
+    query: {
+      queryKey: getGetUserSportsQueryKey(user.id),
+      enabled: open && user.isOwnProfile,
+    },
+  });
+  const [sportsSel, setSportsSel] = useState<string[]>([]);
+  const [sportsMenuOpen, setSportsMenuOpen] = useState(false);
+  // Tracks whether we've already seeded `sportsSel` from the server for
+  // this open-session, so refetches (window focus / cache invalidate)
+  // don't stomp in-progress user edits.
+  const sportsHydratedRef = useRef(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -209,13 +239,66 @@ export function EditProfileDialog({
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
       setSaveError(null);
+      // Hydrate from cache if we already have it; the second effect
+      // below picks up fresh data once the query resolves. Reset the
+      // hydration guard so the first server response for this open
+      // session seeds local state.
+      sportsHydratedRef.current = false;
+      const cached = sportsQuery.data?.sports;
+      if (cached) {
+        setSportsSel(cached);
+        sportsHydratedRef.current = true;
+      } else {
+        setSportsSel([]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user.id]);
 
+  // Seed local state from the server response exactly once per
+  // open-session. Background refetches (window focus, manual
+  // invalidation) must NOT overwrite an in-progress edit.
+  useEffect(() => {
+    if (open && !sportsHydratedRef.current && sportsQuery.data) {
+      setSportsSel(sportsQuery.data.sports ?? []);
+      sportsHydratedRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sportsQuery.data, open]);
+
+  const updateSports = useUpdateUserSports();
+
   const update = useUpdateUser({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async () => {
+        // Task #500 — chain the sports PUT for self-edit only. The
+        // endpoint is self-only (403 for parents editing children), so
+        // we skip it entirely on non-self edits. If the sports PUT
+        // fails we surface the error inline and keep the dialog open;
+        // the user-row PATCH already succeeded so the user sees that
+        // their name/bio/etc. saved but the sports didn't.
+        if (user.isOwnProfile) {
+          try {
+            await updateSports.mutateAsync({
+              userId: user.id,
+              data: { sports: sportsSel },
+            });
+            qc.invalidateQueries({ queryKey: getGetUserSportsQueryKey(user.id) });
+          } catch (e) {
+            const err = e as { body?: { error?: string }; message?: string };
+            const msg =
+              err?.body?.error ?? err?.message ?? "Couldn't save sports.";
+            setSaveError(msg);
+            qc.invalidateQueries({ queryKey: getGetUserByIdQueryKey(user.id) });
+            qc.invalidateQueries({ queryKey: getGetLoggedInUserQueryKey() });
+            toast({
+              title: "Profile saved, sports didn't",
+              description: msg,
+              variant: "destructive",
+            });
+            return;
+          }
+        }
         qc.invalidateQueries({ queryKey: getGetUserByIdQueryKey(user.id) });
         // Only the logged-in user's own /users/me cache needs busting when
         // they edit themselves. When a parent edits a child, leave the
@@ -650,6 +733,108 @@ export function EditProfileDialog({
               </p>
             )}
           </div>
+          {/* Task #500 — Multi-select sports picker (max 5). Self-only:
+              the API returns 403 for parents editing children, so the
+              section is hidden when isOwnProfile is false. Uses
+              DropdownMenuCheckboxItem (Popover/Command aren't wired in
+              this artifact). Selected sports render as removable chips
+              above the trigger; the dropdown disables unchecked rows
+              once the user hits the 5-sport cap. */}
+          {user.isOwnProfile && (
+            <div className="space-y-1.5" data-testid="section-profile-sports">
+              <Label className="text-xs font-bold flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5" aria-hidden="true" />
+                Your sports
+              </Label>
+              {sportsSel.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {sportsSel.map((s) => (
+                    <Badge
+                      key={s}
+                      variant="secondary"
+                      className="gap-1 pr-1 font-medium"
+                      data-testid={`chip-profile-sport-${s}`}
+                    >
+                      <span>{s}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSportsSel((prev) => prev.filter((x) => x !== s))
+                        }
+                        className="rounded-full hover:bg-muted/60 p-0.5"
+                        aria-label={`Remove ${s}`}
+                        data-testid={`btn-remove-sport-${s}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <DropdownMenu
+                open={sportsMenuOpen}
+                onOpenChange={setSportsMenuOpen}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="font-bold rounded-full gap-2"
+                    disabled={sportsQuery.isLoading}
+                    data-testid="button-add-sport"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {sportsSel.length > 0 ? "Edit sports" : "Add sport"}
+                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  className="max-h-72 w-72 overflow-y-auto"
+                >
+                  <DropdownMenuLabel className="text-xs font-bold">
+                    Pick up to {MAX_USER_SPORTS}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {SPORTS.map((s) => {
+                    const checked = sportsSel.includes(s);
+                    const atCap = sportsSel.length >= MAX_USER_SPORTS;
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={s}
+                        checked={checked}
+                        disabled={!checked && atCap}
+                        // Prevent menu from closing on each pick.
+                        onSelect={(e) => e.preventDefault()}
+                        onCheckedChange={(next) => {
+                          setSportsSel((prev) => {
+                            if (next) {
+                              if (prev.includes(s) || prev.length >= MAX_USER_SPORTS) {
+                                return prev;
+                              }
+                              return [...prev, s];
+                            }
+                            return prev.filter((x) => x !== s);
+                          });
+                        }}
+                        data-testid={`option-profile-sport-${s}`}
+                      >
+                        {s}
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+                  <DropdownMenuSeparator />
+                  <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+                    {sportsSel.length}/{MAX_USER_SPORTS} selected
+                    {sportsSel.length >= MAX_USER_SPORTS
+                      ? " — 5 sports max."
+                      : ""}
+                  </p>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
           {isMinor ? (
             <p
               className="text-xs font-medium text-muted-foreground"
@@ -746,11 +931,15 @@ export function EditProfileDialog({
             variant="brand"
             onClick={onSave}
             disabled={
-              update.isPending || avatarUploading || !firstName || !lastName
+              update.isPending ||
+              updateSports.isPending ||
+              avatarUploading ||
+              !firstName ||
+              !lastName
             }
             data-testid="button-save-profile"
           >
-            {update.isPending ? "Saving…" : "Save"}
+            {update.isPending || updateSports.isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -3,6 +3,8 @@ import { useParams, Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserById,
+  useGetUserSports,
+  getGetUserSportsQueryKey,
   useGetLoggedInUser,
   useListUserPosts,
   useListUserOrganizations,
@@ -42,6 +44,7 @@ import {
   MessageSquare,
   Shield,
   Tag,
+  Trophy,
   Users,
 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
@@ -57,6 +60,18 @@ export default function UserProfilePage() {
   const isLg = useIsLg();
   const { data: user, isLoading } = useGetUserById(userId);
   const { data: me } = useGetLoggedInUser();
+  // Task #500 — sports list. The endpoint is self-only (returns 403 for
+  // strangers), so we only enable the query when viewing your own
+  // profile to avoid a guaranteed-failed request. If product later wants
+  // sports public to anyone who can see the profile, the spec needs to
+  // open this endpoint up — out of scope here.
+  const { data: sportsResp } = useGetUserSports(userId, {
+    query: {
+      queryKey: getGetUserSportsQueryKey(userId),
+      enabled: !!userId && user?.isOwnProfile === true,
+    },
+  });
+  const userSports = sportsResp?.sports ?? [];
   const { data: postsResp } = useListUserPosts(userId);
   const { data: orgsResp } = useListUserOrganizations(userId);
   const { data: teamsResp } = useListUserTeams(userId);
@@ -458,7 +473,7 @@ export default function UserProfilePage() {
           const dobValid = dobDate && !Number.isNaN(dobDate.getTime());
           const dobLabel = dobValid ? friendlyAgeLabel(dobDate) : null;
           const showInfo =
-            user.bio || user.city || user.state || dobLabel;
+            user.bio || user.city || user.state || dobLabel || userSports.length > 0;
           if (!showInfo) return null;
           return (
           <div className="px-6 pb-6 space-y-2">
@@ -477,6 +492,30 @@ export default function UserProfilePage() {
               >
                 <Cake className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>{dobLabel}</span>
+              </div>
+            )}
+            {/* Task #500 — Show the user's selected sports as small
+                badge chips. Hidden when empty (and the query is only
+                enabled for own-profile, so strangers never see this
+                row at all today). */}
+            {userSports.length > 0 && (
+              <div
+                className="flex items-start gap-2 text-sm font-medium text-muted-foreground"
+                data-testid="text-user-sports"
+              >
+                <Trophy className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="flex flex-wrap gap-1.5">
+                  {userSports.map((s) => (
+                    <Badge
+                      key={s}
+                      variant="secondary"
+                      className="font-medium"
+                      data-testid={`badge-user-sport-${s}`}
+                    >
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
             {/* Task #349 — Show "City, ST", just the city, or just the state
