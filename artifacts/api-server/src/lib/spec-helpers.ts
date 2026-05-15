@@ -690,7 +690,11 @@ export function toInvite(i: InviteRow, invitedBy: UserRow | null) {
 
 interface PostExtras {
   team?: TeamRow | null;
-  org: OrgRow;
+  // Task #510 — `org` is nullable for profile-only highlights (no team,
+  // no org). All article-backed and org_post paths still pass a real
+  // org. When both `team` and `org` are null, `basePost` emits a
+  // user-context post keyed to `author` (the uploader).
+  org: OrgRow | null;
   author: UserRow | null;
   reactionCount?: number;
   hasReacted?: boolean;
@@ -873,32 +877,48 @@ function basePost(p: {
       })
     : { id: "system", displayName: "System", avatarUrl: null, authorRole: null };
   const team = p.extras.team;
-  const context = team
+  const org = p.extras.org;
+  const context = team && org
     ? {
         type: "team" as const,
         id: team.id,
         name: team.name,
         slug: slugify(team.name),
-        orgSlug: slugify(p.extras.org.name),
-        orgId: p.extras.org.id,
-        orgName: p.extras.org.name,
+        orgSlug: slugify(org.name),
+        orgId: org.id,
+        orgName: org.name,
         avatarUrl: team.logoUrl ?? null,
         // Team posts carry the parent org's logo so PostCard can show
         // the org logo as the team's avatar. Null when the parent org
         // also has no logo set.
-        orgAvatarUrl: p.extras.org.logoUrl ?? null,
+        orgAvatarUrl: org.logoUrl ?? null,
       }
-    : {
-        type: "organization" as const,
-        id: p.extras.org.id,
-        name: p.extras.org.name,
-        slug: slugify(p.extras.org.name),
-        orgSlug: null,
-        orgId: null,
-        orgName: null,
-        avatarUrl: p.extras.org.logoUrl ?? null,
-        orgAvatarUrl: null,
-      };
+    : org
+      ? {
+          type: "organization" as const,
+          id: org.id,
+          name: org.name,
+          slug: slugify(org.name),
+          orgSlug: null,
+          orgId: null,
+          orgName: null,
+          avatarUrl: org.logoUrl ?? null,
+          orgAvatarUrl: null,
+        }
+      : {
+          // Task #510 — profile-only highlights live on the uploader's
+          // profile + followers' feeds, with no team or org chip. The
+          // post card renders the uploader's display name + avatar.
+          type: "user" as const,
+          id: author.id,
+          name: author.displayName,
+          slug: null,
+          orgSlug: null,
+          orgId: null,
+          orgName: null,
+          avatarUrl: author.avatarUrl ?? null,
+          orgAvatarUrl: null,
+        };
   return {
     id: p.id,
     postType: p.postType,

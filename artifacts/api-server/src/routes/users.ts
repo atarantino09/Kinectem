@@ -805,8 +805,10 @@ router.get(
         author: users,
       })
       .from(highlights)
-      .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #510 — leftJoin to include profile-only highlights on the
+      // uploader's own profile feed.
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .where(and(...highlightConds));
 
@@ -833,8 +835,10 @@ router.get(
       })
       .from(highlightTags)
       .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
-      .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #510 — leftJoin: a profile-only highlight may still tag the
+      // user, and should surface here.
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .where(
         and(
@@ -874,8 +878,9 @@ router.get(
       ? await db
           .select({ h: highlights, team: teams, org: organizations, author: users })
           .from(highlights)
-          .innerJoin(teams, eq(highlights.teamId, teams.id))
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          // Task #510 — profile-only highlights are shareable.
+          .leftJoin(teams, eq(highlights.teamId, teams.id))
+          .leftJoin(organizations, eq(teams.organizationId, organizations.id))
           .leftJoin(users, eq(highlights.uploaderId, users.id))
           .where(
             and(
@@ -897,8 +902,9 @@ router.get(
     type HighlightRow = {
       kind: "highlight";
       h: typeof highlights.$inferSelect;
-      team: typeof teams.$inferSelect;
-      org: typeof organizations.$inferSelect;
+      // Task #510 — team/org are null on profile-only highlights.
+      team: typeof teams.$inferSelect | null;
+      org: typeof organizations.$inferSelect | null;
       author: typeof users.$inferSelect | null;
       // Set when this row only made it onto the profile because the
       // user was tagged in someone else's highlight (block 3b). The

@@ -466,7 +466,11 @@ export const articleAuthors = pgTable("article_authors", {
 
 export const highlights = pgTable("highlights", {
   id: uuid("id").primaryKey().defaultRandom(),
-  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  // Task #510 — nullable to support "Just my profile" highlights that
+  // are scoped to the uploader only (no team / org). Read paths must
+  // use leftJoin against `teams` and treat null team/org as a
+  // user-context post.
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }),
   articleId: uuid("article_id").references(() => articles.id, { onDelete: "set null" }),
   uploaderId: uuid("uploader_id").references(() => users.id, { onDelete: "set null" }),
   title: text("title").notNull(),

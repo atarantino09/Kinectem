@@ -240,8 +240,10 @@ router.get(
       const ownHls = await db
         .select({ h: highlights, team: teams, org: organizations, uploader: users })
         .from(highlights)
-        .innerJoin(teams, eq(highlights.teamId, teams.id))
-        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        // Task #510 — leftJoin so profile-only highlights (teamId null,
+        // no parent org) still surface.
+        .leftJoin(teams, eq(highlights.teamId, teams.id))
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(highlights.uploaderId, users.id))
         .where(and(eq(highlights.uploaderId, me.id), isNull(highlights.hiddenAt)))
         .orderBy(desc(highlights.createdAt))
@@ -404,8 +406,9 @@ router.get(
     const hls = await db
       .select({ h: highlights, team: teams, org: organizations, uploader: users })
       .from(highlights)
-      .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #510 — leftJoin to include profile-only highlights.
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .where(and(isNull(highlights.hiddenAt), or(...highlightConds)))
       .orderBy(desc(highlights.createdAt))
@@ -471,8 +474,9 @@ router.get(
       ? await db
           .select({ h: highlights, team: teams, org: organizations, uploader: users })
           .from(highlights)
-          .innerJoin(teams, eq(highlights.teamId, teams.id))
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          // Task #510 — profile-only highlights are shareable too.
+          .leftJoin(teams, eq(highlights.teamId, teams.id))
+          .leftJoin(organizations, eq(teams.organizationId, organizations.id))
           .leftJoin(users, eq(highlights.uploaderId, users.id))
           .where(and(inArray(highlights.id, sharedHighlightIds), isNull(highlights.hiddenAt)))
       : [];
@@ -521,12 +525,17 @@ router.get(
       })),
     ];
     // Batched org-admin lookup for `canEdit` on org_post rows.
+    // Task #510 — profile-only highlights have null org; filter them
+    // out of the org-admin lookup batch (they have no org-scope edit
+    // ACL to compute).
     const feedOrgIds = [
       ...arts.map((r) => r.org.id),
-      ...hls.map((r) => r.org.id),
+      ...hls.map((r) => r.org?.id).filter((id): id is string => !!id),
       ...orgPostRows.map((r) => r.org.id),
       ...sharedArticleRows.map((r) => r.org.id),
-      ...sharedHighlightRows.map((r) => r.org.id),
+      ...sharedHighlightRows
+        .map((r) => r.org?.id)
+        .filter((id): id is string => !!id),
     ];
     // Task #414 — collect every user id we may surface as an embed in
     // this feed response (authors, uploaders, sharers, and tagged
@@ -1033,8 +1042,9 @@ router.get(
     const [row] = await db
       .select({ h: highlights, team: teams, org: organizations, uploader: users })
       .from(highlights)
-      .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #510 — leftJoin so GET /posts/:postId resolves profile-only.
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .where(eq(highlights.id, parsed.id))
       .limit(1);
@@ -1660,13 +1670,51 @@ router.post(
         }
       }
     }
-    if (!teamId)
+    // Task #510 — "Just my profile" highlight branch. Short posts may
+    // omit teamId/organizationId entirely; the highlight is then scoped
+    // to the uploader (no team, no org, no fan-out, no admin notify).
+    // Long-form recaps still require a team — there is no
+    // "profile-only" recap.
+    const isShort = body.postType !== "long";
+    const wantsProfileOnly =
+      isShort &&
+      !teamId &&
+      !body.organizationId &&
+      (body.context?.type === "user" || !body.context?.type);
+    if (!teamId && !wantsProfileOnly)
       return apiError(
         res,
         400,
         "teamId is required (post from a team page or include teamId in the request).",
       );
+    if (wantsProfileOnly) {
+      const [h] = await db
+        .insert(highlights)
+        .values({
+          teamId: null,
+          uploaderId: me.id,
+          title: body.title ?? "Untitled",
+          description: body.description ?? undefined,
+          videoUrl: body.assets?.[0]?.url ?? body.videoUrl ?? "",
+        })
+        .returning();
+      res.status(201).json(
+        highlightToPost(h, {
+          team: null,
+          org: null,
+          author: me,
+          taggedUsers: [],
+          minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
+        }),
+      );
+      return;
+    }
     if (body.postType === "long") {
+      // Task #510 — narrow `teamId` for the recap branch. The
+      // profile-only branch above is the only path that can leave
+      // it null past the guard, and that branch returns early; by
+      // here a recap must have a teamId.
+      if (!teamId) return notFound(res);
       const isDraft = body.status === "draft";
       const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
       const [org] = team
@@ -1797,6 +1845,9 @@ router.post(
     // Resolve the team + org first so the permission gate can read
     // them, and so the response payload below has the same shape it
     // had before the gate was added.
+    // Task #510 — narrow teamId. Profile-only highlights returned
+    // above; everything below is the team-scoped highlight path.
+    if (!teamId) return notFound(res);
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     const [org] = team
       ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)

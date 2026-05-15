@@ -313,19 +313,36 @@ export function PostFormFields({
         onVideoUrlChange={onVideoUrlChange}
       />
 
-      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && myTeams.data.length > 0 && (
+      {/* Task #510 — for short posts the picker always renders (even
+          when the user has zero authorable teams) so "Just my profile"
+          is always reachable. For recaps it stays gated on having at
+          least one authorable team. */}
+      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && (isShort || myTeams.data.length > 0) && (
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-            Post to Team
+            {isShort ? "Post to" : "Post to Team"}
           </Label>
           <Select value={teamId} onValueChange={onTeamIdChange}>
             <SelectTrigger
               className="mt-2"
               data-testid="select-post-to-team"
             >
-              <SelectValue placeholder="Pick a team" />
+              <SelectValue placeholder={isShort ? "Pick a destination" : "Pick a team"} />
             </SelectTrigger>
             <SelectContent>
+              {isShort && (
+                <SelectItem
+                  value="__profile__"
+                  data-testid="option-post-to-profile"
+                >
+                  <div className="flex flex-col items-start">
+                    <span className="font-semibold">Just my profile</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Visible on your profile and to your followers
+                    </span>
+                  </div>
+                </SelectItem>
+              )}
               {myTeams.data.map((m) => (
                 <SelectItem
                   key={m.teamId}
@@ -353,7 +370,9 @@ export function PostFormFields({
           game recaps" guard so the user sees why Publish is disabled
           before clicking. Skipped for highlights without a team scope
           and for the org Update / draft / edit-published paths. */}
-      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && myTeams.data.length === 0 && (
+      {/* Task #510 — short posts have the "Just my profile" fallback,
+          so the zero-authorable-teams empty-state is recap-only. */}
+      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && !isShort && myTeams && myTeams.data.length === 0 && (
         <div
           className="flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"
           data-testid="empty-state-no-authorable-teams"

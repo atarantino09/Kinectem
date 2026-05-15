@@ -153,11 +153,17 @@ async function patchHighlight(
     .set(updates)
     .where(eq(highlights.id, h.id))
     .returning();
-  const [team] = await db
-    .select()
-    .from(teams)
-    .where(eq(teams.id, updated.teamId))
-    .limit(1);
+  // Task #510 — profile-only highlights have null teamId and have no
+  // owning team/org to resolve. Skip the lookup in that case so the
+  // PATCH response is the same `team: null, org: null` shape as
+  // GET /posts/:postId / POST /posts.
+  const [team] = updated.teamId
+    ? await db
+        .select()
+        .from(teams)
+        .where(eq(teams.id, updated.teamId))
+        .limit(1)
+    : [null];
   const [org] = team
     ? await db
         .select()
@@ -165,7 +171,9 @@ async function patchHighlight(
         .where(eq(organizations.id, team.organizationId))
         .limit(1)
     : [null];
-  if (!team || !org) return notFound(res);
+  // Only fall through to 404 when a team WAS expected but couldn't
+  // be loaded (i.e. team-scoped highlight referencing a deleted team).
+  if (updated.teamId && (!team || !org)) return notFound(res);
   // Task #414 — write-time PATCH echo: viewer is the uploader (`me`),
   // so masking is not needed. Pass the bypass context explicitly.
   const tagViews = await loadHighlightTagViews(
@@ -175,8 +183,8 @@ async function patchHighlight(
   );
   return res.json(
     highlightToPost(updated, {
-      team,
-      org,
+      team: team ?? null,
+      org: org ?? null,
       author: me,
       canEdit: true,
       canDelete: true,

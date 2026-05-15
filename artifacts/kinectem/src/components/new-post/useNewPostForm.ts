@@ -656,15 +656,21 @@ export function useNewPostForm({
 
   const buildPayload = (status?: "draft"): CreatePostRequest => {
     const recapDate = !isShort ? gameDateForApi() : null;
+    // Task #510 — sentinel for "Just my profile" highlight. Selecting
+    // it leaves teamId === "__profile__", which we translate to
+    // "submit with no team / context" so the server takes the
+    // profile-only branch.
+    const selectedTeam =
+      teamId === "__profile__" ? "" : teamId;
     return {
       postType,
       title: title.trim() || undefined,
       body: !isShort && body.trim() ? body.trim() : undefined,
-      ...(initialTeamId || teamId
+      ...(initialTeamId || selectedTeam
         ? ({
             context: {
               type: "team",
-              id: (initialTeamId ?? teamId) as string,
+              id: (initialTeamId ?? selectedTeam) as string,
             },
           } as object)
         : {}),

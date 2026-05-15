@@ -77,8 +77,9 @@ router.get(
       })
       .from(highlightTags)
       .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
-      .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #510 — leftJoin for profile-only highlights with no team/org.
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(and(eq(highlightTags.userId, me.id), eq(highlightTags.status, "approved")))
       .orderBy(desc(highlightTags.createdAt));
     const data = [
@@ -96,8 +97,9 @@ router.get(
         kind: "highlight" as const,
         postId: highlightPostId(r.h.id),
         title: r.h.title ?? "Highlight",
-        teamName: r.team.name,
-        orgName: r.org.name,
+        // Task #510 — profile-only highlights have no team/org chip.
+        teamName: r.team?.name ?? "",
+        orgName: r.org?.name ?? "",
         createdAt: r.t.createdAt.toISOString(),
       })),
     ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -175,6 +177,19 @@ router.post(
         .where(eq(highlights.id, parsed.id))
         .limit(1);
       if (!h) return notFound(res);
+      // Task #510 — profile-only highlights have no team, so the
+      // roster-based eligibility check below can't run. We reject
+      // the request explicitly rather than silently drop every tag,
+      // so a hand-rolled client gets a clear signal. The web composer
+      // never enables the player picker without a team scope, so
+      // this branch is only reachable via direct API calls.
+      if (!h.teamId)
+        return apiError(
+          res,
+          400,
+          "Profile-only highlights cannot be tagged — only roster members of a team-scoped highlight can be tagged.",
+          { code: "highlight_has_no_team" },
+        );
       teamId = h.teamId;
       isAuthor = h.uploaderId === me.id;
       highlightTitle = h.title ?? null;

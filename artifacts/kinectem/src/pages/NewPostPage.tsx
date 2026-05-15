@@ -65,6 +65,10 @@ export default function NewPostPage() {
   useEffect(() => {
     if (initialTeamId) return;
     if (form.teamId) return;
+    // Task #510 — highlights default to "Just my profile" so a user
+    // with one authorable team isn't auto-routed into team scope.
+    // The author can still flip the picker to the team if they want.
+    if (form.isShort) return;
     const only = myTeams?.data;
     if (only && only.length === 1) {
       form.setTeamId(only[0].teamId);
@@ -79,8 +83,14 @@ export default function NewPostPage() {
   // team via the loaded payload, so they bypass this guard.
   const composerNeedsTeam =
     !initialTeamId && !form.draftId && !form.isEditingPublished;
+  // Task #510 — short posts can target the uploader's profile only,
+  // so "__profile__" counts as a valid selection. Recaps still
+  // require a real team.
+  const hasTeamSelection =
+    !!form.teamId &&
+    (!form.isShort ? form.teamId !== "__profile__" : true);
   const publishDisabled =
-    composerNeedsTeam && form.loadedKind !== "org_post" && !form.teamId;
+    composerNeedsTeam && form.loadedKind !== "org_post" && !hasTeamSelection;
 
   // Roster for the per-player Tag Players picker. Originally added
   // for the highlight composer (task #313); task #322 extends the

@@ -237,8 +237,9 @@ router.get(
     const [row] = await db
       .select({ h: highlights, team: teams, org: organizations, uploader: users })
       .from(highlights)
-      .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #510 — leftJoin to support profile-only highlights.
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       .where(eq(highlights.id, parsed.id))
       .limit(1);
