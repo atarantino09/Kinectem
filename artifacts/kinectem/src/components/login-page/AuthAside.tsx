@@ -1,18 +1,15 @@
-import { Trophy } from "lucide-react";
-
 export function AuthAside() {
   return (
     <aside className="relative hidden md:flex flex-col justify-between p-10 bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 text-white overflow-hidden">
       <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/10 blur-3xl" />
       <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-blue-300/20 blur-3xl" />
 
-      <div className="relative flex items-center gap-2">
-        <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
-          <Trophy className="w-5 h-5" />
-        </div>
-        <span className="font-black text-2xl tracking-tight">
-          Kinect<span className="brand-gradient-text">em</span>
-        </span>
+      <div className="relative flex items-center">
+        <img
+          src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+          alt="Kinectem"
+          className="h-9 w-auto brightness-0 invert"
+        />
       </div>
 
       <div className="relative space-y-6">

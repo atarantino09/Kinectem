@@ -128,15 +128,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SheetDescription className="sr-only">
             Move between the main sections of Kinectem.
           </SheetDescription>
-          <div className="flex items-center gap-2 px-6 h-16 border-b border-border">
+          <div className="flex items-center px-6 h-16 border-b border-border">
             <img
-              src={`${import.meta.env.BASE_URL}logo-icon.png`}
+              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
-              className="w-8 h-8 rounded-lg object-cover"
+              className="h-8 w-auto"
             />
-            <span className="font-black text-lg tracking-tight">
-              Kinect<span className="brand-gradient-text">em</span>
-            </span>
           </div>
           <nav className="flex flex-col gap-1 p-3">
             {navItems.map((item) => {
@@ -199,15 +196,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       ) : (
       <header className="hidden md:block sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
-          <Link href="/" className="flex items-center gap-2 shrink-0">
+          <Link href="/" className="flex items-center shrink-0">
             <img
-              src={`${import.meta.env.BASE_URL}logo-icon.png`}
+              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
-              className="w-9 h-9 rounded-lg object-cover"
+              className="h-9 w-auto"
             />
-            <span className="font-black text-xl tracking-tight hidden sm:inline">
-              Kinect<span className="brand-gradient-text">em</span>
-            </span>
           </Link>
 
           <form onSubmit={onSearchSubmit} className="flex-1 max-w-md relative">

@@ -37,17 +37,14 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
 
           <Link
             href="/"
-            className="flex items-center gap-2 shrink-0"
+            className="flex items-center shrink-0"
             data-testid="mobile-top-logo"
           >
             <img
-              src={`${import.meta.env.BASE_URL}logo-icon.png`}
+              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
-              className="w-8 h-8 rounded-lg object-cover"
+              className="h-7 w-auto"
             />
-            <span className="font-black text-base tracking-tight">
-              Kinect<span className="brand-gradient-text">em</span>
-            </span>
           </Link>
         </div>
 

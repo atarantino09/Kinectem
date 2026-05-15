@@ -96,8 +96,11 @@ function Header({ onMenu }: { onMenu: () => void }) {
             href="/"
             className="flex items-center gap-2 text-[var(--color-fg)] no-underline hover:!no-underline"
           >
-            <Logo />
-            <span className="font-semibold tracking-tight">Kinectem</span>
+            <img
+              src="/logo-horizontal.png"
+              alt="Kinectem"
+              className="h-6 w-auto"
+            />
             <span className="text-[var(--color-fg-subtle)]">/</span>
             <span className="text-sm font-medium text-[var(--color-fg-muted)]">
               developers
@@ -128,29 +131,6 @@ function Header({ onMenu }: { onMenu: () => void }) {
         </div>
       </div>
     </header>
-  );
-}
-
-function Logo() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-      <rect
-        x="1"
-        y="1"
-        width="20"
-        height="20"
-        rx="5"
-        fill="var(--color-accent)"
-      />
-      <path
-        d="M7 6.5v9M7 11l5-4.5M7 11l5 4.5M14 6.5l1.6 4.5L14 15.5"
-        stroke="white"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
   );
 }
 
