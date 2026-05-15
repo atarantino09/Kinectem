@@ -42,3 +42,9 @@ id = "XxcSva6mMe7f-9jntVHqx"
 uri = "file://exports/kinectem-sdk/openapi.json"
 type = "unspecified"
 title = "Kinectem OpenAPI spec (JSON, 153 endpoints)"
+
+[[outputs]]
+id = "0xIArRda-9uIz9IhOskFz"
+uri = "file://artifacts/kinectem/public/logo-icon.png"
+type = "image"
+title = "New favicon (K mark)"
