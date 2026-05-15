@@ -6,9 +6,9 @@ export function AuthAside() {
 
       <div className="relative flex items-center">
         <img
-          src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+          src={`${import.meta.env.BASE_URL}logo-horizontal-dark.png`}
           alt="Kinectem"
-          className="h-9 w-auto brightness-0 invert"
+          className="block h-9 w-auto"
         />
       </div>
 

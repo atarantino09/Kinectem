@@ -128,13 +128,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SheetDescription className="sr-only">
             Move between the main sections of Kinectem.
           </SheetDescription>
-          <div className="flex items-center px-6 h-16 border-b border-border">
+          <Link
+            href="/"
+            onClick={() => setMobileNavOpen(false)}
+            className="flex items-center px-6 h-16 border-b border-border"
+          >
             <img
               src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
-              className="h-8 w-auto"
+              className="block h-8 w-auto"
             />
-          </div>
+          </Link>
           <nav className="flex flex-col gap-1 p-3">
             {navItems.map((item) => {
               const active = isNavActive(item.href);
@@ -200,7 +204,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <img
               src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
-              className="h-9 w-auto"
+              className="block h-9 w-auto"
             />
           </Link>
 
