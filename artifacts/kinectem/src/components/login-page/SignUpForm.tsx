@@ -70,11 +70,6 @@ export function SignUpForm({
   const dobComplete = Boolean(dobMonth && dobDay && dobYear);
   const dobValid = dobComplete && isValidDob(dobParts);
   const dob = dobValid ? composeDob(dobParts) : "";
-  const resetDob = () => {
-    setDobMonth("");
-    setDobDay("");
-    setDobYear("");
-  };
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianConsent, setGuardianConsent] = useState(false);
 
