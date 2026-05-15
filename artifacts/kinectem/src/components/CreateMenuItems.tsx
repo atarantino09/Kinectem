@@ -10,10 +10,6 @@ type Props = {
   onCreateOrg: () => void;
 };
 
-// Task #508 — Create menu shows ONLY true "create" actions
-// (Game Recap, Highlight Clip, New Organization). Management entries
-// (Pending Tags, My Drafts, Browse Orgs) moved to the user-avatar
-// dropdown / header Orgs tab.
 export function CreateMenuItems({ canAuthorRecap, onCreateOrg }: Props) {
   const [, setLocation] = useLocation();
   return (
