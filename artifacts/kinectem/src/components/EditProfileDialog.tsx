@@ -48,6 +48,7 @@ import { Camera, ChevronDown, Loader2, Pencil, Plus, Trophy, X } from "lucide-re
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { US_STATES } from "@/lib/usStates";
 import { SPORTS } from "@/lib/sports";
+import { DOB_MONTHS, DOB_DAYS, DOB_YEARS, parseDob } from "@/lib/dob";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 
 const MAX_USER_SPORTS = 5;
@@ -55,36 +56,10 @@ const MAX_USER_SPORTS = 5;
 const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-// Task #432 — Birthday is composed from three Select dropdowns rather
-// than a native date input (the native picker dropped values silently
-// on some browsers). Months are zero-padded so the value can be
-// concatenated directly into the YYYY-MM-DD payload. Days always show
-// 1–31 — invalid combos like Feb 31 are caught by the round-trip
-// validation in onSave. Years run from the current year back to 1900,
-// newest first so adults find their year quickly.
-const DOB_MONTHS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "01", label: "January" },
-  { value: "02", label: "February" },
-  { value: "03", label: "March" },
-  { value: "04", label: "April" },
-  { value: "05", label: "May" },
-  { value: "06", label: "June" },
-  { value: "07", label: "July" },
-  { value: "08", label: "August" },
-  { value: "09", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-];
-const DOB_DAYS: ReadonlyArray<string> = Array.from({ length: 31 }, (_, i) =>
-  String(i + 1).padStart(2, "0"),
-);
-const DOB_YEARS: ReadonlyArray<string> = (() => {
-  const now = new Date().getUTCFullYear();
-  const years: string[] = [];
-  for (let y = now; y >= 1900; y -= 1) years.push(String(y));
-  return years;
-})();
+// Task #432 / #506 — Birthday is composed from three Select dropdowns
+// rather than a native date input (the native picker dropped values
+// silently on some browsers). The month/day/year constants now live in
+// `@/lib/dob` so the same pattern can be reused on the signup age gate.
 
 async function uploadAvatarFile(file: File): Promise<string> {
   const upload = await requestUpload({
@@ -155,16 +130,7 @@ export function EditProfileDialog({
   // dropped values on some browsers (the user's chosen date never made
   // it into React state, so saves looked like "today's date" no-ops).
   // Three controlled selects sidestep that whole class of bugs.
-  const dobParts = (
-    v: PrivateUserResponse["dateOfBirth"],
-  ): { m: string; d: string; y: string } => {
-    if (!v) return { m: "", d: "", y: "" };
-    const s = String(v).slice(0, 10);
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-    if (!match) return { m: "", d: "", y: "" };
-    return { y: match[1], m: match[2], d: match[3] };
-  };
-  const initialDobParts = dobParts(user.dateOfBirth);
+  const initialDobParts = parseDob(user.dateOfBirth);
   const [dobMonth, setDobMonth] = useState(initialDobParts.m);
   const [dobDay, setDobDay] = useState(initialDobParts.d);
   const [dobYear, setDobYear] = useState(initialDobParts.y);
@@ -225,7 +191,7 @@ export function EditProfileDialog({
       setCity(user.city ?? "");
       setState(user.state ?? "");
       {
-        const p = dobParts(user.dateOfBirth);
+        const p = parseDob(user.dateOfBirth);
         setDobMonth(p.m);
         setDobDay(p.d);
         setDobYear(p.y);
@@ -336,7 +302,7 @@ export function EditProfileDialog({
       setCity(user.city ?? "");
       setState(user.state ?? "");
       {
-        const p = dobParts(user.dateOfBirth);
+        const p = parseDob(user.dateOfBirth);
         setDobMonth(p.m);
         setDobDay(p.d);
         setDobYear(p.y);
@@ -636,7 +602,10 @@ export function EditProfileDialog({
                 >
                   <SelectValue placeholder="Month" />
                 </SelectTrigger>
-                <SelectContent className="max-h-72">
+                <SelectContent
+                  position="popper"
+                  className="max-h-[min(60vh,24rem)]"
+                >
                   {DOB_MONTHS.map((m) => (
                     <SelectItem
                       key={m.value}
@@ -655,7 +624,10 @@ export function EditProfileDialog({
                 >
                   <SelectValue placeholder="Day" />
                 </SelectTrigger>
-                <SelectContent className="max-h-72">
+                <SelectContent
+                  position="popper"
+                  className="max-h-[min(60vh,24rem)]"
+                >
                   {DOB_DAYS.map((d) => (
                     <SelectItem
                       key={d}
@@ -674,7 +646,10 @@ export function EditProfileDialog({
                 >
                   <SelectValue placeholder="Year" />
                 </SelectTrigger>
-                <SelectContent className="max-h-72">
+                <SelectContent
+                  position="popper"
+                  className="max-h-[min(60vh,24rem)]"
+                >
                   {DOB_YEARS.map((y) => (
                     <SelectItem
                       key={y}

@@ -14,6 +14,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import {
+  DOB_MONTHS,
+  DOB_DAYS,
+  DOB_YEARS,
+  composeDob,
+  isValidDob,
+} from "@/lib/dob";
 
 export type Role = "athlete" | "coach" | "admin" | "parent";
 
@@ -52,7 +59,22 @@ export function SignUpForm({
   const [role, setRole] = useState<Role>(initialRole);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [dob, setDob] = useState("");
+  // Task #506 — Composed from three dropdowns instead of a native
+  // <input type="date">. Same pattern as the profile editor (Task
+  // #432): the native picker silently dropped values on some
+  // browsers / was hard to use on mobile for older years.
+  const [dobMonth, setDobMonth] = useState("");
+  const [dobDay, setDobDay] = useState("");
+  const [dobYear, setDobYear] = useState("");
+  const dobParts = { m: dobMonth, d: dobDay, y: dobYear };
+  const dobComplete = Boolean(dobMonth && dobDay && dobYear);
+  const dobValid = dobComplete && isValidDob(dobParts);
+  const dob = dobValid ? composeDob(dobParts) : "";
+  const resetDob = () => {
+    setDobMonth("");
+    setDobDay("");
+    setDobYear("");
+  };
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianConsent, setGuardianConsent] = useState(false);
 
@@ -70,7 +92,12 @@ export function SignUpForm({
     setSubmitting(true);
     onError(null);
     try {
-      if (!dob) throw new Error("Please enter your date of birth.");
+      if (!dobComplete) {
+        throw new Error("Pick a month, day, and year.");
+      }
+      if (!dobValid) {
+        throw new Error("That date doesn't look right — please double-check.");
+      }
       // Hit the neutral /auth/age-check first. The server returns
       // { requiresParentalConsent: true|false } and sets the signed
       // `kinectem_age_gate` cookie; the signup call later requires it.
@@ -134,32 +161,115 @@ export function SignUpForm({
   };
 
   if (step === "age") {
+    const showInvalidHint = dobComplete && !dobValid;
     return (
       <form className="space-y-4" onSubmit={handleAgeSubmit} data-testid="form-age-gate">
         <div className="space-y-1.5">
           <Label
-            htmlFor="age-dob"
+            id="age-dob-label"
             className="text-xs font-semibold uppercase tracking-wide text-slate-600"
           >
             Date of birth
           </Label>
-          <Input
-            id="age-dob"
-            type="date"
-            required
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            className="rounded-xl h-11"
+          {/* Task #506 — Three scrollable Select dropdowns (Month /
+              Day / Year) match the profile editor pattern and avoid
+              the browser-specific bugs of <input type="date"> for the
+              age gate. position="popper" + max-h ensures the ~125-
+              entry year list scrolls smoothly on desktop and mobile. */}
+          <div
+            className="grid grid-cols-3 gap-2"
+            role="group"
+            aria-labelledby="age-dob-label"
             data-testid="input-age-dob"
-          />
-          <p className="text-xs text-slate-500">
-            We ask everyone for their date of birth before creating an account.
-          </p>
+          >
+            <Select value={dobMonth} onValueChange={setDobMonth}>
+              <SelectTrigger
+                className="rounded-xl h-11"
+                aria-label="Birthday month"
+                data-testid="signup-dob-month"
+              >
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                className="max-h-[min(60vh,24rem)]"
+              >
+                {DOB_MONTHS.map((m) => (
+                  <SelectItem
+                    key={m.value}
+                    value={m.value}
+                    data-testid={`option-signup-dob-month-${m.value}`}
+                  >
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={dobDay} onValueChange={setDobDay}>
+              <SelectTrigger
+                className="rounded-xl h-11"
+                aria-label="Birthday day"
+                data-testid="signup-dob-day"
+              >
+                <SelectValue placeholder="Day" />
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                className="max-h-[min(60vh,24rem)]"
+              >
+                {DOB_DAYS.map((d) => (
+                  <SelectItem
+                    key={d}
+                    value={d}
+                    data-testid={`option-signup-dob-day-${d}`}
+                  >
+                    {Number(d)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={dobYear} onValueChange={setDobYear}>
+              <SelectTrigger
+                className="rounded-xl h-11"
+                aria-label="Birthday year"
+                data-testid="signup-dob-year"
+              >
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                className="max-h-[min(60vh,24rem)]"
+              >
+                {DOB_YEARS.map((y) => (
+                  <SelectItem
+                    key={y}
+                    value={y}
+                    data-testid={`option-signup-dob-year-${y}`}
+                  >
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {showInvalidHint ? (
+            <p
+              className="text-xs text-rose-600"
+              data-testid="error-signup-dob"
+            >
+              That date doesn't look right — please double-check.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              We ask everyone for their date of birth before creating an
+              account.
+            </p>
+          )}
         </div>
         <Button
           type="submit"
           variant="brandBlock"
-          disabled={submitting}
+          disabled={submitting || !dobValid}
           data-testid="btn-age-continue"
         >
           {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
