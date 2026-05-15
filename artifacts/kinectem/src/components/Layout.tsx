@@ -131,7 +131,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link
             href="/"
             onClick={() => setMobileNavOpen(false)}
-            className="flex items-center px-6 h-16 border-b border-border"
+            className="flex items-center w-full px-6 h-16 border-b border-border"
           >
             <img
               src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
