@@ -146,6 +146,7 @@ export default function FeedPage() {
                               teamId={t.id}
                               teamName={t.name}
                               teamLogoUrl={t.logoUrl}
+                              hideAvatar
                             />
                           ))}
                         </div>
@@ -280,23 +281,27 @@ function TeamLinkRow({
   teamName,
   teamLogoUrl,
   subtitle,
+  hideAvatar,
 }: {
   teamId: string;
   teamName: string;
   teamLogoUrl: string | null;
   subtitle?: string;
+  hideAvatar?: boolean;
 }) {
   return (
     <Link href={`/teams/${teamId}`} data-testid={`link-team-${teamId}`}>
       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer py-1.5 px-1.5 rounded-md hover:bg-muted/50">
-        <TeamAvatar
-          avatarUrl={teamLogoUrl}
-          displayName={teamName}
-          size="xs"
-          rounded="lg"
-          className="w-5 h-5 shrink-0"
-          fallbackClassName="bg-muted text-muted-foreground"
-        />
+        {!hideAvatar && (
+          <TeamAvatar
+            avatarUrl={teamLogoUrl}
+            displayName={teamName}
+            size="xs"
+            rounded="lg"
+            className="w-5 h-5 shrink-0"
+            fallbackClassName="bg-muted text-muted-foreground"
+          />
+        )}
         <span className="truncate flex-1 min-w-0">
           <span className="truncate">{teamName}</span>
           {subtitle && (
