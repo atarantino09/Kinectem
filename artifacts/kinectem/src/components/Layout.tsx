@@ -7,7 +7,7 @@ import {
 import { UserAvatar } from "@/components/UserAvatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield } from "lucide-react";
+import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield, Tag, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -308,6 +308,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <Shield className="w-4 h-4 mr-2" /> Admin
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/tags/pending")}
+                  data-testid="menu-pending-tags"
+                >
+                  <Tag className="w-4 h-4 mr-2" /> Pending Tags
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/drafts")}
+                  data-testid="menu-drafts"
+                >
+                  <FileText className="w-4 h-4 mr-2" /> My Drafts
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setLocation("/login")}>
                   <Repeat className="w-4 h-4 mr-2" /> Switch user
                 </DropdownMenuItem>
