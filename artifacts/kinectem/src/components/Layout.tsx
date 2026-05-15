@@ -200,7 +200,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       ) : (
       <header className="hidden md:block sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
-          <Link href="/" className="flex items-center shrink-0">
+          <Link href="/" className="flex items-center shrink-0 cursor-pointer">
             <img
               src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
