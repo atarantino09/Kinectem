@@ -835,8 +835,12 @@ router.get(
       })
       .from(highlightTags)
       .innerJoin(highlights, eq(highlightTags.highlightId, highlights.id))
-      // Task #510 — leftJoin: a profile-only highlight may still tag the
-      // user, and should surface here.
+      // Task #510 — leftJoin to support profile-only highlights when
+      // querying tagged-in rows. Profile-only highlights themselves
+      // cannot be tagged (POST /posts/:postId/tags rejects them), but
+      // historical tag rows on highlights whose team was later
+      // detached would still need to surface, and the join must not
+      // drop a row just because team/org is null.
       .leftJoin(teams, eq(highlights.teamId, teams.id))
       .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
