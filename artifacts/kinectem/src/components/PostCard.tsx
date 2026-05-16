@@ -538,7 +538,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
             {post.title && (
               <div className="flex items-start gap-2 mb-2">
                 <Link href={`/posts/${post.id}`} className="flex-1 min-w-0">
-                  <h3 className="font-black text-xl tracking-tight leading-tight hover:underline cursor-pointer">
+                  <h3 className="font-black text-lg tracking-tight leading-tight hover:underline cursor-pointer">
                     {post.title}
                   </h3>
                 </Link>
