@@ -46,6 +46,7 @@ import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
+import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { getInitials } from "@/lib/format";
 
 type TeamRailItem = {
@@ -328,9 +329,10 @@ export default function OrganizationPage() {
             {(organization.description || organization.website) && (
               <div className="px-4 sm:px-6 pb-4 sm:pb-6">
                 {organization.description && (
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                    {organization.description}
-                  </p>
+                  <OrganizationDescription
+                    description={organization.description}
+                    organizationName={organization.name}
+                  />
                 )}
                 {organization.website && (
                   <a
