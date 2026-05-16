@@ -78,7 +78,7 @@ export default function FeedPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_300px] gap-6">
       {/* Left sidebar */}
-      <aside className="hidden lg:block space-y-4">
+      <aside className="hidden lg:block lg:sticky lg:top-16 lg:self-start lg:max-h-[calc(100vh-4rem-1.5rem)] lg:overflow-y-auto space-y-4">
         {me && (
           <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
             <div className="h-16 brand-gradient-cover relative">
@@ -193,7 +193,7 @@ export default function FeedPage() {
       </div>
 
       {/* Right sidebar: three single-type "to follow" cards */}
-      <aside className="hidden lg:block space-y-4">
+      <aside className="hidden lg:block lg:sticky lg:top-16 lg:self-start lg:max-h-[calc(100vh-4rem-1.5rem)] lg:overflow-y-auto space-y-4">
         <SuggestionsPanel
           variant="compact"
           section="users"
