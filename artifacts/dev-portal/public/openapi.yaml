@@ -429,6 +429,95 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /users/me/follow-requests:
+    get:
+      operationId: listMyFollowRequests
+      summary: List pending follow requests on the authenticated user
+      description: |
+        Task #520 — Lists outstanding follow requests when the user has
+        `requiresFollowApproval = true`. Each item is a pending row in
+        `user_followers` whose `following_user_id` is the caller and
+        whose `moderation_status` is `pending`. Newest first.
+      tags:
+        - Follows
+      responses:
+        '200':
+          description: Paginated list of pending follow requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFollowRequestsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/me/follow-requests/{requesterId}/approve:
+    post:
+      operationId: approveFollowRequest
+      summary: Approve a pending follow request
+      description: |
+        Task #520 — Flips the pending `user_followers` row's
+        `moderation_status` to `approved`. Idempotent: returns 200 if
+        the request was already approved, 404 if no row exists.
+      tags:
+        - Follows
+      parameters:
+        - name: requesterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/me/follow-requests/{requesterId}/decline:
+    post:
+      operationId: declineFollowRequest
+      summary: Decline a pending follow request
+      description: |
+        Task #520 — Deletes the pending `user_followers` row. The
+        requester will see the profile as not-followed again and may
+        re-request later. Idempotent: returns 200 if no row exists.
+      tags:
+        - Follows
+      parameters:
+        - name: requesterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /users/me/settings:
     get:
       operationId: getMySettings
@@ -6741,6 +6830,15 @@ components:
           type: boolean
         isConnection:
           type: boolean
+        followRequestPending:
+          type: boolean
+          description: |
+            Task #520 — True when the viewer has an outstanding follow
+            request awaiting the profile owner's approval (the row
+            exists with `moderationStatus = 'pending'`). The client
+            renders a "Requested" button with cancel. False on
+            approved follows and when no edge exists. Always false on
+            own-profile responses.
         followerCount:
           type: integer
           minimum: 0
@@ -6869,6 +6967,16 @@ components:
                 from the Edit Profile dialog. Minor accounts are
                 forced to `private` server-side regardless of the
                 value stored in the database.
+            requiresFollowApproval:
+              type: boolean
+              description: |
+                Task #520 — Adult-only "private account" toggle. When
+                true, new incoming follow edges land as `pending`
+                (reviewable from /follow-requests) instead of the
+                default `approved`. Always false on minor accounts
+                (which are guardian-mediated via the COPPA pending
+                queue). Surfaced on the private response so the
+                profile owner can toggle it from Edit Profile.
 
     UpdateUserRequest:
       type: object
@@ -6896,6 +7004,13 @@ components:
             Task #426 — Who can see this user's birthday. Omit to
             leave the stored value untouched. Minor accounts may only
             store `private` — sending any other value returns 400.
+        requiresFollowApproval:
+          type: boolean
+          description: |
+            Task #520 — Adult-only private-account toggle. When true,
+            new incoming follow edges land as pending. Sending any
+            value on a minor account returns 400. Omit to leave the
+            stored value untouched.
         bio:
           type: string
           nullable: true
@@ -7793,6 +7908,51 @@ components:
         followedAt:
           type: string
           format: date-time
+
+    FollowRequestListItem:
+      type: object
+      required:
+        - id
+        - displayName
+        - requestedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The requesting user's ID.
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        requestedAt:
+          type: string
+          format: date-time
+
+    PaginatedFollowRequestsResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FollowRequestListItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    OkResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
 
     PaginatedFollowersResponse:
       type: object
