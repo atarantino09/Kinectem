@@ -35,7 +35,7 @@ export function OrganizationDescription({
   }, []);
 
   return (
-    <div className="max-w-2xl">
+    <div className="mt-3 max-w-2xl">
       <p
         ref={ref}
         className="text-sm text-muted-foreground leading-relaxed line-clamp-4 whitespace-pre-wrap"
