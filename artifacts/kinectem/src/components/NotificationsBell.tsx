@@ -43,6 +43,10 @@ import { useToast } from "@/hooks/use-toast";
 //                               source: lib/article-tagging.ts (notifyNewlyTaggedInRecap)
 //   follow                   -> `/users/<actorUserId>`      (new follower's profile)
 //                               source: routes/organizations.ts (POST /users/:userId/follow)
+//   follow_request           -> `/follow-requests`          (Task #520 — adult
+//                               private-account inbox). Inserted by the same
+//                               route when the followed adult has
+//                               `requires_follow_approval = true`.
 //   roster_invite            -> `/teams/<teamId>?roster=1&entryId=<entryId>`
 //                               source: routes/teams.ts (member add + invite redeem)
 //   roster_invite_for_child  -> `/family?childId=...&entryId=...&teamId=...`

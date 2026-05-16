@@ -383,6 +383,10 @@ export function toPublicUser(
     // for surfaces that have already been audited (e.g. the user's
     // own profile resource where the carve-out applies).
     minorNameCtx?: MinorNameViewerContext;
+    // Task #520 — Set true when the viewer has a pending follow
+    // request against this user (private-account flow). The SPA
+    // renders a "Requested" button with cancel.
+    followRequestPending?: boolean;
     // Task #426 — When the viewer satisfies the profile owner's
     // `dateOfBirthVisibility` tier, GET /users/:userId passes the
     // ISO date string here so the public response includes it. Omit
@@ -413,6 +417,10 @@ export function toPublicUser(
     isOwnProfile: opts.isOwnProfile ?? false,
     isFollowing: opts.isFollowing ?? false,
     isConnection: false,
+    // Task #520 — Outstanding follow request from the viewer (only
+    // true for the requester's own view of a private account). False
+    // on own-profile and on approved follows.
+    followRequestPending: opts.followRequestPending ?? false,
     // Task #367 — non-PII boolean exposed on every public profile so
     // the SPA can mount <NoIndex/> as a belt-and-braces against the
     // X-Robots-Tag header. Public listings of minors are already
@@ -445,12 +453,14 @@ export function toPrivateUser(
      */
     isOwnProfile?: boolean;
     isFollowing?: boolean;
+    followRequestPending?: boolean;
   } = {},
 ) {
   return {
     ...toPublicUser(u, {
       isOwnProfile: opts.isOwnProfile ?? true,
       isFollowing: opts.isFollowing ?? false,
+      followRequestPending: opts.followRequestPending ?? false,
       followerCount: opts.followerCount,
       followingCount: opts.followingCount,
       // Task #426 — Self / linked guardian always sees the actual
@@ -474,6 +484,10 @@ export function toPrivateUser(
     dateOfBirthVisibility: u.isMinor
       ? "private"
       : (u.dateOfBirthVisibility ?? "private"),
+    // Task #520 — Adult-only "private account" toggle. Minor rows are
+    // pinned false (their incoming follows are gated through the COPPA
+    // pending queue instead).
+    requiresFollowApproval: u.isMinor ? false : !!u.requiresFollowApproval,
   };
 }
 

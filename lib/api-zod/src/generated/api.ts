@@ -161,6 +161,12 @@ export const GetUserByIdResponse = zod.union([
       isOwnProfile: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       isConnection: zod.boolean().optional(),
+      followRequestPending: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+        ),
       followerCount: zod
         .number()
         .min(getUserByIdResponseOneOneFollowerCountMin)
@@ -212,6 +218,12 @@ export const GetUserByIdResponse = zod.union([
           .describe(
             "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
           ),
+        requiresFollowApproval: zod
+          .boolean()
+          .optional()
+          .describe(
+            'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
+          ),
       }),
     ),
   zod.object({
@@ -242,6 +254,12 @@ export const GetUserByIdResponse = zod.union([
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(getUserByIdResponseTwoFollowerCountMin)
@@ -294,6 +312,12 @@ export const UpdateUserBody = zod.object({
     .optional()
     .describe(
       "Task #426 — Who can see this user's birthday. Omit to\nleave the stored value untouched. Minor accounts may only\nstore `private` — sending any other value returns 400.\n",
+    ),
+  requiresFollowApproval: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Task #520 — Adult-only private-account toggle. When true,\nnew incoming follow edges land as pending. Sending any\nvalue on a minor account returns 400. Omit to leave the\nstored value untouched.\n",
     ),
   bio: zod.string().max(updateUserBodyBioMax).nullish(),
   city: zod
@@ -405,6 +429,12 @@ export const UpdateUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(updateUserResponseOneFollowerCountMin)
@@ -455,6 +485,12 @@ export const UpdateUserResponse = zod
         .optional()
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
+        ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
         ),
     }),
   );
@@ -509,6 +545,12 @@ export const SetUserCoverPhotoResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(setUserCoverPhotoResponseOneFollowerCountMin)
@@ -560,6 +602,12 @@ export const SetUserCoverPhotoResponse = zod
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
+        ),
     }),
   );
 
@@ -606,6 +654,12 @@ export const DeleteUserCoverPhotoResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(deleteUserCoverPhotoResponseOneFollowerCountMin)
@@ -656,6 +710,12 @@ export const DeleteUserCoverPhotoResponse = zod
         .optional()
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
+        ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
         ),
     }),
   );
@@ -710,6 +770,12 @@ export const SetUserAvatarResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(setUserAvatarResponseOneFollowerCountMin)
@@ -761,6 +827,12 @@ export const SetUserAvatarResponse = zod
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
+        ),
     }),
   );
 
@@ -807,6 +879,12 @@ export const DeleteUserAvatarResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(deleteUserAvatarResponseOneFollowerCountMin)
@@ -857,6 +935,12 @@ export const DeleteUserAvatarResponse = zod
         .optional()
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
+        ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
         ),
     }),
   );
@@ -1017,6 +1101,12 @@ export const GetLoggedInUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(getLoggedInUserResponseOneFollowerCountMin)
@@ -1068,8 +1158,69 @@ export const GetLoggedInUserResponse = zod
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
+        ),
     }),
   );
+
+/**
+ * Task #520 — Lists outstanding follow requests when the user has
+`requiresFollowApproval = true`. Each item is a pending row in
+`user_followers` whose `following_user_id` is the caller and
+whose `moderation_status` is `pending`. Newest first.
+
+ * @summary List pending follow requests on the authenticated user
+ */
+export const ListMyFollowRequestsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid().describe("The requesting user's ID."),
+      displayName: zod.string(),
+      avatarUrl: zod.string().url().nullish(),
+      bio: zod.string().nullish(),
+      requestedAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * Task #520 — Flips the pending `user_followers` row's
+`moderation_status` to `approved`. Idempotent: returns 200 if
+the request was already approved, 404 if no row exists.
+
+ * @summary Approve a pending follow request
+ */
+export const ApproveFollowRequestParams = zod.object({
+  requesterId: zod.coerce.string().uuid(),
+});
+
+export const ApproveFollowRequestResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * Task #520 — Deletes the pending `user_followers` row. The
+requester will see the profile as not-followed again and may
+re-request later. Idempotent: returns 200 if no row exists.
+
+ * @summary Decline a pending follow request
+ */
+export const DeclineFollowRequestParams = zod.object({
+  requesterId: zod.coerce.string().uuid(),
+});
+
+export const DeclineFollowRequestResponse = zod.object({
+  ok: zod.boolean(),
+});
 
 /**
  * @summary Get the authenticated user's settings bag
@@ -5138,6 +5289,12 @@ export const ListFollowSuggestionsResponse = zod.object({
       isOwnProfile: zod.boolean(),
       isFollowing: zod.boolean().optional(),
       isConnection: zod.boolean().optional(),
+      followRequestPending: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+        ),
       followerCount: zod
         .number()
         .min(listFollowSuggestionsResponseUsersItemFollowerCountMin)
@@ -7798,6 +7955,12 @@ export const UpdateAdminUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(updateAdminUserResponseOneFollowerCountMin)
@@ -7849,6 +8012,12 @@ export const UpdateAdminUserResponse = zod
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
+        ),
     }),
   );
 
@@ -7894,6 +8063,12 @@ export const SoftDeleteAdminUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(softDeleteAdminUserResponseOneFollowerCountMin)
@@ -7945,6 +8120,12 @@ export const SoftDeleteAdminUserResponse = zod
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
         ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
+        ),
     }),
   );
 
@@ -7990,6 +8171,12 @@ export const RestoreAdminUserResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(restoreAdminUserResponseOneFollowerCountMin)
@@ -8040,6 +8227,12 @@ export const RestoreAdminUserResponse = zod
         .optional()
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
+        ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
         ),
     }),
   );
@@ -8376,6 +8569,12 @@ export const AuthLoginResponse = zod
     isOwnProfile: zod.boolean(),
     isFollowing: zod.boolean().optional(),
     isConnection: zod.boolean().optional(),
+    followRequestPending: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+      ),
     followerCount: zod
       .number()
       .min(authLoginResponseOneFollowerCountMin)
@@ -8426,6 +8625,12 @@ export const AuthLoginResponse = zod
         .optional()
         .describe(
           "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
+        ),
+      requiresFollowApproval: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
         ),
     }),
   );
@@ -8560,6 +8765,12 @@ export const AuthTokenResponse = zod
           isOwnProfile: zod.boolean(),
           isFollowing: zod.boolean().optional(),
           isConnection: zod.boolean().optional(),
+          followRequestPending: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Task #520 — True when the viewer has an outstanding follow\nrequest awaiting the profile owner's approval (the row\nexists with `moderationStatus = 'pending'`). The client\nrenders a \"Requested\" button with cancel. False on\napproved follows and when no edge exists. Always false on\nown-profile responses.\n",
+            ),
           followerCount: zod
             .number()
             .min(authTokenResponseTwoUserOneFollowerCountMin)
@@ -8610,6 +8821,12 @@ export const AuthTokenResponse = zod
               .optional()
               .describe(
                 "Task #426 — Who can see this user's birthday. `private`\n(default) limits it to self \/ linked guardian \/ admin;\n`followers` adds approved followers; `public` exposes\nit to everyone. Surfaced on the private view so the\nprofile owner (and their linked guardian) can edit it\nfrom the Edit Profile dialog. Minor accounts are\nforced to `private` server-side regardless of the\nvalue stored in the database.\n",
+              ),
+            requiresFollowApproval: zod
+              .boolean()
+              .optional()
+              .describe(
+                'Task #520 — Adult-only \"private account\" toggle. When\ntrue, new incoming follow edges land as `pending`\n(reviewable from \/follow-requests) instead of the\ndefault `approved`. Always false on minor accounts\n(which are guardian-mediated via the COPPA pending\nqueue). Surfaced on the private response so the\nprofile owner can toggle it from Edit Profile.\n',
               ),
           }),
         ),

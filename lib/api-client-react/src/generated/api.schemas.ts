@@ -129,6 +129,14 @@ organizations. Null when not set.
   isOwnProfile: boolean;
   isFollowing?: boolean;
   isConnection?: boolean;
+  /** Task #520 — True when the viewer has an outstanding follow
+request awaiting the profile owner's approval (the row
+exists with `moderationStatus = 'pending'`). The client
+renders a "Requested" button with cancel. False on
+approved follows and when no edge exists. Always false on
+own-profile responses.
+ */
+  followRequestPending?: boolean;
   /** @minimum 0 */
   followerCount?: number;
   /** @minimum 0 */
@@ -264,6 +272,15 @@ forced to `private` server-side regardless of the
 value stored in the database.
  */
   dateOfBirthVisibility?: PrivateUserResponseDateOfBirthVisibility;
+  /** Task #520 — Adult-only "private account" toggle. When
+true, new incoming follow edges land as `pending`
+(reviewable from /follow-requests) instead of the
+default `approved`. Always false on minor accounts
+(which are guardian-mediated via the COPPA pending
+queue). Surfaced on the private response so the
+profile owner can toggle it from Edit Profile.
+ */
+  requiresFollowApproval?: boolean;
 };
 
 export type TokenIssueResponse = TokenRefreshResponse & {
@@ -369,6 +386,12 @@ leave the stored value untouched. Minor accounts may only
 store `private` — sending any other value returns 400.
  */
   dateOfBirthVisibility?: UpdateUserRequestDateOfBirthVisibility;
+  /** Task #520 — Adult-only private-account toggle. When true,
+new incoming follow edges land as pending. Sending any
+value on a minor account returns 400. Omit to leave the
+stored value untouched.
+ */
+  requiresFollowApproval?: boolean;
   /**
    * @maxLength 1000
    * @nullable
@@ -1359,6 +1382,26 @@ export interface FollowingListItem {
   avatarUrl?: string | null;
   entityType: FollowingListItemEntityType;
   followedAt?: string;
+}
+
+export interface FollowRequestListItem {
+  /** The requesting user's ID. */
+  id: string;
+  displayName: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  requestedAt: string;
+}
+
+export interface PaginatedFollowRequestsResponse {
+  data: FollowRequestListItem[];
+  pagination: PaginationMeta;
+}
+
+export interface OkResponse {
+  ok: boolean;
 }
 
 export interface PaginatedFollowersResponse {

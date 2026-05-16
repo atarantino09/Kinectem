@@ -246,10 +246,12 @@ import type {
   NotFoundResponse,
   NotificationResponse,
   NotificationUnreadCount,
+  OkResponse,
   OrgPrivacySettingsResponse,
   OrganizationResponse,
   PaginatedComments,
   PaginatedConversations,
+  PaginatedFollowRequestsResponse,
   PaginatedFollowersResponse,
   PaginatedFollowingResponse,
   PaginatedInvitesResponse,
@@ -1441,6 +1443,292 @@ export function useGetLoggedInUser<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Task #520 — Lists outstanding follow requests when the user has
+`requiresFollowApproval = true`. Each item is a pending row in
+`user_followers` whose `following_user_id` is the caller and
+whose `moderation_status` is `pending`. Newest first.
+
+ * @summary List pending follow requests on the authenticated user
+ */
+export const getListMyFollowRequestsUrl = () => {
+  return `/api/v1/users/me/follow-requests`;
+};
+
+export const listMyFollowRequests = async (
+  options?: RequestInit,
+): Promise<PaginatedFollowRequestsResponse> => {
+  return customFetch<PaginatedFollowRequestsResponse>(
+    getListMyFollowRequestsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListMyFollowRequestsQueryKey = () => {
+  return [`/api/v1/users/me/follow-requests`] as const;
+};
+
+export const getListMyFollowRequestsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMyFollowRequests>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | InternalServerErrorResponse
+  >,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyFollowRequests>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMyFollowRequestsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMyFollowRequests>>
+  > = ({ signal }) => listMyFollowRequests({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMyFollowRequests>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMyFollowRequestsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMyFollowRequests>>
+>;
+export type ListMyFollowRequestsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary List pending follow requests on the authenticated user
+ */
+
+export function useListMyFollowRequests<
+  TData = Awaited<ReturnType<typeof listMyFollowRequests>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | InternalServerErrorResponse
+  >,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyFollowRequests>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMyFollowRequestsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #520 — Flips the pending `user_followers` row's
+`moderation_status` to `approved`. Idempotent: returns 200 if
+the request was already approved, 404 if no row exists.
+
+ * @summary Approve a pending follow request
+ */
+export const getApproveFollowRequestUrl = (requesterId: string) => {
+  return `/api/v1/users/me/follow-requests/${requesterId}/approve`;
+};
+
+export const approveFollowRequest = async (
+  requesterId: string,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getApproveFollowRequestUrl(requesterId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getApproveFollowRequestMutationOptions = <
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveFollowRequest>>,
+    TError,
+    { requesterId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveFollowRequest>>,
+  TError,
+  { requesterId: string },
+  TContext
+> => {
+  const mutationKey = ["approveFollowRequest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveFollowRequest>>,
+    { requesterId: string }
+  > = (props) => {
+    const { requesterId } = props ?? {};
+
+    return approveFollowRequest(requesterId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveFollowRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveFollowRequest>>
+>;
+
+export type ApproveFollowRequestMutationError = ErrorType<
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Approve a pending follow request
+ */
+export const useApproveFollowRequest = <
+  TError = ErrorType<
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveFollowRequest>>,
+    TError,
+    { requesterId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveFollowRequest>>,
+  TError,
+  { requesterId: string },
+  TContext
+> => {
+  return useMutation(getApproveFollowRequestMutationOptions(options));
+};
+
+/**
+ * Task #520 — Deletes the pending `user_followers` row. The
+requester will see the profile as not-followed again and may
+re-request later. Idempotent: returns 200 if no row exists.
+
+ * @summary Decline a pending follow request
+ */
+export const getDeclineFollowRequestUrl = (requesterId: string) => {
+  return `/api/v1/users/me/follow-requests/${requesterId}/decline`;
+};
+
+export const declineFollowRequest = async (
+  requesterId: string,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getDeclineFollowRequestUrl(requesterId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDeclineFollowRequestMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof declineFollowRequest>>,
+    TError,
+    { requesterId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof declineFollowRequest>>,
+  TError,
+  { requesterId: string },
+  TContext
+> => {
+  const mutationKey = ["declineFollowRequest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof declineFollowRequest>>,
+    { requesterId: string }
+  > = (props) => {
+    const { requesterId } = props ?? {};
+
+    return declineFollowRequest(requesterId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeclineFollowRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof declineFollowRequest>>
+>;
+
+export type DeclineFollowRequestMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Decline a pending follow request
+ */
+export const useDeclineFollowRequest = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof declineFollowRequest>>,
+    TError,
+    { requesterId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof declineFollowRequest>>,
+  TError,
+  { requesterId: string },
+  TContext
+> => {
+  return useMutation(getDeclineFollowRequestMutationOptions(options));
+};
 
 /**
  * @summary Get the authenticated user's settings bag

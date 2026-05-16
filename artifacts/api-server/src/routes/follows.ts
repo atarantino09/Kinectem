@@ -201,8 +201,14 @@ router.get(
     // Task #363 — pending follow edges are only visible to the linked
     // guardian. The child themselves should not see incoming pending
     // follows in their public follower list (those live on the
-    // family-managed surface). Self-views also see approved-only.
-    if (!isGuardianViewer) {
+    // family-managed surface).
+    // Task #520 — Adult account owners (non-minor) CAN see their own
+    // pending follows in their `/followers` view; the private-account
+    // inbox at /follow-requests is the canonical surface, but list
+    // consumers (e.g. profile renderer) should reflect pending edges
+    // for the owner so the row count matches what they manage.
+    const isOwnerAdultViewer = !!me && me.id === userId && !me.isMinor;
+    if (!isGuardianViewer && !isOwnerAdultViewer) {
       conds.push(eq(userFollowers.moderationStatus, "approved"));
     }
     if (cursor) {
@@ -266,10 +272,16 @@ router.get(
     // Task #363 — only show approved outgoing follows in the public
     // /following list; pending edges remain invisible until guardian
     // approval.
-    const userConds = [
-      eq(userFollowers.followerUserId, userId),
-      eq(userFollowers.moderationStatus, "approved"),
-    ];
+    // Task #520 — Adult account owners viewing their own /following
+    // list see their pending outgoing requests too (the "Requested"
+    // state on the requester side), so the list matches what the
+    // profile UI surfaces.
+    const me = req.sessionUser;
+    const isOwnerAdultViewer = !!me && me.id === userId && !me.isMinor;
+    const userConds = [eq(userFollowers.followerUserId, userId)];
+    if (!isOwnerAdultViewer) {
+      userConds.push(eq(userFollowers.moderationStatus, "approved"));
+    }
     const userRowsRaw = await db
       .select({
         id: users.id,

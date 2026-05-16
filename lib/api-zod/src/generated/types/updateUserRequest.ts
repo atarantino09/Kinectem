@@ -102,6 +102,12 @@ leave the stored value untouched. Minor accounts may only
 store `private` — sending any other value returns 400.
  */
   dateOfBirthVisibility?: UpdateUserRequestDateOfBirthVisibility;
+  /** Task #520 — Adult-only private-account toggle. When true,
+new incoming follow edges land as pending. Sending any
+value on a minor account returns 400. Omit to leave the
+stored value untouched.
+ */
+  requiresFollowApproval?: boolean;
   /**
    * @maxLength 1000
    * @nullable

@@ -19,6 +19,7 @@ import PendingTagsPage from "@/pages/PendingTagsPage";
 import DraftsPage from "@/pages/DraftsPage";
 import MyTagsPage from "@/pages/MyTagsPage";
 import GuardianPage from "@/pages/GuardianPage";
+import FollowRequestsPage from "@/pages/FollowRequestsPage";
 import ChildConversationPage from "@/pages/ChildConversationPage";
 import InviteAcceptPage from "@/pages/InviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
@@ -75,6 +76,7 @@ function Router() {
             <Route path="/tags/pending" component={PendingTagsPage} />
             <Route path="/drafts" component={DraftsPage} />
             <Route path="/me/tags" component={MyTagsPage} />
+            <Route path="/follow-requests" component={FollowRequestsPage} />
             <Route
               path="/family/:childId/messages/:conversationId"
               component={ChildConversationPage}

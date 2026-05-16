@@ -317,22 +317,27 @@ router.get(
     }
 
     let isFollowing = false;
+    let followRequestPending = false;
     if (me && !isOwnProfile) {
-      // Task #363 — pending follow edges must not show as "following"
-      // until the linked guardian approves them; only approved rows
-      // count toward the boolean.
+      // Task #363 / #520 — pending follow edges must not show as
+      // "following" until approved; we now also surface the pending
+      // state on the requester's view so the SPA renders a "Requested"
+      // button with cancel (private-account flow).
       const [f] = await db
-        .select()
+        .select({ status: userFollowers.moderationStatus })
         .from(userFollowers)
         .where(
           and(
             eq(userFollowers.followingUserId, u.id),
             eq(userFollowers.followerUserId, me.id),
-            eq(userFollowers.moderationStatus, "approved"),
           ),
         )
         .limit(1);
-      isFollowing = !!f;
+      if (f?.status === "approved") {
+        isFollowing = true;
+      } else if (f?.status === "pending") {
+        followRequestPending = true;
+      }
     }
     // Task #363 — pending follow edges must not bump publicly-visible
     // counts; only approved edges count toward follower/following totals.
@@ -387,10 +392,12 @@ router.get(
             followingCount,
             isOwnProfile,
             isFollowing,
+            followRequestPending,
           })
         : toPublicUser(u, {
             isOwnProfile: false,
             isFollowing,
+            followRequestPending,
             followerCount,
             followingCount,
             dateOfBirth: viewerCanSeeDob ? dobIso : null,
@@ -611,6 +618,23 @@ router.patch(
       }
       updates.dateOfBirthVisibility = body.dateOfBirthVisibility as
         (typeof allowed)[number];
+    }
+    // Task #520 — Adult-only "private account" toggle. Reject any
+    // attempt to set it on a minor account (their incoming follows
+    // are guardian-mediated via the COPPA pending queue, not this
+    // self-managed toggle).
+    if (body.requiresFollowApproval !== undefined) {
+      if (typeof body.requiresFollowApproval !== "boolean") {
+        return apiError(res, 400, "requiresFollowApproval must be a boolean");
+      }
+      if (existing.isMinor) {
+        return apiError(
+          res,
+          400,
+          "Minor accounts cannot toggle private-account approval",
+        );
+      }
+      updates.requiresFollowApproval = body.requiresFollowApproval;
     }
     if (body.avatarUrl !== undefined) {
       if (body.avatarUrl !== null && typeof body.avatarUrl !== "string") {

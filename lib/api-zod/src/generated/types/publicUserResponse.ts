@@ -115,6 +115,14 @@ organizations. Null when not set.
   isOwnProfile: boolean;
   isFollowing?: boolean;
   isConnection?: boolean;
+  /** Task #520 — True when the viewer has an outstanding follow
+request awaiting the profile owner's approval (the row
+exists with `moderationStatus = 'pending'`). The client
+renders a "Requested" button with cancel. False on
+approved follows and when no edge exists. Always false on
+own-profile responses.
+ */
+  followRequestPending?: boolean;
   /** @minimum 0 */
   followerCount?: number;
   /** @minimum 0 */

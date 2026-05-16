@@ -236,6 +236,14 @@ export const users = pgTable("users", {
     .notNull()
     .default(false),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
+  // Task #520 — Adult-only "private account" toggle. When true, new
+  // incoming follow edges land as `pending` (same enum + column used
+  // by the COPPA minor-gating flow) and the followed user reviews
+  // them from /follow-requests. Minors are forced to false; the
+  // toggle is hidden in the client and rejected server-side.
+  requiresFollowApproval: boolean("requires_follow_approval")
+    .notNull()
+    .default(false),
   lastSignInAt: timestamp("last_sign_in_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

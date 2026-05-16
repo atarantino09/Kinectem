@@ -1391,7 +1391,34 @@ router.post(
     // guardian can approve from the family dashboard. Adult targets
     // and the guardian's own follow-edge stay `approved` (the existing
     // default).
-    const status = gateFollowOfMinor(target, me.id);
+    let status = gateFollowOfMinor(target, me.id);
+    // Task #520 — Adult-only "private account" toggle. If the COPPA
+    // gate already returned `pending` (i.e. stranger-follows-minor),
+    // leave it pending and let the guardian queue handle it. Otherwise
+    // demote the brand-new edge to `pending` when the target adult has
+    // `requires_follow_approval = true` so they can approve it from
+    // /follow-requests. We only demote when no row already exists
+    // (`onConflictDoNothing` returns 0 rows on conflict), so existing
+    // followers are never retroactively kicked back to pending.
+    let privateAccountGated = false;
+    if (status === "approved") {
+      const [targetRow] = await db
+        .select({
+          isMinor: users.isMinor,
+          requiresFollowApproval: users.requiresFollowApproval,
+        })
+        .from(users)
+        .where(eq(users.id, req.params.userId))
+        .limit(1);
+      if (
+        targetRow &&
+        !targetRow.isMinor &&
+        targetRow.requiresFollowApproval
+      ) {
+        status = "pending";
+        privateAccountGated = true;
+      }
+    }
     const inserted = await db
       .insert(userFollowers)
       .values({
@@ -1411,6 +1438,18 @@ router.post(
           kind: "follow",
           message: `${displayName(me)} started following you`,
           link: `/users/${me.id}`,
+          actorUserId: me.id,
+        });
+      } else if (privateAccountGated) {
+        // Task #520 — Ring the followed adult directly when their
+        // private-account toggle landed this request in the pending
+        // queue. Distinct kind so the bell deep-links to the new
+        // /follow-requests inbox instead of the guardian dashboard.
+        await db.insert(notifications).values({
+          userId: req.params.userId,
+          kind: "follow_request",
+          message: `${displayName(me)} requested to follow you`,
+          link: `/follow-requests`,
           actorUserId: me.id,
         });
       } else if (target.parentId) {

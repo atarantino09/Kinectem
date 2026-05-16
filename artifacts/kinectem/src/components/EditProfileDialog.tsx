@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -146,6 +147,15 @@ export function EditProfileDialog({
   const [dateOfBirthVisibility, setDateOfBirthVisibility] = useState<DobVisibility>(
     initialDobVisibility,
   );
+  // Task #520 — Adult-only "private account" toggle. Defaults from the
+  // server (false for legacy rows). Minor accounts never see this row,
+  // and the server rejects any attempt to flip it.
+  const initialRequiresFollowApproval = Boolean(
+    (user as { requiresFollowApproval?: boolean }).requiresFollowApproval,
+  );
+  const [requiresFollowApproval, setRequiresFollowApproval] = useState<boolean>(
+    initialRequiresFollowApproval,
+  );
   // Task #432 — Visibility dropdown stays clickable in either order
   // (date-first or visibility-first). The save guard in `onSave` is
   // what actually prevents the inconsistent { dateOfBirth: null,
@@ -201,6 +211,11 @@ export function EditProfileDialog({
         ((user as { dateOfBirthVisibility?: DobVisibility })
           .dateOfBirthVisibility ??
           UpdateUserRequestDateOfBirthVisibility.private) as DobVisibility,
+      );
+      setRequiresFollowApproval(
+        Boolean(
+          (user as { requiresFollowApproval?: boolean }).requiresFollowApproval,
+        ),
       );
       setAvatarUrl(user.avatarUrl ?? null);
       setAvatarError(null);
@@ -469,6 +484,7 @@ export function EditProfileDialog({
         state: state ? (state as UpdateUserRequestState) : null,
         dateOfBirth: dobPayload,
         dateOfBirthVisibility,
+        requiresFollowApproval,
         avatarUrl,
       },
     });
@@ -708,6 +724,36 @@ export function EditProfileDialog({
               </p>
             )}
           </div>
+          {/* Task #520 — Adult-only "private account" toggle. Hidden
+              entirely for minors (their incoming follows are gated
+              through the COPPA guardian queue instead) and for parents
+              editing a child's profile from /family. */}
+          {!isMinor && user.isOwnProfile && (
+            <div
+              className="flex items-start justify-between gap-3 rounded-md border border-border p-3"
+              data-testid="section-profile-private-account"
+            >
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="profile-private-account"
+                  className="text-xs font-bold"
+                >
+                  Private account
+                </Label>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  New follow requests need your approval before they can
+                  see your posts. Current followers stay.
+                </p>
+              </div>
+              <Switch
+                id="profile-private-account"
+                checked={requiresFollowApproval}
+                onCheckedChange={setRequiresFollowApproval}
+                data-testid="switch-profile-private-account"
+                aria-label="Require approval for new follow requests"
+              />
+            </div>
+          )}
           {/* Task #500 — Multi-select sports picker (max 5). Self-only:
               the API returns 403 for parents editing children, so the
               section is hidden when isOwnProfile is false. Uses

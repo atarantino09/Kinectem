@@ -85,7 +85,16 @@ export default function UserProfilePage() {
   const onToggleFollow = async () => {
     if (!user) return;
     try {
-      if (user.isFollowing) {
+      // Task #520 — `followRequestPending` means we already have a
+      // pending row on a private account. Unfollow deletes any row
+      // regardless of moderationStatus, so reuse it as the "cancel
+      // request" action.
+      const hasEdge =
+        user.isFollowing ||
+        Boolean(
+          (user as { followRequestPending?: boolean }).followRequestPending,
+        );
+      if (hasEdge) {
         await unfollowUser.mutateAsync({ userId });
       } else {
         await followUser.mutateAsync({ userId });
@@ -411,7 +420,12 @@ export default function UserProfilePage() {
                   disabled={followUser.isPending || unfollowUser.isPending}
                   data-testid="btn-follow-user"
                 >
-                  {user.isFollowing ? "Following" : "Follow"}
+                  {user.isFollowing
+                    ? "Following"
+                    : (user as { followRequestPending?: boolean })
+                          .followRequestPending
+                      ? "Requested"
+                      : "Follow"}
                 </Button>
               </div>
             )}
