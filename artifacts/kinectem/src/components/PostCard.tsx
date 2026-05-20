@@ -135,20 +135,16 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const Icon = isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
   // Task #524 — only surface the takedown affordance on posts where the
-  // selected child has a plausible client-visible connection: child is
-  // the author, OR child is tagged on this article/highlight (the
-  // child-scoped fetch sets `currentUserTag` to the child's tag). The
-  // server is still source of truth and 403s on unrelated posts, but
-  // gating here prevents the action from appearing on clearly unrelated
-  // posts when a parent lands on one with `?asChild=` in the URL.
-  // Roster-only org_post links can't be verified client-side, so we
-  // err on the side of letting the user attempt and surface the server
-  // toast if they're not actually linked.
+  // selected child has a plausible client-visible link: child is the
+  // author, OR child is tagged on this article/highlight (the child-
+  // scoped fetch sets `currentUserTag` to the child's tag). The server
+  // is still the source of truth — roster-only org_post links that
+  // aren't visible client-side will simply not render the action here;
+  // an admin or the guardian can still file via the post detail page
+  // when the relationship is detectable.
   const childPlausiblyLinked =
     !!asChildId &&
-    (post.author.id === asChildId ||
-      !!post.currentUserTag ||
-      reportTarget.contentType === "org_post");
+    (post.author.id === asChildId || !!post.currentUserTag);
   // The composer at /posts/new is kind-aware: it loads and PATCHes
   // recap articles, highlights, and org_post Updates. The server
   // populates `canEdit` per-viewer for all three kinds (author /

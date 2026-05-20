@@ -342,15 +342,13 @@ export default function PostPage() {
   // Task #524 — only surface the takedown affordance when the selected
   // child has a plausible client-visible link to the post: child is
   // the author, OR child is tagged (the child-scoped fetch populates
-  // `post.currentUserTag` with the child's tag). For org_post the
-  // link may be roster-only (not visible client-side), so we leave
-  // the button visible and rely on the server's 403 + toast to
-  // catch truly unrelated postings.
+  // `post.currentUserTag` with the child's tag). Roster-only org_post
+  // relationships aren't exposed on the post response, so the action
+  // intentionally stays hidden in that case — server remains the
+  // source of truth, but the UI never offers a takedown on a post
+  // where no link signal is visible.
   const childPlausiblyLinked =
-    !!asChildId &&
-    (post.author.id === asChildId ||
-      !!post.currentUserTag ||
-      takedownRef.kind === "org_post");
+    !!asChildId && (post.author.id === asChildId || !!post.currentUserTag);
   const submitTakedown = async (reason: string | null) => {
     if (!asChildId) return;
     setReportSubmitting(true);
