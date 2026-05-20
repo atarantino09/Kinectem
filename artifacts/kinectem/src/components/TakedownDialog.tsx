@@ -86,7 +86,7 @@ export function TakedownDialog({
             onClick={() => void onConfirm(finalReason)}
             data-testid="btn-takedown-submit"
           >
-            {submitting ? "Submitting…" : "Submit takedown"}
+            {submitting ? "Submitting…" : "File takedown request"}
           </Button>
         </DialogFooter>
       </DialogContent>

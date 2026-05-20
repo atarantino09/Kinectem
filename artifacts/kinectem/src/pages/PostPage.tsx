@@ -339,6 +339,18 @@ export default function PostPage() {
       : takedownRef.kind === "org_post"
         ? "update"
         : "game recap";
+  // Task #524 — only surface the takedown affordance when the selected
+  // child has a plausible client-visible link to the post: child is
+  // the author, OR child is tagged (the child-scoped fetch populates
+  // `post.currentUserTag` with the child's tag). For org_post the
+  // link may be roster-only (not visible client-side), so we leave
+  // the button visible and rely on the server's 403 + toast to
+  // catch truly unrelated postings.
+  const childPlausiblyLinked =
+    !!asChildId &&
+    (post.author.id === asChildId ||
+      !!post.currentUserTag ||
+      takedownRef.kind === "org_post");
   const submitTakedown = async (reason: string | null) => {
     if (!asChildId) return;
     setReportSubmitting(true);
@@ -378,7 +390,7 @@ export default function PostPage() {
   return (
     <article className="max-w-3xl mx-auto space-y-6">
       {authorIsMinor ? <NoIndex /> : null}
-      {asChildId && (
+      {asChildId && childPlausiblyLinked && (
         <div className="flex justify-end">
           <Button
             variant="outline"
