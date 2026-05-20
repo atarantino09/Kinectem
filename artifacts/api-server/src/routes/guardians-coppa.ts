@@ -25,6 +25,8 @@ import {
   notifications,
   takedownRequests,
   rosterEntries,
+  orgPosts,
+  teams,
 } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
@@ -1174,8 +1176,9 @@ router.post(
 // contains an unapproved image of the linked child. While
 // `status='pending'`, GET /posts/:postId 404s the post for everyone
 // except the requesting guardian and platform admins (who can resolve
-// it). Org-post takedowns are out of scope for the launch-readiness
-// MVP and rejected with 400.
+// it). Task #524 extends coverage to plain timeline (`org_post`)
+// posts; the eligibility check requires the child to be the author
+// or rostered on any team under the org that owns the post.
 router.post(
   "/guardians/children/:childId/takedown-request",
   asyncHandler(async (req, res) => {
@@ -1191,11 +1194,15 @@ router.post(
       typeof body.reason === "string" && body.reason.trim().length > 0
         ? body.reason.trim().slice(0, 500)
         : null;
-    const m = /^(article|highlight):([0-9a-f-]{36})$/i.exec(postIdRaw);
+    const m = /^(article|highlight|org_post):([0-9a-f-]{36})$/i.exec(postIdRaw);
     if (!m) {
-      return apiError(res, 400, "Invalid postId. Expected article:<uuid> or highlight:<uuid>.");
+      return apiError(
+        res,
+        400,
+        "Invalid postId. Expected article:<uuid>, highlight:<uuid>, or org_post:<uuid>.",
+      );
     }
-    const kind = m[1].toLowerCase() as "article" | "highlight";
+    const kind = m[1].toLowerCase() as "article" | "highlight" | "org_post";
     const refId = m[2];
     // Task #367 — authorization: the guardian may only file a
     // takedown for a post that ALREADY links the child somehow.
@@ -1260,7 +1267,7 @@ router.post(
           "Child is not linked to this post (not author, not tagged, not rostered on the posting team).",
         );
       }
-    } else {
+    } else if (kind === "highlight") {
       const [row] = await db
         .select({ id: highlights.id, uploaderId: highlights.uploaderId, teamId: highlights.teamId })
         .from(highlights)
@@ -1299,6 +1306,49 @@ router.post(
           res,
           403,
           "Child is not linked to this post (not uploader, not tagged, not rostered on the posting team).",
+        );
+      }
+    } else {
+      // Task #524 — org_post: a plain timeline post owned by an
+      // organization (no team_id, no tag table). Accepted signals:
+      //   • child authored the org_post, OR
+      //   • child is rostered on any team under the org that owns it.
+      // The second clause covers the common case where a coach or
+      // org admin posts a team-photo announcement to the org timeline
+      // without tagging individuals.
+      const [row] = await db
+        .select({
+          id: orgPosts.id,
+          authorId: orgPosts.authorId,
+          organizationId: orgPosts.organizationId,
+        })
+        .from(orgPosts)
+        .where(eq(orgPosts.id, refId))
+        .limit(1);
+      if (!row) return apiError(res, 404, "Post not found");
+      let childIsLinked = row.authorId === auth.childId;
+      if (!childIsLinked) {
+        // Restrict to active (`accepted`) roster rows — pending/declined
+        // invites must not confer takedown standing on org-wide posts.
+        const [roster] = await db
+          .select({ id: rosterEntries.id })
+          .from(rosterEntries)
+          .innerJoin(teams, eq(teams.id, rosterEntries.teamId))
+          .where(
+            and(
+              eq(teams.organizationId, row.organizationId),
+              eq(rosterEntries.userId, auth.childId),
+              eq(rosterEntries.status, "accepted"),
+            ),
+          )
+          .limit(1);
+        childIsLinked = !!roster;
+      }
+      if (!childIsLinked) {
+        return apiError(
+          res,
+          403,
+          "Child is not linked to this post (not author, not rostered on any team in the posting organization).",
         );
       }
     }

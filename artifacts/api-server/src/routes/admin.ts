@@ -1134,12 +1134,12 @@ router.get(
         }
         let post: {
           id: string;
-          kind: "article" | "highlight";
+          kind: "article" | "highlight" | "org_post";
           title: string | null;
           exists: boolean;
         } = {
           id: r.t.postRefId,
-          kind: r.t.postKind as "article" | "highlight",
+          kind: r.t.postKind as "article" | "highlight" | "org_post",
           title: null,
           exists: false,
         };
@@ -1157,6 +1157,14 @@ router.get(
             .where(eq(highlights.id, r.t.postRefId))
             .limit(1);
           if (h) post = { ...post, title: h.title, exists: true };
+        } else if (r.t.postKind === "org_post") {
+          // Task #524 — surface org_post title/snippet in the moderator queue.
+          const [p] = await db
+            .select({ id: orgPosts.id, title: orgPosts.title })
+            .from(orgPosts)
+            .where(eq(orgPosts.id, r.t.postRefId))
+            .limit(1);
+          if (p) post = { ...post, title: p.title, exists: true };
         }
         return {
           id: r.t.id,
@@ -1176,14 +1184,23 @@ router.get(
 
 async function resolveTakedownRow(
   takedownId: string,
-): Promise<{ kind: "article" | "highlight"; refId: string } | null> {
+): Promise<{
+  kind: "article" | "highlight" | "org_post";
+  refId: string;
+} | null> {
   const [row] = await db
     .select({ postKind: takedownRequests.postKind, postRefId: takedownRequests.postRefId })
     .from(takedownRequests)
     .where(eq(takedownRequests.id, takedownId))
     .limit(1);
   if (!row) return null;
-  if (row.postKind !== "article" && row.postKind !== "highlight") return null;
+  if (
+    row.postKind !== "article" &&
+    row.postKind !== "highlight" &&
+    row.postKind !== "org_post"
+  ) {
+    return null;
+  }
   return { kind: row.postKind, refId: row.postRefId };
 }
 
@@ -1195,7 +1212,7 @@ async function resolveTakedownRow(
 // closed.
 async function decideTakedown(
   req: import("express").Request,
-  ref: { kind: "article" | "highlight"; refId: string },
+  ref: { kind: "article" | "highlight" | "org_post"; refId: string },
   decision: "approved" | "declined",
 ): Promise<
   { id: string; childUserId: string; requestedByGuardianId: string | null }[]
@@ -1231,8 +1248,11 @@ async function decideTakedown(
       // Hard takedown: delete the post; FKs cascade tags/reactions/etc.
       if (ref.kind === "article") {
         await tx.delete(articles).where(eq(articles.id, ref.refId));
-      } else {
+      } else if (ref.kind === "highlight") {
         await tx.delete(highlights).where(eq(highlights.id, ref.refId));
+      } else {
+        // Task #524 — org_post hard takedown.
+        await tx.delete(orgPosts).where(eq(orgPosts.id, ref.refId));
       }
     }
     if (rows.length > 0) {

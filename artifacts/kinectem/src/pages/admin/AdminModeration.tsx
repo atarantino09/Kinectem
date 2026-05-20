@@ -216,7 +216,7 @@ type Takedown = {
   decidedAt: string | null;
   child: { id: string; name: string; email: string | null; avatarUrl: string | null } | null;
   guardian: { id: string; name: string; email: string | null } | null;
-  post: { id: string; kind: "article" | "highlight"; title: string | null; exists: boolean };
+  post: { id: string; kind: "article" | "highlight" | "org_post"; title: string | null; exists: boolean };
 };
 
 function TakedownsPanel() {

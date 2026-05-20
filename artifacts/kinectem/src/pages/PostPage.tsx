@@ -58,6 +58,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { TakedownDialog } from "@/components/TakedownDialog";
+import { apiErrorMessage } from "@/lib/api-errors";
 
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
@@ -68,6 +70,7 @@ export default function PostPage() {
   const deletePost = useDeletePost();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [takedownOpen, setTakedownOpen] = useState(false);
   // When the parent jumps in here from the family stream the link carries
   // `?asChild=<id>`. Surface that context so the parent knows why they
   // landed here, and fetch the post through the child-scoped endpoint so
@@ -314,24 +317,41 @@ export default function PostPage() {
   // to the COPPA Phase 3 endpoint; a successful filing immediately
   // hides the post from feeds for everyone except admin + the
   // requesting guardian.
-  const handleReportPhotoOfChild = async () => {
+  // Task #524 — derive the canonical post ref from the synthetic id
+  // for all three kinds (article / highlight / org_post). `post.id`
+  // arrives as e.g. `article-<uuid>`, `highlight-<uuid>`, or
+  // `orgpost-<uuid>`; the takedown endpoint expects `<kind>:<uuid>`.
+  const takedownRef = (() => {
+    if (post.id.startsWith("article-")) {
+      return { kind: "article" as const, uuid: post.id.slice("article-".length) };
+    }
+    if (post.id.startsWith("highlight-")) {
+      return { kind: "highlight" as const, uuid: post.id.slice("highlight-".length) };
+    }
+    if (post.id.startsWith("orgpost-")) {
+      return { kind: "org_post" as const, uuid: post.id.slice("orgpost-".length) };
+    }
+    return { kind: isShort ? ("highlight" as const) : ("article" as const), uuid: post.id };
+  })();
+  const takedownLabel =
+    takedownRef.kind === "highlight"
+      ? "highlight"
+      : takedownRef.kind === "org_post"
+        ? "update"
+        : "game recap";
+  const submitTakedown = async (reason: string | null) => {
     if (!asChildId) return;
     setReportSubmitting(true);
     try {
-      // Task #367 — `post.id` is the synthetic id (e.g.
-      // `article-<uuid>` / `highlight-<uuid>`). The takedown
-      // endpoint expects the canonical `article:<uuid>` /
-      // `highlight:<uuid>` format, so strip the prefix and rebuild.
-      const refKind = isShort ? "highlight" : "article";
-      const refUuid = post.id.startsWith(`${refKind}-`)
-        ? post.id.slice(refKind.length + 1)
-        : post.id;
       await customFetch(
         `/api/v1/guardians/children/${asChildId}/takedown-request`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postId: `${refKind}:${refUuid}` }),
+          body: JSON.stringify({
+            postId: `${takedownRef.kind}:${takedownRef.uuid}`,
+            ...(reason ? { reason } : {}),
+          }),
         },
       );
       toast({
@@ -341,13 +361,13 @@ export default function PostPage() {
       });
       qc.invalidateQueries({ queryKey: ["post", postId] });
       qc.invalidateQueries({ queryKey: ["child-post", asChildId, postId] });
+      setTakedownOpen(false);
     } catch (err) {
       toast({
         title: "Couldn't submit takedown",
         description:
-          err instanceof Error
-            ? err.message
-            : "Something went wrong filing the takedown request.",
+          apiErrorMessage(err) ??
+          "Something went wrong filing the takedown request.",
         variant: "destructive",
       });
     } finally {
@@ -364,11 +384,18 @@ export default function PostPage() {
             variant="outline"
             size="sm"
             disabled={reportSubmitting}
-            onClick={handleReportPhotoOfChild}
+            onClick={() => setTakedownOpen(true)}
             data-testid="btn-report-photo-of-child"
           >
             {reportSubmitting ? "Submitting…" : "Report photo of my child"}
           </Button>
+          <TakedownDialog
+            open={takedownOpen}
+            onOpenChange={setTakedownOpen}
+            onConfirm={submitTakedown}
+            submitting={reportSubmitting}
+            postKindLabel={takedownLabel}
+          />
         </div>
       )}
       {asChildId && (

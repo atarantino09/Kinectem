@@ -37,6 +37,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
+import { TakedownDialog } from "@/components/TakedownDialog";
+import { apiErrorMessage } from "@/lib/api-errors";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
@@ -78,18 +80,21 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   const [currentPath, setLocation] = useLocation();
   const [reportOpen, setReportOpen] = useState(false);
   // Task #367 — when a guardian is browsing in child-preview mode
-  // (URL carries `?asChildId=<uuid>`), expose the "Report photo of
+  // (URL carries `?asChild=<uuid>` from server-generated deep-links
+  // such as parent-inbox / article-tagging notifications, or the
+  // legacy `?asChildId=<uuid>` form), expose the "Report photo of
   // my child" action right on each feed card so they don't have to
   // click into the post first. The same action is also rendered on
   // PostPage as a top-level button.
   const search = useSearch();
   const asChildId = (() => {
     const p = new URLSearchParams(search);
-    const v = p.get("asChildId");
+    const v = p.get("asChild") ?? p.get("asChildId");
     return v && /^[0-9a-f-]{36}$/i.test(v) ? v : null;
   })();
   const [reportingPhoto, setReportingPhoto] = useState(false);
-  const handleReportPhotoOfChild = async () => {
+  const [takedownOpen, setTakedownOpen] = useState(false);
+  const submitTakedown = async (reason: string | null) => {
     if (!asChildId) return;
     setReportingPhoto(true);
     try {
@@ -100,6 +105,7 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             postId: `${reportTarget.contentType}:${reportTarget.contentId}`,
+            ...(reason ? { reason } : {}),
           }),
         },
       );
@@ -109,13 +115,13 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           "We've notified moderators. The post is hidden from public feeds while we review it.",
       });
       qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+      setTakedownOpen(false);
     } catch (err) {
       toast({
         title: "Couldn't submit takedown",
         description:
-          err instanceof Error
-            ? err.message
-            : "Something went wrong filing the takedown request.",
+          apiErrorMessage(err) ??
+          "Something went wrong filing the takedown request.",
         variant: "destructive",
       });
     } finally {
@@ -396,7 +402,10 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 {asChildId && (
                   <DropdownMenuItem
                     disabled={reportingPhoto}
-                    onSelect={() => handleReportPhotoOfChild()}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setTakedownOpen(true);
+                    }}
                     data-testid="menu-report-photo-of-child"
                   >
                     <Flag className="w-4 h-4 mr-2" />
@@ -434,6 +443,15 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
           contentType={reportTarget.contentType}
           contentId={reportTarget.contentId}
         />
+        {asChildId && (
+          <TakedownDialog
+            open={takedownOpen}
+            onOpenChange={setTakedownOpen}
+            onConfirm={submitTakedown}
+            submitting={reportingPhoto}
+            postKindLabel={label.toLowerCase()}
+          />
+        )}
         {post.currentUserTag && (
           <AlertDialog open={untagOpen} onOpenChange={setUntagOpen}>
             <AlertDialogContent data-testid={`dialog-untag-${post.id}`}>

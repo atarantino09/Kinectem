@@ -99,7 +99,7 @@ const router: IRouter = Router();
 // into the helper so callers don't have to remember to pass
 // `requestedByGuardianId`.
 async function isPendingTakedown(
-  kind: "article" | "highlight",
+  kind: "article" | "highlight" | "org_post",
   postId: string,
   viewerId: string | null,
 ): Promise<boolean> {
@@ -128,7 +128,7 @@ async function isPendingTakedown(
 // and platform admins continue to see it via GET /posts/:postId so
 // they can resolve the queue).
 async function pendingTakedownIdSet(
-  kind: "article" | "highlight",
+  kind: "article" | "highlight" | "org_post",
   postIds: string[],
   viewerId: string | null,
 ): Promise<Set<string>> {
@@ -603,26 +603,33 @@ router.get(
     // path. Real (non-masquerading) admins bypass the filter so they
     // can see the moderation queue from their own feed.
     const feedIsAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
-    const [feedPendingArtIds, feedPendingHlIds] = feedIsAdmin
-      ? [new Set<string>(), new Set<string>()]
-      : await Promise.all([
-          pendingTakedownIdSet(
-            "article",
-            [
-              ...arts.map((r) => r.a.id),
-              ...sharedArticleRows.map((r) => r.a.id),
-            ],
-            me.id,
-          ),
-          pendingTakedownIdSet(
-            "highlight",
-            [
-              ...hls.map((r) => r.h.id),
-              ...sharedHighlightRows.map((r) => r.h.id),
-            ],
-            me.id,
-          ),
-        ]);
+    const [feedPendingArtIds, feedPendingHlIds, feedPendingOrgPostIds] =
+      feedIsAdmin
+        ? [new Set<string>(), new Set<string>(), new Set<string>()]
+        : await Promise.all([
+            pendingTakedownIdSet(
+              "article",
+              [
+                ...arts.map((r) => r.a.id),
+                ...sharedArticleRows.map((r) => r.a.id),
+              ],
+              me.id,
+            ),
+            pendingTakedownIdSet(
+              "highlight",
+              [
+                ...hls.map((r) => r.h.id),
+                ...sharedHighlightRows.map((r) => r.h.id),
+              ],
+              me.id,
+            ),
+            // Task #524 — extend takedown hiding to plain timeline posts.
+            pendingTakedownIdSet(
+              "org_post",
+              orgPostRows.map((r) => r.p.id),
+              me.id,
+            ),
+          ]);
     const seenIds = new Set<string>([
       ...arts
         .filter((r) => !feedPendingArtIds.has(r.a.id))
@@ -661,7 +668,7 @@ router.get(
           minorNameCtx: minorCtx,
         });
       }),
-      ...orgPostRows.map((r) => {
+      ...orgPostRows.filter((r) => !feedPendingOrgPostIds.has(r.p.id)).map((r) => {
         const isAuthor = !!me && r.p.authorId === me.id;
         const isOrgAdmin = adminOrgIds.has(r.org.id);
         return orgPostToPost(r.p, {
@@ -1010,6 +1017,14 @@ router.get(
         .limit(1);
       if (!row) return notFound(res);
       if (row.p.hiddenAt && !isAdmin) return notFound(res);
+      // Task #524 — pending photo-of-minor takedown hides the org_post
+      // from everyone except the requesting guardian and admins.
+      if (
+        !isAdmin &&
+        (await isPendingTakedown("org_post", row.p.id, me?.id ?? null))
+      ) {
+        return notFound(res);
+      }
       const isAuthor = !!me && row.p.authorId === me.id;
       const isOrgAdmin =
         !!me && (await canManageOrganization(me.id, row.org.id));
