@@ -545,12 +545,12 @@
         <div class="signup__inner">
           <div class="signup__copy">
             <span class="section-eyebrow" aria-hidden="true">Be the First In</span>
-            <h2 class="signup__heading" id="signup-heading">Ready to Elevate Your Program?</h2>
+            <h2 class="signup__heading" id="signup-heading">Join the Founding 100</h2>
             <p class="signup__subtext">
-              Kinectem is in development. Join the waitlist to be first in line when we launch —
-              and help shape the platform that'll put your organization, your players, and your wins in the spotlight.
+              Kinectem is in development. The first 100 youth-sports organizations to sign up get founding-member
+              status — early access, a direct line to the team building it, and a permanent spot in the launch story.
             </p>
-            <ul class="signup__perks" role="list" aria-label="Waitlist benefits">
+            <ul class="signup__perks" role="list" aria-label="Founding 100 benefits">
               <li>
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
                 First to claim your organization's profile
@@ -570,27 +570,105 @@
               class="signup__form"
               id="signup-form"
               novalidate
-              aria-label="Waitlist signup form"
+              aria-label="Founding 100 signup form"
               onsubmit="handleSignupSubmit(event)"
             >
-              <p class="signup__form-label">Enter your email to get notified</p>
-              <label for="email-input" class="sr-only">Email address</label>
+              <p class="signup__form-label">Tell us about your organization</p>
+
+              <label for="org-name-input" class="signup__field-label">Organization name</label>
+              <input
+                type="text"
+                id="org-name-input"
+                class="signup__input"
+                name="orgName"
+                placeholder="Riverside Youth Soccer Club"
+                autocomplete="organization"
+                required
+                aria-required="true"
+              />
+
+              <label for="admin-name-input" class="signup__field-label">Your name</label>
+              <input
+                type="text"
+                id="admin-name-input"
+                class="signup__input"
+                name="adminName"
+                placeholder="Jordan Rivera"
+                autocomplete="name"
+                required
+                aria-required="true"
+              />
+
+              <label for="admin-email-input" class="signup__field-label">Email</label>
               <input
                 type="email"
-                id="email-input"
+                id="admin-email-input"
                 class="signup__input"
-                name="email"
-                placeholder="your@email.com"
+                name="adminEmail"
+                placeholder="you@yourclub.org"
                 autocomplete="email"
                 required
                 aria-required="true"
-                aria-describedby="email-error"
               />
-              <span id="email-error" role="alert" aria-live="polite" class="signup__error"></span>
+
+              <label for="role-title-input" class="signup__field-label">Role / title</label>
+              <input
+                type="text"
+                id="role-title-input"
+                class="signup__input"
+                name="roleTitle"
+                placeholder="Director of Operations"
+                autocomplete="organization-title"
+                required
+                aria-required="true"
+              />
+
+              <div class="signup__row">
+                <div class="signup__row-col">
+                  <label for="estimated-teams-input" class="signup__field-label">Approx. teams</label>
+                  <input
+                    type="number"
+                    id="estimated-teams-input"
+                    class="signup__input"
+                    name="estimatedTeams"
+                    min="1"
+                    step="1"
+                    placeholder="12"
+                    required
+                    aria-required="true"
+                  />
+                </div>
+                <div class="signup__row-col">
+                  <label for="estimated-players-input" class="signup__field-label">Approx. players</label>
+                  <input
+                    type="number"
+                    id="estimated-players-input"
+                    class="signup__input"
+                    name="estimatedPlayers"
+                    min="1"
+                    step="1"
+                    placeholder="180"
+                    required
+                    aria-required="true"
+                  />
+                </div>
+              </div>
+
+              <label for="sport-input" class="signup__field-label">Primary sport <span class="signup__field-optional">(optional)</span></label>
+              <input
+                type="text"
+                id="sport-input"
+                class="signup__input"
+                name="sport"
+                placeholder="Soccer"
+                autocomplete="off"
+              />
+
+              <span id="signup-error" role="alert" aria-live="polite" class="signup__error"></span>
               <button type="submit" class="signup__submit">
-                Notify Me When We Launch
+                Claim Our Spot in the Founding 100
               </button>
-              <p class="signup__fine-print">No spam. Unsubscribe anytime.</p>
+              <p class="signup__fine-print">We'll only use this to reach out about early access. No spam.</p>
             </form>
 
             <div
@@ -604,7 +682,7 @@
                 <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
               </svg>
               <strong>You're on the list.</strong>
-              <p>We'll be in touch when Kinectem launches. Expect early access before anyone else.</p>
+              <p>Welcome to the Founding 100. We'll be in touch with early-access details as launch approaches.</p>
             </div>
           </div>
         </div>
@@ -724,125 +802,116 @@
     }());
 
     /* --------------------------------------------------
-       Email form — validation + submit handler
+       Founding 100 form — validation + submit handler
        -------------------------------------------------- */
 
-    /**
-     * Basic email format validation beyond the browser's built-in check.
-     * @param {string} email
-     * @returns {boolean}
-     */
     function isValidEmail(email) {
       return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
     }
 
     /**
-     * submitEmail — integration stub
-     *
-     * Replace the body of this function with your email service of choice.
-     * The function should return a promise that resolves to { ok: true } on
-     * success, or throws/rejects on failure.
-     *
-     * -------------------------------------------------------
-     * Option A: Mailchimp (embedded form POST via JSONP)
-     * -------------------------------------------------------
-     * async function submitEmail(email) {
-     *   const url = 'https://YOUR_SUBDOMAIN.us1.list-manage.com/subscribe/post-json'
-     *     + '?u=YOUR_U_PARAM&id=YOUR_ID_PARAM&EMAIL=' + encodeURIComponent(email)
-     *     + '&c=callback';
-     *   // Mailchimp requires JSONP for cross-origin. Use their embedded form
-     *   // endpoint or a server-side proxy instead.
-     *   throw new Error('Wire up Mailchimp integration here');
-     * }
-     *
-     * -------------------------------------------------------
-     * Option B: ConvertKit
-     * -------------------------------------------------------
-     * async function submitEmail(email) {
-     *   const res = await fetch(
-     *     'https://api.convertkit.com/v3/forms/YOUR_FORM_ID/subscribe',
-     *     {
-     *       method: 'POST',
-     *       headers: { 'Content-Type': 'application/json' },
-     *       body: JSON.stringify({ api_key: 'YOUR_API_KEY', email }),
-     *     }
-     *   );
-     *   if (!res.ok) throw new Error('ConvertKit subscribe failed');
-     *   return { ok: true };
-     * }
-     *
-     * -------------------------------------------------------
-     * Option C: Custom Kinectem API
-     * -------------------------------------------------------
-     * async function submitEmail(email) {
-     *   const res = await fetch('https://api.kinectem.com/waitlist', {
-     *     method: 'POST',
-     *     headers: { 'Content-Type': 'application/json' },
-     *     body: JSON.stringify({ email }),
-     *   });
-     *   if (!res.ok) throw new Error('Waitlist signup failed');
-     *   return { ok: true };
-     * }
-     *
-     * -------------------------------------------------------
-     * Current stub — simulates success with no network call
-     * -------------------------------------------------------
+     * Posts the Founding 100 signup to the Kinectem API. Returns
+     * { ok: true } on success, throws Error(message) on failure.
+     * @param {object} payload
      */
-    async function submitEmail(email) {
-      // Simulate a short network delay so the UX feels real
-      await new Promise(function (resolve) { setTimeout(resolve, 500); });
-      // For now, just simulate success
+    async function submitFoundingSignup(payload) {
+      var res = await fetch('https://app.kinectem.com/api/v1/founding-signups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      var data = null;
+      try { data = await res.json(); } catch (_e) { /* non-JSON body */ }
+      if (!res.ok) {
+        var msg = (data && (data.error || data.message)) || 'Signup failed. Please try again.';
+        throw new Error(msg);
+      }
       return { ok: true };
     }
 
-    /**
-     * handleSignupSubmit — form submit event handler
-     * Validates, calls submitEmail, and shows success/error state.
-     * @param {SubmitEvent} event
-     */
     async function handleSignupSubmit(event) {
       event.preventDefault();
 
       var form    = document.getElementById('signup-form');
-      var input   = document.getElementById('email-input');
-      var errorEl = document.getElementById('email-error');
+      var errorEl = document.getElementById('signup-error');
       var success = document.getElementById('signup-success');
       var submit  = form.querySelector('button[type="submit"]');
 
-      // Clear previous error state
+      var orgEl       = document.getElementById('org-name-input');
+      var nameEl      = document.getElementById('admin-name-input');
+      var emailEl     = document.getElementById('admin-email-input');
+      var roleEl      = document.getElementById('role-title-input');
+      var teamsEl     = document.getElementById('estimated-teams-input');
+      var playersEl   = document.getElementById('estimated-players-input');
+      var sportEl     = document.getElementById('sport-input');
+
+      var inputs = [orgEl, nameEl, emailEl, roleEl, teamsEl, playersEl, sportEl];
+      inputs.forEach(function (el) { el.removeAttribute('aria-invalid'); });
       errorEl.textContent = '';
       errorEl.style.display = 'none';
-      input.removeAttribute('aria-invalid');
 
-      var email = input.value.trim();
+      var orgName    = orgEl.value.trim();
+      var adminName  = nameEl.value.trim();
+      var adminEmail = emailEl.value.trim();
+      var roleTitle  = roleEl.value.trim();
+      var teamsRaw   = teamsEl.value.trim();
+      var playersRaw = playersEl.value.trim();
+      var sport      = sportEl.value.trim();
 
-      if (!email || !isValidEmail(email)) {
-        errorEl.textContent = 'Please enter a valid email address.';
+      function fail(el, message) {
+        errorEl.textContent = message;
         errorEl.style.display = 'block';
-        input.setAttribute('aria-invalid', 'true');
-        input.focus();
+        el.setAttribute('aria-invalid', 'true');
+        el.focus();
+      }
+
+      if (!orgName)     { fail(orgEl,    'Please enter your organization name.'); return; }
+      if (!adminName)   { fail(nameEl,   'Please enter your name.');               return; }
+      if (!adminEmail || !isValidEmail(adminEmail)) {
+        fail(emailEl, 'Please enter a valid email address.');
+        return;
+      }
+      if (!roleTitle)   { fail(roleEl,   'Please enter your role or title.');      return; }
+
+      var estimatedTeams   = Number(teamsRaw);
+      var estimatedPlayers = Number(playersRaw);
+      if (!teamsRaw   || !Number.isInteger(estimatedTeams)   || estimatedTeams   < 1) {
+        fail(teamsEl,   'Please enter a whole number of teams (1 or more).');
+        return;
+      }
+      if (!playersRaw || !Number.isInteger(estimatedPlayers) || estimatedPlayers < 1) {
+        fail(playersEl, 'Please enter a whole number of players (1 or more).');
         return;
       }
 
-      // Disable form while submitting
-      input.disabled  = true;
+      var payload = {
+        orgName: orgName,
+        adminName: adminName,
+        adminEmail: adminEmail,
+        roleTitle: roleTitle,
+        estimatedTeams: estimatedTeams,
+        estimatedPlayers: estimatedPlayers,
+      };
+      if (sport) payload.sport = sport;
+
+      inputs.forEach(function (el) { el.disabled = true; });
       submit.disabled = true;
+      var originalLabel = submit.textContent;
       submit.textContent = 'Sending\u2026';
 
       try {
-        var result = await submitEmail(email);
+        var result = await submitFoundingSignup(payload);
         if (result && result.ok) {
           form.style.display = 'none';
           success.classList.add('is-visible');
         }
       } catch (err) {
-        input.disabled  = false;
+        inputs.forEach(function (el) { el.disabled = false; });
         submit.disabled = false;
-        submit.textContent = 'Notify Me When We Launch';
-        errorEl.textContent = 'Something went wrong. Please try again.';
+        submit.textContent = originalLabel;
+        errorEl.textContent = (err && err.message) || 'Something went wrong. Please try again.';
         errorEl.style.display = 'block';
-        input.setAttribute('aria-invalid', 'true');
-        console.error('Email signup error:', err);
+        console.error('Founding 100 signup error:', err);
       }
     }
   </script>

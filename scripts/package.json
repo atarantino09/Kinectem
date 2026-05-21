@@ -12,6 +12,7 @@
     "backfill-parent-team-follows": "tsx ./src/backfill-parent-team-follows.ts",
     "backfill-self-team-follows": "tsx ./src/backfill-self-team-follows.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
+    "export-founding-100": "tsx ./src/export-founding-100.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

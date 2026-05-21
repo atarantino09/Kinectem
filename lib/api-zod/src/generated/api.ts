@@ -8685,6 +8685,69 @@ export const ListAdminActivityAdminsResponse = zod.object({
 });
 
 /**
+ * Public, unauthenticated endpoint backing the marketing site's
+Founding 100 form. Rate-limited per source IP. Upserts on
+`adminEmail` so a re-submission updates the existing row in
+place rather than creating duplicates.
+
+ * @summary Capture a "Founding 100" pre-launch signup from the marketing site
+ */
+export const createFoundingSignupBodyOrgNameMax = 200;
+
+export const createFoundingSignupBodyAdminNameMax = 200;
+
+export const createFoundingSignupBodyAdminEmailMax = 320;
+
+export const createFoundingSignupBodyRoleTitleMax = 200;
+
+export const createFoundingSignupBodyEstimatedTeamsMax = 100000;
+
+export const createFoundingSignupBodyEstimatedPlayersMax = 1000000;
+
+export const createFoundingSignupBodySportMax = 100;
+
+export const CreateFoundingSignupBody = zod.object({
+  orgName: zod.string().min(1).max(createFoundingSignupBodyOrgNameMax),
+  adminName: zod.string().min(1).max(createFoundingSignupBodyAdminNameMax),
+  adminEmail: zod.string().email().max(createFoundingSignupBodyAdminEmailMax),
+  roleTitle: zod.string().min(1).max(createFoundingSignupBodyRoleTitleMax),
+  estimatedTeams: zod
+    .number()
+    .min(1)
+    .max(createFoundingSignupBodyEstimatedTeamsMax),
+  estimatedPlayers: zod
+    .number()
+    .min(1)
+    .max(createFoundingSignupBodyEstimatedPlayersMax),
+  sport: zod.string().max(createFoundingSignupBodySportMax).nullish(),
+});
+
+/**
+ * @summary List all "Founding 100" signups (admin)
+ */
+export const ListFoundingSignupsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      orgName: zod.string(),
+      adminName: zod.string(),
+      adminEmail: zod.string().email(),
+      roleTitle: zod.string(),
+      estimatedTeams: zod.number(),
+      estimatedPlayers: zod.number(),
+      sport: zod.string().nullable(),
+      submittedAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullable(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number(),
+  }),
+});
+
+/**
  * @summary Begin masquerading as another user (admin)
  */
 export const StartAdminMasqueradeParams = zod.object({

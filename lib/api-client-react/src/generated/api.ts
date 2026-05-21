@@ -145,6 +145,7 @@ import type {
   CreateCommentRequest,
   CreateConsentRequest,
   CreateConversationRequest,
+  CreateFoundingSignup201,
   CreateInviteRequest,
   CreateMyChild201,
   CreateMyChildBody,
@@ -171,6 +172,7 @@ import type {
   FollowSuggestionsResponse,
   FollowUserResponse,
   ForbiddenResponse,
+  FoundingSignupRequest,
   GetChildConversation200,
   GetChildPost200,
   GetChildrenNotificationsSummary200,
@@ -209,6 +211,7 @@ import type {
   ListConversationsParams,
   ListDrafts200,
   ListFeedParams,
+  ListFoundingSignups200,
   ListMembersParams,
   ListMessagesParams,
   ListMyChildren200,
@@ -19375,6 +19378,176 @@ export function useListAdminActivityAdmins<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListAdminActivityAdminsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Public, unauthenticated endpoint backing the marketing site's
+Founding 100 form. Rate-limited per source IP. Upserts on
+`adminEmail` so a re-submission updates the existing row in
+place rather than creating duplicates.
+
+ * @summary Capture a "Founding 100" pre-launch signup from the marketing site
+ */
+export const getCreateFoundingSignupUrl = () => {
+  return `/api/v1/founding-signups`;
+};
+
+export const createFoundingSignup = async (
+  foundingSignupRequest: FoundingSignupRequest,
+  options?: RequestInit,
+): Promise<CreateFoundingSignup201> => {
+  return customFetch<CreateFoundingSignup201>(getCreateFoundingSignupUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(foundingSignupRequest),
+  });
+};
+
+export const getCreateFoundingSignupMutationOptions = <
+  TError = ErrorType<BadRequestResponse | TooManyRequestsResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createFoundingSignup>>,
+    TError,
+    { data: BodyType<FoundingSignupRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createFoundingSignup>>,
+  TError,
+  { data: BodyType<FoundingSignupRequest> },
+  TContext
+> => {
+  const mutationKey = ["createFoundingSignup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createFoundingSignup>>,
+    { data: BodyType<FoundingSignupRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createFoundingSignup(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateFoundingSignupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createFoundingSignup>>
+>;
+export type CreateFoundingSignupMutationBody = BodyType<FoundingSignupRequest>;
+export type CreateFoundingSignupMutationError = ErrorType<
+  BadRequestResponse | TooManyRequestsResponse
+>;
+
+/**
+ * @summary Capture a "Founding 100" pre-launch signup from the marketing site
+ */
+export const useCreateFoundingSignup = <
+  TError = ErrorType<BadRequestResponse | TooManyRequestsResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createFoundingSignup>>,
+    TError,
+    { data: BodyType<FoundingSignupRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createFoundingSignup>>,
+  TError,
+  { data: BodyType<FoundingSignupRequest> },
+  TContext
+> => {
+  return useMutation(getCreateFoundingSignupMutationOptions(options));
+};
+
+/**
+ * @summary List all "Founding 100" signups (admin)
+ */
+export const getListFoundingSignupsUrl = () => {
+  return `/api/v1/admin/founding-signups`;
+};
+
+export const listFoundingSignups = async (
+  options?: RequestInit,
+): Promise<ListFoundingSignups200> => {
+  return customFetch<ListFoundingSignups200>(getListFoundingSignupsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFoundingSignupsQueryKey = () => {
+  return [`/api/v1/admin/founding-signups`] as const;
+};
+
+export const getListFoundingSignupsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFoundingSignups>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFoundingSignups>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFoundingSignupsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFoundingSignups>>
+  > = ({ signal }) => listFoundingSignups({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFoundingSignups>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFoundingSignupsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFoundingSignups>>
+>;
+export type ListFoundingSignupsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary List all "Founding 100" signups (admin)
+ */
+
+export function useListFoundingSignups<
+  TData = Awaited<ReturnType<typeof listFoundingSignups>>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFoundingSignups>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFoundingSignupsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

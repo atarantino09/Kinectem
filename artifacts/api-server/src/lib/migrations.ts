@@ -610,6 +610,26 @@ CREATE INDEX IF NOT EXISTS organization_invites_org_status_idx
   ON organization_invites(organization_id, status);
 `;
 
+// Task #543 — Founding 100 signup capture for the marketing site.
+// Standalone table, not linked to platform users. Idempotent.
+const TASK_543_FOUNDING_SIGNUPS = `
+CREATE TABLE IF NOT EXISTS founding_signups (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_name          text NOT NULL,
+  admin_name        text NOT NULL,
+  admin_email       text NOT NULL UNIQUE,
+  role_title        text NOT NULL,
+  estimated_teams   integer NOT NULL,
+  estimated_players integer NOT NULL,
+  sport             text,
+  submitted_at      timestamp NOT NULL DEFAULT now(),
+  updated_at        timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS founding_signups_submitted_at_idx
+  ON founding_signups (submitted_at DESC);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -686,6 +706,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-21-task-541-organization-invites",
     sql: TASK_541_ORGANIZATION_INVITES,
+  },
+  {
+    name: "2026-05-21-task-543-founding-signups",
+    sql: TASK_543_FOUNDING_SIGNUPS,
   },
 ];
 

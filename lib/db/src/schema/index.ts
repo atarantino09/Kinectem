@@ -961,6 +961,24 @@ export const parentalConsents = pgTable("parental_consents", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Task #543 — Founding 100 signup capture. Standalone table for the
+// marketing site's "Join the Founding 100" CTA. No FK to users — these
+// are pre-launch prospects, not platform accounts. Email is stored
+// lower-cased + unique so a re-submit updates the existing row instead
+// of creating a duplicate.
+export const foundingSignups = pgTable("founding_signups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgName: text("org_name").notNull(),
+  adminName: text("admin_name").notNull(),
+  adminEmail: text("admin_email").notNull().unique(),
+  roleTitle: text("role_title").notNull(),
+  estimatedTeams: integer("estimated_teams").notNull(),
+  estimatedPlayers: integer("estimated_players").notNull(),
+  sport: text("sport"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Append-only audit log for every consent-relevant event. Used to satisfy
 // the FTC requirement that the operator retain proof of consent and to
 // give parents a transparent history.

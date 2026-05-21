@@ -35,6 +35,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminModeration from "@/pages/admin/AdminModeration";
 import AdminActivity from "@/pages/admin/AdminActivity";
+import AdminFounding100 from "@/pages/admin/AdminFounding100";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +101,7 @@ function Router() {
             <Route path="/admin/users" component={AdminUsers} />
             <Route path="/admin/moderation" component={AdminModeration} />
             <Route path="/admin/activity" component={AdminActivity} />
+            <Route path="/admin/founding-100" component={AdminFounding100} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

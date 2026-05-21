@@ -3032,6 +3032,55 @@ export interface InviteGuardianRequest {
   relationshipType: InviteGuardianRequestRelationshipType;
 }
 
+export interface FoundingSignupRequest {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  orgName: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  adminName: string;
+  /** @maxLength 320 */
+  adminEmail: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  roleTitle: string;
+  /**
+   * @minimum 1
+   * @maximum 100000
+   */
+  estimatedTeams: number;
+  /**
+   * @minimum 1
+   * @maximum 1000000
+   */
+  estimatedPlayers: number;
+  /**
+   * @maxLength 100
+   * @nullable
+   */
+  sport?: string | null;
+}
+
+export interface FoundingSignup {
+  id: string;
+  orgName: string;
+  adminName: string;
+  adminEmail: string;
+  roleTitle: string;
+  estimatedTeams: number;
+  estimatedPlayers: number;
+  /** @nullable */
+  sport: string | null;
+  submittedAt: string;
+  updatedAt: string;
+}
+
 export type GuardianLinkResponseGuardian = {
   id: string;
   displayName: string;
@@ -4361,6 +4410,23 @@ export type ListAdminActivity200 = {
 
 export type ListAdminActivityAdmins200 = {
   data: AdminWhoamiUser[];
+};
+
+export type CreateFoundingSignup201 = {
+  ok: boolean;
+  id: string;
+};
+
+export type ListFoundingSignups200Pagination = {
+  /** @nullable */
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+};
+
+export type ListFoundingSignups200 = {
+  data: FoundingSignup[];
+  pagination: ListFoundingSignups200Pagination;
 };
 
 export type StartAdminMasquerade200 = {

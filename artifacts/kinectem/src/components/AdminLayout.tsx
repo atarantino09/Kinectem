@@ -4,6 +4,7 @@ import {
   Users,
   ShieldAlert,
   History,
+  Sparkles,
   ArrowLeft,
   Lock,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const NAV = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
   { href: "/admin/activity", label: "Activity log", icon: History },
+  { href: "/admin/founding-100", label: "Founding 100", icon: Sparkles },
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {

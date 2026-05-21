@@ -1188,6 +1188,34 @@ header { position: sticky; top: 0; z-index: 100; }
   margin-bottom: 12px;
 }
 
+.signup__field-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--grey-600);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  margin-top: 4px;
+}
+.signup__field-optional {
+  color: var(--grey-400);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.signup__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.signup__row-col { min-width: 0; }
+@media (max-width: 480px) {
+  .signup__row { grid-template-columns: 1fr; }
+}
+
 .signup__input {
   width: 100%;
   background: var(--grey-50);

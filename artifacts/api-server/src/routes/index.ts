@@ -24,6 +24,7 @@ import childConversationsRouter from "./child-conversations";
 import searchRouter from "./search";
 import reportsRouter from "./reports";
 import masqueradeRouter from "./masquerade";
+import foundingSignupsRouter from "./founding-signups";
 
 const router: Router = Router();
 
@@ -58,5 +59,6 @@ router.use(childConversationsRouter);
 router.use(searchRouter);
 router.use(reportsRouter);
 router.use(masqueradeRouter);
+router.use(foundingSignupsRouter);
 
 export default router;
