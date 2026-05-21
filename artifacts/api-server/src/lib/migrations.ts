@@ -630,6 +630,17 @@ CREATE INDEX IF NOT EXISTS founding_signups_submitted_at_idx
   ON founding_signups (submitted_at DESC);
 `;
 
+// Task #548 — Per-user-per-org dismissal of the org setup checklist.
+// Adds a nullable `dismissed_setup_at` timestamp on organization_admins.
+// Without this, POST /organizations (and any other write that touches
+// the membership row) 500s on databases that predate task #548 with
+// `column "dismissed_setup_at" of relation "organization_admins" does
+// not exist`. Idempotent.
+const TASK_548_ORG_ADMIN_DISMISSED_SETUP_AT = `
+ALTER TABLE organization_admins
+  ADD COLUMN IF NOT EXISTS dismissed_setup_at timestamp;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -710,6 +721,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-21-task-543-founding-signups",
     sql: TASK_543_FOUNDING_SIGNUPS,
+  },
+  {
+    name: "2026-05-21-task-548-org-admin-dismissed-setup-at",
+    sql: TASK_548_ORG_ADMIN_DISMISSED_SETUP_AT,
   },
 ];
 
