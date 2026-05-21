@@ -710,6 +710,27 @@ export const messageAssets = pgTable("message_assets", {
   displayOrder: integer("display_order").notNull().default(0),
 }, (t) => ({ pk: primaryKey({ columns: [t.messageId, t.assetId] }) }));
 
+// Task #535 — Fan photo album entries attached to a post. Polymorphic
+// over (postKind, postRefId) to match the existing post_comments /
+// post_shares / post_reactions convention so the client can keep
+// passing the prefixed post id (`article-<uuid>`, `highlight-<uuid>`,
+// `orgpost-<uuid>`) and the server `parsePostId`s it at the boundary.
+// Each row points at a confirmed `assets` row (the actual image bytes)
+// and records the uploader's display name + optional caption.
+// `uploaderUserId` is nullable so an unauthenticated future flow can
+// still post (today's implementation always populates it from the
+// session).
+export const albumPhotos = pgTable("album_photos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  postKind: postKindEnum("post_kind").notNull(),
+  postRefId: uuid("post_ref_id").notNull(),
+  uploaderUserId: uuid("uploader_user_id").references(() => users.id, { onDelete: "set null" }),
+  uploaderName: text("uploader_name").notNull(),
+  caption: text("caption").notNull().default(""),
+  assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const organizationJoinRequests = pgTable("organization_join_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),

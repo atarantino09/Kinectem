@@ -106,6 +106,8 @@ import type {
   AdminCreateUserRequest,
   AdminOkResponse,
   AdminUpdateUserRequest,
+  AlbumPhotoListResponse,
+  AlbumPhotoResponse,
   ApiKeyWithToken,
   ApproveAllChildNotifications200,
   ApproveJoinRequestBody,
@@ -138,6 +140,7 @@ import type {
   ConsentRequestResponse,
   ConversationListItem,
   CreateAddressRequest,
+  CreateAlbumPhotoRequest,
   CreateApiKeyBody,
   CreateCommentRequest,
   CreateConsentRequest,
@@ -13214,6 +13217,309 @@ export const useRemoveCommentReaction = <
   TContext
 > => {
   return useMutation(getRemoveCommentReactionMutationOptions(options));
+};
+
+/**
+ * Returns every fan-album entry attached to the post. The album is
+separate from the post's hero `assets` gallery — entries are
+per-uploader, captioned, and shown in the dedicated "Fan Photo
+Album" section. Requires a signed-in viewer who can view the
+post.
+
+ * @summary List fan-album photos for a post (newest first)
+ */
+export const getListAlbumPhotosUrl = (postId: string) => {
+  return `/api/v1/posts/${postId}/album`;
+};
+
+export const listAlbumPhotos = async (
+  postId: string,
+  options?: RequestInit,
+): Promise<AlbumPhotoListResponse> => {
+  return customFetch<AlbumPhotoListResponse>(getListAlbumPhotosUrl(postId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAlbumPhotosQueryKey = (postId: string) => {
+  return [`/api/v1/posts/${postId}/album`] as const;
+};
+
+export const getListAlbumPhotosQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAlbumPhotos>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  postId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlbumPhotos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAlbumPhotosQueryKey(postId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAlbumPhotos>>> = ({
+    signal,
+  }) => listAlbumPhotos(postId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!postId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAlbumPhotos>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAlbumPhotosQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAlbumPhotos>>
+>;
+export type ListAlbumPhotosQueryError = ErrorType<
+  UnauthorizedResponse | NotFoundResponse
+>;
+
+/**
+ * @summary List fan-album photos for a post (newest first)
+ */
+
+export function useListAlbumPhotos<
+  TData = Awaited<ReturnType<typeof listAlbumPhotos>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  postId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAlbumPhotos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAlbumPhotosQueryOptions(postId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Step 4 of the upload flow for fan-album photos:
+
+1. `POST /assets/upload` to mint a presigned URL.
+2. `PUT <uploadUrl>` with the binary.
+3. `POST /assets/{assetId}/confirm` to mark it confirmed.
+4. `POST /posts/{postId}/album` with the `assetId` plus the
+   uploader's display name and optional caption.
+
+The asset's minor-asset processing (EXIF strip etc.) is already
+applied at step 2, so this endpoint just records the album row.
+Requires a signed-in viewer who can view the post.
+
+ * @summary Attach an uploaded asset to a post's fan photo album
+ */
+export const getCreateAlbumPhotoUrl = (postId: string) => {
+  return `/api/v1/posts/${postId}/album`;
+};
+
+export const createAlbumPhoto = async (
+  postId: string,
+  createAlbumPhotoRequest: CreateAlbumPhotoRequest,
+  options?: RequestInit,
+): Promise<AlbumPhotoResponse> => {
+  return customFetch<AlbumPhotoResponse>(getCreateAlbumPhotoUrl(postId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createAlbumPhotoRequest),
+  });
+};
+
+export const getCreateAlbumPhotoMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAlbumPhoto>>,
+    TError,
+    { postId: string; data: BodyType<CreateAlbumPhotoRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAlbumPhoto>>,
+  TError,
+  { postId: string; data: BodyType<CreateAlbumPhotoRequest> },
+  TContext
+> => {
+  const mutationKey = ["createAlbumPhoto"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAlbumPhoto>>,
+    { postId: string; data: BodyType<CreateAlbumPhotoRequest> }
+  > = (props) => {
+    const { postId, data } = props ?? {};
+
+    return createAlbumPhoto(postId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAlbumPhotoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAlbumPhoto>>
+>;
+export type CreateAlbumPhotoMutationBody = BodyType<CreateAlbumPhotoRequest>;
+export type CreateAlbumPhotoMutationError = ErrorType<
+  | BadRequestResponse
+  | UnauthorizedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+>;
+
+/**
+ * @summary Attach an uploaded asset to a post's fan photo album
+ */
+export const useCreateAlbumPhoto = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | UnauthorizedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAlbumPhoto>>,
+    TError,
+    { postId: string; data: BodyType<CreateAlbumPhotoRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAlbumPhoto>>,
+  TError,
+  { postId: string; data: BodyType<CreateAlbumPhotoRequest> },
+  TContext
+> => {
+  return useMutation(getCreateAlbumPhotoMutationOptions(options));
+};
+
+/**
+ * The uploader of the photo, the post's author, and platform
+admins can delete an album entry. Other viewers receive a 403.
+
+ * @summary Remove a fan-album photo
+ */
+export const getDeleteAlbumPhotoUrl = (postId: string, photoId: string) => {
+  return `/api/v1/posts/${postId}/album/${photoId}`;
+};
+
+export const deleteAlbumPhoto = async (
+  postId: string,
+  photoId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAlbumPhotoUrl(postId, photoId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAlbumPhotoMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAlbumPhoto>>,
+    TError,
+    { postId: string; photoId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAlbumPhoto>>,
+  TError,
+  { postId: string; photoId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteAlbumPhoto"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAlbumPhoto>>,
+    { postId: string; photoId: string }
+  > = (props) => {
+    const { postId, photoId } = props ?? {};
+
+    return deleteAlbumPhoto(postId, photoId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAlbumPhotoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAlbumPhoto>>
+>;
+
+export type DeleteAlbumPhotoMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Remove a fan-album photo
+ */
+export const useDeleteAlbumPhoto = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAlbumPhoto>>,
+    TError,
+    { postId: string; photoId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAlbumPhoto>>,
+  TError,
+  { postId: string; photoId: string },
+  TContext
+> => {
+  return useMutation(getDeleteAlbumPhotoMutationOptions(options));
 };
 
 /**

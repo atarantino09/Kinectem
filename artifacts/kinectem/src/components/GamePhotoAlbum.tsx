@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,17 +13,84 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, ImagePlus, Trash2, X } from "lucide-react";
-import { useAlbum, AlbumQuotaError, type AlbumPhoto } from "@/lib/photoAlbum";
-import { useGetLoggedInUser } from "@workspace/api-client-react";
+import {
+  useGetLoggedInUser,
+  useListAlbumPhotos,
+  createAlbumPhoto,
+  deleteAlbumPhoto,
+  requestUpload,
+  confirmUpload,
+  getListAlbumPhotosQueryKey,
+  type AlbumPhotoResponse,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@/lib/format";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 
 const MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 
+// Task #535 — one-time migration of any photos still sitting in
+// `kinectem.photoAlbums.v1` from the localStorage prototype. On first
+// mount for a post that has legacy data, we upload each photo to the
+// server and clear the bucket for this post. Best-effort: partial
+// failures simply leave the remaining entries in localStorage so a
+// later mount can retry.
+const LEGACY_STORAGE_KEY = "kinectem.photoAlbums.v1";
+const MIGRATION_DONE_KEY = (postId: string) => `kinectem.albumMigrated.${postId}`;
+
+type LegacyPhoto = {
+  id: string;
+  postId: string;
+  dataUrl: string;
+  uploaderName: string;
+  caption: string;
+  createdAt: string;
+};
+
+function dataUrlToBlob(dataUrl: string): Blob | null {
+  const match = /^data:([^;,]+)(;base64)?,(.*)$/.exec(dataUrl);
+  if (!match) return null;
+  const mime = match[1] || "application/octet-stream";
+  const isBase64 = !!match[2];
+  const payload = match[3];
+  try {
+    if (isBase64) {
+      const bin = atob(payload);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    }
+    return new Blob([decodeURIComponent(payload)], { type: mime });
+  } catch {
+    return null;
+  }
+}
+
+async function uploadFanPhoto(blob: Blob, fileName: string): Promise<string> {
+  const upload = await requestUpload({
+    fileName,
+    fileType: blob.type || "image/jpeg",
+    fileSize: blob.size,
+  });
+  const putResp = await fetch(upload.uploadUrl, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": blob.type || "image/jpeg" },
+    body: blob,
+  });
+  if (!putResp.ok) {
+    throw new Error(`Upload failed (${putResp.status})`);
+  }
+  await confirmUpload(upload.assetId);
+  return upload.assetId;
+}
+
 export function GamePhotoAlbum({ postId }: { postId: string }) {
-  const { photos, addPhotos, removePhoto } = useAlbum(postId);
   const { data: me } = useGetLoggedInUser();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, refetch } = useListAlbumPhotos(postId);
+  const photos = data?.data ?? [];
 
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -31,13 +98,96 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   const [uploaderName, setUploaderName] = useState("");
   const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
-  const [lightbox, setLightbox] = useState<AlbumPhoto | null>(null);
+  const [lightbox, setLightbox] = useState<AlbumPhotoResponse | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const defaultName =
     me && "firstName" in me && "lastName" in me
       ? `${me.firstName} ${me.lastName}`
       : "";
+
+  // Best-effort one-time migration from the old localStorage prototype.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!me || !("id" in me)) return;
+    if (localStorage.getItem(MIGRATION_DONE_KEY(postId)) === "1") return;
+    let raw: string | null;
+    try {
+      raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) {
+      localStorage.setItem(MIGRATION_DONE_KEY(postId), "1");
+      return;
+    }
+    let store: Record<string, LegacyPhoto[]> = {};
+    try {
+      store = JSON.parse(raw) as Record<string, LegacyPhoto[]>;
+    } catch {
+      localStorage.setItem(MIGRATION_DONE_KEY(postId), "1");
+      return;
+    }
+    const legacy = store[postId] ?? [];
+    if (legacy.length === 0) {
+      localStorage.setItem(MIGRATION_DONE_KEY(postId), "1");
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      let uploaded = 0;
+      const remaining: LegacyPhoto[] = [];
+      for (const p of legacy) {
+        const blob = dataUrlToBlob(p.dataUrl);
+        if (!blob) {
+          // Unparseable legacy entry — preserve it so a future code
+          // path (or manual recovery) can still see the raw payload.
+          // Dropping silently would lose user data.
+          remaining.push(p);
+          continue;
+        }
+        try {
+          const assetId = await uploadFanPhoto(blob, `${p.id}.jpg`);
+          await createAlbumPhoto(postId, {
+            assetId,
+            uploaderName: p.uploaderName || "Anonymous fan",
+            caption: p.caption || "",
+          });
+          uploaded += 1;
+        } catch {
+          remaining.push(p);
+        }
+        if (cancelled) return;
+      }
+      // Persist whatever didn't make it so a later mount can retry.
+      try {
+        const next = { ...store, [postId]: remaining };
+        if (remaining.length === 0) delete next[postId];
+        localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // localStorage may be full / disabled — best effort only.
+      }
+      if (remaining.length === 0) {
+        localStorage.setItem(MIGRATION_DONE_KEY(postId), "1");
+      }
+      if (uploaded > 0) {
+        toast({
+          title: `Restored ${uploaded} photo${uploaded === 1 ? "" : "s"} to the album`,
+          description: "We moved your local photos to the server.",
+        });
+        await queryClient.invalidateQueries({
+          queryKey: getListAlbumPhotosQueryKey(postId),
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // We intentionally key only on postId + identity of `me`. The toast /
+    // queryClient closures are stable for the duration of this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId, me && "id" in me ? me.id : null]);
 
   const onFilesPicked = async (fileList: FileList | null) => {
     if (!fileList) return;
@@ -58,7 +208,6 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     try {
       const shrunk = await Promise.all(picked.map(shrinkImage));
       setFiles(shrunk);
-      // shrunk files are already small, so a plain FileReader is enough.
       const previewUrls = await Promise.all(
         shrunk.map(
           (f) =>
@@ -94,34 +243,43 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     const name = (uploaderName || defaultName || "Anonymous fan").trim();
     setSaving(true);
     try {
-      addPhotos(
-        files.map((_, i) => ({
-          dataUrl: previews[i],
+      for (const f of files) {
+        const assetId = await uploadFanPhoto(f, f.name || "fan-photo.jpg");
+        await createAlbumPhoto(postId, {
+          assetId,
           uploaderName: name,
           caption: caption.trim(),
-        })),
-      );
+        });
+      }
       toast({
         title: `Added ${files.length} photo${files.length === 1 ? "" : "s"}`,
         description: "Thanks for sharing.",
       });
       reset();
       setOpen(false);
+      await refetch();
     } catch (err) {
-      if (err instanceof AlbumQuotaError) {
-        // Leave the dialog open and the picked files intact so the user can
-        // remove a few existing album photos and retry without re-picking.
-        toast({
-          title: "Album storage is full on this device",
-          description:
-            "Remove some photos from this album before adding more.",
-          variant: "destructive",
-        });
-        return;
-      }
-      throw err;
+      toast({
+        title: "Couldn't add those photos",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onRemove = async (photoId: string) => {
+    try {
+      await deleteAlbumPhoto(postId, photoId);
+      setLightbox(null);
+      await refetch();
+    } catch (err) {
+      toast({
+        title: "Couldn't remove that photo",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -255,7 +413,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
                 data-testid={`album-photo-${p.id}`}
               >
                 <img
-                  src={p.dataUrl}
+                  src={p.url}
                   alt={p.caption || "fan photo"}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                 />
@@ -285,7 +443,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
                 <X className="w-4 h-4" />
               </button>
               <img
-                src={lightbox.dataUrl}
+                src={lightbox.url}
                 alt=""
                 className="w-full max-h-[70vh] object-contain bg-black"
               />
@@ -301,10 +459,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
                   size="sm"
                   variant="outline"
                   className="font-bold gap-1 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    removePhoto(lightbox.id);
-                    setLightbox(null);
-                  }}
+                  onClick={() => onRemove(lightbox.id)}
                   data-testid={`button-remove-photo-${lightbox.id}`}
                 >
                   <Trash2 className="w-3.5 h-3.5" />

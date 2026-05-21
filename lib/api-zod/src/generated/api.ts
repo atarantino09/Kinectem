@@ -5573,6 +5573,78 @@ export const RemoveCommentReactionParams = zod.object({
 });
 
 /**
+ * Returns every fan-album entry attached to the post. The album is
+separate from the post's hero `assets` gallery — entries are
+per-uploader, captioned, and shown in the dedicated "Fan Photo
+Album" section. Requires a signed-in viewer who can view the
+post.
+
+ * @summary List fan-album photos for a post (newest first)
+ */
+export const ListAlbumPhotosParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const ListAlbumPhotosResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      postId: zod.string().uuid(),
+      assetId: zod.string().uuid(),
+      url: zod
+        .string()
+        .describe(
+          "Resolved asset URL (may be a `data:` URL or an http(s) URL).",
+        ),
+      uploaderUserId: zod.string().uuid().nullish(),
+      uploaderName: zod.string(),
+      caption: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * Step 4 of the upload flow for fan-album photos:
+
+1. `POST /assets/upload` to mint a presigned URL.
+2. `PUT <uploadUrl>` with the binary.
+3. `POST /assets/{assetId}/confirm` to mark it confirmed.
+4. `POST /posts/{postId}/album` with the `assetId` plus the
+   uploader's display name and optional caption.
+
+The asset's minor-asset processing (EXIF strip etc.) is already
+applied at step 2, so this endpoint just records the album row.
+Requires a signed-in viewer who can view the post.
+
+ * @summary Attach an uploaded asset to a post's fan photo album
+ */
+export const CreateAlbumPhotoParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+});
+
+export const createAlbumPhotoBodyUploaderNameMax = 80;
+
+export const createAlbumPhotoBodyCaptionMax = 280;
+
+export const CreateAlbumPhotoBody = zod.object({
+  assetId: zod.string().uuid(),
+  uploaderName: zod.string().min(1).max(createAlbumPhotoBodyUploaderNameMax),
+  caption: zod.string().max(createAlbumPhotoBodyCaptionMax).optional(),
+});
+
+/**
+ * The uploader of the photo, the post's author, and platform
+admins can delete an album entry. Other viewers receive a 403.
+
+ * @summary Remove a fan-album photo
+ */
+export const DeleteAlbumPhotoParams = zod.object({
+  postId: zod.coerce.string().uuid(),
+  photoId: zod.coerce.string().uuid(),
+});
+
+/**
  * @summary Propose one or more content tags on a post
  */
 export const CreatePostTagsParams = zod.object({

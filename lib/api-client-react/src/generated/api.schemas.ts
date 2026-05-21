@@ -1347,6 +1347,34 @@ export interface AssetResponse {
   createdAt: string;
 }
 
+export interface CreateAlbumPhotoRequest {
+  assetId: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  uploaderName: string;
+  /** @maxLength 280 */
+  caption?: string;
+}
+
+export interface AlbumPhotoResponse {
+  id: string;
+  postId: string;
+  assetId: string;
+  /** Resolved asset URL (may be a `data:` URL or an http(s) URL). */
+  url: string;
+  /** @nullable */
+  uploaderUserId?: string | null;
+  uploaderName: string;
+  caption: string;
+  createdAt: string;
+}
+
+export interface AlbumPhotoListResponse {
+  data: AlbumPhotoResponse[];
+}
+
 export interface FollowUserResponse {
   followerId: string;
   followingUserId: string;

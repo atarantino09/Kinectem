@@ -3411,6 +3411,94 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /posts/{postId}/album:
+    get:
+      operationId: listAlbumPhotos
+      summary: List fan-album photos for a post (newest first)
+      description: |
+        Returns every fan-album entry attached to the post. The album is
+        separate from the post's hero `assets` gallery — entries are
+        per-uploader, captioned, and shown in the dedicated "Fan Photo
+        Album" section. Requires a signed-in viewer who can view the
+        post.
+      tags:
+        - Album
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      responses:
+        '200':
+          description: Album photos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlbumPhotoListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createAlbumPhoto
+      summary: Attach an uploaded asset to a post's fan photo album
+      description: |
+        Step 4 of the upload flow for fan-album photos:
+
+        1. `POST /assets/upload` to mint a presigned URL.
+        2. `PUT <uploadUrl>` with the binary.
+        3. `POST /assets/{assetId}/confirm` to mark it confirmed.
+        4. `POST /posts/{postId}/album` with the `assetId` plus the
+           uploader's display name and optional caption.
+
+        The asset's minor-asset processing (EXIF strip etc.) is already
+        applied at step 2, so this endpoint just records the album row.
+        Requires a signed-in viewer who can view the post.
+      tags:
+        - Album
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAlbumPhotoRequest'
+      responses:
+        '201':
+          description: Album photo created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlbumPhotoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /posts/{postId}/album/{photoId}:
+    delete:
+      operationId: deleteAlbumPhoto
+      summary: Remove a fan-album photo
+      description: |
+        The uploader of the photo, the post's author, and platform
+        admins can delete an album entry. Other viewers receive a 403.
+      tags:
+        - Album
+      parameters:
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/AlbumPhotoId'
+      responses:
+        '204':
+          description: Album photo removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /posts/{postId}/tags:
     post:
       operationId: createPostTags
@@ -7828,6 +7916,72 @@ components:
           format: date-time
 
     # ------------------------------------------------------------------
+    # Album schemas (Task #535 — fan photo album)
+    # ------------------------------------------------------------------
+
+    CreateAlbumPhotoRequest:
+      type: object
+      required:
+        - assetId
+        - uploaderName
+      additionalProperties: false
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        uploaderName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        caption:
+          type: string
+          maxLength: 280
+
+    AlbumPhotoResponse:
+      type: object
+      required:
+        - id
+        - postId
+        - assetId
+        - url
+        - uploaderName
+        - caption
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        postId:
+          type: string
+          format: uuid
+        assetId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          description: Resolved asset URL (may be a `data:` URL or an http(s) URL).
+        uploaderUserId:
+          type: string
+          format: uuid
+          nullable: true
+        uploaderName:
+          type: string
+        caption:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AlbumPhotoListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlbumPhotoResponse'
+
+    # ------------------------------------------------------------------
     # Follow schemas
     # ------------------------------------------------------------------
 
@@ -11419,6 +11573,14 @@ components:
         format: uuid
     LinkId:
       name: linkId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    AlbumPhotoId:
+      name: photoId
       in: path
       required: true
       schema:
