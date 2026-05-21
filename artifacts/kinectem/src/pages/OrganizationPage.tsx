@@ -299,6 +299,16 @@ export default function OrganizationPage() {
                 {isOrgManager && (
                   <Button
                     variant="outline"
+                    onClick={() => setManageMembersOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-manage-admins-hero"
+                  >
+                    <Shield className="w-4 h-4 mr-1.5" /> Manage admins & members
+                  </Button>
+                )}
+                {isOrgManager && (
+                  <Button
+                    variant="outline"
                     onClick={() => setEditOpen(true)}
                     className="font-bold rounded-full"
                     data-testid="btn-edit-org"
@@ -349,6 +359,42 @@ export default function OrganizationPage() {
             )}
           </div>
 
+          {isOrgManager && (() => {
+            const adminCount = members.filter(
+              (m) => m.role === "admin" || m.role === "owner",
+            ).length;
+            if (adminCount > 1) return null;
+            return (
+              <Card
+                className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30"
+                data-testid="card-empty-admins-nudge"
+              >
+                <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <Shield className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm">
+                        You're the only admin
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Promote a member to help you run {organization.name}.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    className="font-bold rounded-full shrink-0"
+                    onClick={() => setManageMembersOpen(true)}
+                    data-testid="btn-empty-admins-promote"
+                  >
+                    Promote a member
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {isOrgManager && <OrgAdminPanel orgId={orgId} />}
 
           {/* Teams + archived: inline on mobile, in rail on lg+. The
@@ -380,7 +426,7 @@ export default function OrganizationPage() {
                     onClick={() => setManageMembersOpen(true)}
                     data-testid="btn-manage-members"
                   >
-                    <Settings className="w-4 h-4 mr-1" /> Manage members
+                    <Settings className="w-4 h-4 mr-1" /> Manage admins & members
                   </Button>
                 )}
               </div>

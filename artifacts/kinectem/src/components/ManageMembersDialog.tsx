@@ -192,12 +192,13 @@ export function ManageMembersDialog({
         >
           <DialogHeader>
             <DialogTitle className="font-black tracking-tight">
-              Manage members
+              Manage admins & members
             </DialogTitle>
             <DialogDescription>
               {orgName} has {members.length}{" "}
-              {members.length === 1 ? "member" : "members"}. Only the owner can
-              transfer ownership.
+              {members.length === 1 ? "member" : "members"}. Promote a member
+              to admin to let them manage teams, members, and posts on behalf
+              of the org. Only the owner can transfer ownership.
             </DialogDescription>
           </DialogHeader>
 
