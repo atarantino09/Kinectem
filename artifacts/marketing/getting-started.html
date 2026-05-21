@@ -77,19 +77,33 @@
     }
     .gs-step__desc { font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 12px; }
     .gs-step__visual {
-      margin-top: 12px;
-      height: 120px;
+      margin-top: 16px;
       border-radius: 12px;
-      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(37,99,235,0.06));
-      border: 1px dashed #cbd5e1;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(124,58,237,0.04), rgba(37,99,235,0.04));
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    }
+    .gs-step__visual picture,
+    .gs-step__visual img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    /* Some screenshots are dialog crops with a narrow intrinsic aspect.
+       Cap their displayed width and center them so they don't blow up
+       across the full card. */
+    .gs-step__visual--narrow {
+      padding: 24px;
       display: flex;
-      align-items: center;
       justify-content: center;
-      color: #94a3b8;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+    }
+    .gs-step__visual--narrow picture,
+    .gs-step__visual--narrow img {
+      width: 100%;
+      max-width: 420px;
+      border-radius: 10px;
+      box-shadow: 0 6px 18px rgba(15,23,42,0.08);
     }
     .gs-roles { max-width: 820px; margin: 64px auto 0; padding: 32px; border: 1px solid #e2e8f0; border-radius: 16px; background: #f8fafc; }
     .gs-roles__heading {
@@ -182,7 +196,12 @@
             <div>
               <h2 class="gs-step__title">Upload your org logo</h2>
               <p class="gs-step__desc">Give your organization a recognizable face on profiles, team pages, and posts. Square logos look best — at least 256×256.</p>
-              <div class="gs-step__visual" aria-hidden="true">Screenshot — logo upload</div>
+              <div class="gs-step__visual gs-step__visual--narrow">
+                <picture>
+                  <source type="image/webp" srcset="./gs-step-1-logo.webp" />
+                  <img src="./gs-step-1-logo.png" alt="Edit organization dialog with a Logo section that shows the current square logo placeholder and an Upload logo button, plus fields for name, description, website, city, state, and zip." width="448" height="588" loading="lazy" decoding="async" />
+                </picture>
+              </div>
             </div>
           </li>
           <li class="gs-step">
@@ -190,7 +209,12 @@
             <div>
               <h2 class="gs-step__title">Create your first team</h2>
               <p class="gs-step__desc">Teams are the unit of activity in Kinectem — they hold rosters, recaps, and highlights. Most orgs start with one team and grow from there.</p>
-              <div class="gs-step__visual" aria-hidden="true">Screenshot — create team</div>
+              <div class="gs-step__visual gs-step__visual--narrow">
+                <picture>
+                  <source type="image/webp" srcset="./gs-step-2-team.webp" />
+                  <img src="./gs-step-2-team.png" alt="New team dialog with fields for team name, URL handle, sport, gender, league, season, description, and an optional team photo, plus Cancel and Create team buttons." width="448" height="756" loading="lazy" decoding="async" />
+                </picture>
+              </div>
             </div>
           </li>
           <li class="gs-step">
@@ -198,7 +222,12 @@
             <div>
               <h2 class="gs-step__title">Invite coaches &amp; staff</h2>
               <p class="gs-step__desc">Send email invites to coaches, team managers, and front-office staff so they can help run the org alongside you.</p>
-              <div class="gs-step__visual" aria-hidden="true">Screenshot — invite staff</div>
+              <div class="gs-step__visual">
+                <picture>
+                  <source type="image/webp" srcset="./gs-step-3-staff.webp" />
+                  <img src="./gs-step-3-staff.png" alt="Team page for U8 boys with Roster, Staff, and Pending tabs — the Staff tab is selected, showing a Sam Patel row with role Admin, status Active, and an Invite button." width="1280" height="800" loading="lazy" decoding="async" />
+                </picture>
+              </div>
             </div>
           </li>
           <li class="gs-step">
@@ -206,7 +235,12 @@
             <div>
               <h2 class="gs-step__title">Add a co-admin</h2>
               <p class="gs-step__desc">Promote at least one other member to admin so you aren't a single point of failure. Admins can manage teams, members, and posts on behalf of the org.</p>
-              <div class="gs-step__visual" aria-hidden="true">Screenshot — promote admin</div>
+              <div class="gs-step__visual gs-step__visual--narrow">
+                <picture>
+                  <source type="image/webp" srcset="./gs-step-4-admin.webp" />
+                  <img src="./gs-step-4-admin.png" alt="Manage admins and members dialog with a prompt to promote a member to admin, an Add admin button, and a member row for Sam Patel marked Owner." width="512" height="270" loading="lazy" decoding="async" />
+                </picture>
+              </div>
             </div>
           </li>
           <li class="gs-step">
@@ -214,7 +248,12 @@
             <div>
               <h2 class="gs-step__title">Add players to a roster</h2>
               <p class="gs-step__desc">From any team page, invite players or add them directly to the roster. Players see team-only content and get tagged in recaps and highlights.</p>
-              <div class="gs-step__visual" aria-hidden="true">Screenshot — roster invite</div>
+              <div class="gs-step__visual">
+                <picture>
+                  <source type="image/webp" srcset="./gs-step-5-roster.webp" />
+                  <img src="./gs-step-5-roster.png" alt="Team page for U8 boys with the Roster tab selected, showing a Players section with an Invite button and a roster rail on the right." width="1280" height="800" loading="lazy" decoding="async" />
+                </picture>
+              </div>
             </div>
           </li>
           <li class="gs-step">
@@ -222,7 +261,12 @@
             <div>
               <h2 class="gs-step__title">Invite parents &amp; guardians</h2>
               <p class="gs-step__desc">When you invite a player, include the parent's email so they can follow the team and (for players under 13) complete the COPPA consent flow on the child's behalf.</p>
-              <div class="gs-step__visual" aria-hidden="true">Screenshot — guardian invite</div>
+              <div class="gs-step__visual">
+                <picture>
+                  <source type="image/webp" srcset="./gs-step-6-guardian.webp" />
+                  <img src="./gs-step-6-guardian.png" alt="Family dashboard showing notification preferences, a Linked children section with Samira Carter, and a notifications list with Approve and Remove actions on each item." width="1280" height="800" loading="lazy" decoding="async" />
+                </picture>
+              </div>
             </div>
           </li>
         </ol>
