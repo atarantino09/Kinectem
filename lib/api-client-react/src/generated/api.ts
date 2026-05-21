@@ -256,6 +256,7 @@ import type {
   NotificationUnreadCount,
   OkResponse,
   OrgPrivacySettingsResponse,
+  OrgSetupStatusResponse,
   OrganizationInvitePreviewResponse,
   OrganizationInviteResponse,
   OrganizationInviteStatusResponse,
@@ -3814,6 +3815,286 @@ export const useTransferOrganizationOwnership = <
   TContext
 > => {
   return useMutation(getTransferOrganizationOwnershipMutationOptions(options));
+};
+
+/**
+ * @summary Get the org setup-checklist status for the calling owner/admin
+ */
+export const getGetOrgSetupStatusUrl = (orgId: string) => {
+  return `/api/v1/organizations/${orgId}/setup-status`;
+};
+
+export const getOrgSetupStatus = async (
+  orgId: string,
+  options?: RequestInit,
+): Promise<OrgSetupStatusResponse> => {
+  return customFetch<OrgSetupStatusResponse>(getGetOrgSetupStatusUrl(orgId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetOrgSetupStatusQueryKey = (orgId: string) => {
+  return [`/api/v1/organizations/${orgId}/setup-status`] as const;
+};
+
+export const getGetOrgSetupStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOrgSetupStatus>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  orgId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOrgSetupStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetOrgSetupStatusQueryKey(orgId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getOrgSetupStatus>>
+  > = ({ signal }) => getOrgSetupStatus(orgId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!orgId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getOrgSetupStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetOrgSetupStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOrgSetupStatus>>
+>;
+export type GetOrgSetupStatusQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Get the org setup-checklist status for the calling owner/admin
+ */
+
+export function useGetOrgSetupStatus<
+  TData = Awaited<ReturnType<typeof getOrgSetupStatus>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  orgId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOrgSetupStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOrgSetupStatusQueryOptions(orgId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Dismiss the org setup checklist for the calling user
+ */
+export const getDismissOrgSetupChecklistUrl = (orgId: string) => {
+  return `/api/v1/organizations/${orgId}/setup-checklist/dismiss`;
+};
+
+export const dismissOrgSetupChecklist = async (
+  orgId: string,
+  options?: RequestInit,
+): Promise<OrgSetupStatusResponse> => {
+  return customFetch<OrgSetupStatusResponse>(
+    getDismissOrgSetupChecklistUrl(orgId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getDismissOrgSetupChecklistMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof dismissOrgSetupChecklist>>,
+    TError,
+    { orgId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof dismissOrgSetupChecklist>>,
+  TError,
+  { orgId: string },
+  TContext
+> => {
+  const mutationKey = ["dismissOrgSetupChecklist"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof dismissOrgSetupChecklist>>,
+    { orgId: string }
+  > = (props) => {
+    const { orgId } = props ?? {};
+
+    return dismissOrgSetupChecklist(orgId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DismissOrgSetupChecklistMutationResult = NonNullable<
+  Awaited<ReturnType<typeof dismissOrgSetupChecklist>>
+>;
+
+export type DismissOrgSetupChecklistMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Dismiss the org setup checklist for the calling user
+ */
+export const useDismissOrgSetupChecklist = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof dismissOrgSetupChecklist>>,
+    TError,
+    { orgId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof dismissOrgSetupChecklist>>,
+  TError,
+  { orgId: string },
+  TContext
+> => {
+  return useMutation(getDismissOrgSetupChecklistMutationOptions(options));
+};
+
+/**
+ * @summary Re-open the org setup checklist for the calling user
+ */
+export const getReopenOrgSetupChecklistUrl = (orgId: string) => {
+  return `/api/v1/organizations/${orgId}/setup-checklist/dismiss`;
+};
+
+export const reopenOrgSetupChecklist = async (
+  orgId: string,
+  options?: RequestInit,
+): Promise<OrgSetupStatusResponse> => {
+  return customFetch<OrgSetupStatusResponse>(
+    getReopenOrgSetupChecklistUrl(orgId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getReopenOrgSetupChecklistMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reopenOrgSetupChecklist>>,
+    TError,
+    { orgId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reopenOrgSetupChecklist>>,
+  TError,
+  { orgId: string },
+  TContext
+> => {
+  const mutationKey = ["reopenOrgSetupChecklist"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reopenOrgSetupChecklist>>,
+    { orgId: string }
+  > = (props) => {
+    const { orgId } = props ?? {};
+
+    return reopenOrgSetupChecklist(orgId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReopenOrgSetupChecklistMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reopenOrgSetupChecklist>>
+>;
+
+export type ReopenOrgSetupChecklistMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Re-open the org setup checklist for the calling user
+ */
+export const useReopenOrgSetupChecklist = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reopenOrgSetupChecklist>>,
+    TError,
+    { orgId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reopenOrgSetupChecklist>>,
+  TError,
+  { orgId: string },
+  TContext
+> => {
+  return useMutation(getReopenOrgSetupChecklistMutationOptions(options));
 };
 
 /**

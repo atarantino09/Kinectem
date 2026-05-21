@@ -339,6 +339,10 @@ export const organizationAdmins = pgTable("organization_admins", {
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   role: orgMemberRoleEnum("role").notNull().default("admin"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Task #548 — Per-user dismissal of the org setup checklist card.
+  // NULL = checklist is shown on the org dashboard for this user;
+  // non-NULL = user dismissed it at this time. Re-opening clears it.
+  dismissedSetupAt: timestamp("dismissed_setup_at"),
 }, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
 
 export const organizationFollowers = pgTable("organization_followers", {

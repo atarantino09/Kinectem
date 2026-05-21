@@ -10,6 +10,8 @@ import {
   teamFollowers,
   teams,
   rosterEntries,
+  rosterInvites,
+  organizationInvites,
   articles,
   highlights,
   orgPosts,
@@ -1533,6 +1535,169 @@ router.delete(
     res.status(204).end();
   }),
 );
+// ---------------------------------------------------------------------------
+// Org setup checklist (Task #548).
+//
+// `GET /organizations/:orgId/setup-status` returns per-step completion
+// booleans derived from real org state plus the calling user's
+// dismissal flag. `POST /…/setup-checklist/dismiss` and
+// `DELETE /…/setup-checklist/dismiss` flip the persisted
+// `organization_admins.dismissed_setup_at` column for the caller.
+// All three endpoints are owner/admin-gated. The status query uses
+// count-only subqueries so it stays a single cheap round-trip.
+// ---------------------------------------------------------------------------
+
+async function computeOrgSetupStatus(orgId: string, userId: string) {
+  const [orgRow] = await db
+    .select({ logoUrl: organizations.logoUrl })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  if (!orgRow) return null;
+
+  const [membership] = await db
+    .select({ dismissedSetupAt: organizationAdmins.dismissedSetupAt })
+    .from(organizationAdmins)
+    .where(
+      and(
+        eq(organizationAdmins.organizationId, orgId),
+        eq(organizationAdmins.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  const [counts] = await db
+    .select({
+      teamCount: sql<number>`(
+        select count(*)::int from ${teams}
+        where ${teams.organizationId} = ${orgId}
+          and ${teams.archivedAt} is null
+      )`,
+      memberCount: sql<number>`(
+        select count(*)::int from ${organizationAdmins}
+        where ${organizationAdmins.organizationId} = ${orgId}
+      )`,
+      adminCount: sql<number>`(
+        select count(*)::int from ${organizationAdmins}
+        where ${organizationAdmins.organizationId} = ${orgId}
+          and ${organizationAdmins.role} in ('owner','admin')
+      )`,
+      pendingOrgInviteCount: sql<number>`(
+        select count(*)::int from ${organizationInvites}
+        where ${organizationInvites.organizationId} = ${orgId}
+          and ${organizationInvites.status} = 'pending'
+      )`,
+      rosterCount: sql<number>`(
+        select count(*)::int from ${rosterEntries}
+        inner join ${teams} on ${teams.id} = ${rosterEntries.teamId}
+        where ${teams.organizationId} = ${orgId}
+          and ${teams.archivedAt} is null
+      )`,
+      guardianLinkCount: sql<number>`(
+        select count(*)::int from ${rosterEntries}
+        inner join ${teams} on ${teams.id} = ${rosterEntries.teamId}
+        inner join ${users} on ${users.id} = ${rosterEntries.userId}
+        where ${teams.organizationId} = ${orgId}
+          and ${teams.archivedAt} is null
+          and ${users.parentId} is not null
+      )`,
+      pendingRosterInviteCount: sql<number>`(
+        select count(*)::int from ${rosterInvites}
+        inner join ${teams} on ${teams.id} = ${rosterInvites.teamId}
+        where ${teams.organizationId} = ${orgId}
+          and ${teams.archivedAt} is null
+          and ${rosterInvites.status} = 'pending'
+      )`,
+    })
+    .from(sql`(select 1) as _one`);
+
+  const steps = {
+    logoSet: orgRow.logoUrl != null && orgRow.logoUrl !== "",
+    hasTeam: (counts?.teamCount ?? 0) >= 1,
+    hasStaffOrInvite:
+      (counts?.memberCount ?? 0) >= 2 ||
+      (counts?.pendingOrgInviteCount ?? 0) >= 1,
+    hasCoAdmin: (counts?.adminCount ?? 0) >= 2,
+    hasRosterEntry: (counts?.rosterCount ?? 0) >= 1,
+    hasGuardianLinkOrInvite:
+      (counts?.guardianLinkCount ?? 0) >= 1 ||
+      (counts?.pendingRosterInviteCount ?? 0) >= 1,
+  };
+  const stepValues = Object.values(steps);
+  const completedCount = stepValues.filter(Boolean).length;
+  const totalSteps = stepValues.length;
+  return {
+    orgId,
+    steps,
+    completedCount,
+    totalSteps,
+    allComplete: completedCount === totalSteps,
+    dismissedAt: membership?.dismissedSetupAt
+      ? membership.dismissedSetupAt.toISOString()
+      : null,
+  };
+}
+
+router.get(
+  "/organizations/:orgId/setup-status",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    const status = await computeOrgSetupStatus(req.params.orgId, me.id);
+    if (!status) return notFound(res);
+    res.json(status);
+  }),
+);
+
+router.post(
+  "/organizations/:orgId/setup-checklist/dismiss",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    await db
+      .update(organizationAdmins)
+      .set({ dismissedSetupAt: new Date() })
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, req.params.orgId),
+          eq(organizationAdmins.userId, me.id),
+        ),
+      );
+    const status = await computeOrgSetupStatus(req.params.orgId, me.id);
+    if (!status) return notFound(res);
+    res.json(status);
+  }),
+);
+
+router.delete(
+  "/organizations/:orgId/setup-checklist/dismiss",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    await db
+      .update(organizationAdmins)
+      .set({ dismissedSetupAt: null })
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, req.params.orgId),
+          eq(organizationAdmins.userId, me.id),
+        ),
+      );
+    const status = await computeOrgSetupStatus(req.params.orgId, me.id);
+    if (!status) return notFound(res);
+    res.json(status);
+  }),
+);
+
 router.get("/organizations/:orgId/privacy", (_req, res) =>
   res.json({ orgId: _req.params.orgId, settings: {} }),
 );

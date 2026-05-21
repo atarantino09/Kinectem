@@ -386,6 +386,8 @@ export * from "./orgPrivacySettingsResponseSettingsProfile";
 export * from "./orgSearchResult";
 export * from "./orgSearchResultEntityType";
 export * from "./orgSearchSection";
+export * from "./orgSetupStatusResponse";
+export * from "./orgSetupStatusResponseSteps";
 export * from "./paginatedComments";
 export * from "./paginatedConversations";
 export * from "./paginatedFollowersResponse";

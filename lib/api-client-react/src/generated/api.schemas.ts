@@ -932,6 +932,44 @@ server before being stored. An empty string clears the field.
   logoUrl?: string | null;
 }
 
+export type OrgSetupStatusResponseSteps = {
+  /** Organization has a non-null logoUrl. */
+  logoSet: boolean;
+  /** Organization has at least one non-archived team. */
+  hasTeam: boolean;
+  /** At least 2 members OR at least 1 outstanding org invite. */
+  hasStaffOrInvite: boolean;
+  /** At least 2 users with owner/admin org role. */
+  hasCoAdmin: boolean;
+  /** Any team in the org has at least one roster entry. */
+  hasRosterEntry: boolean;
+  /** Any rostered player has a linked guardian (`users.parent_id`
+set) OR there is at least one pending roster invite.
+ */
+  hasGuardianLinkOrInvite: boolean;
+};
+
+/**
+ * Per-step completion of the org setup checklist (Task #548). All
+booleans are derived from real org state. `dismissedAt` reflects
+the calling user's per-org dismissal of the checklist card.
+
+ */
+export interface OrgSetupStatusResponse {
+  orgId: string;
+  steps: OrgSetupStatusResponseSteps;
+  /** @minimum 0 */
+  completedCount: number;
+  /** @minimum 1 */
+  totalSteps: number;
+  allComplete: boolean;
+  /**
+   * ISO timestamp when the calling user dismissed the checklist; null if visible.
+   * @nullable
+   */
+  dismissedAt: string | null;
+}
+
 export type MemberResponseRole =
   (typeof MemberResponseRole)[keyof typeof MemberResponseRole];
 

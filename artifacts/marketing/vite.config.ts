@@ -29,6 +29,18 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        // Multi-page setup so Vite emits both the landing page and the
+        // public Getting Started guide (Task #548). Add additional entry
+        // points here when introducing new static marketing pages.
+        main: path.resolve(import.meta.dirname, "index.html"),
+        gettingStarted: path.resolve(
+          import.meta.dirname,
+          "getting-started.html",
+        ),
+      },
+    },
   },
   server: {
     port,

@@ -41,6 +41,10 @@ import {
 import { PostCard } from "@/components/PostCard";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
+import {
+  OrgSetupChecklist,
+  RolesPermissionsCard,
+} from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
@@ -359,6 +363,25 @@ export default function OrganizationPage() {
             )}
           </div>
 
+          {isOrgManager && (
+            <OrgSetupChecklist
+              orgId={orgId}
+              actions={{
+                onEditLogo: () => setEditOpen(true),
+                onCreateTeam: () => setCreateTeamOpen(true),
+                onManageMembers: () => setManageMembersOpen(true),
+                onPromoteAdmin: () => setManageMembersOpen(true),
+                onGoToTeams: () => {
+                  // Scroll the teams rail / inline teams section into view.
+                  const el = document.querySelector(
+                    '[data-testid="rail-teams"]',
+                  );
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                },
+              }}
+            />
+          )}
+
           {isOrgManager && (() => {
             const adminCount = members.filter(
               (m) => m.role === "admin" || m.role === "owner",
@@ -455,6 +478,12 @@ export default function OrganizationPage() {
               </Card>
             </section>
           )}
+
+          {/* Task #548 — Roles & permissions reference, visible to any
+              org member (the checklist card already includes the same
+              accordion for owners/admins, so this only renders for
+              non-managers to avoid duplication). */}
+          {!isOrgManager && organization.role && <RolesPermissionsCard />}
 
           {/* Posts */}
           <section>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Kinectem — Getting started guide for organization owners. The six steps every program follows to set up their org, plus a quick reference of roles and permissions." />
+  <meta property="og:title" content="Kinectem — Getting Started" />
+  <meta property="og:description" content="The six steps every program follows to set up their Kinectem organization, plus a reference of who-can-do-what." />
+  <meta property="og:type" content="article" />
+  <title>Kinectem — Getting Started</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <style>
+    /* Page-local layout — keep small + scoped so the existing marketing
+       site CSS stays the single source of truth for shared styles. */
+    .gs-page { padding: 96px 0 64px; background: #fff; }
+    .gs-page__header { text-align: center; margin-bottom: 48px; }
+    .gs-page__eyebrow {
+      display: inline-block;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--purple, #7c3aed);
+      margin-bottom: 12px;
+    }
+    .gs-page__heading {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(32px, 5vw, 48px);
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin: 0 0 16px;
+      color: #0f172a;
+    }
+    .gs-page__subtext {
+      font-size: 17px;
+      color: #475569;
+      max-width: 640px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .gs-steps { display: flex; flex-direction: column; gap: 24px; max-width: 820px; margin: 0 auto; }
+    .gs-step {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 20px;
+      align-items: start;
+      padding: 24px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    }
+    .gs-step__num {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      color: #fff;
+      background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%);
+    }
+    .gs-step__title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      margin: 0 0 4px;
+      color: #0f172a;
+    }
+    .gs-step__desc { font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 12px; }
+    .gs-step__visual {
+      margin-top: 12px;
+      height: 120px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(37,99,235,0.06));
+      border: 1px dashed #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .gs-roles { max-width: 820px; margin: 64px auto 0; padding: 32px; border: 1px solid #e2e8f0; border-radius: 16px; background: #f8fafc; }
+    .gs-roles__heading {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 24px;
+      margin: 0 0 8px;
+      color: #0f172a;
+    }
+    .gs-roles__lede { font-size: 14px; color: #475569; margin: 0 0 24px; }
+    .gs-roles__group { margin-bottom: 20px; }
+    .gs-roles__group:last-child { margin-bottom: 0; }
+    .gs-roles__group-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: #64748b;
+      margin: 0 0 8px;
+    }
+    .gs-roles__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    .gs-roles__list li { font-size: 14px; color: #334155; line-height: 1.6; }
+    .gs-roles__list strong { color: #0f172a; }
+    .gs-cta {
+      max-width: 820px;
+      margin: 48px auto 0;
+      text-align: center;
+      padding: 32px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(37,99,235,0.08));
+    }
+    @media (max-width: 640px) {
+      .gs-step { grid-template-columns: 1fr; }
+      .gs-step__num { width: 40px; height: 40px; font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header role="banner">
+    <nav class="nav" aria-label="Main navigation">
+      <div class="nav__inner">
+        <a href="./" class="nav__logo" aria-label="Kinectem home">
+          <img src="./logo-horizontal.png" alt="Kinectem" />
+        </a>
+        <ul class="nav__links" role="list">
+          <li><a href="./#personas" class="nav__link">Who It's For</a></li>
+          <li><a href="./#features" class="nav__link">Why Kinectem</a></li>
+          <li><a href="./getting-started.html" class="nav__link" aria-current="page">Getting Started</a></li>
+        </ul>
+        <a href="./#signup" class="founding-cta founding-cta--nav" aria-label="Join the Founding 100">
+          <img src="./founding-100.png" alt="Join the Founding 100" />
+        </a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="gs-page">
+      <div class="container">
+        <div class="gs-page__header">
+          <span class="gs-page__eyebrow">Getting Started</span>
+          <h1 class="gs-page__heading">Six steps to set up your organization</h1>
+          <p class="gs-page__subtext">
+            Every Kinectem org follows the same short setup checklist. Owners and admins see this same list inside the app — here's a preview of what to expect, plus a quick reference of who can do what.
+          </p>
+        </div>
+
+        <ol class="gs-steps" aria-label="Setup steps">
+          <li class="gs-step">
+            <div class="gs-step__num" aria-hidden="true">1</div>
+            <div>
+              <h2 class="gs-step__title">Upload your org logo</h2>
+              <p class="gs-step__desc">Give your organization a recognizable face on profiles, team pages, and posts. Square logos look best — at least 256×256.</p>
+              <div class="gs-step__visual" aria-hidden="true">Screenshot — logo upload</div>
+            </div>
+          </li>
+          <li class="gs-step">
+            <div class="gs-step__num" aria-hidden="true">2</div>
+            <div>
+              <h2 class="gs-step__title">Create your first team</h2>
+              <p class="gs-step__desc">Teams are the unit of activity in Kinectem — they hold rosters, recaps, and highlights. Most orgs start with one team and grow from there.</p>
+              <div class="gs-step__visual" aria-hidden="true">Screenshot — create team</div>
+            </div>
+          </li>
+          <li class="gs-step">
+            <div class="gs-step__num" aria-hidden="true">3</div>
+            <div>
+              <h2 class="gs-step__title">Invite coaches &amp; staff</h2>
+              <p class="gs-step__desc">Send email invites to coaches, team managers, and front-office staff so they can help run the org alongside you.</p>
+              <div class="gs-step__visual" aria-hidden="true">Screenshot — invite staff</div>
+            </div>
+          </li>
+          <li class="gs-step">
+            <div class="gs-step__num" aria-hidden="true">4</div>
+            <div>
+              <h2 class="gs-step__title">Add a co-admin</h2>
+              <p class="gs-step__desc">Promote at least one other member to admin so you aren't a single point of failure. Admins can manage teams, members, and posts on behalf of the org.</p>
+              <div class="gs-step__visual" aria-hidden="true">Screenshot — promote admin</div>
+            </div>
+          </li>
+          <li class="gs-step">
+            <div class="gs-step__num" aria-hidden="true">5</div>
+            <div>
+              <h2 class="gs-step__title">Add players to a roster</h2>
+              <p class="gs-step__desc">From any team page, invite players or add them directly to the roster. Players see team-only content and get tagged in recaps and highlights.</p>
+              <div class="gs-step__visual" aria-hidden="true">Screenshot — roster invite</div>
+            </div>
+          </li>
+          <li class="gs-step">
+            <div class="gs-step__num" aria-hidden="true">6</div>
+            <div>
+              <h2 class="gs-step__title">Invite parents &amp; guardians</h2>
+              <p class="gs-step__desc">When you invite a player, include the parent's email so they can follow the team and (for players under 13) complete the COPPA consent flow on the child's behalf.</p>
+              <div class="gs-step__visual" aria-hidden="true">Screenshot — guardian invite</div>
+            </div>
+          </li>
+        </ol>
+
+        <aside class="gs-roles" aria-labelledby="gs-roles-heading">
+          <h2 class="gs-roles__heading" id="gs-roles-heading">Roles &amp; permissions</h2>
+          <p class="gs-roles__lede">A quick reference for who can do what across the platform. Plain-language summaries, grouped by scope.</p>
+
+          <div class="gs-roles__group">
+            <p class="gs-roles__group-title">Organization roles</p>
+            <ul class="gs-roles__list">
+              <li><strong>Owner</strong> — Full control. Only the owner can transfer ownership or delete the org. Can do everything an admin can.</li>
+              <li><strong>Admin</strong> — Manages org details, teams (create / edit / archive), and members (invite, remove, promote other admins). Can author and approve recaps/posts for any team in the org.</li>
+              <li><strong>Member</strong> — Belongs to the org but can't change settings, manage teams, or invite people.</li>
+            </ul>
+          </div>
+
+          <div class="gs-roles__group">
+            <p class="gs-roles__group-title">Team roles (roster)</p>
+            <ul class="gs-roles__list">
+              <li><strong>Coach</strong> — Team manager. Can edit the team, manage its roster (invite / remove players and coaches), and author recaps/posts for that team.</li>
+              <li><strong>Player</strong> — On the roster. Sees team-only content and is tagged in team activity. No management rights.</li>
+              <li><strong>Author position</strong> — A non-coach roster member can be granted the "author" position to write recaps for that specific team without being made a coach.</li>
+            </ul>
+          </div>
+
+          <div class="gs-roles__group">
+            <p class="gs-roles__group-title">Family</p>
+            <ul class="gs-roles__list">
+              <li><strong>Parent / Guardian</strong> — A user with linked children. Approves follow requests, comments, and DMs for their kids, and manages COPPA consent. Guardian capability is automatic when a child is linked to your account — it's not a separate role you pick.</li>
+            </ul>
+          </div>
+
+          <div class="gs-roles__group">
+            <p class="gs-roles__group-title">Platform</p>
+            <ul class="gs-roles__list">
+              <li><strong>Platform admin</strong> — Internal Kinectem staff. Not something an org grants; mentioned only so people know moderation exists.</li>
+            </ul>
+          </div>
+        </aside>
+
+        <div class="gs-cta">
+          <a href="./#signup" class="btn btn-primary">Join the Founding 100</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" role="contentinfo">
+    <div class="container">
+      <div class="footer__inner">
+        <div class="footer__brand">
+          <a href="./" class="footer__logo" aria-label="Kinectem home">
+            <img src="./logo-horizontal.png" alt="Kinectem" />
+          </a>
+          <p class="footer__tagline">Where Programs Shine</p>
+          <span class="footer__badge">Coming Soon</span>
+        </div>
+        <nav class="footer__links" aria-label="Footer links">
+          <a href="./getting-started.html" class="footer__link">Getting Started</a>
+          <a href="./" class="footer__link">Privacy Policy</a>
+          <a
+            href="https://app.kinectem.com"
+            class="footer__link"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Kinectem app (opens in new tab)"
+          >
+            app.kinectem.com
+          </a>
+        </nav>
+      </div>
+      <div class="footer__bottom">
+        <p class="footer__copyright">&copy; 2026 Kinectem. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

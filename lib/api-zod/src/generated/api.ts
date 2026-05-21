@@ -1846,6 +1846,150 @@ export const TransferOrganizationOwnershipResponse = zod.object({
 });
 
 /**
+ * @summary Get the org setup-checklist status for the calling owner/admin
+ */
+export const GetOrgSetupStatusParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const getOrgSetupStatusResponseCompletedCountMin = 0;
+
+export const GetOrgSetupStatusResponse = zod
+  .object({
+    orgId: zod.string().uuid(),
+    steps: zod.object({
+      logoSet: zod.boolean().describe("Organization has a non-null logoUrl."),
+      hasTeam: zod
+        .boolean()
+        .describe("Organization has at least one non-archived team."),
+      hasStaffOrInvite: zod
+        .boolean()
+        .describe("At least 2 members OR at least 1 outstanding org invite."),
+      hasCoAdmin: zod
+        .boolean()
+        .describe("At least 2 users with owner\/admin org role."),
+      hasRosterEntry: zod
+        .boolean()
+        .describe("Any team in the org has at least one roster entry."),
+      hasGuardianLinkOrInvite: zod
+        .boolean()
+        .describe(
+          "Any rostered player has a linked guardian (`users.parent_id`\nset) OR there is at least one pending roster invite.\n",
+        ),
+    }),
+    completedCount: zod
+      .number()
+      .min(getOrgSetupStatusResponseCompletedCountMin),
+    totalSteps: zod.number().min(1),
+    allComplete: zod.boolean(),
+    dismissedAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp when the calling user dismissed the checklist; null if visible.",
+      ),
+  })
+  .describe(
+    "Per-step completion of the org setup checklist (Task #548). All\nbooleans are derived from real org state. `dismissedAt` reflects\nthe calling user's per-org dismissal of the checklist card.\n",
+  );
+
+/**
+ * @summary Dismiss the org setup checklist for the calling user
+ */
+export const DismissOrgSetupChecklistParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const dismissOrgSetupChecklistResponseCompletedCountMin = 0;
+
+export const DismissOrgSetupChecklistResponse = zod
+  .object({
+    orgId: zod.string().uuid(),
+    steps: zod.object({
+      logoSet: zod.boolean().describe("Organization has a non-null logoUrl."),
+      hasTeam: zod
+        .boolean()
+        .describe("Organization has at least one non-archived team."),
+      hasStaffOrInvite: zod
+        .boolean()
+        .describe("At least 2 members OR at least 1 outstanding org invite."),
+      hasCoAdmin: zod
+        .boolean()
+        .describe("At least 2 users with owner\/admin org role."),
+      hasRosterEntry: zod
+        .boolean()
+        .describe("Any team in the org has at least one roster entry."),
+      hasGuardianLinkOrInvite: zod
+        .boolean()
+        .describe(
+          "Any rostered player has a linked guardian (`users.parent_id`\nset) OR there is at least one pending roster invite.\n",
+        ),
+    }),
+    completedCount: zod
+      .number()
+      .min(dismissOrgSetupChecklistResponseCompletedCountMin),
+    totalSteps: zod.number().min(1),
+    allComplete: zod.boolean(),
+    dismissedAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp when the calling user dismissed the checklist; null if visible.",
+      ),
+  })
+  .describe(
+    "Per-step completion of the org setup checklist (Task #548). All\nbooleans are derived from real org state. `dismissedAt` reflects\nthe calling user's per-org dismissal of the checklist card.\n",
+  );
+
+/**
+ * @summary Re-open the org setup checklist for the calling user
+ */
+export const ReopenOrgSetupChecklistParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const reopenOrgSetupChecklistResponseCompletedCountMin = 0;
+
+export const ReopenOrgSetupChecklistResponse = zod
+  .object({
+    orgId: zod.string().uuid(),
+    steps: zod.object({
+      logoSet: zod.boolean().describe("Organization has a non-null logoUrl."),
+      hasTeam: zod
+        .boolean()
+        .describe("Organization has at least one non-archived team."),
+      hasStaffOrInvite: zod
+        .boolean()
+        .describe("At least 2 members OR at least 1 outstanding org invite."),
+      hasCoAdmin: zod
+        .boolean()
+        .describe("At least 2 users with owner\/admin org role."),
+      hasRosterEntry: zod
+        .boolean()
+        .describe("Any team in the org has at least one roster entry."),
+      hasGuardianLinkOrInvite: zod
+        .boolean()
+        .describe(
+          "Any rostered player has a linked guardian (`users.parent_id`\nset) OR there is at least one pending roster invite.\n",
+        ),
+    }),
+    completedCount: zod
+      .number()
+      .min(reopenOrgSetupChecklistResponseCompletedCountMin),
+    totalSteps: zod.number().min(1),
+    allComplete: zod.boolean(),
+    dismissedAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO timestamp when the calling user dismissed the checklist; null if visible.",
+      ),
+  })
+  .describe(
+    "Per-step completion of the org setup checklist (Task #548). All\nbooleans are derived from real org state. `dismissedAt` reflects\nthe calling user's per-org dismissal of the checklist card.\n",
+  );
+
+/**
  * @summary List organization invites
  */
 export const ListOrganizationInvitesParams = zod.object({
