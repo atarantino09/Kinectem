@@ -139,13 +139,30 @@
         <ul class="nav__links" role="list">
           <li><a href="./#personas" class="nav__link">Who It's For</a></li>
           <li><a href="./#features" class="nav__link">Why Kinectem</a></li>
+          <li><a href="./#faq" class="nav__link">FAQ</a></li>
           <li><a href="./getting-started.html" class="nav__link" aria-current="page">Getting Started</a></li>
         </ul>
         <a href="./#signup" class="founding-cta founding-cta--nav" aria-label="Join the Founding 100">
           <img src="./founding-100.png" alt="Join the Founding 100" />
         </a>
+        <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" aria-hidden="true">
+            <rect y="0" width="22" height="2" rx="1" fill="currentColor"/>
+            <rect y="7" width="22" height="2" rx="1" fill="currentColor"/>
+            <rect y="14" width="22" height="2" rx="1" fill="currentColor"/>
+          </svg>
+        </button>
       </div>
     </nav>
+    <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+      <ul role="list">
+        <li><a href="./#personas" class="mobile-menu__link">Who It's For</a></li>
+        <li><a href="./#features" class="mobile-menu__link">Why Kinectem</a></li>
+        <li><a href="./#faq" class="mobile-menu__link">FAQ</a></li>
+        <li><a href="./getting-started.html" class="mobile-menu__link" aria-current="page">Getting Started</a></li>
+        <li><a href="./#signup" class="founding-cta founding-cta--mobile" aria-label="Join the Founding 100"><img src="./founding-100.png" alt="Join the Founding 100" /></a></li>
+      </ul>
+    </div>
   </header>
 
   <main id="main-content">
@@ -284,5 +301,27 @@
     </div>
   </footer>
 
+  <script>
+    (function () {
+      var toggle = document.querySelector('.nav__mobile-toggle');
+      var menu   = document.getElementById('mobile-menu');
+      if (!toggle || !menu) return;
+
+      toggle.addEventListener('click', function () {
+        var expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!expanded));
+        menu.classList.toggle('is-open', !expanded);
+        menu.setAttribute('aria-hidden', String(expanded));
+      });
+
+      menu.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', function () {
+          toggle.setAttribute('aria-expanded', 'false');
+          menu.classList.remove('is-open');
+          menu.setAttribute('aria-hidden', 'true');
+        });
+      });
+    }());
+  </script>
 </body>
 </html>
