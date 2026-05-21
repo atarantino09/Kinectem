@@ -101,21 +101,20 @@ const USER_PROFILE_US_STATE_CODES = new Set([
 router.get(
   "/users",
   asyncHandler(async (req, res) => {
-    const q = typeof req.query["q"] === "string" ? req.query["q"] : "";
+    const q =
+      typeof req.query["search"] === "string" ? req.query["search"] : "";
     const roleFilter =
       typeof req.query["role"] === "string" ? req.query["role"] : "";
-    let rows = q
-      ? await db
-          .select()
-          .from(users)
-          .where(
-            and(
-              isNull(users.deletedAt),
-              or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
-            ),
-          )
-          .limit(40)
-      : await db.select().from(users).where(isNull(users.deletedAt)).limit(40);
+    let rows = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          isNull(users.deletedAt),
+          or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
+        ),
+      )
+      .limit(40);
     if (roleFilter) rows = rows.filter((u) => u.role === roleFilter);
     // Task #359 — minors are not discoverable through public listings.
     // The viewer-aware filter still surfaces the minor to themselves and
