@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Kinectem — the youth sports platform that helps organizations showcase team accomplishments, give every player a digital storybook and online resume, and attract new talent." />
+  <meta property="og:title" content="Kinectem — Elevate Your Youth Sports Organization" />
+  <meta property="og:description" content="Promote team wins, spotlight your players, and attract new athletes — all on one purpose-built platform. Coming soon." />
+  <meta property="og:type" content="website" />
+  <title>Kinectem — Elevate Your Youth Sports Organization</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- =====================================================
+       Navigation
+       ===================================================== -->
+  <header role="banner">
+    <nav class="nav" aria-label="Main navigation">
+      <div class="nav__inner">
+        <a href="#" class="nav__logo" aria-label="Kinectem home">
+          KINECT<span>EM</span>
+        </a>
+        <ul class="nav__links" role="list">
+          <li><a href="#personas" class="nav__link">Who It's For</a></li>
+          <li><a href="#features" class="nav__link">Why Kinectem</a></li>
+        </ul>
+        <a href="#signup" class="btn btn-primary btn--nav" aria-label="Join the waitlist">
+          Join the Waitlist
+        </a>
+        <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" aria-hidden="true">
+            <rect y="0" width="22" height="2" rx="1" fill="currentColor"/>
+            <rect y="7" width="22" height="2" rx="1" fill="currentColor"/>
+            <rect y="14" width="22" height="2" rx="1" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </nav>
+    <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+      <ul role="list">
+        <li><a href="#personas" class="mobile-menu__link">Who It's For</a></li>
+        <li><a href="#features" class="mobile-menu__link">Features</a></li>
+        <li><a href="#signup" class="mobile-menu__link mobile-menu__link--cta">Join the Waitlist</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="main-content">
+
+    <!-- =====================================================
+         Hero
+         ===================================================== -->
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="hero__bg-grid" aria-hidden="true"></div>
+      <div class="hero__glow" aria-hidden="true"></div>
+      <div class="hero__content">
+        <span class="hero__eyebrow" aria-hidden="true">Coming Soon</span>
+        <h1 class="hero__heading" id="hero-heading">
+          The Platform That Makes<br>
+          Your Organization
+          <span class="hero__rotating-wrapper" aria-label="Shine">
+            <span class="hero__word hero__word--shine is-active">Shine</span>
+          </span>
+        </h1>
+        <p class="hero__subtext">
+          Kinectem gives youth sports organizations a powerful home base — showcase your team's
+          wins, give every player a digital storybook and online resume, and attract the next wave of talent to your program.
+        </p>
+        <div class="hero__actions">
+          <a href="#signup" class="btn btn-primary" aria-label="Join the waitlist">
+            Join the Waitlist
+          </a>
+          <a href="#personas" class="btn btn-ghost">
+            See Who It's For
+          </a>
+        </div>
+        <div class="hero__visual" aria-hidden="true">
+          <div class="hero__stat-card hero__stat-card--1">
+            <span class="stat-card__number">🏆</span>
+            <span class="stat-card__label">Showcase Team Wins</span>
+          </div>
+          <div class="hero__stat-card hero__stat-card--2">
+            <span class="stat-card__number">⚡</span>
+            <span class="stat-card__label">Digital Storybooks & Online Resumes</span>
+          </div>
+          <div class="hero__stat-card hero__stat-card--3">
+            <span class="stat-card__number">📣</span>
+            <span class="stat-card__label">Attract New Athletes</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Wave divider -->
+    <div aria-hidden="true" style="line-height:0; background: var(--gradient-hero-bg);">
+      <svg viewBox="0 0 1440 40" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:40px;">
+        <path d="M0,20 C240,40 480,0 720,20 C960,40 1200,0 1440,20 L1440,40 L0,40 Z" fill="white" opacity="0.6"/>
+        <path d="M0,28 C360,8 720,40 1080,20 C1260,10 1380,30 1440,28 L1440,40 L0,40 Z" fill="white" opacity="0.4"/>
+      </svg>
+    </div>
+
+    <!-- =====================================================
+         Stats Strip
+         ===================================================== -->
+    <div class="stats-strip" aria-label="Platform highlights">
+      <div class="stats-strip__inner">
+        <div class="stats-strip__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 2L12.09 7.26L17.82 7.27L13.45 10.64L15.18 15.99L10 12.77L4.82 15.99L6.55 10.64L2.18 7.27L7.91 7.26L10 2Z" fill="currentColor"/>
+          </svg>
+          <span>Promote team championships &amp; milestones</span>
+        </div>
+        <div class="stats-strip__divider" aria-hidden="true"></div>
+        <div class="stats-strip__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M12 2C9.24 2 7 4.24 7 7C7 9.76 9.24 12 12 12C14.76 12 17 9.76 17 7C17 4.24 14.76 2 12 2ZM12 10C10.35 10 9 8.65 9 7C9 5.35 10.35 4 12 4C13.65 4 15 5.35 15 7C15 8.65 13.65 10 12 10ZM12 13C9.33 13 4 14.34 4 17V19H20V17C20 14.34 14.67 13 12 13Z" fill="currentColor"/>
+          </svg>
+          <span>Boost individual player visibility &amp; recognition</span>
+        </div>
+        <div class="stats-strip__divider" aria-hidden="true"></div>
+        <div class="stats-strip__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M9 12H11V14H9V12ZM9 6H11V10H9V6ZM10 2C5.59 2 2 5.59 2 10C2 14.42 5.59 18 10 18C14.42 18 18 14.42 18 10C18 5.59 14.42 2 10 2ZM10 16C6.69 16 4 13.31 4 10C4 6.69 6.69 4 10 4C13.31 4 16 6.69 16 10C16 13.31 13.31 16 10 16Z" fill="currentColor"/>
+          </svg>
+          <span>Discover new players for your program</span>
+        </div>
+        <div class="stats-strip__divider" aria-hidden="true"></div>
+        <div class="stats-strip__item">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M16 4H15V2H13V4H7V2H5V4H4C2.89 4 2 4.9 2 6V18C2 19.11 2.89 20 4 20H16C17.11 20 18 19.11 18 18V6C18 4.9 17.11 4 16 4ZM16 18H4V9H16V18ZM16 7H4V6H16V7Z" fill="currentColor"/>
+          </svg>
+          <span>COPPA-compliant &amp; built for youth sports</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         Who It's For (Persona Sections)
+         ===================================================== -->
+    <section class="personas" id="personas" aria-labelledby="personas-heading">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-eyebrow" aria-hidden="true">Built for Your Entire Program</span>
+          <h2 class="section-heading" id="personas-heading">Who Kinectem Is For</h2>
+          <p class="section-subtext">
+            Whether you're an organization looking to grow, a coach building a winning roster,
+            a player ready to be seen, or a parent supporting your athlete —
+            Kinectem was built with you in mind.
+          </p>
+        </div>
+
+                <!-- Athletes -->
+        <div class="persona-row persona-row--reverse">
+          <div class="persona-row__visual persona-row__visual--athletes" aria-hidden="true">
+            <div class="persona-row__card-mock">
+              <div class="mock-profile">
+                <div class="mock-profile__avatar"></div>
+                <div class="mock-profile__lines">
+                  <div class="mock-line mock-line--wide"></div>
+                  <div class="mock-line mock-line--mid"></div>
+                </div>
+                <div class="mock-profile__badge">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M10 2L12.09 7.26L17.82 7.27L13.45 10.64L15.18 15.99L10 12.77L4.82 15.99L6.55 10.64L2.18 7.27L7.91 7.26L10 2Z" fill="currentColor"/></svg>
+                  Featured Athlete
+                </div>
+              </div>
+              <div class="mock-stats">
+                <div class="mock-stat"><span class="mock-stat__num">47</span><span class="mock-stat__lbl">Profile Views</span></div>
+                <div class="mock-stat"><span class="mock-stat__num">12</span><span class="mock-stat__lbl">Scout Saves</span></div>
+                <div class="mock-stat"><span class="mock-stat__num">3</span><span class="mock-stat__lbl">Coach Messages</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="persona-row__content">
+            <span class="persona-row__label persona-row__label--athlete">For Athletes</span>
+            <h3 class="persona-row__heading">Your Digital Storybook. Your Online Resume. Your Future.</h3>
+            <p class="persona-row__desc">
+              Every player deserves to be seen beyond the box score. Game recap articles accumulate over time to automatically build each athlete's digital storybook and online resume — archiving their growth, accomplishments, and standout moments into a record that gets more impressive every season.
+            </p>
+            <ul class="persona-row__bullets" role="list">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Game recaps accumulate into a digital storybook that archives your full journey
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                An online resume that grows richer with every season and every game
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                A complete archive of team accomplishments and individual progress over time
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Direct messaging from verified coaches and scouts
+              </li>
+            </ul>
+            <a href="#signup" class="btn btn-primary">Get Early Access</a>
+          </div>
+        </div>
+
+        <!-- Organizations -->
+        <div class="persona-row">
+          <div class="persona-row__visual persona-row__visual--athletes" aria-hidden="true">
+            <div class="persona-row__card-mock">
+              <div class="mock-profile">
+                <div class="mock-profile__avatar" style="border-radius: 8px;"></div>
+                <div class="mock-profile__lines">
+                  <div class="mock-line mock-line--wide"></div>
+                  <div class="mock-line mock-line--mid"></div>
+                </div>
+                <div class="mock-profile__badge">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M10 2L12.09 7.26L17.82 7.27L13.45 10.64L15.18 15.99L10 12.77L4.82 15.99L6.55 10.64L2.18 7.27L7.91 7.26L10 2Z" fill="currentColor"/></svg>
+                  Verified Organization
+                </div>
+              </div>
+              <div class="mock-stats">
+                <div class="mock-stat"><span class="mock-stat__num">3</span><span class="mock-stat__lbl">Championships</span></div>
+                <div class="mock-stat"><span class="mock-stat__num">48</span><span class="mock-stat__lbl">Active Players</span></div>
+                <div class="mock-stat"><span class="mock-stat__num">12</span><span class="mock-stat__lbl">New Inquiries</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="persona-row__content">
+            <span class="persona-row__label persona-row__label--athlete">For Organizations</span>
+            <h3 class="persona-row__heading">Put Your Program on the Map.</h3>
+            <p class="persona-row__desc">
+              Give your youth sports organization a professional home base. Kinectem lets you
+              celebrate team accomplishments, shine a spotlight on your players, and make your
+              program the one every local athlete wants to join.
+            </p>
+            <ul class="persona-row__bullets" role="list">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Dedicated org profile to showcase wins, seasons, and history
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Publish game recap articles that go deeper than the final score — creating third-party validation of player and team accomplishments, tagged to team pages and individual player profiles
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Highlight team championships, tournaments, and milestones
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Attract new athletes with a compelling, discoverable presence
+              </li>
+            </ul>
+            <a href="#signup" class="btn btn-primary">Get Early Access</a>
+          </div>
+        </div>
+
+        <!-- Coaches -->
+        <div class="persona-row persona-row--reverse">
+          <div class="persona-row__visual persona-row__visual--coaches" aria-hidden="true">
+            <div class="persona-row__card-mock">
+              <div class="mock-search">
+                <div class="mock-search__bar">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M15.5 14L20 18.5L18.5 20L14 15.5V14.71L13.73 14.43C12.59 15.41 11.11 16 9.5 16C5.91 16 3 13.09 3 9.5C3 5.91 5.91 3 9.5 3C13.09 3 16 5.91 16 9.5C16 11.11 15.41 12.59 14.43 13.73L14.71 14H15.5ZM9.5 14C12 14 14 12 14 9.5C14 7 12 5 9.5 5C7 5 5 7 5 9.5C5 12 7 14 9.5 14Z" fill="currentColor"/></svg>
+                  <span>Search athletes by sport, age, position...</span>
+                </div>
+                <div class="mock-results">
+                  <div class="mock-result-row">
+                    <div class="mock-result-avatar mock-result-avatar--a"></div>
+                    <div class="mock-result-info">
+                      <div class="mock-line mock-line--mid"></div>
+                      <div class="mock-line mock-line--short"></div>
+                    </div>
+                    <span class="mock-result-tag">Forward</span>
+                  </div>
+                  <div class="mock-result-row">
+                    <div class="mock-result-avatar mock-result-avatar--b"></div>
+                    <div class="mock-result-info">
+                      <div class="mock-line mock-line--mid"></div>
+                      <div class="mock-line mock-line--short"></div>
+                    </div>
+                    <span class="mock-result-tag">Midfielder</span>
+                  </div>
+                  <div class="mock-result-row">
+                    <div class="mock-result-avatar mock-result-avatar--c"></div>
+                    <div class="mock-result-info">
+                      <div class="mock-line mock-line--mid"></div>
+                      <div class="mock-line mock-line--short"></div>
+                    </div>
+                    <span class="mock-result-tag">Goalkeeper</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="persona-row__content">
+            <span class="persona-row__label persona-row__label--coach">For Coaches</span>
+            <h3 class="persona-row__heading">Build Your Roster. Grow Your Program.</h3>
+            <p class="persona-row__desc">
+              Stop relying on word-of-mouth and weekend tournaments alone. Kinectem gives
+              coaches a searchable pool of motivated athletes — so you can identify players smarter,
+              fill your roster faster, and bring the right players into your organization.
+            </p>
+            <ul class="persona-row__bullets" role="list">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Searchable athlete database by sport, age, and position
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Save and organize prospects for tryouts and open spots
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Direct outreach to athletes interested in joining your program
+              </li>
+            </ul>
+            <a href="#signup" class="btn btn-primary">Get Early Access</a>
+          </div>
+        </div>
+
+        <!-- Scouts -->
+        <div class="persona-row">
+          <div class="persona-row__visual persona-row__visual--scouts" aria-hidden="true">
+            <div class="persona-row__card-mock">
+              <div class="mock-scout">
+                <div class="mock-scout__header">
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M15.5 14L20 18.5L18.5 20L14 15.5V14.71L13.73 14.43C12.59 15.41 11.11 16 9.5 16C5.91 16 3 13.09 3 9.5C3 5.91 5.91 3 9.5 3C13.09 3 16 5.91 16 9.5C16 11.11 15.41 12.59 14.43 13.73L14.71 14H15.5ZM9.5 14C12 14 14 12 14 9.5C14 7 12 5 9.5 5C7 5 5 7 5 9.5C5 12 7 14 9.5 14Z" fill="currentColor"/></svg>
+                  <span>Talent Radar</span>
+                </div>
+                <div class="mock-scout__list">
+                  <div class="mock-scout-item mock-scout-item--hot">
+                    <div class="mock-scout-item__dot"></div>
+                    <div class="mock-scout-item__info">
+                      <div class="mock-line mock-line--mid"></div>
+                      <div class="mock-line mock-line--short"></div>
+                    </div>
+                    <span class="mock-scout-item__tag">High Potential</span>
+                  </div>
+                  <div class="mock-scout-item">
+                    <div class="mock-scout-item__dot mock-scout-item__dot--warm"></div>
+                    <div class="mock-scout-item__info">
+                      <div class="mock-line mock-line--mid"></div>
+                      <div class="mock-line mock-line--short"></div>
+                    </div>
+                    <span class="mock-scout-item__tag mock-scout-item__tag--warm">Watchlist</span>
+                  </div>
+                  <div class="mock-scout-item">
+                    <div class="mock-scout-item__dot mock-scout-item__dot--warm"></div>
+                    <div class="mock-scout-item__info">
+                      <div class="mock-line mock-line--mid"></div>
+                      <div class="mock-line mock-line--short"></div>
+                    </div>
+                    <span class="mock-scout-item__tag mock-scout-item__tag--warm">Watchlist</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="persona-row__content">
+            <span class="persona-row__label persona-row__label--scout">For Scouts</span>
+            <h3 class="persona-row__heading">Find the Next Generation of Talent.</h3>
+            <p class="persona-row__desc">
+              Access a continuously growing pool of youth athletes across every sport.
+              Kinectem's talent discovery tools help you identify standout players earlier —
+              before they're on everyone else's radar.
+            </p>
+            <ul class="persona-row__bullets" role="list">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Cross-sport talent tracking
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Watchlists and notes per athlete
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Highlight reel access in one click
+              </li>
+            </ul>
+            <a href="#signup" class="btn btn-primary">Get Early Access</a>
+          </div>
+        </div>
+
+        <!-- Parents -->
+        <div class="persona-row persona-row--reverse">
+          <div class="persona-row__visual persona-row__visual--parents" aria-hidden="true">
+            <div class="persona-row__card-mock">
+              <div class="mock-guardian">
+                <div class="mock-guardian__header">
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1ZM12 11.99H19C18.47 15.11 16.15 17.78 12 18.93V12H5V6.3L12 3.19V11.99Z" fill="currentColor"/></svg>
+                  <span>Guardian Controls</span>
+                </div>
+                <div class="mock-guardian__items">
+                  <div class="mock-guardian-row">
+                    <span class="mock-guardian-row__label">Profile visibility</span>
+                    <span class="mock-toggle mock-toggle--on">On</span>
+                  </div>
+                  <div class="mock-guardian-row">
+                    <span class="mock-guardian-row__label">Coach messaging</span>
+                    <span class="mock-toggle mock-toggle--on">On</span>
+                  </div>
+                  <div class="mock-guardian-row">
+                    <span class="mock-guardian-row__label">Public highlight sharing</span>
+                    <span class="mock-toggle mock-toggle--off">Off</span>
+                  </div>
+                  <div class="mock-guardian-row mock-guardian-row--coppa">
+                    <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1Z" fill="currentColor"/></svg>
+                    COPPA compliant — parental consent active
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="persona-row__content">
+            <span class="persona-row__label persona-row__label--parent">For Parents</span>
+            <h3 class="persona-row__heading">Your Child Gets Discovered. You Stay in Control.</h3>
+            <p class="persona-row__desc">
+              Kinectem puts parents in the driver's seat. You control what's visible, who can
+              reach your child, and how their information is used — with COPPA-compliant
+              privacy protections built in from the start.
+            </p>
+            <ul class="persona-row__bullets" role="list">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Full parental consent and guardian controls
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Granular privacy settings per child
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                COPPA compliant — under-13 protections built in
+              </li>
+            </ul>
+            <a href="#signup" class="btn btn-primary">Get Early Access</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================
+         Why Kinectem (Features)
+         ===================================================== -->
+    <section class="features" id="features" aria-labelledby="features-heading">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-eyebrow" aria-hidden="true">Built Different</span>
+          <h2 class="section-heading" id="features-heading">Why Kinectem</h2>
+          <p class="section-subtext">
+            We didn't build another social network. We built the growth engine youth sports organizations have been missing.
+          </p>
+        </div>
+
+        <div class="features__grid">
+
+          <article class="feature-card">
+            <div class="feature-card__icon-wrap" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Trophy">
+                <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94C8.02 14.5 9.37 15.96 11 16.4V19H7v2h10v-2h-4v-2.6c1.63-.44 2.98-1.9 3.61-3.46C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z" fill="currentColor"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Showcase Team Accomplishments</h3>
+            <p class="feature-card__desc">
+              Your organization's wins deserve more than a trophy shelf. Kinectem gives you a
+              dedicated space to publish championships, season records, tournament results, and
+              milestones — building a legacy that attracts players and earns community respect.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-card__icon-wrap" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Game recap article">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Game Recap Articles: Third-Party Validation That Compounds Over Time</h3>
+            <p class="feature-card__desc">
+              When your organization writes a game recap, you're doing more than telling a story — you're creating independent, third-party validation of every player's and team's accomplishments. These aren't self-reported stats; they're documented achievements written by the organization itself. Over time, recaps accumulate into a living archive that automatically builds each player's digital storybook and online resume, and preserves a verified record of your team's progress and success that carries real credibility with coaches and scouts.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-card__icon-wrap" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Player profile boost">
+                <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="currentColor"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Every Player Gets a Digital Storybook & Online Resume</h3>
+            <p class="feature-card__desc">
+              As game recaps accumulate over time, each player's digital storybook and online resume grows automatically — archiving their highlights, stats, and standout moments season by season. Because these recaps are written by the organization, not the player, they serve as credible third-party validation of every achievement. It's a living record that gets more powerful the longer they play, giving coaches and scouts a complete and trustworthy picture of who that athlete is and how far they've come.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-card__icon-wrap" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Attract new players">
+                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Attract New Players to Your Program</h3>
+            <p class="feature-card__desc">
+              Turn your organization's profile into your best tool to discover new players. Athletes and
+              families searching for a program can discover your team, browse your history, and
+              reach out directly — bringing motivated new players right to your door.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-card__icon-wrap" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Shield with checkmark">
+                <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1ZM10 17L6 13L7.41 11.59L10 14.17L16.59 7.58L18 9L10 17Z" fill="currentColor"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">COPPA Compliant by Design</h3>
+            <p class="feature-card__desc">
+              Built for under-13 athletes from the ground up — proper parental consent flows,
+              guardian controls, and data protections baked in at the architecture level, not
+              bolted on as an afterthought.
+            </p>
+          </article>
+          <!--historical team membership tracking-->
+          <article class="feature-card">
+            <div class="feature-card__icon-wrap" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Historical team membership tracking">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Historical Team Membership Tracking</h3>
+            <p class="feature-card__desc">
+              Every player profile includes a timeline of their team memberships, so you can see not just where an athlete is now, but the full journey that got them there.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================
+         Email Signup
+         ===================================================== -->
+    <section class="signup" id="signup" aria-labelledby="signup-heading">
+      <div class="container">
+        <div class="signup__inner">
+          <div class="signup__copy">
+            <span class="section-eyebrow" aria-hidden="true">Be the First In</span>
+            <h2 class="signup__heading" id="signup-heading">Ready to Elevate Your Program?</h2>
+            <p class="signup__subtext">
+              Kinectem is in development. Join the waitlist to be first in line when we launch —
+              and help shape the platform that'll put your organization, your players, and your wins in the spotlight.
+            </p>
+            <ul class="signup__perks" role="list" aria-label="Waitlist benefits">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                First to claim your organization's profile
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Early access before the public launch
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
+                Shape the product with your feedback
+              </li>
+            </ul>
+          </div>
+          <div class="signup__form-wrap">
+            <form
+              class="signup__form"
+              id="signup-form"
+              novalidate
+              aria-label="Waitlist signup form"
+              onsubmit="handleSignupSubmit(event)"
+            >
+              <p class="signup__form-label">Enter your email to get notified</p>
+              <label for="email-input" class="sr-only">Email address</label>
+              <input
+                type="email"
+                id="email-input"
+                class="signup__input"
+                name="email"
+                placeholder="your@email.com"
+                autocomplete="email"
+                required
+                aria-required="true"
+                aria-describedby="email-error"
+              />
+              <span id="email-error" role="alert" aria-live="polite" class="signup__error"></span>
+              <button type="submit" class="signup__submit">
+                Notify Me When We Launch
+              </button>
+              <p class="signup__fine-print">No spam. Unsubscribe anytime.</p>
+            </form>
+
+            <div
+              class="signup__success"
+              id="signup-success"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
+              </svg>
+              <strong>You're on the list.</strong>
+              <p>We'll be in touch when Kinectem launches. Expect early access before anyone else.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =====================================================
+       Footer
+       ===================================================== -->
+  <footer class="footer" role="contentinfo">
+    <div class="container">
+      <div class="footer__inner">
+        <div class="footer__brand">
+          <a href="#" class="footer__logo" aria-label="Kinectem home">
+            KINECT<span>EM</span>
+          </a>
+          <p class="footer__tagline">Where Programs Shine</p>
+          <span class="footer__badge">Coming Soon</span>
+        </div>
+        <nav class="footer__links" aria-label="Footer links">
+          <a href="#" class="footer__link">Privacy Policy</a>
+          <a
+            href="https://app.kinectem.com"
+            class="footer__link"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Kinectem app (opens in new tab)"
+          >
+            app.kinectem.com
+          </a>
+        </nav>
+      </div>
+      <div class="footer__bottom">
+        <p class="footer__copyright">&copy; 2026 Kinectem. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- =====================================================
+       Scripts
+       ===================================================== -->
+  <script>
+    /* --------------------------------------------------
+       Mobile nav toggle
+       -------------------------------------------------- */
+    (function () {
+      var toggle = document.querySelector('.nav__mobile-toggle');
+      var menu   = document.getElementById('mobile-menu');
+      if (!toggle || !menu) return;
+
+      toggle.addEventListener('click', function () {
+        var expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!expanded));
+        menu.classList.toggle('is-open', !expanded);
+        menu.setAttribute('aria-hidden', String(expanded));
+      });
+
+      // Close menu when a link is clicked
+      menu.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', function () {
+          toggle.setAttribute('aria-expanded', 'false');
+          menu.classList.remove('is-open');
+          menu.setAttribute('aria-hidden', 'true');
+        });
+      });
+    }());
+
+    /* --------------------------------------------------
+       Hero rotating word animation
+       -------------------------------------------------- */
+    (function () {
+      var wrapper = document.querySelector('.hero__rotating');
+      if (!wrapper) return;
+
+      var words   = wrapper.querySelectorAll('.hero__word');
+      var current = 0;
+      var total   = words.length - 1; // last word is a repeat of first
+
+      // Duration each word stays visible (ms) — Shine holds much longer
+      var durations = [3800, 1800, 1800, 3800];
+
+      // Mark the first word as active on load
+      words[0].classList.add('is-active');
+
+      // Respect reduced motion
+      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReduced) return;
+
+      function nextWord() {
+        words[current].classList.remove('is-active');
+        words[current].classList.add('is-exiting');
+        var exiting = current;
+        setTimeout(function () {
+          words[exiting].classList.remove('is-exiting');
+        }, 450);
+
+        current = (current + 1) % total;
+        words[current].classList.add('is-active');
+
+        setTimeout(nextWord, durations[current]);
+      }
+
+      setTimeout(nextWord, durations[0]);
+    }());
+
+    /* --------------------------------------------------
+       Nav scroll state
+       -------------------------------------------------- */
+    (function () {
+      var nav = document.querySelector('.nav');
+      if (!nav) return;
+      window.addEventListener('scroll', function () {
+        nav.classList.toggle('nav--scrolled', window.scrollY > 20);
+      }, { passive: true });
+    }());
+
+    /* --------------------------------------------------
+       Email form — validation + submit handler
+       -------------------------------------------------- */
+
+    /**
+     * Basic email format validation beyond the browser's built-in check.
+     * @param {string} email
+     * @returns {boolean}
+     */
+    function isValidEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+    }
+
+    /**
+     * submitEmail — integration stub
+     *
+     * Replace the body of this function with your email service of choice.
+     * The function should return a promise that resolves to { ok: true } on
+     * success, or throws/rejects on failure.
+     *
+     * -------------------------------------------------------
+     * Option A: Mailchimp (embedded form POST via JSONP)
+     * -------------------------------------------------------
+     * async function submitEmail(email) {
+     *   const url = 'https://YOUR_SUBDOMAIN.us1.list-manage.com/subscribe/post-json'
+     *     + '?u=YOUR_U_PARAM&id=YOUR_ID_PARAM&EMAIL=' + encodeURIComponent(email)
+     *     + '&c=callback';
+     *   // Mailchimp requires JSONP for cross-origin. Use their embedded form
+     *   // endpoint or a server-side proxy instead.
+     *   throw new Error('Wire up Mailchimp integration here');
+     * }
+     *
+     * -------------------------------------------------------
+     * Option B: ConvertKit
+     * -------------------------------------------------------
+     * async function submitEmail(email) {
+     *   const res = await fetch(
+     *     'https://api.convertkit.com/v3/forms/YOUR_FORM_ID/subscribe',
+     *     {
+     *       method: 'POST',
+     *       headers: { 'Content-Type': 'application/json' },
+     *       body: JSON.stringify({ api_key: 'YOUR_API_KEY', email }),
+     *     }
+     *   );
+     *   if (!res.ok) throw new Error('ConvertKit subscribe failed');
+     *   return { ok: true };
+     * }
+     *
+     * -------------------------------------------------------
+     * Option C: Custom Kinectem API
+     * -------------------------------------------------------
+     * async function submitEmail(email) {
+     *   const res = await fetch('https://api.kinectem.com/waitlist', {
+     *     method: 'POST',
+     *     headers: { 'Content-Type': 'application/json' },
+     *     body: JSON.stringify({ email }),
+     *   });
+     *   if (!res.ok) throw new Error('Waitlist signup failed');
+     *   return { ok: true };
+     * }
+     *
+     * -------------------------------------------------------
+     * Current stub — simulates success with no network call
+     * -------------------------------------------------------
+     */
+    async function submitEmail(email) {
+      // Simulate a short network delay so the UX feels real
+      await new Promise(function (resolve) { setTimeout(resolve, 500); });
+      // For now, just simulate success
+      return { ok: true };
+    }
+
+    /**
+     * handleSignupSubmit — form submit event handler
+     * Validates, calls submitEmail, and shows success/error state.
+     * @param {SubmitEvent} event
+     */
+    async function handleSignupSubmit(event) {
+      event.preventDefault();
+
+      var form    = document.getElementById('signup-form');
+      var input   = document.getElementById('email-input');
+      var errorEl = document.getElementById('email-error');
+      var success = document.getElementById('signup-success');
+      var submit  = form.querySelector('button[type="submit"]');
+
+      // Clear previous error state
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+      input.removeAttribute('aria-invalid');
+
+      var email = input.value.trim();
+
+      if (!email || !isValidEmail(email)) {
+        errorEl.textContent = 'Please enter a valid email address.';
+        errorEl.style.display = 'block';
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+        return;
+      }
+
+      // Disable form while submitting
+      input.disabled  = true;
+      submit.disabled = true;
+      submit.textContent = 'Sending\u2026';
+
+      try {
+        var result = await submitEmail(email);
+        if (result && result.ok) {
+          form.style.display = 'none';
+          success.classList.add('is-visible');
+        }
+      } catch (err) {
+        input.disabled  = false;
+        submit.disabled = false;
+        submit.textContent = 'Notify Me When We Launch';
+        errorEl.textContent = 'Something went wrong. Please try again.';
+        errorEl.style.display = 'block';
+        input.setAttribute('aria-invalid', 'true');
+        console.error('Email signup error:', err);
+      }
+    }
+  </script>
+
+</body>
+</html>
