@@ -814,8 +814,20 @@
      * { ok: true } on success, throws Error(message) on failure.
      * @param {object} payload
      */
+    function resolveFoundingSignupUrl() {
+      var host = window.location.hostname;
+      // Marketing-only hosts must point at the API host. Everywhere else
+      // (Replit dev preview, single-domain prod) we use same-origin so the
+      // shared proxy routes /api to the API server.
+      var marketingOnlyHosts = ['www.kinectem.com', 'kinectem.com'];
+      if (marketingOnlyHosts.indexOf(host) !== -1) {
+        return 'https://app.kinectem.com/api/v1/founding-signups';
+      }
+      return '/api/v1/founding-signups';
+    }
+
     async function submitFoundingSignup(payload) {
-      var res = await fetch('https://app.kinectem.com/api/v1/founding-signups', {
+      var res = await fetch(resolveFoundingSignupUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
