@@ -52,6 +52,14 @@ import { useToast } from "@/hooks/use-toast";
 //   roster_invite_for_child  -> `/family?childId=...&entryId=...&teamId=...`
 //                               source: routes/teams.ts; also handled inline below
 //                               (Accept / Decline buttons on the row).
+//   roster_role_changed      -> `/teams/<teamId>?roster=1&entryId=<entryId>`
+//                               source: routes/teams.ts (PATCH /teams/:teamId/members/:memberId).
+//                               Plain link click — Task #536.
+//   roster_role_changed_for_child
+//                            -> `/family?childId=...&entryId=...&teamId=...`
+//                               source: routes/teams.ts (PATCH /teams/:teamId/members/:memberId).
+//                               Plain link click — no inline Accept/Decline,
+//                               since role changes are not pending invites.
 //   recap_approved           -> `/posts/<articlePostId>` (the published recap)
 //                               source: routes/organizations.ts
 //                               (POST /organizations/:orgId/post-approvals/:id/approve)

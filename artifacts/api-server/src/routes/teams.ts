@@ -514,6 +514,25 @@ function positionToRosterFields(positionRaw: string): {
   };
 }
 
+// Viewer-friendly label for a stored `roster_entries.position` value.
+// Persisted column may be `null` (which positionToRosterFields uses for
+// plain "coach"), one of the canonical strings in ALLOWED_POSITIONS, or a
+// legacy free-form string from earlier writes. Used by Task #536 to
+// describe the new role in role-change bell notifications.
+function positionDisplayLabel(position: string | null): string {
+  if (!position || !position.trim()) return "Coach";
+  const map: Record<string, string> = {
+    player: "Player",
+    coach: "Coach",
+    assistant_coach: "Assistant Coach",
+    admin: "Admin",
+    manager: "Manager",
+    parent: "Parent",
+    author: "Author",
+  };
+  return map[position] ?? position;
+}
+
 router.patch(
   "/teams/:teamId/members/:memberId",
   asyncHandler(async (req, res) => {
@@ -615,6 +634,42 @@ router.patch(
       .where(eq(users.id, entry.userId))
       .limit(1);
     if (!u) return notFound(res);
+
+    // Task #536 — Notify the affected member (and their guardian, if
+    // any) when a coach/admin changes their position. The PATCH path is
+    // otherwise silent, so users would only discover a promotion by
+    // re-visiting the team page. Skipped when the position is unchanged
+    // (jersey-only edit, or no-op write) and when the actor is editing
+    // their own row.
+    const oldPositionNorm = (entry.position ?? "").trim();
+    const newPositionNorm = (newPosition ?? "").trim();
+    const positionChanged =
+      positionProvided && oldPositionNorm !== newPositionNorm;
+    if (positionChanged && me.id !== u.id) {
+      const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+      const roleLabel = positionDisplayLabel(newPosition);
+      await db.insert(notifications).values({
+        userId: u.id,
+        kind: "roster_role_changed",
+        message: `${actorName} changed your role on ${t.name} to ${roleLabel}.`,
+        link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
+        actorUserId: me.id,
+      });
+      if (u.parentId) {
+        const childFirstName =
+          (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
+            ? u.name!.trim().split(/\s+/)[0]
+            : "your child";
+        await db.insert(notifications).values({
+          userId: u.parentId,
+          kind: "roster_role_changed_for_child",
+          message: `${actorName} changed ${childFirstName}'s role on ${t.name} to ${roleLabel}.`,
+          link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
+          actorUserId: me.id,
+        });
+      }
+    }
+
     res.json(toTeamMember(updated, u));
   }),
 );
