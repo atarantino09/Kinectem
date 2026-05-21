@@ -1048,6 +1048,75 @@ paths:
           $ref: '#/components/responses/InternalServerError'
 
   # -------------------------------------------------------------------------
+  # Org setup checklist (Task #548) — admin/owner-only progress view of
+  # the first-run setup steps for a freshly created organization. Each
+  # step is auto-computed from real org state (logo, teams, members,
+  # admins, outstanding invites, roster size, guardian links). Includes
+  # a per-user dismissal flag persisted on the membership row.
+  # -------------------------------------------------------------------------
+
+  /organizations/{orgId}/setup-status:
+    get:
+      operationId: getOrgSetupStatus
+      summary: Get the org setup-checklist status for the calling owner/admin
+      tags: [Organizations]
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Per-step completion + dismissal state for this user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgSetupStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /organizations/{orgId}/setup-checklist/dismiss:
+    post:
+      operationId: dismissOrgSetupChecklist
+      summary: Dismiss the org setup checklist for the calling user
+      tags: [Organizations]
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Checklist dismissed for this user (idempotent).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgSetupStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: reopenOrgSetupChecklist
+      summary: Re-open the org setup checklist for the calling user
+      tags: [Organizations]
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Checklist re-opened for this user (idempotent).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgSetupStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # -------------------------------------------------------------------------
   # Organization invites (Task #541) — admin/member invites via email or
   # by selecting an existing Kinectem user. Mirrors the team roster-invite
   # shape but is scoped to org membership.
@@ -7991,6 +8060,67 @@ components:
         logoUrl:
           type: string
           nullable: true
+
+    OrgSetupStatusResponse:
+      type: object
+      description: |
+        Per-step completion of the org setup checklist (Task #548). All
+        booleans are derived from real org state. `dismissedAt` reflects
+        the calling user's per-org dismissal of the checklist card.
+      required:
+        - orgId
+        - steps
+        - completedCount
+        - totalSteps
+        - allComplete
+        - dismissedAt
+      properties:
+        orgId:
+          type: string
+          format: uuid
+        steps:
+          type: object
+          required:
+            - logoSet
+            - hasTeam
+            - hasStaffOrInvite
+            - hasCoAdmin
+            - hasRosterEntry
+            - hasGuardianLinkOrInvite
+          properties:
+            logoSet:
+              type: boolean
+              description: Organization has a non-null logoUrl.
+            hasTeam:
+              type: boolean
+              description: Organization has at least one non-archived team.
+            hasStaffOrInvite:
+              type: boolean
+              description: At least 2 members OR at least 1 outstanding org invite.
+            hasCoAdmin:
+              type: boolean
+              description: At least 2 users with owner/admin org role.
+            hasRosterEntry:
+              type: boolean
+              description: Any team in the org has at least one roster entry.
+            hasGuardianLinkOrInvite:
+              type: boolean
+              description: |
+                Any rostered player has a linked guardian (`users.parent_id`
+                set) OR there is at least one pending roster invite.
+        completedCount:
+          type: integer
+          minimum: 0
+        totalSteps:
+          type: integer
+          minimum: 1
+        allComplete:
+          type: boolean
+        dismissedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO timestamp when the calling user dismissed the checklist; null if visible.
 
     MemberResponse:
       type: object
