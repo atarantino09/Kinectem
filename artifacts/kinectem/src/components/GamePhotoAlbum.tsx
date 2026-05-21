@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, ImagePlus, Trash2, X } from "lucide-react";
-import { useAlbum, type AlbumPhoto } from "@/lib/photoAlbum";
+import { useAlbum, AlbumQuotaError, type AlbumPhoto } from "@/lib/photoAlbum";
 import { useGetLoggedInUser } from "@workspace/api-client-react";
 import { timeAgo } from "@/lib/format";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
@@ -21,7 +21,7 @@ import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 const MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 
 export function GamePhotoAlbum({ postId }: { postId: string }) {
-  const { photos, addPhoto, removePhoto } = useAlbum(postId);
+  const { photos, addPhotos, removePhoto } = useAlbum(postId);
   const { data: me } = useGetLoggedInUser();
   const { toast } = useToast();
 
@@ -94,19 +94,32 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     const name = (uploaderName || defaultName || "Anonymous fan").trim();
     setSaving(true);
     try {
-      for (let i = 0; i < files.length; i++) {
-        addPhoto({
+      addPhotos(
+        files.map((_, i) => ({
           dataUrl: previews[i],
           uploaderName: name,
           caption: caption.trim(),
-        });
-      }
+        })),
+      );
       toast({
         title: `Added ${files.length} photo${files.length === 1 ? "" : "s"}`,
         description: "Thanks for sharing.",
       });
       reset();
       setOpen(false);
+    } catch (err) {
+      if (err instanceof AlbumQuotaError) {
+        // Leave the dialog open and the picked files intact so the user can
+        // remove a few existing album photos and retry without re-picking.
+        toast({
+          title: "Album storage is full on this device",
+          description:
+            "Remove some photos from this album before adding more.",
+          variant: "destructive",
+        });
+        return;
+      }
+      throw err;
     } finally {
       setSaving(false);
     }
