@@ -4169,7 +4169,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Want to grab some film review tomorrow?
+                    example: Awesome game today. Proud of the effort.
         "201":
           description: Guardian link created in pending status
           content:
@@ -4589,7 +4589,7 @@ paths:
                         format: uuid
                       reason:
                         type: string
-                        example: Spam or off-topic
+                        example: Misleading content
                       note:
                         type: string
                         nullable: true
@@ -5151,6 +5151,87 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/founding-signups:
+    post:
+      operationId: createFoundingSignup
+      summary: Capture a "Founding 100" pre-launch signup from the marketing site
+      description: |
+        Public, unauthenticated endpoint backing the marketing site's
+        Founding 100 form. Rate-limited per source IP. Upserts on
+        `adminEmail` so a re-submission updates the existing row in
+        place rather than creating duplicates.
+      tags:
+        - Founding
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FoundingSignupRequest"
+      responses:
+        "201":
+          description: Signup captured
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - id
+                properties:
+                  ok:
+                    type: boolean
+                  id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/admin/founding-signups:
+    get:
+      operationId: listFoundingSignups
+      summary: List all "Founding 100" signups (admin)
+      tags:
+        - Admin
+        - Founding
+      security:
+        - cookieSession: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: All founding-100 signups, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FoundingSignup"
+                  pagination:
+                    type: object
+                    required:
+                      - nextCursor
+                      - hasMore
+                      - totalCount
+                    properties:
+                      nextCursor:
+                        type: string
+                        nullable: true
+                      hasMore:
+                        type: boolean
+                      totalCount:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/admin/masquerade/{userId}/start:
     parameters:
       - $ref: "#/components/parameters/UserId"
@@ -5235,7 +5316,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: coach@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5287,15 +5368,15 @@ paths:
                 firstName:
                   type: string
                   minLength: 1
-                  example: Aaron
+                  example: Devon
                 lastName:
                   type: string
                   minLength: 1
-                  example: Hayes
+                  example: Foster
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: maya@kinectem.demo
                 password:
                   type: string
                   minLength: 8
@@ -5397,7 +5478,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: coach@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5484,7 +5565,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: maya@kinectem.demo
+                  example: jordan@kinectem.demo
       responses:
         "200":
           description: Reset email sent if the address is registered.
@@ -5500,7 +5581,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Want to grab some film review tomorrow?
+                    example: Awesome game today. Proud of the effort.
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/password-reset/complete:
@@ -5832,7 +5913,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: maya@kinectem.demo
                 password:
                   type: string
       responses:
@@ -5895,7 +5976,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Awesome game today. Proud of the effort.
+                    example: Want to grab some film review tomorrow?
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
@@ -5955,7 +6036,7 @@ paths:
                   minLength: 1
                   maxLength: 80
                   description: Human label so the owner can tell keys apart later.
-                  example: Riverside Soccer Club
+                  example: North Valley Athletic Association
                 scopes:
                   type: array
                   description: |
@@ -6043,10 +6124,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Tyler
+                      example: Chris
                     lastName:
                       type: string
-                      example: Nguyen
+                      example: Silva
                     role:
                       type: string
                       enum:
@@ -6057,19 +6138,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: coach@kinectem.demo
+                      example: marcus@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Lacrosse
+                      example: Basketball
                     position:
                       type: string
                       nullable: true
-                      example: Wide Receiver
+                      example: Point Guard
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -6763,11 +6844,11 @@ paths:
                     firstName:
                       type: string
                       minLength: 1
-                      example: Maya
+                      example: Kai
                     lastName:
                       type: string
                       minLength: 1
-                      example: Foster
+                      example: Rivera
                   additionalProperties: false
       responses:
         "200":
@@ -10898,6 +10979,85 @@ components:
           enum:
             - parent
             - legal_guardian
+    FoundingSignupRequest:
+      type: object
+      required:
+        - orgName
+        - adminName
+        - adminEmail
+        - roleTitle
+        - estimatedTeams
+        - estimatedPlayers
+      properties:
+        orgName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        adminName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        adminEmail:
+          type: string
+          format: email
+          maxLength: 320
+        roleTitle:
+          type: string
+          minLength: 1
+          maxLength: 200
+        estimatedTeams:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        estimatedPlayers:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+        sport:
+          type: string
+          maxLength: 100
+          nullable: true
+          example: Football
+    FoundingSignup:
+      type: object
+      required:
+        - id
+        - orgName
+        - adminName
+        - adminEmail
+        - roleTitle
+        - estimatedTeams
+        - estimatedPlayers
+        - sport
+        - submittedAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgName:
+          type: string
+        adminName:
+          type: string
+        adminEmail:
+          type: string
+          format: email
+        roleTitle:
+          type: string
+        estimatedTeams:
+          type: integer
+        estimatedPlayers:
+          type: integer
+        sport:
+          type: string
+          nullable: true
+          example: Basketball
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     GuardianLinkResponse:
       type: object
       required:
@@ -10923,11 +11083,11 @@ components:
               format: uuid
             displayName:
               type: string
-              example: Marcus Rivera
+              example: Tyler Chen
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
         relationshipType:
           type: string
           enum:
@@ -10977,11 +11137,11 @@ components:
               format: uuid
             displayName:
               type: string
-              example: Tyler Chen
+              example: Daniela Patel
             avatarUrl:
               type: string
               nullable: true
-              example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
+              example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
             dateOfBirth:
               type: string
               format: date
@@ -11026,12 +11186,12 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Daniela Patel
+          example: Maya Brooks
         avatarUrl:
           type: string
           format: uri
           nullable: true
-          example: https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
     ChildNotificationKind:
       type: string
       description: |
@@ -11073,11 +11233,11 @@ components:
           $ref: "#/components/schemas/ChildNotificationKind"
         title:
           type: string
-          example: Saturday's win secures playoff spot
+          example: "Player profile: rising star at WR"
         body:
           type: string
           nullable: true
-          example: Practice was a grind today. The work is paying off.
+          example: Highlight reel from Friday's matchup is up — go check it out.
         link:
           type: string
           nullable: true
@@ -11144,11 +11304,11 @@ components:
           format: uuid
         displayName:
           type: string
-          example: Jordan Bennett
+          example: Coach Davis
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
         relationship:
           type: string
           description: Optional hint about why this contact is eligible (e.g., teammate, follower).
@@ -11184,11 +11344,11 @@ components:
           format: uuid
         name:
           type: string
-          example: Eastside Eagles
+          example: Lincoln High Football
         email:
           type: string
           nullable: true
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         role:
           type: string
           enum:
@@ -11213,17 +11373,17 @@ components:
           format: uuid
         firstName:
           type: string
-          example: Quinn
+          example: Marcus
         lastName:
           type: string
-          example: Foster
+          example: Rivera
         displayName:
           type: string
-          example: Marcus Rivera
+          example: Tyler Chen
         email:
           type: string
           nullable: true
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         role:
           type: string
           enum:
@@ -11245,30 +11405,30 @@ components:
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
         sport:
           type: string
           nullable: true
-          example: Baseball
+          example: Volleyball
         position:
           type: string
           nullable: true
-          example: Pitcher
+          example: Outside Hitter
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Senior
+          example: Class of 2025
         location:
           type: string
           nullable: true
-          example: Bay Shore, NY
+          example: Riverside, CA
         bio:
           type: string
           nullable: true
-          example: Class of 2026. Future is bright. Stay locked in.
+          example: Three-sport athlete with a love for the game and the grind.
         dateOfBirth:
           type: string
           format: date
@@ -11300,16 +11460,16 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Maya
+          example: Kai
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Walker
+          example: Reed
         email:
           type: string
           format: email
-          example: coach@kinectem.demo
+          example: marcus@kinectem.demo
         password:
           type: string
           minLength: 8
@@ -11328,16 +11488,16 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Riley
+          example: Avery
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Foster
+          example: Rivera
         email:
           type: string
           format: email
-          example: jordan@kinectem.demo
+          example: maya@kinectem.demo
         role:
           type: string
           enum:
@@ -11348,31 +11508,31 @@ components:
         sport:
           type: string
           nullable: true
-          example: Football
+          example: Soccer
         position:
           type: string
           nullable: true
-          example: Quarterback
+          example: Midfielder
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Junior
+          example: Class of 2026
         location:
           type: string
           nullable: true
-          example: Westfield, NJ
+          example: Lincoln, NE
         bio:
           type: string
           maxLength: 5000
           nullable: true
-          example: Coach by day, fan by night. Building champions on and off the field.
+          example: Speed, hands, and vision. Dedicated to outworking the competition.
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
         dateOfBirth:
           type: string
           nullable: true
@@ -11414,11 +11574,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Spring tryouts open next week
+          example: Saturday's win secures playoff spot
         body:
           type: string
           nullable: true
-          example: Thanks to all the families who came out to support us.
+          example: Practice was a grind today. The work is paying off.
         authorId:
           type: string
           format: uuid
@@ -11455,7 +11615,7 @@ components:
           type: string
           minLength: 1
           maxLength: 120
-          example: Inappropriate language
+          example: Spam or off-topic
         note:
           type: string
           maxLength: 2000
@@ -11495,11 +11655,11 @@ components:
         title:
           type: string
           nullable: true
-          example: "Senior night recap: a perfect ending"
+          example: Spring tryouts open next week
         body:
           type: string
           nullable: true
-          example: Big shoutout to the seniors for leading by example.
+          example: Thanks to all the families who came out to support us.
         hiddenAt:
           type: string
           format: date-time
@@ -11536,7 +11696,7 @@ components:
           format: uuid
         reason:
           type: string
-          example: Inappropriate language
+          example: Spam or off-topic
         note:
           type: string
           nullable: true
@@ -11691,32 +11851,10 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Eastside Eagles
+                    example: Lincoln High Football
                   count:
                     type: integer
             followedUsers:
-              type: array
-              items:
-                type: object
-                required:
-                  - userId
-                  - name
-                  - count
-                properties:
-                  userId:
-                    type: string
-                    format: uuid
-                  name:
-                    type: string
-                    nullable: true
-                    example: North Valley Athletic Association
-                  email:
-                    type: string
-                    nullable: true
-                    example: marcus@kinectem.demo
-                  count:
-                    type: integer
-            postersThisWeek:
               type: array
               items:
                 type: object
@@ -11738,6 +11876,28 @@ components:
                     example: coach@kinectem.demo
                   count:
                     type: integer
+            postersThisWeek:
+              type: array
+              items:
+                type: object
+                required:
+                  - userId
+                  - name
+                  - count
+                properties:
+                  userId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                    nullable: true
+                    example: Riverside Soccer Club
+                  email:
+                    type: string
+                    nullable: true
+                    example: marcus@kinectem.demo
+                  count:
+                    type: integer
     ApiKey:
       type: object
       required:
@@ -11755,7 +11915,7 @@ components:
         name:
           type: string
           description: Owner-supplied human label.
-          example: Riverside Soccer Club
+          example: North Valley Athletic Association
         prefix:
           type: string
           description: |

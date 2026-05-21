@@ -5275,6 +5275,79 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /founding-signups:
+    post:
+      operationId: createFoundingSignup
+      summary: Capture a "Founding 100" pre-launch signup from the marketing site
+      description: |
+        Public, unauthenticated endpoint backing the marketing site's
+        Founding 100 form. Rate-limited per source IP. Upserts on
+        `adminEmail` so a re-submission updates the existing row in
+        place rather than creating duplicates.
+      tags: [Founding]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FoundingSignupRequest'
+      responses:
+        '201':
+          description: Signup captured
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id]
+                properties:
+                  ok:
+                    type: boolean
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /admin/founding-signups:
+    get:
+      operationId: listFoundingSignups
+      summary: List all "Founding 100" signups (admin)
+      tags: [Admin, Founding]
+      security:
+        - cookieSession: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All founding-100 signups, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FoundingSignup'
+                  pagination:
+                    type: object
+                    required: [nextCursor, hasMore, totalCount]
+                    properties:
+                      nextCursor:
+                        type: string
+                        nullable: true
+                      hasMore:
+                        type: boolean
+                      totalCount:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /admin/masquerade/{userId}/start:
     parameters:
       - $ref: '#/components/parameters/UserId'
@@ -10819,6 +10892,85 @@ components:
         relationshipType:
           type: string
           enum: [parent, legal_guardian]
+
+    FoundingSignupRequest:
+      type: object
+      required:
+        - orgName
+        - adminName
+        - adminEmail
+        - roleTitle
+        - estimatedTeams
+        - estimatedPlayers
+      properties:
+        orgName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        adminName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        adminEmail:
+          type: string
+          format: email
+          maxLength: 320
+        roleTitle:
+          type: string
+          minLength: 1
+          maxLength: 200
+        estimatedTeams:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        estimatedPlayers:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+        sport:
+          type: string
+          maxLength: 100
+          nullable: true
+
+    FoundingSignup:
+      type: object
+      required:
+        - id
+        - orgName
+        - adminName
+        - adminEmail
+        - roleTitle
+        - estimatedTeams
+        - estimatedPlayers
+        - sport
+        - submittedAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgName:
+          type: string
+        adminName:
+          type: string
+        adminEmail:
+          type: string
+          format: email
+        roleTitle:
+          type: string
+        estimatedTeams:
+          type: integer
+        estimatedPlayers:
+          type: integer
+        sport:
+          type: string
+          nullable: true
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     GuardianLinkResponse:
       type: object
