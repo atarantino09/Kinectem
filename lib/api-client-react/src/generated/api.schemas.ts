@@ -985,6 +985,123 @@ export interface PaginatedMembersResponse {
   pagination: PaginationMeta;
 }
 
+export type CreateOrganizationInviteRequestRole =
+  (typeof CreateOrganizationInviteRequestRole)[keyof typeof CreateOrganizationInviteRequestRole];
+
+export const CreateOrganizationInviteRequestRole = {
+  admin: "admin",
+  member: "member",
+} as const;
+
+export interface CreateOrganizationInviteRequest {
+  /** @maxLength 255 */
+  email: string;
+  role: CreateOrganizationInviteRequestRole;
+  /** @maxLength 500 */
+  note?: string;
+}
+
+export type OrganizationInviteResponseRole =
+  (typeof OrganizationInviteResponseRole)[keyof typeof OrganizationInviteResponseRole];
+
+export const OrganizationInviteResponseRole = {
+  admin: "admin",
+  member: "member",
+} as const;
+
+export type OrganizationInviteResponseStatus =
+  (typeof OrganizationInviteResponseStatus)[keyof typeof OrganizationInviteResponseStatus];
+
+export const OrganizationInviteResponseStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  expired: "expired",
+  withdrawn: "withdrawn",
+} as const;
+
+export type OrganizationInviteResponseInvitedBy = {
+  id: string;
+  displayName: string;
+};
+
+export interface OrganizationInviteResponse {
+  id: string;
+  organizationId: string;
+  invitedEmail: string;
+  role: OrganizationInviteResponseRole;
+  /** @nullable */
+  note?: string | null;
+  status: OrganizationInviteResponseStatus;
+  invitedBy: OrganizationInviteResponseInvitedBy;
+  createdAt: string;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export type OrganizationInviteStatusResponseStatus =
+  (typeof OrganizationInviteStatusResponseStatus)[keyof typeof OrganizationInviteStatusResponseStatus];
+
+export const OrganizationInviteStatusResponseStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  expired: "expired",
+  withdrawn: "withdrawn",
+} as const;
+
+export interface OrganizationInviteStatusResponse {
+  id: string;
+  status: OrganizationInviteStatusResponseStatus;
+}
+
+export type OrganizationInvitePreviewResponseStatus =
+  (typeof OrganizationInvitePreviewResponseStatus)[keyof typeof OrganizationInvitePreviewResponseStatus];
+
+export const OrganizationInvitePreviewResponseStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  expired: "expired",
+  withdrawn: "withdrawn",
+} as const;
+
+export type OrganizationInvitePreviewResponseRole =
+  (typeof OrganizationInvitePreviewResponseRole)[keyof typeof OrganizationInvitePreviewResponseRole];
+
+export const OrganizationInvitePreviewResponseRole = {
+  admin: "admin",
+  member: "member",
+} as const;
+
+export type OrganizationInvitePreviewResponseOrganization = {
+  id: string;
+  name: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+};
+
+/**
+ * @nullable
+ */
+export type OrganizationInvitePreviewResponseInvitedBy = {
+  id?: string;
+  displayName?: string;
+} | null;
+
+export interface OrganizationInvitePreviewResponse {
+  id: string;
+  status: OrganizationInvitePreviewResponseStatus;
+  role: OrganizationInvitePreviewResponseRole;
+  /** @nullable */
+  invitedEmail?: string | null;
+  organization: OrganizationInvitePreviewResponseOrganization;
+  /** @nullable */
+  invitedBy?: OrganizationInvitePreviewResponseInvitedBy;
+}
+
+export interface PaginatedOrganizationInvitesResponse {
+  data: OrganizationInviteResponse[];
+  pagination: PaginationMeta;
+}
+
 export type PostResponsePostType =
   (typeof PostResponsePostType)[keyof typeof PostResponsePostType];
 
@@ -3629,6 +3746,20 @@ export type ListMembersParams = {
   limit?: LimitParameter;
   includeTotal?: IncludeTotalParameter;
 };
+
+export type ListOrganizationInvitesParams = {
+  status?: ListOrganizationInvitesStatus;
+};
+
+export type ListOrganizationInvitesStatus =
+  (typeof ListOrganizationInvitesStatus)[keyof typeof ListOrganizationInvitesStatus];
+
+export const ListOrganizationInvitesStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  expired: "expired",
+  withdrawn: "withdrawn",
+} as const;
 
 export type ListOrgPostsParams = {
   /**

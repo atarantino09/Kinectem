@@ -1047,6 +1047,177 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  # -------------------------------------------------------------------------
+  # Organization invites (Task #541) — admin/member invites via email or
+  # by selecting an existing Kinectem user. Mirrors the team roster-invite
+  # shape but is scoped to org membership.
+  # -------------------------------------------------------------------------
+
+  /organizations/{orgId}/invites:
+    get:
+      operationId: listOrganizationInvites
+      summary: List organization invites
+      tags: [Members]
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, accepted, expired, withdrawn]
+            default: pending
+      responses:
+        '200':
+          description: List of invites for the organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationInvitesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createOrganizationInvite
+      summary: Send an organization invite by email
+      tags: [Members]
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationInviteRequest'
+      responses:
+        '201':
+          description: Invite created and (best-effort) emailed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInviteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /organizations/{orgId}/invites/{inviteId}:
+    delete:
+      operationId: withdrawOrganizationInvite
+      summary: Withdraw a pending organization invite
+      tags: [Members]
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Invite withdrawn (or already in a terminal state).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInviteStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /org-invites/{token}/preview:
+    get:
+      operationId: previewOrganizationInvite
+      summary: Public preview of an organization invite token
+      tags: [Members]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite preview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvitePreviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Invite expired, accepted, or withdrawn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /org-invites/{token}/accept:
+    post:
+      operationId: acceptOrganizationInvite
+      summary: Accept an organization invite
+      tags: [Members]
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite accepted; caller is now a member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          description: Invite expired, accepted, or withdrawn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /org-invites/{token}/decline:
+    post:
+      operationId: declineOrganizationInvite
+      summary: Decline an organization invite
+      tags: [Members]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite declined.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInviteStatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /posts:
     post:
       operationId: createPost
@@ -7826,6 +7997,131 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MemberResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ------------------------------------------------------------------
+    # Organization invite schemas (Task #541)
+    # ------------------------------------------------------------------
+
+    CreateOrganizationInviteRequest:
+      type: object
+      required: [email, role]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        role:
+          type: string
+          enum: [admin, member]
+        note:
+          type: string
+          maxLength: 500
+
+    OrganizationInviteResponse:
+      type: object
+      required:
+        - id
+        - organizationId
+        - invitedEmail
+        - role
+        - status
+        - invitedBy
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        invitedEmail:
+          type: string
+        role:
+          type: string
+          enum: [admin, member]
+        note:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, accepted, expired, withdrawn]
+        invitedBy:
+          type: object
+          required: [id, displayName]
+          properties:
+            id:
+              type: string
+              format: uuid
+            displayName:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    OrganizationInviteStatusResponse:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, expired, withdrawn]
+
+    OrganizationInvitePreviewResponse:
+      type: object
+      required: [id, status, role, organization]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, expired, withdrawn]
+        role:
+          type: string
+          enum: [admin, member]
+        invitedEmail:
+          type: string
+          nullable: true
+        organization:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            avatarUrl:
+              type: string
+              nullable: true
+        invitedBy:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            displayName:
+              type: string
+
+    PaginatedOrganizationInvitesResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationInviteResponse'
         pagination:
           $ref: '#/components/schemas/PaginationMeta'
 

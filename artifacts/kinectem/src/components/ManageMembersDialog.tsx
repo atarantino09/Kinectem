@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   queryOpts,
@@ -6,10 +6,18 @@ import {
   useUpdateMemberRole,
   useRemoveMember,
   useTransferOrganizationOwnership,
+  useAddMember,
+  useSearchUsers,
+  useListOrganizationInvites,
+  useCreateOrganizationInvite,
+  useWithdrawOrganizationInvite,
   getListMembersQueryKey,
   getGetOrganizationByIdQueryKey,
   getListUserOrganizationsQueryKey,
+  getListOrganizationInvitesQueryKey,
   type MemberResponse,
+  type OrganizationInviteResponse,
+  type UserSearchResult,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -31,7 +39,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Crown, Shield, User, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Crown, Shield, User, Loader2, UserPlus, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
 
@@ -86,6 +98,14 @@ export function ManageMembersDialog({
   });
   const members = membersResp?.data ?? [];
 
+  // Task #541 — pending invites alongside the members list.
+  const { data: invitesResp } = useListOrganizationInvites(
+    orgId,
+    { status: "pending" },
+    { query: queryOpts({ enabled: open }) },
+  );
+  const pendingInvites = invitesResp?.data ?? [];
+
   const invalidate = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: getListMembersQueryKey(orgId) }),
@@ -98,6 +118,11 @@ export function ManageMembersDialog({
     ]);
   };
 
+  const invalidateInvites = () =>
+    qc.invalidateQueries({
+      queryKey: getListOrganizationInvitesQueryKey(orgId),
+    });
+
   const updateRole = useUpdateMemberRole({
     mutation: { onSuccess: invalidate },
   });
@@ -107,6 +132,19 @@ export function ManageMembersDialog({
   const transferOwnership = useTransferOrganizationOwnership({
     mutation: { onSuccess: invalidate },
   });
+  const addMember = useAddMember({
+    mutation: {
+      onSuccess: async () => {
+        await invalidate();
+      },
+    },
+  });
+  const createInvite = useCreateOrganizationInvite({
+    mutation: { onSuccess: invalidateInvites },
+  });
+  const withdrawInvite = useWithdrawOrganizationInvite({
+    mutation: { onSuccess: invalidateInvites },
+  });
 
   // Per-row pending action UI state. We track the targeted user + the
   // pending action separately so the dialogs work for whichever member
@@ -115,6 +153,9 @@ export function ManageMembersDialog({
   const [transferTarget, setTransferTarget] = useState<MemberResponse | null>(
     null,
   );
+
+  // Task #541 — Add-admin picker state.
+  const [addOpen, setAddOpen] = useState(false);
 
   const isOwner = myRole === "owner";
 
@@ -183,11 +224,22 @@ export function ManageMembersDialog({
     );
   };
 
+  const onWithdrawInvite = (i: OrganizationInviteResponse) => {
+    withdrawInvite.mutate(
+      { orgId, inviteId: i.id },
+      {
+        onSuccess: () => toast({ title: `Invite to ${i.invitedEmail} withdrawn` }),
+        onError: () =>
+          toast({ title: "Couldn't withdraw invite", variant: "destructive" }),
+      },
+    );
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-lg sm:max-h-[80vh]"
+          className="sm:max-w-lg sm:max-h-[80vh] overflow-y-auto"
           data-testid="dialog-manage-members"
         >
           <DialogHeader>
@@ -201,6 +253,18 @@ export function ManageMembersDialog({
               of the org. Only the owner can transfer ownership.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              className="font-bold h-8 gap-1"
+              onClick={() => setAddOpen(true)}
+              data-testid="btn-open-add-admin"
+            >
+              <UserPlus className="w-3 h-3" />
+              Add admin
+            </Button>
+          </div>
 
           {isLoading ? (
             <div className="py-8 flex items-center justify-center text-muted-foreground">
@@ -296,8 +360,96 @@ export function ManageMembersDialog({
               })}
             </ul>
           )}
+
+          {pendingInvites.length > 0 && (
+            <div className="space-y-2" data-testid="section-pending-invites">
+              <h3 className="text-xs uppercase tracking-wide font-bold text-muted-foreground mt-2">
+                Pending invites
+              </h3>
+              <ul className="space-y-2">
+                {pendingInvites.map((i) => (
+                  <li
+                    key={i.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-border bg-muted/30"
+                    data-testid={`invite-row-${i.id}`}
+                  >
+                    <Avatar className="w-9 h-9 shrink-0">
+                      <AvatarFallback className="bg-slate-200 text-slate-700 text-xs font-bold">
+                        <Mail className="w-4 h-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate">
+                        {i.invitedEmail}
+                      </p>
+                      <div className="mt-0.5 flex items-center gap-1">
+                        {roleBadge(i.role as Role)}
+                        <span className="text-[11px] text-muted-foreground">
+                          Invited by {i.invitedBy.displayName}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="font-bold h-8"
+                      onClick={() => onWithdrawInvite(i)}
+                      disabled={withdrawInvite.isPending}
+                      data-testid={`btn-withdraw-invite-${i.id}`}
+                    >
+                      Withdraw
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      <AddAdminDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        orgId={orgId}
+        members={members}
+        pendingInvites={pendingInvites}
+        addMemberPending={addMember.isPending}
+        createInvitePending={createInvite.isPending}
+        onAddExistingUser={(u, role) => {
+          addMember.mutate(
+            { orgId, data: { userId: u.id, role } },
+            {
+              onSuccess: () => {
+                toast({ title: `${u.displayName} added as ${role}` });
+                setAddOpen(false);
+              },
+              onError: (err: unknown) =>
+                toast({
+                  title:
+                    (err as Error)?.message ?? "Couldn't add member",
+                  variant: "destructive",
+                }),
+            },
+          );
+        }}
+        onInviteByEmail={(email, role, note) => {
+          createInvite.mutate(
+            { orgId, data: { email, role, note: note || undefined } },
+            {
+              onSuccess: () => {
+                toast({ title: `Invite sent to ${email}` });
+                setAddOpen(false);
+              },
+              onError: (err: unknown) =>
+                toast({
+                  title:
+                    (err as Error)?.message ?? "Couldn't send invite",
+                  variant: "destructive",
+                }),
+            },
+          );
+        }}
+      />
 
       <AlertDialog
         open={!!removeTarget}
@@ -362,4 +514,234 @@ export function ManageMembersDialog({
       </AlertDialog>
     </>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Task #541 — Add-admin picker. Two tabs:
+//   1. Find existing Kinectem user → POST /organizations/:orgId/members
+//   2. Invite by email          → POST /organizations/:orgId/invites
+// ---------------------------------------------------------------------------
+
+function AddAdminDialog({
+  open,
+  onOpenChange,
+  members,
+  pendingInvites,
+  addMemberPending,
+  createInvitePending,
+  onAddExistingUser,
+  onInviteByEmail,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  orgId: string;
+  members: MemberResponse[];
+  pendingInvites: OrganizationInviteResponse[];
+  addMemberPending: boolean;
+  createInvitePending: boolean;
+  onAddExistingUser: (u: UserSearchResult, role: "admin" | "member") => void;
+  onInviteByEmail: (
+    email: string,
+    role: "admin" | "member",
+    note: string,
+  ) => void;
+}) {
+  const [tab, setTab] = useState<"find" | "email">("find");
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState<"admin" | "member">("admin");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+
+  // Reset state every time the dialog closes so the next open is fresh.
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setEmail("");
+      setNote("");
+      setRole("admin");
+      setTab("find");
+    }
+  }, [open]);
+
+  const memberIds = new Set(members.map((m) => m.userId));
+  const pendingEmails = new Set(
+    pendingInvites.map((i) => i.invitedEmail.toLowerCase()),
+  );
+
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const enabledSearch = debouncedQuery.length >= 2;
+  const search = useSearchUsers(
+    { search: debouncedQuery, limit: 10 },
+    { query: queryOpts({ enabled: enabledSearch && tab === "find" && open }) },
+  );
+  const results = (search.data?.data ?? []).filter(
+    (u) => !memberIds.has(u.id),
+  );
+
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const emailAlreadyPending = pendingEmails.has(email.trim().toLowerCase());
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-md"
+        data-testid="dialog-add-admin"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-black tracking-tight">
+            Add admin
+          </DialogTitle>
+          <DialogDescription>
+            Find someone already on Kinectem, or invite them by email to join
+            this organization.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs font-bold">Role</Label>
+            <div className="flex gap-2 mt-1">
+              <Button
+                size="sm"
+                variant={role === "admin" ? "default" : "outline"}
+                className="font-bold h-8"
+                onClick={() => setRole("admin")}
+                data-testid="btn-role-admin"
+              >
+                <Shield className="w-3 h-3 mr-1" /> Admin
+              </Button>
+              <Button
+                size="sm"
+                variant={role === "member" ? "default" : "outline"}
+                className="font-bold h-8"
+                onClick={() => setRole("member")}
+                data-testid="btn-role-member"
+              >
+                <User className="w-3 h-3 mr-1" /> Member
+              </Button>
+            </div>
+          </div>
+
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "find" | "email")}>
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="find" data-testid="tab-find-user">
+                Find user
+              </TabsTrigger>
+              <TabsTrigger value="email" data-testid="tab-invite-email">
+                Invite by email
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="find" className="space-y-2 mt-3">
+              <Input
+                placeholder="Search by name (min 2 characters)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                data-testid="input-search-user"
+              />
+              {enabledSearch && search.isLoading ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-1" />
+                  Searching…
+                </div>
+              ) : enabledSearch && results.length === 0 ? (
+                <p className="py-2 text-sm text-muted-foreground">
+                  No users found. Try inviting them by email instead.
+                </p>
+              ) : null}
+              {!enabledSearch && (
+                <p className="py-1 text-xs text-muted-foreground">
+                  Start typing to search for existing Kinectem users.
+                </p>
+              )}
+              <ul className="space-y-1 max-h-64 overflow-y-auto">
+                {results.map((u) => (
+                  <li
+                    key={u.id}
+                    className="flex items-center gap-2 p-2 rounded-md hover:bg-muted"
+                    data-testid={`search-result-${u.id}`}
+                  >
+                    <Avatar className="w-8 h-8">
+                      {u.avatarUrl ? (
+                        <AvatarImage src={u.avatarUrl} alt={u.displayName} />
+                      ) : null}
+                      <AvatarFallback className="bg-slate-900 text-primary-foreground text-[10px] font-bold">
+                        {getInitials(u.displayName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-bold flex-1 min-w-0 truncate">
+                      {u.displayName}
+                    </span>
+                    <Button
+                      size="sm"
+                      className="font-bold h-8"
+                      onClick={() => onAddExistingUser(u, role)}
+                      disabled={addMemberPending}
+                      data-testid={`btn-add-user-${u.id}`}
+                    >
+                      Add
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </TabsContent>
+
+            <TabsContent value="email" className="space-y-2 mt-3">
+              <div>
+                <Label htmlFor="invite-email" className="text-xs font-bold">
+                  Email address
+                </Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  placeholder="coach@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  data-testid="input-invite-email"
+                />
+                {emailAlreadyPending && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    An invite is already pending for this email.
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="invite-note" className="text-xs font-bold">
+                  Personal note (optional)
+                </Label>
+                <Textarea
+                  id="invite-note"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Hi! Joining our staff?"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  data-testid="input-invite-note"
+                />
+              </div>
+              <Button
+                className="font-bold w-full"
+                disabled={
+                  !emailLooksValid || emailAlreadyPending || createInvitePending
+                }
+                onClick={() => onInviteByEmail(email.trim(), role, note.trim())}
+                data-testid="btn-send-invite"
+              >
+                {createInvitePending ? "Sending…" : "Send invite"}
+              </Button>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
 }

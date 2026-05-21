@@ -123,6 +123,48 @@ export function buildFamilyUrl(): string {
   return `${appBaseUrl()}/family`;
 }
 
+// Task #541 — accept-landing URL for the organization invite token.
+export function buildOrganizationInviteUrl(token: string): string {
+  return `${appBaseUrl()}/org-invites/${token}`;
+}
+
+// Task #541 — Sent when an org owner/admin invites someone (by email) to
+// join their organization. The link lands on the in-app accept page;
+// recipients sign in or sign up first if needed.
+export async function sendOrganizationInviteEmail(
+  to: string,
+  args: {
+    organizationName: string;
+    inviterDisplayName: string;
+    role: "admin" | "member";
+    token: string;
+    note?: string | null;
+  },
+): Promise<void> {
+  const { organizationName, inviterDisplayName, role, token, note } = args;
+  const url = buildOrganizationInviteUrl(token);
+  const roleLabel = role === "admin" ? "an admin" : "a member";
+  const notePlain = note && note.trim() ? `\n\nNote from ${inviterDisplayName}:\n${note.trim()}\n` : "";
+  const noteHtml = note && note.trim()
+    ? `<p><em>Note from ${inviterDisplayName}:</em></p><blockquote>${note.trim().replace(/\n/g, "<br/>")}</blockquote>`
+    : "";
+  await sendEmail({
+    to,
+    subject: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem`,
+    text: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem as ${roleLabel}.
+${notePlain}
+Open this link to accept:
+${url}
+
+If you don't have a Kinectem account yet, you can sign up from the same link.`,
+    html: `<p><strong>${inviterDisplayName}</strong> invited you to join <strong>${organizationName}</strong> on Kinectem as ${roleLabel}.</p>
+${noteHtml}
+<p>Open this link to accept:</p>
+<p><a href="${url}">${url}</a></p>
+<p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
+  });
+}
+
 export function buildPostUrl(link: string): string {
   // Callers store post links as relative paths (e.g. "/posts/article-…").
   // Stitch them onto the configured app base url so the email lands users

@@ -22,6 +22,7 @@ import GuardianPage from "@/pages/GuardianPage";
 import FollowRequestsPage from "@/pages/FollowRequestsPage";
 import ChildConversationPage from "@/pages/ChildConversationPage";
 import InviteAcceptPage from "@/pages/InviteAcceptPage";
+import OrgInviteAcceptPage from "@/pages/OrgInviteAcceptPage";
 import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import GuardianConfirmPage from "@/pages/GuardianConfirmPage";
@@ -63,6 +64,7 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicyPage} />
       <Route path="/coppa-notice" component={CoppaNoticePage} />
       <Route path="/invites/:token" component={InviteAcceptPage} />
+      <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
       <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}

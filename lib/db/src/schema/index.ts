@@ -429,6 +429,29 @@ export const rosterEntries = pgTable("roster_entries", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Task #541 — Email/admin invites at the organization level. Mirrors
+// rosterInvites but for org membership (not team roster). Token is
+// hashed at rest (`hashToken`); raw token only ever leaves the server
+// in the invitee's email. The DB enum reuses `invite_status`; we map
+// the wire "withdrawn" state to DB "revoked" at the route boundary,
+// matching the team-roster invite convention.
+export const organizationInvites = pgTable("organization_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
+  invitedEmail: text("invited_email").notNull(),
+  role: orgMemberRoleEnum("role").notNull().default("admin"),
+  note: text("note"),
+  tokenHash: text("token_hash").notNull().unique(),
+  status: inviteStatusEnum("status").notNull().default("pending"),
+  resolvedUserId: uuid("resolved_user_id").references(() => users.id, { onDelete: "set null" }),
+  withdrawnAt: timestamp("withdrawn_at"),
+  acceptedAt: timestamp("accepted_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const rosterInvites = pgTable("roster_invites", {
   id: uuid("id").primaryKey().defaultRandom(),
   token: text("token").notNull().unique(),

@@ -584,6 +584,32 @@ CREATE TABLE IF NOT EXISTS user_sports (
 );
 `;
 
+// Task #541 — organization_invites table. Mirrors roster_invites but
+// scoped to org membership/admin. Hashed token at rest (`token_hash`).
+// Idempotent (re-runs are no-ops on an already-migrated DB).
+const TASK_541_ORGANIZATION_INVITES = `
+CREATE TABLE IF NOT EXISTS organization_invites (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invited_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  invited_email text NOT NULL,
+  role org_member_role NOT NULL DEFAULT 'admin',
+  note text,
+  token_hash text NOT NULL,
+  status invite_status NOT NULL DEFAULT 'pending',
+  resolved_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  withdrawn_at timestamptz,
+  accepted_at timestamptz,
+  expires_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS organization_invites_token_hash_unique
+  ON organization_invites(token_hash);
+CREATE INDEX IF NOT EXISTS organization_invites_org_status_idx
+  ON organization_invites(organization_id, status);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -656,6 +682,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-13-task-504-user-sports",
     sql: TASK_504_USER_SPORTS,
+  },
+  {
+    name: "2026-05-21-task-541-organization-invites",
+    sql: TASK_541_ORGANIZATION_INVITES,
   },
 ];
 

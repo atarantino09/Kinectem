@@ -1846,6 +1846,127 @@ export const TransferOrganizationOwnershipResponse = zod.object({
 });
 
 /**
+ * @summary List organization invites
+ */
+export const ListOrganizationInvitesParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const listOrganizationInvitesQueryStatusDefault = `pending`;
+
+export const ListOrganizationInvitesQueryParams = zod.object({
+  status: zod
+    .enum(["pending", "accepted", "expired", "withdrawn"])
+    .default(listOrganizationInvitesQueryStatusDefault),
+});
+
+export const ListOrganizationInvitesResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      organizationId: zod.string().uuid(),
+      invitedEmail: zod.string(),
+      role: zod.enum(["admin", "member"]),
+      note: zod.string().nullish(),
+      status: zod.enum(["pending", "accepted", "expired", "withdrawn"]),
+      invitedBy: zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+      }),
+      createdAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date().nullish(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * @summary Send an organization invite by email
+ */
+export const CreateOrganizationInviteParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+});
+
+export const createOrganizationInviteBodyEmailMax = 255;
+
+export const createOrganizationInviteBodyNoteMax = 500;
+
+export const CreateOrganizationInviteBody = zod.object({
+  email: zod.string().email().max(createOrganizationInviteBodyEmailMax),
+  role: zod.enum(["admin", "member"]),
+  note: zod.string().max(createOrganizationInviteBodyNoteMax).optional(),
+});
+
+/**
+ * @summary Withdraw a pending organization invite
+ */
+export const WithdrawOrganizationInviteParams = zod.object({
+  orgId: zod.coerce.string().uuid(),
+  inviteId: zod.coerce.string().uuid(),
+});
+
+export const WithdrawOrganizationInviteResponse = zod.object({
+  id: zod.string().uuid(),
+  status: zod.enum(["pending", "accepted", "expired", "withdrawn"]),
+});
+
+/**
+ * @summary Public preview of an organization invite token
+ */
+export const PreviewOrganizationInviteParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const PreviewOrganizationInviteResponse = zod.object({
+  id: zod.string().uuid(),
+  status: zod.enum(["pending", "accepted", "expired", "withdrawn"]),
+  role: zod.enum(["admin", "member"]),
+  invitedEmail: zod.string().nullish(),
+  organization: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    avatarUrl: zod.string().nullish(),
+  }),
+  invitedBy: zod
+    .object({
+      id: zod.string().uuid().optional(),
+      displayName: zod.string().optional(),
+    })
+    .nullish(),
+});
+
+/**
+ * @summary Accept an organization invite
+ */
+export const AcceptOrganizationInviteParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const AcceptOrganizationInviteResponse = zod.object({
+  userId: zod.string().uuid(),
+  displayName: zod.string(),
+  avatarUrl: zod.string().url().nullish(),
+  role: zod.enum(["owner", "admin", "member"]),
+  joinedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Decline an organization invite
+ */
+export const DeclineOrganizationInviteParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const DeclineOrganizationInviteResponse = zod.object({
+  id: zod.string().uuid(),
+  status: zod.enum(["pending", "accepted", "expired", "withdrawn"]),
+});
+
+/**
  * Creates a new short or long-form post.
 
 For long-form posts, when the request includes a `gameDate`,
