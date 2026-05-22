@@ -48,3 +48,39 @@ id = "0xIArRda-9uIz9IhOskFz"
 uri = "file://artifacts/kinectem/public/logo-icon.png"
 type = "image"
 title = "New favicon (K mark)"
+
+[[outputs]]
+id = "qgHXZP7G9XJaxA4qmo-l8"
+uri = "file://artifacts/signup-walkthrough/public/audio/bg_music.mp3"
+type = "audio"
+title = "background music"
+
+[[outputs]]
+id = "cTLKMyzbGe_vQ8-HZTuOv"
+uri = "file://artifacts/signup-walkthrough/public/audio/vo_marketing.mp3"
+type = "audio"
+title = "vo marketing"
+
+[[outputs]]
+id = "FbPELdHQ1PMVlvIX05z2M"
+uri = "file://artifacts/signup-walkthrough/public/audio/vo_orgCreate.mp3"
+type = "audio"
+title = "vo orgCreate"
+
+[[outputs]]
+id = "g1TQ-IG5imLmKQ0qYbTRc"
+uri = "file://artifacts/signup-walkthrough/public/audio/vo_signup.mp3"
+type = "audio"
+title = "vo signup"
+
+[[outputs]]
+id = "6BvUGW0wkmxpVR7I2P7Kx"
+uri = "file://artifacts/signup-walkthrough/public/audio/vo_teamCreate.mp3"
+type = "audio"
+title = "vo teamCreate"
+
+[[outputs]]
+id = "FNMdtQIK7RsN1y6bmlpiO"
+uri = "file://artifacts/signup-walkthrough/public/audio/vo_recap.mp3"
+type = "audio"
+title = "vo recap"

@@ -13,6 +13,7 @@
     "backfill-self-team-follows": "tsx ./src/backfill-self-team-follows.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
+    "record-walkthrough": "tsx ./src/record-walkthrough.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "playwright": "^1.60.0",
     "tsx": "catalog:"
   }
 }

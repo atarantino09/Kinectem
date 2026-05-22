@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/signup-walkthrough/"
+title = "Kinectem Signup Walkthrough"
+version = "1.0.0"
+id = "artifacts/signup-walkthrough"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/signup-walkthrough/" ]
+localPort = 19396
+
+[services.development]
+run = "pnpm --filter @workspace/signup-walkthrough run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/signup-walkthrough", "run", "build" ]
+publicDir = "artifacts/signup-walkthrough/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19396"
+BASE_PATH = "/signup-walkthrough/"

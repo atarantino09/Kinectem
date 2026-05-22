@@ -1,0 +1,29 @@
+{
+  "markers": [
+    {
+      "key": "marketing",
+      "ms": 0
+    },
+    {
+      "key": "signup",
+      "ms": 2461
+    },
+    {
+      "key": "orgCreate",
+      "ms": 14374
+    },
+    {
+      "key": "teamCreate",
+      "ms": 24054
+    },
+    {
+      "key": "recap",
+      "ms": 35373
+    },
+    {
+      "key": "end",
+      "ms": 47912
+    }
+  ],
+  "totalMs": 47912
+}
