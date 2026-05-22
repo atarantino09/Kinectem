@@ -182,10 +182,20 @@ export async function notifyHighlightDecision(args: {
   highlightTitle: string | null;
   decidedBy: string;
   decision: "approved" | "declined";
+  // Optional staff-supplied decline note. Trimmed by the caller and
+  // ignored on approvals.
+  reason?: string | null;
 }): Promise<void> {
   if (args.uploaderId === args.decidedBy) return;
   const title = args.highlightTitle?.trim() ? args.highlightTitle.trim() : "your highlight";
   const link = `/posts/${highlightPostId(args.highlightId)}`;
+  const reason =
+    args.decision === "declined" && args.reason?.trim()
+      ? args.reason.trim()
+      : null;
+  const declineMessage = reason
+    ? `Your highlight "${title}" was declined: ${reason}`
+    : `Your highlight "${title}" was declined.`;
   await db.insert(notifications).values({
     userId: args.uploaderId,
     kind:
@@ -195,7 +205,7 @@ export async function notifyHighlightDecision(args: {
     message:
       args.decision === "approved"
         ? `Your highlight "${title}" was approved.`
-        : `Your highlight "${title}" was declined.`,
+        : declineMessage,
     link,
     actorUserId: args.decidedBy,
   });

@@ -246,7 +246,12 @@ export async function computeArticleCanEditMap(
 // used to resolve the strongest team-relevant role the author currently
 // holds on the recap's team / parent org. Kept in sync with the
 // `PostAuthor.authorRole` enum in the OpenAPI spec.
-export type AuthorRoleLabel = "Coach" | "Author" | "Owner" | "Admin";
+export type AuthorRoleLabel =
+  | "Coach"
+  | "Author"
+  | "Manager"
+  | "Owner"
+  | "Admin";
 
 // Batched "what role authorized this person to write the recap?" lookup.
 //
@@ -331,13 +336,20 @@ export async function computeArticleAuthorRoleMap(
   // entries on the same team across positions; collapse them per pair.
   const rosterByPair = new Map<
     string,
-    { isCoach: boolean; isAuthor: boolean }
+    { isCoach: boolean; isAuthor: boolean; isManager: boolean }
   >();
   for (const r of rosterRows) {
     const key = `${r.teamId}|${r.userId}`;
-    const prev = rosterByPair.get(key) ?? { isCoach: false, isAuthor: false };
+    const prev =
+      rosterByPair.get(key) ?? {
+        isCoach: false,
+        isAuthor: false,
+        isManager: false,
+      };
     if (r.role === "coach") prev.isCoach = true;
     if (r.position === "author") prev.isAuthor = true;
+    // Task #559 — team managers are also staff-grade recap authors.
+    if (r.position === "manager") prev.isManager = true;
     rosterByPair.set(key, prev);
   }
   // Each (org, user) pair should have at most one row, but if the data
@@ -365,6 +377,10 @@ export async function computeArticleAuthorRoleMap(
     }
     if (roster?.isAuthor) {
       result.set(r.articleId, "Author");
+      continue;
+    }
+    if (roster?.isManager) {
+      result.set(r.articleId, "Manager");
       continue;
     }
     const admin = adminByPair.get(`${r.orgId}|${r.authorId}`);

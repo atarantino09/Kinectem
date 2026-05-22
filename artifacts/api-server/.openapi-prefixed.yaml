@@ -3873,6 +3873,20 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 280
+                  description: |
+                    Optional short note shown to the uploader in the
+                    decline notification. Trimmed; ignored when empty.
+                  example: Inappropriate language
       responses:
         "200":
           description: Highlight declined
@@ -4323,7 +4337,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Awesome game today. Proud of the effort.
+                    example: Hey, you free this weekend for an extra session?
         "201":
           description: Guardian link created in pending status
           content:
@@ -4743,7 +4757,7 @@ paths:
                         format: uuid
                       reason:
                         type: string
-                        example: Misleading content
+                        example: Spam or off-topic
                       note:
                         type: string
                         nullable: true
@@ -5470,7 +5484,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: marcus@kinectem.demo
+                  example: jordan@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5522,15 +5536,15 @@ paths:
                 firstName:
                   type: string
                   minLength: 1
-                  example: Devon
+                  example: Kai
                 lastName:
                   type: string
                   minLength: 1
-                  example: Foster
+                  example: Carter
                 email:
                   type: string
                   format: email
-                  example: maya@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
                   minLength: 8
@@ -5632,7 +5646,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: marcus@kinectem.demo
+                  example: jordan@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5719,7 +5733,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: coach@kinectem.demo
       responses:
         "200":
           description: Reset email sent if the address is registered.
@@ -5735,7 +5749,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Awesome game today. Proud of the effort.
+                    example: Hey, you free this weekend for an extra session?
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/password-reset/complete:
@@ -6067,7 +6081,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: maya@kinectem.demo
+                  example: marcus@kinectem.demo
                 password:
                   type: string
       responses:
@@ -6130,7 +6144,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Want to grab some film review tomorrow?
+                    example: Practice moved to 4pm — pass it along to the team.
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
@@ -6190,7 +6204,7 @@ paths:
                   minLength: 1
                   maxLength: 80
                   description: Human label so the owner can tell keys apart later.
-                  example: North Valley Athletic Association
+                  example: Lincoln High Football
                 scopes:
                   type: array
                   description: |
@@ -6278,10 +6292,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Chris
+                      example: Lisa
                     lastName:
                       type: string
-                      example: Silva
+                      example: Walker
                     role:
                       type: string
                       enum:
@@ -6292,19 +6306,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: marcus@kinectem.demo
+                      example: jordan@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Basketball
+                      example: Soccer
                     position:
                       type: string
                       nullable: true
-                      example: Point Guard
+                      example: Midfielder
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -6998,11 +7012,11 @@ paths:
                     firstName:
                       type: string
                       minLength: 1
-                      example: Kai
+                      example: Riley
                     lastName:
                       type: string
                       minLength: 1
-                      example: Rivera
+                      example: Bennett
                   additionalProperties: false
       responses:
         "200":
@@ -9001,6 +9015,7 @@ components:
           enum:
             - Coach
             - Author
+            - Manager
             - Owner
             - Admin
             - null
@@ -9008,11 +9023,12 @@ components:
             The strongest team-relevant role that authorizes this user
             to author the post on the post's team, resolved at read
             time. Priority: team coach → "Coach", roster "author"
-            position → "Author", organization owner → "Owner",
-            organization admin → "Admin". Only article-backed
-            (long-form) posts populate this; short-form (highlight)
-            and org posts always omit it / send null. Null when the
-            author no longer holds any of those roles.
+            position → "Author", roster "manager" position →
+            "Manager", organization owner → "Owner", organization
+            admin → "Admin". Only article-backed (long-form) posts
+            populate this; short-form (highlight) and org posts
+            always omit it / send null. Null when the author no
+            longer holds any of those roles.
     PostTaggedUser:
       type: object
       required:

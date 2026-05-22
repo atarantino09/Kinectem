@@ -166,6 +166,7 @@ import type {
   DecideChildNotification200,
   DecideChildNotificationBody,
   DeclineTeamHighlight200,
+  DeclineTeamHighlightBody,
   EmailPreferenceResponse,
   ErrorResponse,
   FeedResponse,
@@ -15475,6 +15476,7 @@ export const getDeclineTeamHighlightUrl = (
 export const declineTeamHighlight = async (
   teamId: string,
   highlightId: string,
+  declineTeamHighlightBody?: DeclineTeamHighlightBody,
   options?: RequestInit,
 ): Promise<DeclineTeamHighlight200> => {
   return customFetch<DeclineTeamHighlight200>(
@@ -15482,6 +15484,8 @@ export const declineTeamHighlight = async (
     {
       ...options,
       method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(declineTeamHighlightBody),
     },
   );
 };
@@ -15495,14 +15499,22 @@ export const getDeclineTeamHighlightMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof declineTeamHighlight>>,
     TError,
-    { teamId: string; highlightId: string },
+    {
+      teamId: string;
+      highlightId: string;
+      data: BodyType<DeclineTeamHighlightBody>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof declineTeamHighlight>>,
   TError,
-  { teamId: string; highlightId: string },
+  {
+    teamId: string;
+    highlightId: string;
+    data: BodyType<DeclineTeamHighlightBody>;
+  },
   TContext
 > => {
   const mutationKey = ["declineTeamHighlight"];
@@ -15516,11 +15528,15 @@ export const getDeclineTeamHighlightMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof declineTeamHighlight>>,
-    { teamId: string; highlightId: string }
+    {
+      teamId: string;
+      highlightId: string;
+      data: BodyType<DeclineTeamHighlightBody>;
+    }
   > = (props) => {
-    const { teamId, highlightId } = props ?? {};
+    const { teamId, highlightId, data } = props ?? {};
 
-    return declineTeamHighlight(teamId, highlightId, requestOptions);
+    return declineTeamHighlight(teamId, highlightId, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -15529,7 +15545,8 @@ export const getDeclineTeamHighlightMutationOptions = <
 export type DeclineTeamHighlightMutationResult = NonNullable<
   Awaited<ReturnType<typeof declineTeamHighlight>>
 >;
-
+export type DeclineTeamHighlightMutationBody =
+  BodyType<DeclineTeamHighlightBody>;
 export type DeclineTeamHighlightMutationError = ErrorType<
   UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
 >;
@@ -15546,14 +15563,22 @@ export const useDeclineTeamHighlight = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof declineTeamHighlight>>,
     TError,
-    { teamId: string; highlightId: string },
+    {
+      teamId: string;
+      highlightId: string;
+      data: BodyType<DeclineTeamHighlightBody>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof declineTeamHighlight>>,
   TError,
-  { teamId: string; highlightId: string },
+  {
+    teamId: string;
+    highlightId: string;
+    data: BodyType<DeclineTeamHighlightBody>;
+  },
   TContext
 > => {
   return useMutation(getDeclineTeamHighlightMutationOptions(options));

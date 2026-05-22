@@ -222,6 +222,7 @@ export * from "./decideChildNotificationBody";
 export * from "./decideChildNotificationBodyDecision";
 export * from "./declineTeamHighlight200";
 export * from "./declineTeamHighlight200Status";
+export * from "./declineTeamHighlightBody";
 export * from "./deletedMessageStub";
 export * from "./emailPreferenceResponse";
 export * from "./errorResponse";

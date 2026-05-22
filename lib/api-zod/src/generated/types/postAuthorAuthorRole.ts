@@ -85,11 +85,12 @@ are marked `deprecated: true` in this spec.
  * The strongest team-relevant role that authorizes this user
 to author the post on the post's team, resolved at read
 time. Priority: team coach → "Coach", roster "author"
-position → "Author", organization owner → "Owner",
-organization admin → "Admin". Only article-backed
-(long-form) posts populate this; short-form (highlight)
-and org posts always omit it / send null. Null when the
-author no longer holds any of those roles.
+position → "Author", roster "manager" position →
+"Manager", organization owner → "Owner", organization
+admin → "Admin". Only article-backed (long-form) posts
+populate this; short-form (highlight) and org posts
+always omit it / send null. Null when the author no
+longer holds any of those roles.
 
  * @nullable
  */
@@ -100,6 +101,7 @@ export type PostAuthorAuthorRole =
 export const PostAuthorAuthorRole = {
   Coach: "Coach",
   Author: "Author",
+  Manager: "Manager",
   Owner: "Owner",
   Admin: "Admin",
 } as const;

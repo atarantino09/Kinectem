@@ -161,6 +161,13 @@ router.post(
     // Cached so the highlight branch can pass the post title into the
     // notification helper without re-fetching the row after insert.
     let highlightTitle: string | null = null;
+    // Task #559 — cached approval state of the underlying highlight so
+    // the tag-fanout step can defer the bell notification to tagged
+    // players until staff approves the highlight. Rows are still
+    // inserted at tag time (status "pending") so the post-approval
+    // fan-out has something to act on.
+    let highlightApprovalStatus: "pending" | "approved" | "declined" | null =
+      null;
     if (parsed.kind === "article") {
       const [a] = await db
         .select()
@@ -193,6 +200,7 @@ router.post(
       teamId = h.teamId;
       isAuthor = h.uploaderId === me.id;
       highlightTitle = h.title ?? null;
+      highlightApprovalStatus = h.approvalStatus;
     }
     const [team] = await db
       .select()
@@ -359,7 +367,13 @@ router.post(
     // the tag by accident. Mirrors the recap fan-out's notify step (task
     // #320). Self-tags are dropped inside the helper, and pending tags
     // get a "review" prompt instead of the plain "you were tagged" line.
-    if (inserted.length > 0) {
+    // Task #559 — when the underlying highlight is itself awaiting
+    // staff approval, defer the bell ping to tagged players until the
+    // highlight is approved. notifying now would surface a link that
+    // 404s for the recipient (pending highlights are hidden from every
+    // public read path). The rows themselves are inserted so the
+    // post-approval fan-out in routes/organizations.ts has them.
+    if (inserted.length > 0 && highlightApprovalStatus === "approved") {
       await notifyNewlyTaggedInHighlight({
         tags: inserted.map((t) => ({
           userId: t.userId,

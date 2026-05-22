@@ -14,6 +14,7 @@ import {
   organizationInvites,
   articles,
   highlights,
+  highlightTags,
   orgPosts,
   notifications,
   organizationJoinRequests,
@@ -31,7 +32,12 @@ import {
   computeArticleAuthorRoleMap,
   getOrgRole,
 } from "../lib/permissions";
-import { notifyHighlightDecision } from "../lib/notifications";
+import {
+  notifyAdminsOfTeamHighlight,
+  notifyHighlightDecision,
+} from "../lib/notifications";
+import { notifyNewlyTaggedInHighlight } from "../lib/article-tagging";
+import { maskedDisplayName } from "../lib/spec-helpers";
 import {
   createSession,
   destroySession,
@@ -805,6 +811,15 @@ async function transitionHighlightApproval(
   if (!me) return apiError(res, 401, "Not authenticated");
   const teamId = req.params.teamId;
   const highlightId = req.params.highlightId;
+  // Task #559 — optional staff-supplied note surfaced in the
+  // uploader's decline notification. Approve calls ignore it. Trim
+  // and cap to 280 chars defensively in addition to the OpenAPI
+  // validator's maxLength.
+  const rawReason =
+    next === "declined" && typeof req.body?.reason === "string"
+      ? req.body.reason.trim().slice(0, 280)
+      : "";
+  const declineReason = rawReason.length > 0 ? rawReason : null;
   const [team] = await db
     .select()
     .from(teams)
@@ -846,7 +861,60 @@ async function transitionHighlightApproval(
       highlightTitle: h.title,
       decidedBy: me.id,
       decision: next,
+      reason: declineReason,
     });
+  }
+  // Task #559 — on approval, run the publish-time fan-out that was
+  // intentionally deferred at upload time:
+  //   1. notify org admins/owners that a new highlight is live (the
+  //      same notification staff uploads fire from POST /posts).
+  //   2. notify the players whose tags were inserted while the
+  //      highlight was pending — we held those bell rows back so the
+  //      link wouldn't 404. Tag rows themselves are unchanged
+  //      (status stays "pending" until the tagged player approves).
+  if (next === "approved") {
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, team.organizationId))
+      .limit(1);
+    const [uploader] = h.uploaderId
+      ? await db
+          .select()
+          .from(users)
+          .where(eq(users.id, h.uploaderId))
+          .limit(1)
+      : [null];
+    const isUploaderAdmin = h.uploaderId
+      ? await canManageOrganization(h.uploaderId, team.organizationId)
+      : false;
+    if (org && uploader && !isUploaderAdmin) {
+      await notifyAdminsOfTeamHighlight({
+        organizationId: org.id,
+        teamName: team.name,
+        highlightId: h.id,
+        highlightTitle: h.title,
+        actorUserId: uploader.id,
+        actorDisplayName: uploader.isMinor
+          ? maskedDisplayName(uploader)
+          : displayName(uploader),
+      });
+    }
+    const pendingTagRows = await db
+      .select({ userId: highlightTags.userId, status: highlightTags.status })
+      .from(highlightTags)
+      .where(eq(highlightTags.highlightId, h.id));
+    if (pendingTagRows.length > 0) {
+      await notifyNewlyTaggedInHighlight({
+        tags: pendingTagRows.map((t) => ({
+          userId: t.userId,
+          status: t.status as "pending" | "approved",
+        })),
+        highlightId: h.id,
+        highlightTitle: h.title,
+        actorUserId: h.uploaderId ?? null,
+      });
+    }
   }
   res.json({ status: next });
 }

@@ -1778,7 +1778,11 @@ router.post(
         return apiError(res, 409, "Team is archived", { code: "team_archived" });
       const allowed = await canCreateRecap(me.id, team);
       if (!allowed)
-        return apiError(res, 403, "Only admins, coaches, and authors can create game recaps");
+        return apiError(
+          res,
+          403,
+          "Only admins, coaches, team managers, and authors can create game recaps",
+        );
       const isAdmin = await canManageOrganization(me.id, team.organizationId);
       const status: "draft" | "pending_approval" | "published" = isDraft
         ? "draft"

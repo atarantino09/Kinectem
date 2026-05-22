@@ -2206,13 +2206,14 @@ export const GetPostResponse = zod.object({
       .union([
         zod.literal("Coach"),
         zod.literal("Author"),
+        zod.literal("Manager"),
         zod.literal("Owner"),
         zod.literal("Admin"),
         zod.literal(null),
       ])
       .nullish()
       .describe(
-        'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+        'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
       ),
   }),
   context: zod.object({
@@ -2297,13 +2298,14 @@ export const GetPostResponse = zod.object({
         .union([
           zod.literal("Coach"),
           zod.literal("Author"),
+          zod.literal("Manager"),
           zod.literal("Owner"),
           zod.literal("Admin"),
           zod.literal(null),
         ])
         .nullish()
         .describe(
-          'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+          'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
         ),
     })
     .nullish()
@@ -2471,13 +2473,14 @@ export const UpdatePostResponse = zod.object({
       .union([
         zod.literal("Coach"),
         zod.literal("Author"),
+        zod.literal("Manager"),
         zod.literal("Owner"),
         zod.literal("Admin"),
         zod.literal(null),
       ])
       .nullish()
       .describe(
-        'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+        'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
       ),
   }),
   context: zod.object({
@@ -2562,13 +2565,14 @@ export const UpdatePostResponse = zod.object({
         .union([
           zod.literal("Coach"),
           zod.literal("Author"),
+          zod.literal("Manager"),
           zod.literal("Owner"),
           zod.literal("Admin"),
           zod.literal(null),
         ])
         .nullish()
         .describe(
-          'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+          'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
         ),
     })
     .nullish()
@@ -2727,13 +2731,14 @@ export const ListOrgPostsResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -2826,13 +2831,14 @@ export const ListOrgPostsResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()
@@ -3201,13 +3207,14 @@ export const ListUserPostsResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -3300,13 +3307,14 @@ export const ListUserPostsResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()
@@ -6137,13 +6145,14 @@ export const ListTeamPostsResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -6236,13 +6245,14 @@ export const ListTeamPostsResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()
@@ -6381,13 +6391,14 @@ export const ListTeamPendingPostsResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -6480,13 +6491,14 @@ export const ListTeamPendingPostsResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()
@@ -6625,13 +6637,14 @@ export const ListTeamPendingHighlightsResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -6724,13 +6737,14 @@ export const ListTeamPendingHighlightsResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()
@@ -6839,6 +6853,18 @@ export const ApproveTeamHighlightResponse = zod.object({
 export const DeclineTeamHighlightParams = zod.object({
   teamId: zod.coerce.string().uuid(),
   highlightId: zod.coerce.string().uuid(),
+});
+
+export const declineTeamHighlightBodyReasonMax = 280;
+
+export const DeclineTeamHighlightBody = zod.object({
+  reason: zod
+    .string()
+    .max(declineTeamHighlightBodyReasonMax)
+    .optional()
+    .describe(
+      "Optional short note shown to the uploader in the\ndecline notification. Trimmed; ignored when empty.\n",
+    ),
 });
 
 export const DeclineTeamHighlightResponse = zod.object({
@@ -7253,13 +7279,14 @@ export const ListOrgPostApprovalsResponse = zod.object({
                 .union([
                   zod.literal("Coach"),
                   zod.literal("Author"),
+                  zod.literal("Manager"),
                   zod.literal("Owner"),
                   zod.literal("Admin"),
                   zod.literal(null),
                 ])
                 .nullish()
                 .describe(
-                  'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+                  'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
                 ),
             }),
             context: zod.object({
@@ -7352,13 +7379,14 @@ export const ListOrgPostApprovalsResponse = zod.object({
                   .union([
                     zod.literal("Coach"),
                     zod.literal("Author"),
+                    zod.literal("Manager"),
                     zod.literal("Owner"),
                     zod.literal("Admin"),
                     zod.literal(null),
                   ])
                   .nullish()
                   .describe(
-                    'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+                    'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
                   ),
               })
               .nullish()
@@ -7493,13 +7521,14 @@ export const ApproveOrgPostApprovalResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -7592,13 +7621,14 @@ export const ApproveOrgPostApprovalResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()
@@ -7723,13 +7753,14 @@ export const DeclineOrgPostApprovalResponse = zod.object({
           .union([
             zod.literal("Coach"),
             zod.literal("Author"),
+            zod.literal("Manager"),
             zod.literal("Owner"),
             zod.literal("Admin"),
             zod.literal(null),
           ])
           .nullish()
           .describe(
-            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
           ),
       }),
       context: zod.object({
@@ -7822,13 +7853,14 @@ export const DeclineOrgPostApprovalResponse = zod.object({
             .union([
               zod.literal("Coach"),
               zod.literal("Author"),
+              zod.literal("Manager"),
               zod.literal("Owner"),
               zod.literal("Admin"),
               zod.literal(null),
             ])
             .nullish()
             .describe(
-              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", roster \"manager\" position →\n\"Manager\", organization owner → \"Owner\", organization\nadmin → \"Admin\". Only article-backed (long-form) posts\npopulate this; short-form (highlight) and org posts\nalways omit it \/ send null. Null when the author no\nlonger holds any of those roles.\n',
             ),
         })
         .nullish()

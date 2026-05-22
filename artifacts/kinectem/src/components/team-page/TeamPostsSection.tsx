@@ -99,7 +99,22 @@ export function TeamPostsSection({
       if (decision === "approve") {
         await approveHighlight.mutateAsync({ teamId, highlightId });
       } else {
-        await declineHighlight.mutateAsync({ teamId, highlightId });
+        // Task #559 — optional staff-supplied decline reason. Empty
+        // input (or cancel) sends an empty body; server trims and
+        // ignores blank strings so the uploader's notification falls
+        // back to the generic "was declined." copy.
+        const reason =
+          typeof window !== "undefined"
+            ? (window.prompt(
+                "Optional: tell the uploader why this highlight was declined. Leave blank to skip.",
+                "",
+              ) ?? "")
+            : "";
+        await declineHighlight.mutateAsync({
+          teamId,
+          highlightId,
+          data: { reason: reason.trim() || undefined },
+        });
       }
       await Promise.all([
         qc.invalidateQueries({

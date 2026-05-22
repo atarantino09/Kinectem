@@ -1152,11 +1152,12 @@ export const PostResponsePostType = {
  * The strongest team-relevant role that authorizes this user
 to author the post on the post's team, resolved at read
 time. Priority: team coach → "Coach", roster "author"
-position → "Author", organization owner → "Owner",
-organization admin → "Admin". Only article-backed
-(long-form) posts populate this; short-form (highlight)
-and org posts always omit it / send null. Null when the
-author no longer holds any of those roles.
+position → "Author", roster "manager" position →
+"Manager", organization owner → "Owner", organization
+admin → "Admin". Only article-backed (long-form) posts
+populate this; short-form (highlight) and org posts
+always omit it / send null. Null when the author no
+longer holds any of those roles.
 
  * @nullable
  */
@@ -1167,6 +1168,7 @@ export type PostAuthorAuthorRole =
 export const PostAuthorAuthorRole = {
   Coach: "Coach",
   Author: "Author",
+  Manager: "Manager",
   Owner: "Owner",
   Admin: "Admin",
 } as const;
@@ -1180,11 +1182,12 @@ export interface PostAuthor {
    * The strongest team-relevant role that authorizes this user
 to author the post on the post's team, resolved at read
 time. Priority: team coach → "Coach", roster "author"
-position → "Author", organization owner → "Owner",
-organization admin → "Admin". Only article-backed
-(long-form) posts populate this; short-form (highlight)
-and org posts always omit it / send null. Null when the
-author no longer holds any of those roles.
+position → "Author", roster "manager" position →
+"Manager", organization owner → "Owner", organization
+admin → "Admin". Only article-backed (long-form) posts
+populate this; short-form (highlight) and org posts
+always omit it / send null. Null when the author no
+longer holds any of those roles.
 
    * @nullable
    */
@@ -4201,6 +4204,16 @@ export const ApproveTeamHighlight200Status = {
 
 export type ApproveTeamHighlight200 = {
   status?: ApproveTeamHighlight200Status;
+};
+
+export type DeclineTeamHighlightBody = {
+  /**
+   * Optional short note shown to the uploader in the
+decline notification. Trimmed; ignored when empty.
+
+   * @maxLength 280
+   */
+  reason?: string;
 };
 
 export type DeclineTeamHighlight200Status =
