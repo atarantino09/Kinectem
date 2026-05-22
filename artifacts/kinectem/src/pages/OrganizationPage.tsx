@@ -619,7 +619,7 @@ function TeamsRail({
           <div
             className={
               expanded
-                ? "overflow-hidden"
+                ? "overflow-y-auto max-h-[calc(100vh-14rem)]"
                 : "overflow-hidden max-h-[calc(100vh-14rem)]"
             }
           >
