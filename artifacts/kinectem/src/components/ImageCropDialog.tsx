@@ -16,9 +16,11 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.05;
 // Cap the cropped JPEG's longest edge so we don't ship a needlessly huge
-// image. Matches `shrinkImage`'s 1024 budget on the upper end.
-const MAX_OUTPUT_WIDTH = 1600;
-const OUTPUT_QUALITY = 0.9;
+// image. Matches `shrinkImage`'s 1024 budget on the upper end. Callers
+// can override per instance (e.g. the team-banner cropper bumps this to
+// ~2400 / 0.92 so the hero doesn't upscale on desktop — Task #563).
+const DEFAULT_MAX_OUTPUT_WIDTH = 1600;
+const DEFAULT_OUTPUT_QUALITY = 0.9;
 
 export interface ImageCropDialogProps {
   /** Source image (data URL or blob URL). When null/empty the dialog is hidden. */
@@ -41,6 +43,14 @@ export interface ImageCropDialogProps {
   testId?: string;
   /** Pixel height of the crop area. Defaults to 280. */
   cropAreaHeight?: number;
+  /**
+   * Maximum width (px) of the encoded JPEG. Defaults to 1600. The
+   * team-banner cropper raises this so a full-width hero doesn't
+   * upscale on desktop.
+   */
+  maxOutputWidth?: number;
+  /** JPEG encode quality, 0..1. Defaults to 0.9. */
+  outputQuality?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
@@ -65,6 +75,8 @@ async function cropToFile(
   area: Area,
   fileName: string,
   fallbackBaseName: string,
+  maxOutputWidth: number,
+  outputQuality: number,
 ): Promise<File> {
   const img = await loadHTMLImage(src);
   // Clamp to integer pixels inside image bounds so we never sample
@@ -76,8 +88,8 @@ async function cropToFile(
   const sh = Math.max(1, Math.min(img.naturalHeight - sy, Math.round(area.height)));
 
   // Downscale if the source crop is huge so the resulting JPEG stays
-  // reasonable for upload.
-  const scale = Math.min(1, MAX_OUTPUT_WIDTH / sw);
+  // reasonable for upload. We never upscale (scale capped at 1).
+  const scale = Math.min(1, maxOutputWidth / sw);
   const dw = Math.max(1, Math.round(sw * scale));
   const dh = Math.max(1, Math.round(sh * scale));
 
@@ -89,7 +101,7 @@ async function cropToFile(
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
 
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", OUTPUT_QUALITY),
+    canvas.toBlob(resolve, "image/jpeg", outputQuality),
   );
   if (!blob) throw new Error("Could not encode cropped image");
 
@@ -111,6 +123,8 @@ export function ImageCropDialog({
   fallbackBaseName = "photo",
   testId = "dialog-crop-image",
   cropAreaHeight = 280,
+  maxOutputWidth = DEFAULT_MAX_OUTPUT_WIDTH,
+  outputQuality = DEFAULT_OUTPUT_QUALITY,
   open,
   onOpenChange,
   onConfirm,
@@ -152,6 +166,8 @@ export function ImageCropDialog({
         areaPixelsRef.current,
         fileName,
         fallbackBaseName,
+        maxOutputWidth,
+        outputQuality,
       );
       // Await onConfirm so the dialog stays in its busy/disabled state
       // until the parent finishes uploading. Closing only happens after

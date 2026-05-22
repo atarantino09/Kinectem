@@ -6,6 +6,14 @@ import { ImageCropDialog } from "@/components/ImageCropDialog";
 // ground between desktop (~3-4:1) and the mobile card (~2-2.5:1).
 export const TEAM_BANNER_ASPECT = 16 / 5;
 
+// Task #563 follow-up — the hero renders ~1440px+ wide on desktop, so
+// the cropper's default 1600px output was leaving very little headroom
+// after JPEG compression. Bump to 2400px / quality 0.92 so the banner
+// stays sharp; the shrinker further constrains to its banner budget
+// (2048 longest edge) before upload.
+const TEAM_BANNER_MAX_OUTPUT_WIDTH = 2400;
+const TEAM_BANNER_OUTPUT_QUALITY = 0.92;
+
 interface TeamPhotoCropDialogProps {
   src: string | null;
   fileName: string;
@@ -26,6 +34,8 @@ export function TeamPhotoCropDialog(props: TeamPhotoCropDialogProps) {
       fallbackBaseName="team-photo"
       testId="dialog-crop-team-photo"
       cropAreaHeight={240}
+      maxOutputWidth={TEAM_BANNER_MAX_OUTPUT_WIDTH}
+      outputQuality={TEAM_BANNER_OUTPUT_QUALITY}
     />
   );
 }
