@@ -32,6 +32,7 @@ import {
   Archive,
   Building2,
   ChevronDown,
+  ExternalLink,
   Pencil,
   Plus,
   Settings,
@@ -296,6 +297,23 @@ export default function OrganizationPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {isOrgManager && (
+                  <Button
+                    asChild
+                    variant="ghost"
+                    className="font-bold rounded-full"
+                    data-testid="link-org-getting-started"
+                  >
+                    <a
+                      href="/marketing/getting-started.html"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-1.5" />
+                      Getting started guide
+                    </a>
+                  </Button>
+                )}
                 {isOrgManager && (
                   <Button
                     variant="outline"
