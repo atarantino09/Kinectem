@@ -10,7 +10,7 @@ import {
   highlightTags,
   rosterEntries,
 } from "@workspace/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -80,7 +80,21 @@ router.get(
       // Task #510 — leftJoin for profile-only highlights with no team/org.
       .leftJoin(teams, eq(highlights.teamId, teams.id))
       .leftJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(and(eq(highlightTags.userId, me.id), eq(highlightTags.status, "approved")))
+      // Task #559 — pending/declined highlights must not surface on
+      // the tagged player's My Tags list. The underlying highlight
+      // is hidden from every public read path until staff approves,
+      // and a tagged-in row pointing at a pending highlight would
+      // 404 / leak the existence of the un-published clip. Also
+      // drop admin-hidden highlights for symmetry with the other
+      // tagged-in read paths.
+      .where(
+        and(
+          eq(highlightTags.userId, me.id),
+          eq(highlightTags.status, "approved"),
+          eq(highlights.approvalStatus, "approved"),
+          isNull(highlights.hiddenAt),
+        ),
+      )
       .orderBy(desc(highlightTags.createdAt));
     const data = [
       ...aRows.map((r) => ({
