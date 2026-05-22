@@ -3950,6 +3950,106 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /teams/{teamId}/highlights/pending:
+    get:
+      operationId: listTeamPendingHighlights
+      summary: List pending-approval highlights for a team (staff only)
+      description: >
+        Returns highlights uploaded by players/parents on this team that
+        are currently awaiting staff approval. Restricted to staff
+        approvers — org owners/admins of the parent org, team coaches,
+        and accepted-roster members holding `position = "manager"` or
+        `position = "author"`. Anyone else gets 403. Pending highlights
+        never appear in the public `/teams/{teamId}/posts` feed.
+      tags:
+        - Teams
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated pending highlights for the team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPostsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /teams/{teamId}/highlights/{highlightId}/approve:
+    post:
+      operationId: approveTeamHighlight
+      summary: Approve a pending highlight (staff only)
+      tags:
+        - Teams
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - name: highlightId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Highlight approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - approved
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /teams/{teamId}/highlights/{highlightId}/decline:
+    post:
+      operationId: declineTeamHighlight
+      summary: Decline a pending highlight (staff only)
+      tags:
+        - Teams
+        - Posts
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - name: highlightId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Highlight declined
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - declined
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /teams/{teamId}/avatar:
     put:
       operationId: setTeamAvatar
@@ -9153,6 +9253,20 @@ components:
           description: |
             True when the requesting user has re-shared this post.
             Always false for org posts (not a shareable kind).
+        approvalStatus:
+          type: string
+          enum:
+            - pending
+            - approved
+            - declined
+          nullable: true
+          description: |
+            Task #559 — highlight approval state. Player/parent uploads
+            enter `pending` and stay hidden from public read paths
+            until a staff approver (org admin/owner, head/assistant
+            coach, manager, or accepted-roster "author") approves
+            them. Staff uploads are inserted as `approved`. Non-highlight
+            post kinds always report `null`.
         sharedBy:
           nullable: true
           description: |
