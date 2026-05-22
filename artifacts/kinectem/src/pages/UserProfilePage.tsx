@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import { NoIndex } from "@/components/NoIndex";
 import {
   Building2,
@@ -185,12 +186,11 @@ export default function UserProfilePage() {
     <Link key={org.id} href={`/organizations/${org.id}`}>
       <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
         <CardContent className="p-4 flex items-center gap-3">
-          <TeamAvatar
-            avatarUrl={org.logoUrl}
-            displayName={org.name}
-            size="lg"
-            rounded="lg"
-            fallbackClassName="brand-gradient-dark text-primary font-black"
+          <OrgLogo
+            logoUrl={org.logoUrl}
+            name={org.name}
+            className="w-10 h-10 rounded-lg shrink-0"
+            imgClassName="w-10 h-10 rounded-lg object-cover bg-muted shrink-0"
           />
           <div className="min-w-0 flex-1">
             <p className="font-bold text-sm truncate">{org.name}</p>

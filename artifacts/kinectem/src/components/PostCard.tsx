@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
 import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus } from "lucide-react";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
@@ -324,6 +325,9 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                       ? post.context.orgAvatarUrl ?? null
                       : null)
                   : post.context.avatarUrl;
+              const isOrgAvatar =
+                post.context.type === "organization" ||
+                post.context.type === "team";
               return (
                 <AvatarLightbox
                   avatarUrl={displayedAvatarUrl}
@@ -333,13 +337,26 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                   dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
                   imageTestId={`img-post-avatar-lightbox-${post.id}`}
                 >
-                  <TeamAvatar
-                    avatarUrl={displayedAvatarUrl}
-                    displayName={post.context.name ?? post.context.type}
-                    size="lg"
-                    className={`shrink-0 ${displayedAvatarUrl ? "cursor-pointer" : ""}`}
-                    fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-                  />
+                  {isOrgAvatar ? (
+                    <OrgLogo
+                      logoUrl={displayedAvatarUrl}
+                      name={post.context.name ?? "Organization"}
+                      className={`w-10 h-10 rounded-lg shrink-0 ${
+                        displayedAvatarUrl ? "cursor-pointer" : ""
+                      }`}
+                      imgClassName={`w-10 h-10 rounded-lg object-cover shrink-0 ${
+                        displayedAvatarUrl ? "cursor-pointer" : ""
+                      }`}
+                    />
+                  ) : (
+                    <TeamAvatar
+                      avatarUrl={displayedAvatarUrl}
+                      displayName={post.context.name ?? post.context.type}
+                      size="lg"
+                      className={`shrink-0 ${displayedAvatarUrl ? "cursor-pointer" : ""}`}
+                      fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                    />
+                  )}
                 </AvatarLightbox>
               );
             })()}

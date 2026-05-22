@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { getInitials } from "@/lib/format";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
@@ -253,17 +253,12 @@ export function EditOrgDialog({
                 <Label className="font-bold">Logo</Label>
                 <div className="flex items-center gap-3">
                   <div className="w-16 h-16 bg-muted rounded-xl border border-border flex items-center justify-center overflow-hidden shrink-0">
-                    {organization.logoUrl ? (
-                      <img
-                        src={organization.logoUrl}
-                        alt={`${organization.name} logo`}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-xl font-black text-primary tracking-tighter">
-                        {getInitials(organization.name)}
-                      </div>
-                    )}
+                    <OrgLogo
+                      logoUrl={organization.logoUrl}
+                      name={organization.name}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
+                    />
                   </div>
                   <input
                     ref={fileInputRef}

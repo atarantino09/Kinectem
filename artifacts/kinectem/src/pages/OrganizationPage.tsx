@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import {
   OrgSetupChecklist,
@@ -239,17 +240,12 @@ export default function OrganizationPage() {
                     imageTestId="img-org-logo-lightbox"
                   >
                     <div className="w-24 h-24 sm:w-36 sm:h-36 bg-card rounded-xl shadow-lg border-4 border-card flex items-center justify-center overflow-hidden">
-                      {organization.logoUrl ? (
-                        <img
-                          src={organization.logoUrl}
-                          alt={`${organization.name} logo`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-3xl sm:text-5xl font-black text-primary tracking-tighter">
-                          {getInitials(organization.name)}
-                        </div>
-                      )}
+                      <OrgLogo
+                        logoUrl={organization.logoUrl}
+                        name={organization.name}
+                        className="w-full h-full"
+                        imgClassName="w-full h-full object-cover"
+                      />
                     </div>
                   </AvatarLightbox>
                 </div>

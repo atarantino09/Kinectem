@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useListOrganizations } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Building2, ChevronRight } from "lucide-react";
-import { getInitials } from "@/lib/format";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 
 function OrgLogoTile({
   name,
@@ -14,24 +13,13 @@ function OrgLogoTile({
   name: string;
   logoUrl: string | null;
 }) {
-  const [logoFailed, setLogoFailed] = useState(false);
-  useEffect(() => {
-    setLogoFailed(false);
-  }, [logoUrl]);
-  if (logoUrl && !logoFailed) {
-    return (
-      <img
-        src={logoUrl}
-        alt=""
-        onError={() => setLogoFailed(true)}
-        className="w-14 h-14 rounded-xl object-cover bg-muted shrink-0"
-      />
-    );
-  }
   return (
-    <div className="w-14 h-14 rounded-xl brand-gradient-dark flex items-center justify-center text-primary font-black shrink-0">
-      {getInitials(name)}
-    </div>
+    <OrgLogo
+      logoUrl={logoUrl}
+      name={name}
+      className="w-14 h-14 rounded-xl shrink-0"
+      imgClassName="w-14 h-14 rounded-xl object-cover bg-muted shrink-0"
+    />
   );
 }
 

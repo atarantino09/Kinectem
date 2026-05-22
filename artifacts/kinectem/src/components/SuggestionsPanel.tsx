@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Building2, Users, UserCheck } from "lucide-react";
-import { getInitials } from "@/lib/format";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import { cn } from "@/lib/utils";
 
 type Variant = "full" | "compact";
@@ -489,33 +489,17 @@ function OrgLogoThumb({
   orgId: string;
   size: "sm" | "md";
 }) {
-  const sizeClass = size === "sm" ? "w-9 h-9 text-[10px]" : "w-10 h-10 text-xs";
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    setFailed(false);
-  }, [logoUrl]);
-  if (logoUrl && !failed) {
-    return (
-      <img
-        src={logoUrl}
-        alt={`${orgName} logo`}
-        onError={() => setFailed(true)}
-        data-testid={`img-suggested-org-logo-${orgId}`}
-        className={cn(
-          "rounded-lg object-cover border border-border bg-muted shrink-0",
-          sizeClass,
-        )}
-      />
-    );
-  }
+  const sizeClass = size === "sm" ? "w-9 h-9" : "w-10 h-10";
   return (
-    <div
-      className={cn(
-        "rounded-lg brand-gradient-dark flex items-center justify-center text-primary font-black shrink-0",
+    <OrgLogo
+      logoUrl={logoUrl}
+      name={orgName}
+      data-testid={`img-suggested-org-logo-${orgId}`}
+      className={cn("rounded-lg shrink-0", sizeClass)}
+      imgClassName={cn(
+        "rounded-lg object-cover border border-border bg-muted shrink-0",
         sizeClass,
       )}
-    >
-      {getInitials(orgName)}
-    </div>
+    />
   );
 }

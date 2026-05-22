@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { UsersRound } from "lucide-react";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 
 export default function MyTeamsPage() {
   const { data: me } = useGetLoggedInUser();
@@ -75,16 +76,13 @@ export default function MyTeamsPage() {
                           variant="outline"
                           className="text-[10px] uppercase tracking-wider font-bold inline-flex items-center gap-1"
                         >
-                          {t.organization.logoUrl ? (
-                            <img
-                              src={t.organization.logoUrl}
-                              alt=""
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                              className="w-3 h-3 rounded-sm object-cover bg-muted shrink-0"
-                            />
-                          ) : null}
+                          <OrgLogo
+                            logoUrl={t.organization.logoUrl}
+                            name={t.organization.name}
+                            alt=""
+                            className="w-3 h-3 rounded-sm shrink-0"
+                            imgClassName="w-3 h-3 rounded-sm object-cover bg-muted shrink-0"
+                          />
                           {t.organization.name}
                         </Badge>
                         {t.position === "parent" && (

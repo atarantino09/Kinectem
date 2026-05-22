@@ -10,11 +10,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Shield, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getInitials } from "@/lib/format";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 
 // Task #541 — Landing page for `/org-invites/<token>` emails. Mirrors the
 // roster-invite accept page but is scoped to organization membership. The
@@ -100,17 +99,12 @@ export default function OrgInviteAcceptPage() {
       <Card className="rounded-xl border-border" data-testid="card-org-invite">
         <CardContent className="p-6 space-y-4">
           <div className="flex items-center gap-3">
-            <Avatar className="w-12 h-12">
-              {invite.organization.avatarUrl ? (
-                <AvatarImage
-                  src={invite.organization.avatarUrl}
-                  alt={invite.organization.name}
-                />
-              ) : null}
-              <AvatarFallback className="bg-slate-900 text-primary-foreground font-bold">
-                {getInitials(invite.organization.name)}
-              </AvatarFallback>
-            </Avatar>
+            <OrgLogo
+              logoUrl={invite.organization.avatarUrl}
+              name={invite.organization.name}
+              className="w-12 h-12 rounded-full shrink-0"
+              imgClassName="w-12 h-12 rounded-full object-cover bg-muted shrink-0"
+            />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">
                 You've been invited to join

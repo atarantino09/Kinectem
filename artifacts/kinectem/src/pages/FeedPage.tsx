@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 
@@ -261,13 +262,11 @@ function OrgLinkRow({
         className="flex-1 min-w-0"
       >
         <div className="flex items-center gap-2 text-sm font-semibold hover:text-primary cursor-pointer">
-          <TeamAvatar
-            avatarUrl={orgLogoUrl}
-            displayName={orgName}
-            size="xs"
-            rounded="lg"
-            className="w-5 h-5 shrink-0"
-            fallbackClassName="bg-muted text-muted-foreground"
+          <OrgLogo
+            logoUrl={orgLogoUrl}
+            name={orgName}
+            className="w-5 h-5 rounded-lg shrink-0"
+            imgClassName="w-5 h-5 rounded-lg object-cover shrink-0"
           />
           <span className="truncate flex-1">{orgName}</span>
         </div>
