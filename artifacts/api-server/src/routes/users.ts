@@ -821,9 +821,14 @@ router.get(
     const highlightConds = [eq(highlights.uploaderId, u.id)];
     if (!isAdmin) highlightConds.push(isNull(highlights.hiddenAt));
     // Task #559 — pending uploads (player/parent submissions awaiting
-    // staff approval) only surface to the uploader themselves and to
-    // platform admins. Strangers see the approved set only.
-    if (!isAdmin && !isSelf) {
+    // staff approval) are hidden from every public profile read,
+    // including the uploader's own self-view. Platform admins keep
+    // the bypass so the moderation surface stays usable. The
+    // uploader still discovers status via their bell notifications
+    // and the team-page staff queue (when they're staff); the
+    // profile feed deliberately mirrors what strangers see so a
+    // pending highlight doesn't appear "live" to the author.
+    if (!isAdmin) {
       highlightConds.push(eq(highlights.approvalStatus, "approved"));
     }
     const uploadedHighlights = await db
@@ -877,11 +882,11 @@ router.get(
         and(
           and(...highlightTagConds),
           ...(isAdmin ? [] : [isNull(highlights.hiddenAt)]),
-          // Task #559 — strangers must not see a pending highlight
-          // via a tag on a tagged player's profile.
-          ...(isAdmin || isSelf
-            ? []
-            : [eq(highlights.approvalStatus, "approved")]),
+          // Task #559 — pending highlights must not surface on
+          // anyone's profile feed via a tag (including the tagged
+          // player's own self-view). Only platform admins keep the
+          // bypass so the moderation surface stays usable.
+          ...(isAdmin ? [] : [eq(highlights.approvalStatus, "approved")]),
         ),
       );
 
