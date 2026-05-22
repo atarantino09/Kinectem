@@ -599,6 +599,48 @@ header { position: sticky; top: 0; z-index: 100; }
 }
 
 /* =====================================================
+   WALKTHROUGH VIDEO
+   ===================================================== */
+.walkthrough {
+  padding: 100px 24px;
+  background: var(--gradient-section);
+  position: relative;
+  overflow: hidden;
+}
+
+.walkthrough .section-header {
+  margin-bottom: 48px;
+}
+
+.walkthrough__frame {
+  max-width: 960px;
+  margin: 0 auto;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--black);
+  box-shadow: var(--shadow-card-lg);
+  border: var(--border-strong);
+  position: relative;
+}
+
+.walkthrough__video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: var(--black);
+}
+
+@media (max-width: 640px) {
+  .walkthrough {
+    padding: 64px 16px;
+  }
+  .walkthrough .section-header {
+    margin-bottom: 32px;
+  }
+}
+
+/* =====================================================
    PERSONAS
    ===================================================== */
 .personas {
