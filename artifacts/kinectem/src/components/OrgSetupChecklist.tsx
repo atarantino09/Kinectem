@@ -365,9 +365,15 @@ export function RolesReference() {
             rights.
           </li>
           <li>
-            <span className="font-bold">Author position</span> — A non-coach
-            roster member can be granted the "author" position to write recaps
-            for that specific team without being made a coach.
+            <span className="font-bold">Game recaps</span> — Anyone on a team's
+            roster who isn't a player or a parent can create game recaps for
+            that team (coaches and other non-player / non-parent roster
+            members). No separate "author" position needed.
+          </li>
+          <li>
+            <span className="font-bold">Highlights</span> — Everyone can upload
+            highlights, but highlights uploaded by a player or a parent must
+            be approved by a team admin before they're visible.
           </li>
         </ul>
       </section>
@@ -382,18 +388,6 @@ export function RolesReference() {
             their kids, and manages COPPA consent. Guardian capability is
             automatic when a child is linked to your account — it's not a
             separate role you pick.
-          </li>
-        </ul>
-      </section>
-      <section>
-        <h3 className="text-xs uppercase tracking-wider font-black text-muted-foreground mb-1.5">
-          Platform
-        </h3>
-        <ul className="space-y-1.5">
-          <li>
-            <span className="font-bold">Platform admin</span> — Internal
-            Kinectem staff. Not something an org grants; mentioned only so
-            people know moderation exists.
           </li>
         </ul>
       </section>
