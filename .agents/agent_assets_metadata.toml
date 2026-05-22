@@ -84,3 +84,9 @@ id = "FNMdtQIK7RsN1y6bmlpiO"
 uri = "file://artifacts/signup-walkthrough/public/audio/vo_recap.mp3"
 type = "audio"
 title = "vo recap"
+
+[[outputs]]
+id = "fHtxQYSrRn3D64bYygB1I"
+uri = "file://artifacts/signup-walkthrough/public/walkthrough.mp4"
+type = "video"
+title = "Kinectem signup walkthrough"
