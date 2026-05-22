@@ -58,7 +58,7 @@ export function MediaSection({
     }
     if (accepted.length === 0) return;
     try {
-      const next = await Promise.all(accepted.map(shrinkImageToDataUrl));
+      const next = await Promise.all(accepted.map((f) => shrinkImageToDataUrl(f)));
       onPhotosChange([...photos, ...next]);
     } catch {
       toast({ title: "Couldn't read those photos", variant: "destructive" });

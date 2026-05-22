@@ -206,7 +206,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     }
     if (picked.length === 0) return;
     try {
-      const shrunk = await Promise.all(picked.map(shrinkImage));
+      const shrunk = await Promise.all(picked.map((f) => shrinkImage(f)));
       setFiles(shrunk);
       const previewUrls = await Promise.all(
         shrunk.map(

@@ -19,6 +19,17 @@ export const SHRINK_MAX_DIMENSION = 1024;
 export const SHRINK_OUTPUT_QUALITY = 0.85;
 export const SHRINK_SKIP_BYTES = 200 * 1024;
 export const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+// Task #563 — team hero banner renders ~1440px+ wide on desktop, so the
+// default 1024px budget upscales and looks grainy. Banners get a higher
+// budget; everything else (avatars, post photos, message attachments,
+// org logos, game-photo-album) keeps the 1024 / 0.85 default.
+export const BANNER_SHRINK_MAX_DIMENSION = 2048;
+export const BANNER_SHRINK_OUTPUT_QUALITY = 0.92;
+
+export type ShrinkOptions = {
+  maxDimension?: number;
+  quality?: number;
+};
 // Server's express.json limit is 25mb. Base64-encoded data URLs add
 // ~33% overhead, so cap the *encoded* string well below that to leave
 // room for the rest of the JSON body and any header bloat.
@@ -87,13 +98,19 @@ async function loadImage(
   }
 }
 
-export async function shrinkImage(file: File): Promise<File> {
+export async function shrinkImage(
+  file: File,
+  options?: ShrinkOptions,
+): Promise<File> {
   if (isUnsupportedHeicImage(file)) {
     throw new UnsupportedImageFormatError();
   }
   if (file.type === "image/gif") return file;
   if (file.size <= SHRINK_SKIP_BYTES) return file;
   if (typeof document === "undefined") return file;
+
+  const maxDimension = options?.maxDimension ?? SHRINK_MAX_DIMENSION;
+  const quality = options?.quality ?? SHRINK_OUTPUT_QUALITY;
 
   let loaded: Awaited<ReturnType<typeof loadImage>>;
   try {
@@ -111,7 +128,7 @@ export async function shrinkImage(file: File): Promise<File> {
   try {
     const { source, width, height } = loaded;
     if (!width || !height) return file;
-    const scale = Math.min(1, SHRINK_MAX_DIMENSION / Math.max(width, height));
+    const scale = Math.min(1, maxDimension / Math.max(width, height));
     const targetW = Math.max(1, Math.round(width * scale));
     const targetH = Math.max(1, Math.round(height * scale));
 
@@ -123,7 +140,7 @@ export async function shrinkImage(file: File): Promise<File> {
     ctx.drawImage(source, 0, 0, targetW, targetH);
 
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", SHRINK_OUTPUT_QUALITY),
+      canvas.toBlob(resolve, "image/jpeg", quality),
     );
     if (!blob || blob.size >= file.size) return file;
 
@@ -139,14 +156,36 @@ export async function shrinkImage(file: File): Promise<File> {
   }
 }
 
-// Convenience for call sites that store images as base64 data URLs (logos,
-// post photos stored straight on the row). Shrinks first, then encodes.
-export async function shrinkImageToDataUrl(file: File): Promise<string> {
-  const prepared = await shrinkImage(file);
+async function fileToDataUrl(file: File): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
-    reader.readAsDataURL(prepared);
+    reader.readAsDataURL(file);
   });
+}
+
+// Convenience for call sites that store images as base64 data URLs (logos,
+// post photos stored straight on the row). Shrinks first, then encodes.
+//
+// Task #563 — accepts a per-call shrink budget so the team-banner upload
+// path can opt into a larger 2048px / quality 0.92 encode. If the encoded
+// data URL would exceed `DATA_URL_MAX_LENGTH` (the express.json safety
+// cap), we re-encode at the default 1024px / 0.85 budget rather than
+// failing the upload.
+export async function shrinkImageToDataUrl(
+  file: File,
+  options?: ShrinkOptions,
+): Promise<string> {
+  const prepared = await shrinkImage(file, options);
+  const dataUrl = await fileToDataUrl(prepared);
+  if (dataUrl.length <= DATA_URL_MAX_LENGTH) return dataUrl;
+  // Oversized — fall back to the default budget (unless caller was
+  // already on it, in which case there's nothing more to shrink).
+  const usingDefaults =
+    (options?.maxDimension ?? SHRINK_MAX_DIMENSION) === SHRINK_MAX_DIMENSION &&
+    (options?.quality ?? SHRINK_OUTPUT_QUALITY) === SHRINK_OUTPUT_QUALITY;
+  if (usingDefaults) return dataUrl;
+  const fallback = await shrinkImage(file);
+  return await fileToDataUrl(fallback);
 }

@@ -80,7 +80,7 @@ export function NewOrgPostDialog({
     }
     if (accepted.length === 0) return;
     try {
-      const next = await Promise.all(accepted.map(shrinkImageToDataUrl));
+      const next = await Promise.all(accepted.map((f) => shrinkImageToDataUrl(f)));
       setPhotos((prev) => [...prev, ...next]);
     } catch {
       toast({ title: "Couldn't read those photos", variant: "destructive" });

@@ -565,7 +565,7 @@ function NewMessageDialog({
       validFiles.push(file);
     }
     if (validFiles.length === 0) return;
-    const shrunk = await Promise.all(validFiles.map(shrinkImage));
+    const shrunk = await Promise.all(validFiles.map((f) => shrinkImage(f)));
     const accepted: AttachmentDraft[] = shrunk.map((file) => ({
       localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       file,

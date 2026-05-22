@@ -15,6 +15,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
+  BANNER_SHRINK_MAX_DIMENSION,
+  BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
 import {
   Shield,
@@ -124,7 +126,10 @@ export function TeamHeaderCard({
   const onCroppedConfirm = async (cropped: File) => {
     setUploading(true);
     try {
-      const dataUrl = await shrinkImageToDataUrl(cropped);
+      const dataUrl = await shrinkImageToDataUrl(cropped, {
+        maxDimension: BANNER_SHRINK_MAX_DIMENSION,
+        quality: BANNER_SHRINK_OUTPUT_QUALITY,
+      });
       await customFetch(`/api/v1/teams/${team.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
