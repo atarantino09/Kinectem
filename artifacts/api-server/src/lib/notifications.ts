@@ -5,7 +5,7 @@ import {
   rosterEntries,
   teamFollowers,
 } from "@workspace/db";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { highlightPostId } from "./spec-helpers";
 
 // Roles in `organization_admins` that count as a "team admin" for the
@@ -102,6 +102,103 @@ export async function notifyAdminsOfPendingPostApproval(args: {
       actorUserId: args.actorUserId,
     })),
   );
+}
+
+export const PENDING_HIGHLIGHT_APPROVAL_NOTIF_KIND = "team_highlight_pending_approval";
+export const HIGHLIGHT_APPROVED_NOTIF_KIND = "highlight_approved";
+export const HIGHLIGHT_DECLINED_NOTIF_KIND = "highlight_declined";
+
+// Task #559 — When a player or parent uploads a highlight to a team,
+// it lands in `pending` and is hidden from public read paths until a
+// staff approver (org admin/owner, head/assistant coach, manager, or
+// "author") approves it. Fan out a bell notification to every staff
+// approver on the team so the queue is visible without polling. The
+// uploader is excluded (they already know they submitted). Mirrors
+// `notifyAdminsOfPendingPostApproval`: minor actors are expected to
+// be passed pre-masked. Link points at the team page's pending
+// highlights drawer.
+export async function notifyStaffOfPendingHighlight(args: {
+  teamId: string;
+  organizationId: string;
+  teamName: string | null;
+  highlightId: string;
+  highlightTitle: string | null;
+  actorUserId: string;
+  actorDisplayName: string;
+}): Promise<void> {
+  const link = `/teams/${args.teamId}?pendingHighlights=1`;
+  const [adminRows, staffRosterRows] = await Promise.all([
+    db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, args.organizationId),
+          inArray(organizationAdmins.role, [...ADMIN_ROLES]),
+          ne(organizationAdmins.userId, args.actorUserId),
+        ),
+      ),
+    db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, args.teamId),
+          eq(rosterEntries.status, "accepted"),
+          ne(rosterEntries.userId, args.actorUserId),
+          // Coach role (head/assistant) OR position author/manager.
+          // These mirror canCreateRecap / canApproveTeamHighlight.
+          or(
+            eq(rosterEntries.role, "coach"),
+            inArray(rosterEntries.position, ["author", "manager"]),
+          ),
+        ),
+      ),
+  ]);
+  const recipients = Array.from(
+    new Set([...adminRows, ...staffRosterRows].map((r) => r.userId)),
+  );
+  if (recipients.length === 0) return;
+  const title = args.highlightTitle?.trim() ? args.highlightTitle.trim() : "Untitled";
+  const teamLabel = args.teamName?.trim() ? args.teamName.trim() : "the team";
+  const message = `${args.actorDisplayName} uploaded a highlight to ${teamLabel} and is awaiting your approval: "${title}"`;
+  await db.insert(notifications).values(
+    recipients.map((userId) => ({
+      userId,
+      kind: PENDING_HIGHLIGHT_APPROVAL_NOTIF_KIND,
+      message,
+      link,
+      actorUserId: args.actorUserId,
+    })),
+  );
+}
+
+// Task #559 — Notify the uploader after a staff approver decides on
+// their pending highlight. Skip when the approver is the uploader
+// (shouldn't happen since staff uploads bypass approval, but defensive).
+export async function notifyHighlightDecision(args: {
+  uploaderId: string;
+  highlightId: string;
+  highlightTitle: string | null;
+  decidedBy: string;
+  decision: "approved" | "declined";
+}): Promise<void> {
+  if (args.uploaderId === args.decidedBy) return;
+  const title = args.highlightTitle?.trim() ? args.highlightTitle.trim() : "your highlight";
+  const link = `/posts/${highlightPostId(args.highlightId)}`;
+  await db.insert(notifications).values({
+    userId: args.uploaderId,
+    kind:
+      args.decision === "approved"
+        ? HIGHLIGHT_APPROVED_NOTIF_KIND
+        : HIGHLIGHT_DECLINED_NOTIF_KIND,
+    message:
+      args.decision === "approved"
+        ? `Your highlight "${title}" was approved.`
+        : `Your highlight "${title}" was declined.`,
+    link,
+    actorUserId: args.decidedBy,
+  });
 }
 
 export const TEAM_ARCHIVED_NOTIF_KIND = "team_archived";

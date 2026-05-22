@@ -100,8 +100,12 @@ export async function canCreateRecap(
 ): Promise<boolean> {
   // Org admins and team coaches can always author recaps.
   if (await canManageTeam(userId, team)) return true;
-  // Parents/members granted the explicit "author" position can also author.
-  const [authorEntry] = await db
+  // Parents/members granted the explicit "author" or "manager"
+  // position can also author. Task #559 — team managers are part of
+  // the staff set (admin / head coach / assistant coach / manager /
+  // author) that may publish recaps and approve player/parent
+  // highlight uploads.
+  const [staffEntry] = await db
     .select()
     .from(rosterEntries)
     .where(
@@ -109,12 +113,18 @@ export async function canCreateRecap(
         eq(rosterEntries.teamId, team.id),
         eq(rosterEntries.userId, userId),
         eq(rosterEntries.status, "accepted"),
-        eq(rosterEntries.position, "author"),
+        inArray(rosterEntries.position, ["author", "manager"]),
       ),
     )
     .limit(1);
-  return Boolean(authorEntry);
+  return Boolean(staffEntry);
 }
+
+// Task #559 — `canCreateRecap` defines the same "team staff" set we use
+// for highlight-approval rights (admin / head coach / assistant coach /
+// manager / author). Re-export under a name that reads correctly at
+// every call site without a fresh DB read.
+export const canApproveTeamHighlight = canCreateRecap;
 
 // Cheap "is this user allowed to author a recap on at least one team
 // anywhere?" check. Mirrors the per-team `canCreateRecap` rules without
@@ -145,7 +155,9 @@ export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
         eq(rosterEntries.status, "accepted"),
         or(
           eq(rosterEntries.role, "coach"),
-          eq(rosterEntries.position, "author"),
+          // Task #559 — `manager` joins `author` as a staff position
+          // that can author recaps + approve player/parent highlights.
+          inArray(rosterEntries.position, ["author", "manager"]),
         ),
       ),
     )

@@ -84,6 +84,7 @@ import type { CurrentUserTag } from "./currentUserTag";
 import type { PostAssetResponse } from "./postAssetResponse";
 import type { PostAuthor } from "./postAuthor";
 import type { PostContext } from "./postContext";
+import type { PostResponseApprovalStatus } from "./postResponseApprovalStatus";
 import type { PostResponsePostType } from "./postResponsePostType";
 import type { PostResponseTagStatus } from "./postResponseTagStatus";
 import type { PostTaggedUser } from "./postTaggedUser";
@@ -123,6 +124,17 @@ shareable; org posts are not, so they always report 0.
 Always false for org posts (not a shareable kind).
  */
   hasShared?: boolean;
+  /**
+   * Task #559 — highlight approval state. Player/parent uploads
+enter `pending` and stay hidden from public read paths
+until a staff approver (org admin/owner, head/assistant
+coach, manager, or accepted-roster "author") approves
+them. Staff uploads are inserted as `approved`. Non-highlight
+post kinds always report `null`.
+
+   * @nullable
+   */
+  approvalStatus?: PostResponseApprovalStatus;
   /** Set when this card represents a re-share (e.g. on the
 sharer's profile Posts tab or in the home feed of someone
 following the sharer). Identifies who re-published the

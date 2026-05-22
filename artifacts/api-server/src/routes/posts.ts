@@ -38,6 +38,7 @@ import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canCreateRecap,
+  canApproveTeamHighlight,
   canManageOrganization,
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
@@ -78,6 +79,7 @@ import { loadCurrentUserTags } from "../lib/current-user-tag";
 import {
   notifyAdminsOfTeamHighlight,
   notifyAdminsOfPendingPostApproval,
+  notifyStaffOfPendingHighlight,
 } from "../lib/notifications";
 import {
   blockMinorAction,
@@ -410,7 +412,16 @@ router.get(
       .leftJoin(teams, eq(highlights.teamId, teams.id))
       .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
-      .where(and(isNull(highlights.hiddenAt), or(...highlightConds)))
+      // Task #559 — pending highlights stay out of the public feed.
+      // The uploader still sees their own pending uploads via their
+      // profile/my-posts path (no filter applied there).
+      .where(
+        and(
+          isNull(highlights.hiddenAt),
+          eq(highlights.approvalStatus, "approved"),
+          or(...highlightConds),
+        ),
+      )
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 
@@ -478,7 +489,15 @@ router.get(
           .leftJoin(teams, eq(highlights.teamId, teams.id))
           .leftJoin(organizations, eq(teams.organizationId, organizations.id))
           .leftJoin(users, eq(highlights.uploaderId, users.id))
-          .where(and(inArray(highlights.id, sharedHighlightIds), isNull(highlights.hiddenAt)))
+          .where(
+        and(
+          inArray(highlights.id, sharedHighlightIds),
+          isNull(highlights.hiddenAt),
+          // Task #559 — re-shares of a since-unapproved/declined
+          // highlight must not resurface it in the feed.
+          eq(highlights.approvalStatus, "approved"),
+        ),
+      )
       : [];
 
     const sharedArticleById = new Map(sharedArticleRows.map((r) => [r.a.id, r]));
@@ -1065,6 +1084,19 @@ router.get(
       .limit(1);
     if (!row) return notFound(res);
     if (row.h.hiddenAt && !isAdmin) return notFound(res);
+    // Task #559 — pending highlights are visible to the uploader,
+    // platform admins, and the team's staff approvers (org admin/
+    // owner, coach role, or position author/manager). Everyone else
+    // gets a 404 until the highlight is approved.
+    if (row.h.approvalStatus !== "approved" && !isAdmin) {
+      const isUploaderViewer = !!me && row.h.uploaderId === me.id;
+      const isStaffViewer = isUploaderViewer
+        ? true
+        : !!me && !!row.team
+          ? await canApproveTeamHighlight(me.id, row.team)
+          : false;
+      if (!isStaffViewer) return notFound(res);
+    }
     // Task #367 — pending takedown hides the highlight from listings.
     if (
       !isAdmin &&
@@ -1395,6 +1427,8 @@ async function loadShareableTarget(
     .limit(1);
   if (!row) return { ok: false };
   if (row.h.hiddenAt && !isAdmin) return { ok: false };
+  // Task #559 — pending highlights are not shareable.
+  if (row.h.approvalStatus !== "approved" && !isAdmin) return { ok: false };
   return { ok: true, ownerId: row.h.uploaderId, title: row.h.title, kindLabel: "highlight" };
 }
 
@@ -1870,11 +1904,16 @@ router.post(
     if (!team || !org) return notFound(res);
     // Task #291 — A team-scoped highlight can only be posted by an
     // org admin/owner of the team's org or by someone with an
-    // accepted roster entry on this team. Highlights are otherwise
-    // unmoderated (they publish immediately and skip tag fan-out),
-    // so the permission check has to happen here at the edge.
+    // accepted roster entry on this team.
+    // Task #559 — Highlight uploads are open to all team members,
+    // but uploads from players/parents (non-staff) enter a
+    // pending-approval state and stay hidden from public read paths
+    // until a staff approver (org admin/owner, head/assistant coach,
+    // manager, or "author") approves them. Staff uploads continue
+    // to publish immediately.
     const isOrgAdmin = await canManageOrganization(me.id, team.organizationId);
-    if (!isOrgAdmin) {
+    const isStaff = isOrgAdmin || (await canApproveTeamHighlight(me.id, team));
+    if (!isStaff) {
       const [rosterRow] = await db
         .select({ id: rosterEntries.id })
         .from(rosterEntries)
@@ -1894,6 +1933,7 @@ router.post(
         );
       }
     }
+    const approvalStatus: "approved" | "pending" = isStaff ? "approved" : "pending";
     const [h] = await db
       .insert(highlights)
       .values({
@@ -1902,25 +1942,34 @@ router.post(
         title: body.title ?? "Untitled",
         description: body.description ?? undefined,
         videoUrl: body.assets?.[0]?.url ?? body.videoUrl ?? "",
+        approvalStatus,
+        approvedAt: isStaff ? new Date() : null,
+        approvedByUserId: isStaff ? me.id : null,
       })
       .returning();
-    // Task #306 — Bell-notify org admins/owners when a non-admin
-    // roster member adds a highlight to one of their teams. Org
-    // admins skip this fan-out (the team is already in their own
-    // moderation queue) and the actor is excluded explicitly so
-    // self-notifications never fire.
-    if (!isOrgAdmin) {
-      // Task #414 — `actorDisplayName` is persisted verbatim into
-      // every recipient's `notifications.message` row by the helper
-      // and read back as-is. Recipients are *all* org owners/admins
-      // for `team.organizationId`, NOT just admins on the actor's
-      // team — so they may include org admins who are not privileged
-      // for this minor under the shared-roster rule. Until Task #415
-      // lands viewer-aware notification rendering, conservatively
-      // mask at write time when the actor is a minor so the stored
-      // text never leaks a minor's last name to a non-privileged
-      // org admin. Adult actors keep the full name.
-      await notifyAdminsOfTeamHighlight({
+    if (isStaff) {
+      // Task #306 — Bell-notify org admins/owners when a non-admin
+      // staff member (e.g. a head coach who isn't also an org admin)
+      // adds a highlight to one of their teams. Org admins skip this
+      // fan-out (the team is already in their own moderation queue).
+      if (!isOrgAdmin) {
+        await notifyAdminsOfTeamHighlight({
+          organizationId: org.id,
+          teamName: team.name,
+          highlightId: h.id,
+          highlightTitle: h.title,
+          actorUserId: me.id,
+          actorDisplayName: me.isMinor
+            ? maskedDisplayName(me)
+            : displayName(me),
+        });
+      }
+    } else {
+      // Task #559 — Player/parent uploads go into the staff review
+      // queue. Fan out a bell notification to every staff approver
+      // on the team so they can review without polling.
+      await notifyStaffOfPendingHighlight({
+        teamId,
         organizationId: org.id,
         teamName: team.name,
         highlightId: h.id,

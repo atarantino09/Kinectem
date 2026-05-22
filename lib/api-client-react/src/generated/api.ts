@@ -111,6 +111,7 @@ import type {
   ApiKeyWithToken,
   ApproveAllChildNotifications200,
   ApproveJoinRequestBody,
+  ApproveTeamHighlight200,
   AssetResponse,
   AssetUploadRequest,
   AssetUploadResponse,
@@ -164,6 +165,7 @@ import type {
   CrossEntitySearchParams,
   DecideChildNotification200,
   DecideChildNotificationBody,
+  DeclineTeamHighlight200,
   EmailPreferenceResponse,
   ErrorResponse,
   FeedResponse,
@@ -236,6 +238,7 @@ import type {
   ListSeedUsers200Item,
   ListTeamFollowersParams,
   ListTeamMembersParams,
+  ListTeamPendingHighlightsParams,
   ListTeamPendingPostsParams,
   ListTeamPostsParams,
   ListTeamSeasonsParams,
@@ -15232,6 +15235,329 @@ export function useListTeamPendingPosts<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Returns highlights uploaded by players/parents on this team that are currently awaiting staff approval. Restricted to staff approvers — org owners/admins of the parent org, team coaches, and accepted-roster members holding `position = "manager"` or `position = "author"`. Anyone else gets 403. Pending highlights never appear in the public `/teams/{teamId}/posts` feed.
+
+ * @summary List pending-approval highlights for a team (staff only)
+ */
+export const getListTeamPendingHighlightsUrl = (
+  teamId: string,
+  params?: ListTeamPendingHighlightsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/teams/${teamId}/highlights/pending?${stringifiedParams}`
+    : `/api/v1/teams/${teamId}/highlights/pending`;
+};
+
+export const listTeamPendingHighlights = async (
+  teamId: string,
+  params?: ListTeamPendingHighlightsParams,
+  options?: RequestInit,
+): Promise<PaginatedPostsResponse> => {
+  return customFetch<PaginatedPostsResponse>(
+    getListTeamPendingHighlightsUrl(teamId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListTeamPendingHighlightsQueryKey = (
+  teamId: string,
+  params?: ListTeamPendingHighlightsParams,
+) => {
+  return [
+    `/api/v1/teams/${teamId}/highlights/pending`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListTeamPendingHighlightsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTeamPendingHighlights>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  teamId: string,
+  params?: ListTeamPendingHighlightsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTeamPendingHighlights>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListTeamPendingHighlightsQueryKey(teamId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listTeamPendingHighlights>>
+  > = ({ signal }) =>
+    listTeamPendingHighlights(teamId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!teamId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTeamPendingHighlights>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTeamPendingHighlightsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTeamPendingHighlights>>
+>;
+export type ListTeamPendingHighlightsQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary List pending-approval highlights for a team (staff only)
+ */
+
+export function useListTeamPendingHighlights<
+  TData = Awaited<ReturnType<typeof listTeamPendingHighlights>>,
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+>(
+  teamId: string,
+  params?: ListTeamPendingHighlightsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTeamPendingHighlights>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTeamPendingHighlightsQueryOptions(
+    teamId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Approve a pending highlight (staff only)
+ */
+export const getApproveTeamHighlightUrl = (
+  teamId: string,
+  highlightId: string,
+) => {
+  return `/api/v1/teams/${teamId}/highlights/${highlightId}/approve`;
+};
+
+export const approveTeamHighlight = async (
+  teamId: string,
+  highlightId: string,
+  options?: RequestInit,
+): Promise<ApproveTeamHighlight200> => {
+  return customFetch<ApproveTeamHighlight200>(
+    getApproveTeamHighlightUrl(teamId, highlightId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getApproveTeamHighlightMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveTeamHighlight>>,
+    TError,
+    { teamId: string; highlightId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveTeamHighlight>>,
+  TError,
+  { teamId: string; highlightId: string },
+  TContext
+> => {
+  const mutationKey = ["approveTeamHighlight"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveTeamHighlight>>,
+    { teamId: string; highlightId: string }
+  > = (props) => {
+    const { teamId, highlightId } = props ?? {};
+
+    return approveTeamHighlight(teamId, highlightId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveTeamHighlightMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveTeamHighlight>>
+>;
+
+export type ApproveTeamHighlightMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Approve a pending highlight (staff only)
+ */
+export const useApproveTeamHighlight = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveTeamHighlight>>,
+    TError,
+    { teamId: string; highlightId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveTeamHighlight>>,
+  TError,
+  { teamId: string; highlightId: string },
+  TContext
+> => {
+  return useMutation(getApproveTeamHighlightMutationOptions(options));
+};
+
+/**
+ * @summary Decline a pending highlight (staff only)
+ */
+export const getDeclineTeamHighlightUrl = (
+  teamId: string,
+  highlightId: string,
+) => {
+  return `/api/v1/teams/${teamId}/highlights/${highlightId}/decline`;
+};
+
+export const declineTeamHighlight = async (
+  teamId: string,
+  highlightId: string,
+  options?: RequestInit,
+): Promise<DeclineTeamHighlight200> => {
+  return customFetch<DeclineTeamHighlight200>(
+    getDeclineTeamHighlightUrl(teamId, highlightId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getDeclineTeamHighlightMutationOptions = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof declineTeamHighlight>>,
+    TError,
+    { teamId: string; highlightId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof declineTeamHighlight>>,
+  TError,
+  { teamId: string; highlightId: string },
+  TContext
+> => {
+  const mutationKey = ["declineTeamHighlight"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof declineTeamHighlight>>,
+    { teamId: string; highlightId: string }
+  > = (props) => {
+    const { teamId, highlightId } = props ?? {};
+
+    return declineTeamHighlight(teamId, highlightId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeclineTeamHighlightMutationResult = NonNullable<
+  Awaited<ReturnType<typeof declineTeamHighlight>>
+>;
+
+export type DeclineTeamHighlightMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+/**
+ * @summary Decline a pending highlight (staff only)
+ */
+export const useDeclineTeamHighlight = <
+  TError = ErrorType<
+    UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof declineTeamHighlight>>,
+    TError,
+    { teamId: string; highlightId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof declineTeamHighlight>>,
+  TError,
+  { teamId: string; highlightId: string },
+  TContext
+> => {
+  return useMutation(getDeclineTeamHighlightMutationOptions(options));
+};
 
 /**
  * @summary Set a team's avatar from a confirmed asset

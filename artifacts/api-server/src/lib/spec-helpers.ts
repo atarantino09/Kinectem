@@ -751,6 +751,12 @@ interface PostExtras {
   // names on embed surfaces (post author, sharedBy chip). Pass-through
   // only; if undefined, names are masked for any minor target.
   minorNameCtx?: MinorNameViewerContext;
+  // Task #559 — When this post is a highlight, surfaces the row's
+  // approval state so the client can label pending uploads in the
+  // staff review queue and the uploader's own profile feed. Other
+  // post kinds leave this undefined and the response ships
+  // `approvalStatus: null`.
+  approvalStatus?: "pending" | "approved" | "declined";
 }
 
 export interface PostTaggedUserView {
@@ -864,7 +870,7 @@ export function highlightToPost(h: HighlightRow, extras: PostExtras) {
     isEdited: false,
     createdAt: h.createdAt.toISOString(),
     updatedAt: h.createdAt.toISOString(),
-    extras,
+    extras: { ...extras, approvalStatus: extras.approvalStatus ?? h.approvalStatus },
   });
 }
 
@@ -977,6 +983,11 @@ function basePost(p: {
     // extra round-trip. Article and highlight routes both populate
     // this; org-post routes never do (no tag concept).
     currentUserTag: p.extras.currentUserTag ?? null,
+    // Task #559 — Highlight rows surface their approval state so the
+    // staff review queue + uploader's own profile can label pending
+    // uploads. Recap / org-post paths never set this and the field
+    // ships as null.
+    approvalStatus: p.extras.approvalStatus ?? null,
   };
 }
 

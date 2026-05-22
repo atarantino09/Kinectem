@@ -820,6 +820,12 @@ router.get(
     // 3) Highlights the user uploaded.
     const highlightConds = [eq(highlights.uploaderId, u.id)];
     if (!isAdmin) highlightConds.push(isNull(highlights.hiddenAt));
+    // Task #559 — pending uploads (player/parent submissions awaiting
+    // staff approval) only surface to the uploader themselves and to
+    // platform admins. Strangers see the approved set only.
+    if (!isAdmin && !isSelf) {
+      highlightConds.push(eq(highlights.approvalStatus, "approved"));
+    }
     const uploadedHighlights = await db
       .select({
         h: highlights,
@@ -871,6 +877,11 @@ router.get(
         and(
           and(...highlightTagConds),
           ...(isAdmin ? [] : [isNull(highlights.hiddenAt)]),
+          // Task #559 — strangers must not see a pending highlight
+          // via a tag on a tagged player's profile.
+          ...(isAdmin || isSelf
+            ? []
+            : [eq(highlights.approvalStatus, "approved")]),
         ),
       );
 
@@ -913,6 +924,11 @@ router.get(
             and(
               inArray(highlights.id, sharedHighlightIds),
               ...(isAdmin ? [] : [isNull(highlights.hiddenAt)]),
+              // Task #559 — re-shares of a since-unapproved/declined
+              // highlight must not resurface it on a profile feed.
+              ...(isAdmin
+                ? []
+                : [eq(highlights.approvalStatus, "approved")]),
             ),
           )
       : [];

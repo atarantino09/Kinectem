@@ -26,10 +26,12 @@ import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordRe
 import {
   canManageOrganization,
   canCreateRecap,
+  canApproveTeamHighlight,
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
   getOrgRole,
 } from "../lib/permissions";
+import { notifyHighlightDecision } from "../lib/notifications";
 import {
   createSession,
   destroySession,
@@ -726,6 +728,138 @@ router.get(
   }),
 );
 
+// Task #559 — Staff queue for team-scoped highlights uploaded by
+// players/parents that are awaiting approval. Restricted to staff
+// approvers (org admin/owner of the parent org, accepted-roster
+// coach, manager, or "author"). Anyone else gets 403. The public
+// `/teams/:teamId/posts` feed already filters pending highlights
+// out so this endpoint is the only place they surface.
+router.get(
+  "/teams/:teamId/highlights/pending",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    const allowed = await canApproveTeamHighlight(me.id, team);
+    if (!allowed)
+      return apiError(res, 403, "Only team staff can view pending highlights");
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, team.organizationId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const rows = await db
+      .select({ h: highlights, team: teams, org: organizations, uploader: users })
+      .from(highlights)
+      .innerJoin(teams, eq(highlights.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(highlights.uploaderId, users.id))
+      .where(
+        and(
+          eq(highlights.teamId, teamId),
+          eq(highlights.approvalStatus, "pending"),
+          isNull(highlights.hiddenAt),
+        ),
+      )
+      .orderBy(desc(highlights.createdAt))
+      .limit(50);
+    // Viewer is a staff approver — mask any tagged minor's last name
+    // only when the staff member isn't privileged for that minor.
+    const minorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      rows.map((r) => r.uploader?.id).filter((x): x is string => !!x),
+    );
+    const tagViews = await loadHighlightTagViews(
+      me.id,
+      rows.map((r) => ({ id: r.h.id, uploaderId: r.h.uploaderId })),
+      minorCtx,
+    );
+    const data = rows.map((r) =>
+      highlightToPost(r.h, {
+        team: r.team,
+        org: r.org,
+        author: r.uploader,
+        canEdit: false,
+        canDelete: false,
+        taggedUsers: tagViews.get(r.h.id) ?? [],
+        minorNameCtx: minorCtx,
+      }),
+    );
+    res.json(paginate(data));
+  }),
+);
+
+async function transitionHighlightApproval(
+  req: Request,
+  res: Response,
+  next: "approved" | "declined",
+) {
+  const me = req.sessionUser;
+  if (!me) return apiError(res, 401, "Not authenticated");
+  const teamId = req.params.teamId;
+  const highlightId = req.params.highlightId;
+  const [team] = await db
+    .select()
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  if (!team) return notFound(res);
+  const allowed = await canApproveTeamHighlight(me.id, team);
+  if (!allowed)
+    return apiError(res, 403, "Only team staff can decide pending highlights");
+  // Conditional update — only transitions a row that is still
+  // `pending`. Concurrent approve+decline collapses to one winner so
+  // we don't double-notify the uploader.
+  const updated = await db
+    .update(highlights)
+    .set({
+      approvalStatus: next,
+      approvedAt: next === "approved" ? new Date() : null,
+      approvedByUserId: me.id,
+    })
+    .where(
+      and(
+        eq(highlights.id, highlightId),
+        eq(highlights.teamId, teamId),
+        eq(highlights.approvalStatus, "pending"),
+        // Task #559 review — admin-hidden highlights must not be
+        // revivable via the approval path. If a staff member sees a
+        // pending row that was since soft-hidden, the conditional
+        // update no-ops and the endpoint returns 404.
+        isNull(highlights.hiddenAt),
+      ),
+    )
+    .returning();
+  if (updated.length === 0) return notFound(res);
+  const [h] = updated;
+  if (h.uploaderId) {
+    await notifyHighlightDecision({
+      uploaderId: h.uploaderId,
+      highlightId: h.id,
+      highlightTitle: h.title,
+      decidedBy: me.id,
+      decision: next,
+    });
+  }
+  res.json({ status: next });
+}
+
+router.post(
+  "/teams/:teamId/highlights/:highlightId/approve",
+  asyncHandler((req, res) => transitionHighlightApproval(req, res, "approved")),
+);
+router.post(
+  "/teams/:teamId/highlights/:highlightId/decline",
+  asyncHandler((req, res) => transitionHighlightApproval(req, res, "declined")),
+);
+
 router.get(
   "/teams/:teamId/posts",
   asyncHandler(async (req, res) => {
@@ -760,7 +894,17 @@ router.get(
       .innerJoin(teams, eq(highlights.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
-      .where(and(eq(highlights.teamId, req.params.teamId), isNull(highlights.hiddenAt)))
+      // Task #559 — pending highlights (player/parent uploads
+      // awaiting staff approval) never surface on the public
+      // team-page feed. Staff approvers view them via the separate
+      // /teams/:teamId/highlights/pending endpoint.
+      .where(
+        and(
+          eq(highlights.teamId, req.params.teamId),
+          isNull(highlights.hiddenAt),
+          eq(highlights.approvalStatus, "approved"),
+        ),
+      )
       .orderBy(desc(highlights.createdAt))
       .limit(20);
 

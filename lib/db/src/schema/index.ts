@@ -8,6 +8,7 @@ export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_app
 export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
 export const postKindEnum = pgEnum("post_kind", ["article", "highlight", "org_post"]);
 export const orgPostStatusEnum = pgEnum("org_post_status", ["draft", "published"]);
+export const highlightApprovalStatusEnum = pgEnum("highlight_approval_status", ["pending", "approved", "declined"]);
 export const reactionTypeEnum = pgEnum("reaction_type", ["like"]);
 export const conversationTypeEnum = pgEnum("conversation_type", ["direct", "user_to_org", "org_to_org"]);
 export const participantTypeEnum = pgEnum("participant_type", ["user", "organization"]);
@@ -515,6 +516,14 @@ export const highlights = pgTable("highlights", {
   durationSeconds: integer("duration_seconds"),
   hiddenAt: timestamp("hidden_at"),
   hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  // Task #559 — highlights uploaded by players/parents enter "pending"
+  // and stay hidden from public read paths until a staff member
+  // (org admin, head/assistant coach, manager, or "author") approves
+  // them. Highlights uploaded by staff are created as "approved" so
+  // the existing publish-immediately behavior is preserved.
+  approvalStatus: highlightApprovalStatusEnum("approval_status").notNull().default("approved"),
+  approvedAt: timestamp("approved_at"),
+  approvedByUserId: uuid("approved_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

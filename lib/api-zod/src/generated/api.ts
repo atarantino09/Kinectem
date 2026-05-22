@@ -2282,6 +2282,12 @@ export const GetPostResponse = zod.object({
     .describe(
       "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
     ),
+  approvalStatus: zod
+    .enum(["pending", "approved", "declined"])
+    .nullish()
+    .describe(
+      'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+    ),
   sharedBy: zod
     .object({
       id: zod.string().uuid(),
@@ -2541,6 +2547,12 @@ export const UpdatePostResponse = zod.object({
     .describe(
       "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
     ),
+  approvalStatus: zod
+    .enum(["pending", "approved", "declined"])
+    .nullish()
+    .describe(
+      'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+    ),
   sharedBy: zod
     .object({
       id: zod.string().uuid(),
@@ -2798,6 +2810,12 @@ export const ListOrgPostsResponse = zod.object({
         .optional()
         .describe(
           "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
+        ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
         ),
       sharedBy: zod
         .object({
@@ -3266,6 +3284,12 @@ export const ListUserPostsResponse = zod.object({
         .optional()
         .describe(
           "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
+        ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
         ),
       sharedBy: zod
         .object({
@@ -6197,6 +6221,12 @@ export const ListTeamPostsResponse = zod.object({
         .describe(
           "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
         ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+        ),
       sharedBy: zod
         .object({
           id: zod.string().uuid(),
@@ -6435,6 +6465,12 @@ export const ListTeamPendingPostsResponse = zod.object({
         .describe(
           "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
         ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+        ),
       sharedBy: zod
         .object({
           id: zod.string().uuid(),
@@ -6539,6 +6575,274 @@ export const ListTeamPendingPostsResponse = zod.object({
     hasMore: zod.boolean(),
     totalCount: zod.number().nullish(),
   }),
+});
+
+/**
+ * Returns highlights uploaded by players/parents on this team that are currently awaiting staff approval. Restricted to staff approvers — org owners/admins of the parent org, team coaches, and accepted-roster members holding `position = "manager"` or `position = "author"`. Anyone else gets 403. Pending highlights never appear in the public `/teams/{teamId}/posts` feed.
+
+ * @summary List pending-approval highlights for a team (staff only)
+ */
+export const ListTeamPendingHighlightsParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+});
+
+export const listTeamPendingHighlightsQueryCursorMax = 500;
+
+export const listTeamPendingHighlightsQueryLimitDefault = 20;
+export const listTeamPendingHighlightsQueryLimitMax = 50;
+
+export const ListTeamPendingHighlightsQueryParams = zod.object({
+  cursor: zod.coerce
+    .string()
+    .max(listTeamPendingHighlightsQueryCursorMax)
+    .optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listTeamPendingHighlightsQueryLimitMax)
+    .default(listTeamPendingHighlightsQueryLimitDefault),
+});
+
+export const listTeamPendingHighlightsResponseDataItemReactionCountMin = 0;
+
+export const listTeamPendingHighlightsResponseDataItemCommentCountMin = 0;
+
+export const listTeamPendingHighlightsResponseDataItemShareCountMin = 0;
+
+export const ListTeamPendingHighlightsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string().uuid(),
+      postType: zod.enum(["short", "long"]),
+      title: zod.string().nullish(),
+      description: zod.string().nullish(),
+      body: zod.string().nullish(),
+      author: zod.object({
+        id: zod.string().uuid(),
+        displayName: zod.string(),
+        avatarUrl: zod.string().url().nullish(),
+        authorRole: zod
+          .union([
+            zod.literal("Coach"),
+            zod.literal("Author"),
+            zod.literal("Owner"),
+            zod.literal("Admin"),
+            zod.literal(null),
+          ])
+          .nullish()
+          .describe(
+            'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+          ),
+      }),
+      context: zod.object({
+        type: zod.enum(["user", "organization", "team"]),
+        id: zod.string().uuid(),
+        name: zod.string().nullish(),
+        slug: zod
+          .string()
+          .nullish()
+          .describe(
+            "URL slug for org or team contexts; omitted for user context.",
+          ),
+        orgSlug: zod
+          .string()
+          .nullish()
+          .describe("Parent org slug for team contexts only."),
+        orgId: zod
+          .string()
+          .uuid()
+          .nullish()
+          .describe(
+            "Parent org id for team contexts only; enables linking to the org page.",
+          ),
+        orgName: zod
+          .string()
+          .nullish()
+          .describe("Parent org display name for team contexts only."),
+        avatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Signed S3 URL resolved at read time for org\/team avatars.",
+          ),
+        orgAvatarUrl: zod
+          .string()
+          .url()
+          .nullish()
+          .describe(
+            "Parent organization's logo URL for team contexts only. Populated so post cards can show the org logo next to the team name when the team itself has no logo set. Null for non-team contexts and when the parent org also has no logo.\n",
+          ),
+      }),
+      assets: zod.array(
+        zod.object({
+          id: zod.string().uuid(),
+          fileType: zod.string(),
+          url: zod.string().url().nullish(),
+          displayOrder: zod.number(),
+        }),
+      ),
+      isEdited: zod.boolean(),
+      reactionCount: zod
+        .number()
+        .min(listTeamPendingHighlightsResponseDataItemReactionCountMin),
+      hasReacted: zod.boolean(),
+      commentCount: zod
+        .number()
+        .min(listTeamPendingHighlightsResponseDataItemCommentCountMin),
+      recentReactorName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Display name of the most recent reactor (if any), for \"X and N others reacted\" UI hints.',
+        ),
+      shareCount: zod
+        .number()
+        .min(listTeamPendingHighlightsResponseDataItemShareCountMin)
+        .optional()
+        .describe(
+          "Number of times this post has been re-shared. Per task\n#190 game-recap articles and highlights are both\nshareable; org posts are not, so they always report 0.\n",
+        ),
+      hasShared: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
+        ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+        ),
+      sharedBy: zod
+        .object({
+          id: zod.string().uuid(),
+          displayName: zod.string(),
+          avatarUrl: zod.string().url().nullish(),
+          authorRole: zod
+            .union([
+              zod.literal("Coach"),
+              zod.literal("Author"),
+              zod.literal("Owner"),
+              zod.literal("Admin"),
+              zod.literal(null),
+            ])
+            .nullish()
+            .describe(
+              'The strongest team-relevant role that authorizes this user\nto author the post on the post\'s team, resolved at read\ntime. Priority: team coach → \"Coach\", roster \"author\"\nposition → \"Author\", organization owner → \"Owner\",\norganization admin → \"Admin\". Only article-backed\n(long-form) posts populate this; short-form (highlight)\nand org posts always omit it \/ send null. Null when the\nauthor no longer holds any of those roles.\n',
+            ),
+        })
+        .nullish()
+        .describe(
+          "Set when this card represents a re-share (e.g. on the\nsharer's profile Posts tab or in the home feed of someone\nfollowing the sharer). Identifies who re-published the\nrecap or highlight. The original `author` and `context`\nfields still describe the original post.\n",
+        ),
+      sharedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO datetime the share was created. Only set when\n`sharedBy` is set; clients sort shared cards by this\ntimestamp so a recently-shared old post rises to the\ntop of the sharer's profile feed.\n",
+        ),
+      gameDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          'For long-form posts only. ISO datetime when the recap\'s\ngame was played, or `null` for a regular long-form post.\nClients use this both as the \"is this a recap?\" signal\nand to pre-fill the Game Date input when reopening a\nsaved draft.\n',
+        ),
+      canEdit: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the requesting user is the author, a co-author,\nor an org admin of the team that owns the post — i.e.\nallowed to PATCH this post. Computed on the `getPost`\n(detail) endpoint and on every list endpoint that returns\nposts (feed, team posts, profile posts, org posts) so the\nclient can render the Edit affordance inline. Always\n`false` for non-article post types (highlights, org\nposts) since the composer only edits articles.\n",
+        ),
+      canDelete: zod
+        .boolean()
+        .optional()
+        .describe(
+          'True when the requesting user is the original author of\nthis post — and only the original author. Co-authors,\nteam coaches, and org admins (who can still PATCH the\npost via `canEdit`) are NOT allowed to delete it, so\n`canDelete` will be false for them. Drives the \"Delete\npost\" item in the post 3-dot menu. Always `false` for\nnon-article post types since the composer only deletes\narticles.\n',
+        ),
+      tagStatus: zod
+        .enum(["approved", "pending"])
+        .nullish()
+        .describe(
+          'Only set on `listUserPosts` results, and only when the\narticle was surfaced via the user\'s own `article_tags` row\nand the tag is still `pending`. Clients should render a\nsmall \"Pending tag\" affordance for these posts. Authored\nposts and approved tags omit this field.\n',
+        ),
+      taggedUsers: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            displayName: zod.string(),
+            avatarUrl: zod.string().url().nullish(),
+            tagStatus: zod
+              .enum(["approved", "pending"])
+              .describe(
+                "`approved` for fully-consented tags shown to everyone.\n`pending` is only included for the post author and the\ntagged player themselves; other viewers never see\npending entries in this list.\n",
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "People tagged on this post that the requesting viewer is\nallowed to see. Approved tags are visible to everyone;\npending tags are only included for the post author and\nthe tagged player themselves (mirroring the recap\nconsent rules). Currently populated only for highlight\nposts; other post kinds omit this field. The list is\nstable per highlight in the order tags were created.\n",
+        ),
+      currentUserTag: zod
+        .object({
+          id: zod
+            .string()
+            .uuid()
+            .describe(
+              "The `article_tags.id` or `highlight_tags.id` row the\nviewer can DELETE through `\/article-tags\/:id` or\n`\/highlight-tags\/:id` to remove themselves.\n",
+            ),
+          kind: zod
+            .enum(["article", "highlight"])
+            .describe(
+              "Which tag table the row lives in — chooses between\nthe article-tags and highlight-tags DELETE endpoints.\n",
+            ),
+          status: zod
+            .enum(["approved", "pending"])
+            .describe(
+              "Status of the viewer's own tag row. Declined and\nremoved tags are never surfaced; the field is null\ninstead.\n",
+            ),
+        })
+        .describe(
+          'The requesting viewer\'s own tag on this post, when one\nexists with status `approved` or `pending`. Drives the\n\"Remove me from this post\" affordance in the post 3-dot\nmenu so a tagged user can untag themselves without going\nto the Manage Tags page. Null \/ omitted when the viewer\nis not tagged on the post, or their tag was already\ndeclined \/ removed. Org-post (Update) cards never set\nthis since they have no tag concept.\n',
+        )
+        .nullish()
+        .describe(
+          "The requesting viewer's own tag on this post, when one\nexists with status approved or pending. Used to render\nthe \"Remove me from this post\" 3-dot menu item. Null\nfor guests, for users who aren't tagged, for declined \/\nremoved tags, and for org_post cards (which have no\ntag concept).\n",
+        ),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  pagination: zod.object({
+    nextCursor: zod.string().nullish(),
+    hasMore: zod.boolean(),
+    totalCount: zod.number().nullish(),
+  }),
+});
+
+/**
+ * @summary Approve a pending highlight (staff only)
+ */
+export const ApproveTeamHighlightParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+  highlightId: zod.coerce.string().uuid(),
+});
+
+export const ApproveTeamHighlightResponse = zod.object({
+  status: zod.enum(["approved"]).optional(),
+});
+
+/**
+ * @summary Decline a pending highlight (staff only)
+ */
+export const DeclineTeamHighlightParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+  highlightId: zod.coerce.string().uuid(),
+});
+
+export const DeclineTeamHighlightResponse = zod.object({
+  status: zod.enum(["declined"]).optional(),
 });
 
 /**
@@ -7033,6 +7337,12 @@ export const ListOrgPostApprovalsResponse = zod.object({
               .describe(
                 "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
               ),
+            approvalStatus: zod
+              .enum(["pending", "approved", "declined"])
+              .nullish()
+              .describe(
+                'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+              ),
             sharedBy: zod
               .object({
                 id: zod.string().uuid(),
@@ -7267,6 +7577,12 @@ export const ApproveOrgPostApprovalResponse = zod.object({
         .describe(
           "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
         ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
+        ),
       sharedBy: zod
         .object({
           id: zod.string().uuid(),
@@ -7490,6 +7806,12 @@ export const DeclineOrgPostApprovalResponse = zod.object({
         .optional()
         .describe(
           "True when the requesting user has re-shared this post.\nAlways false for org posts (not a shareable kind).\n",
+        ),
+      approvalStatus: zod
+        .enum(["pending", "approved", "declined"])
+        .nullish()
+        .describe(
+          'Task #559 — highlight approval state. Player\/parent uploads\nenter `pending` and stay hidden from public read paths\nuntil a staff approver (org admin\/owner, head\/assistant\ncoach, manager, or accepted-roster \"author\") approves\nthem. Staff uploads are inserted as `approved`. Non-highlight\npost kinds always report `null`.\n',
         ),
       sharedBy: zod
         .object({

@@ -1247,6 +1247,26 @@ export interface PostAssetResponse {
 }
 
 /**
+ * Task #559 — highlight approval state. Player/parent uploads
+enter `pending` and stay hidden from public read paths
+until a staff approver (org admin/owner, head/assistant
+coach, manager, or accepted-roster "author") approves
+them. Staff uploads are inserted as `approved`. Non-highlight
+post kinds always report `null`.
+
+ * @nullable
+ */
+export type PostResponseApprovalStatus =
+  | (typeof PostResponseApprovalStatus)[keyof typeof PostResponseApprovalStatus]
+  | null;
+
+export const PostResponseApprovalStatus = {
+  pending: "pending",
+  approved: "approved",
+  declined: "declined",
+} as const;
+
+/**
  * Only set on `listUserPosts` results, and only when the
 article was surfaced via the user's own `article_tags` row
 and the tag is still `pending`. Clients should render a
@@ -1382,6 +1402,17 @@ shareable; org posts are not, so they always report 0.
 Always false for org posts (not a shareable kind).
  */
   hasShared?: boolean;
+  /**
+   * Task #559 — highlight approval state. Player/parent uploads
+enter `pending` and stay hidden from public read paths
+until a staff approver (org admin/owner, head/assistant
+coach, manager, or accepted-roster "author") approves
+them. Staff uploads are inserted as `approved`. Non-highlight
+post kinds always report `null`.
+
+   * @nullable
+   */
+  approvalStatus?: PostResponseApprovalStatus;
   /** Set when this card represents a re-share (e.g. on the
 sharer's profile Posts tab or in the home feed of someone
 following the sharer). Identifies who re-published the
@@ -4147,6 +4178,40 @@ export type ListTeamPendingPostsParams = {
    * @maximum 50
    */
   limit?: LimitParameter;
+};
+
+export type ListTeamPendingHighlightsParams = {
+  /**
+   * @maxLength 500
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ApproveTeamHighlight200Status =
+  (typeof ApproveTeamHighlight200Status)[keyof typeof ApproveTeamHighlight200Status];
+
+export const ApproveTeamHighlight200Status = {
+  approved: "approved",
+} as const;
+
+export type ApproveTeamHighlight200 = {
+  status?: ApproveTeamHighlight200Status;
+};
+
+export type DeclineTeamHighlight200Status =
+  (typeof DeclineTeamHighlight200Status)[keyof typeof DeclineTeamHighlight200Status];
+
+export const DeclineTeamHighlight200Status = {
+  declined: "declined",
+} as const;
+
+export type DeclineTeamHighlight200 = {
+  status?: DeclineTeamHighlight200Status;
 };
 
 export type ListOrgJoinRequestsParams = {
