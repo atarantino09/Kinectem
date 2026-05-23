@@ -900,14 +900,9 @@
      * @param {object} payload
      */
     function resolveFoundingSignupUrl() {
-      var host = window.location.hostname;
-      // Marketing-only hosts must point at the API host. Everywhere else
-      // (Replit dev preview, single-domain prod) we use same-origin so the
-      // shared proxy routes /api to the API server.
-      var marketingOnlyHosts = ['www.kinectem.com', 'kinectem.com'];
-      if (marketingOnlyHosts.indexOf(host) !== -1) {
-        return 'https://app.kinectem.com/api/v1/founding-signups';
-      }
+      // Marketing + API are served from the same deployment (kinectem.replit.app
+      // / www.kinectem.com), so a same-origin path always reaches the API
+      // server via the shared proxy. No host carve-out needed.
       return '/api/v1/founding-signups';
     }
 
