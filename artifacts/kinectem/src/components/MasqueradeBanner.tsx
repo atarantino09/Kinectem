@@ -16,7 +16,10 @@ export function MasqueradeBanner() {
       await customFetch("/api/v1/admin/masquerade/stop", { method: "POST" });
       toast({ title: "Masquerade stopped" });
       await qc.invalidateQueries();
-      if (typeof window !== "undefined") window.location.assign("/admin");
+      if (typeof window !== "undefined") {
+        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+        window.location.assign(`${base}/admin`);
+      }
     } catch (err) {
       toast({
         title: "Failed to stop masquerade",

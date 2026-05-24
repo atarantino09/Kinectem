@@ -67,7 +67,8 @@ export function SignInForm({
       await qc.invalidateQueries();
       const dest = returnTo || "/";
       if (typeof window !== "undefined") {
-        window.location.assign(dest);
+        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+        window.location.assign(base + (dest.startsWith("/") ? dest : "/" + dest));
       }
     } catch (err) {
       const e = err as {

@@ -52,7 +52,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const status = (currentUserError as { status?: number } | null)?.status;
     if (status === 401 && location !== "/login") {
       if (typeof window !== "undefined") {
-        window.location.assign("/login");
+        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+        window.location.assign(`${base}/login`);
       } else {
         setLocation("/login");
       }
@@ -72,7 +73,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
     await qc.invalidateQueries();
     if (typeof window !== "undefined") {
-      window.location.assign("/login");
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      window.location.assign(`${base}/login`);
     } else {
       setLocation("/login");
     }
