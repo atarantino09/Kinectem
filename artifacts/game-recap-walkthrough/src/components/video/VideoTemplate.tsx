@@ -47,7 +47,9 @@ function sceneAt(ms: number) {
   };
 }
 
-const AUDIO_DRIFT_SEC = 0.25;
+// A jump larger than this between renders means a scrub/replay, not normal
+// frame advance — only then do we re-seek the audio to match the playhead.
+const AUDIO_RESYNC_JUMP_MS = 350;
 
 export default function VideoTemplate({
   currentMs,
@@ -86,16 +88,23 @@ export default function VideoTemplate({
     return () => audio.removeEventListener('canplay', onReady);
   }, []);
 
-  // Keep audio locked to the playhead. Only correct on meaningful drift so
-  // normal playback doesn't stutter, but scrubs snap immediately.
+  // Keep audio aligned to the playhead WITHOUT nudging it every frame (that
+  // caused choppy audio). While playing, the audio element is the smooth clock
+  // and we only resync on a real discontinuity (scrub / replay jump). While
+  // paused, we track the playhead exactly so resume starts from the right spot.
+  const lastMsRef = useRef(currentMs);
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    const prev = lastMsRef.current;
+    lastMsRef.current = currentMs;
     const target = currentMs / 1000;
-    if (Math.abs(audio.currentTime - target) > AUDIO_DRIFT_SEC) {
+    if (!playing) {
+      if (Math.abs(audio.currentTime - target) > 0.05) audio.currentTime = target;
+    } else if (Math.abs(currentMs - prev) > AUDIO_RESYNC_JUMP_MS) {
       audio.currentTime = target;
     }
-  }, [currentMs]);
+  }, [currentMs, playing]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#09090B] flex items-center justify-center">
