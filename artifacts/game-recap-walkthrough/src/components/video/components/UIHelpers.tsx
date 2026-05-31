@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { clamp01, easeInOut } from '../timing';
 
@@ -86,22 +86,35 @@ export function ScreenshotPan({
   opacity?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [maxScroll, setMaxScroll] = useState(0);
 
-  // Reset measured overflow when the screenshot swaps so a cached image load
-  // can't carry stale scroll distance from the previous beat.
-  useEffect(() => {
-    setMaxScroll(0);
-  }, [src]);
-
-  const measure = (img: HTMLImageElement) => {
+  const measure = useCallback(() => {
+    const img = imgRef.current;
     const container = containerRef.current;
-    if (!container) return;
+    if (!img || !container) return;
     // Image is rendered at full width (h-auto), so clientHeight already
     // reflects its scaled-to-fit-width height.
     const overflow = img.clientHeight - container.clientHeight;
     setMaxScroll(overflow > 0 ? overflow : 0);
-  };
+  }, []);
+
+  // Measure on mount and whenever the screenshot swaps. Critically this covers
+  // the cached-image case: when the <img> is already `complete` before React
+  // attaches the onLoad handler (e.g. opening the video in a fresh tab with a
+  // warm cache), onLoad never fires — so we measure synchronously here instead.
+  // Otherwise reset to 0 so a cached load can't carry stale scroll distance.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalHeight > 0) measure();
+    else setMaxScroll(0);
+  }, [src, measure]);
+
+  // Re-measure when the viewport changes (iframe preview vs full browser tab).
+  useEffect(() => {
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [measure]);
 
   const p = clamp01(progress);
   const y = scroll ? -(maxScroll * easeInOut(p)) : 0;
@@ -114,9 +127,10 @@ export function ScreenshotPan({
       style={{ opacity }}
     >
       <img
+        ref={imgRef}
         src={`${import.meta.env.BASE_URL}shots/${src}`}
         alt=""
-        onLoad={(e) => measure(e.currentTarget)}
+        onLoad={measure}
         className={scroll ? 'w-full h-auto block' : 'absolute inset-x-0 top-0 w-full h-auto block'}
         style={{
           transform: scroll ? `translateY(${y}px)` : `scale(${scale})`,
