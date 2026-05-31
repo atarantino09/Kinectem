@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/game-recap-walkthrough/"
+title = "Kinectem Game Recap Walkthrough"
+version = "1.0.0"
+id = "artifacts/game-recap-walkthrough"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/game-recap-walkthrough/" ]
+localPort = 20081
+
+[services.development]
+run = "pnpm --filter @workspace/game-recap-walkthrough run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/game-recap-walkthrough", "run", "build" ]
+publicDir = "artifacts/game-recap-walkthrough/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20081"
+BASE_PATH = "/game-recap-walkthrough/"

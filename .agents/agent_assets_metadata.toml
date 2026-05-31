@@ -90,3 +90,51 @@ id = "fHtxQYSrRn3D64bYygB1I"
 uri = "file://artifacts/signup-walkthrough/public/walkthrough.mp4"
 type = "video"
 title = "Kinectem signup walkthrough"
+
+[[outputs]]
+id = "jhUVWE7nWQb3ARg7m1l84"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/bg_music.mp3"
+type = "audio"
+title = "background music"
+
+[[outputs]]
+id = "HdMADroD97s8IHTxrLabZ"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_1b.mp3"
+type = "audio"
+title = "vo_1b"
+
+[[outputs]]
+id = "bqkYnul3kCasrz4rBVZ_c"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_2a.mp3"
+type = "audio"
+title = "vo_2a"
+
+[[outputs]]
+id = "07Xf_0iOTc7suOnHwnJ0r"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_3a.mp3"
+type = "audio"
+title = "vo_3a"
+
+[[outputs]]
+id = "RWtl12G8vPdE96d_JUlOb"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_3b.mp3"
+type = "audio"
+title = "vo_3b"
+
+[[outputs]]
+id = "T7mLdlEPg6IfrRjq_3OUr"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_4a.mp3"
+type = "audio"
+title = "vo_4a"
+
+[[outputs]]
+id = "Hbw5hyt8dS8fU_toUeu6C"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_4b.mp3"
+type = "audio"
+title = "vo_4b"
+
+[[outputs]]
+id = "8FwrauQLHlT4lbMPTMI0V"
+uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_5.mp3"
+type = "audio"
+title = "vo_5"
