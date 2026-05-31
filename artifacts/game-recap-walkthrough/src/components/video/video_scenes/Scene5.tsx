@@ -23,9 +23,9 @@ export function Scene5() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8, duration: 0.8 }}
       >
-        <span className="block mb-2">Team story. Club showcase.</span>
+        <span className="block mb-2">Every game recap. One bigger story.</span>
         <span className="text-transparent bg-clip-text bg-[linear-gradient(135deg,#2563EB_0%,#7C3AED_100%)]">
-          A storybook for every player.
+          Your team. Your players. Their whole journey.
         </span>
       </motion.h2>
       
@@ -35,7 +35,7 @@ export function Scene5() {
         animate={{ opacity: 1 }}
         transition={{ delay: 1.5, duration: 0.8 }}
       >
-        Start your club at kinectem.com
+        Start your organization at kinectem.com
       </motion.p>
     </motion.div>
   );

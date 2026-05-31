@@ -7,8 +7,18 @@ description: How to drive the live Kinectem app with Playwright to capture real 
 
 When a video/demo artifact needs ACTUAL app screenshots (not mockups), drive the
 running kinectem app with a Playwright spec under `artifacts/kinectem/e2e/` and
-write PNGs into the video artifact's `public/shots/`. Scenes then display them via
-`object-cover object-top` inside the browser-chrome frame with a Ken-Burns + crossfade.
+write PNGs into the video artifact's `public/shots/`.
+
+## Displaying shots: full-page auto-scroll, not crop
+`ScreenshotPan` (UIHelpers.tsx) renders the shot at full width (`w-full h-auto`),
+measures overflow (image clientHeight − container clientHeight) on load, then
+animates `y` from 0 to `-overflow` so the WHOLE page scrolls past in the browser
+frame. Capture with `fullPage: true` so the tall PNG contains the entire page.
+The old `object-cover object-top` + Ken-Burns approach only showed the top crop —
+do NOT reintroduce it. `scroll={false}` keeps a short beat (e.g. the filter
+dropdown) pinned to the top with a gentle zoom; those shots use `fullPage:false`.
+Reset `maxScroll` to 0 on `src` change so a cached image swap can't carry stale
+overflow into the next beat.
 
 ## Capture mechanics that bite
 - kinectem is served at base path `/app/`. Playwright `baseURL` is the shared proxy
@@ -34,3 +44,15 @@ write PNGs into the video artifact's `public/shots/`. Scenes then display them v
 - **Recap/article detail lives at `/posts/:postId`, where `postId` is a derived POST id, NOT the
   raw `articles.id`.** Linking with the raw article uuid 404s ("Post not available"). Robust
   approach: navigate by CLICKING the recap on the team page so the app uses its own correct link.
+
+## Seeding believable demo data (so captured pages look filled out)
+The shared demo DB is full of throwaway rows (titles with "test"/"edit", plus
+odd ones with no shared pattern) and highlights with dead media that render as
+black boxes. Make demo pages presentable with an idempotent seed script
+(`scripts/src/seed-game-recap-demo.ts`): hide junk articles by `ilike '%test%'`/
+`'%edit%'` AND an explicit `JUNK_TITLES` list across the demo team IDs, hide all
+demo highlights (broken media), insert curated realistic recaps (delete-by-
+team+title then insert), and set the demo player's profile public for capture.
+**Roster gotcha:** the profile sport-filter is driven by accepted `roster_entries`
+via `GET /users/:id/teams`. To guarantee a team appears, DELETE+INSERT the roster
+row (status `accepted`) — a bare UPDATE silently no-ops when the row doesn't exist.

@@ -15,11 +15,9 @@ export function Scene4() {
 
   useEffect(() => {
     const timers = [
-      // Caption 1 — "Filter the story by team..." (0-4s, locked to audio)
-      setTimeout(() => setPhase(1), 2200), // soccer
-      // Caption 2 — "...or by sport..." switches at 4000ms
-      setTimeout(() => setPhase(2), 4000), // basketball
-      setTimeout(() => setPhase(3), 6600), // every sport, combined
+      setTimeout(() => setPhase(1), 1500), // soccer
+      setTimeout(() => setPhase(2), 3470), // basketball (caption switches here)
+      setTimeout(() => setPhase(3), 5300), // every sport, combined
     ];
     return () => timers.forEach(clearTimeout);
   }, []);
@@ -27,12 +25,12 @@ export function Scene4() {
   return (
     <ScreenshotScene>
       <AnimatePresence>
-        <ScreenshotPan key={SHOTS[phase]} src={SHOTS[phase]} />
+        <ScreenshotPan key={SHOTS[phase]} src={SHOTS[phase]} scroll={false} duration={2.5} />
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
         {phase < 2 ? (
-          <Caption key="cap1" text="Filter the story by team..." />
+          <Caption key="cap1" text="Filter the game recaps by team..." />
         ) : (
           <Caption key="cap2" text="...or by sport. One profile, every team, every season." />
         )}

@@ -63,17 +63,20 @@ async function waitLoaded(page: Page) {
     .catch(() => {});
 }
 
-async function shot(page: Page, file: string) {
+async function shot(page: Page, file: string, fullPage = true) {
   await waitLoaded(page);
   await page.waitForTimeout(700);
   // Don't let pending web fonts / animations stall the screenshot indefinitely.
   await page.evaluate(() => document.fonts?.ready).catch(() => {});
+  // Full-page captures let the video scroll through the whole team / org /
+  // player page instead of cropping to the top fold. Overlay beats (an open
+  // filter dropdown) stay viewport-only so the portal'd menu isn't displaced.
   await page.screenshot({
     path: path.join(OUT_DIR, file),
-    fullPage: false,
+    fullPage,
     animations: "disabled",
     caret: "hide",
-    timeout: 12000,
+    timeout: 20000,
   });
   log("captured " + file);
 }
@@ -190,14 +193,17 @@ test("capture game recap walkthrough screenshots", async ({ page }) => {
       await page.waitForTimeout(400);
       await filter.click();
       await page.waitForTimeout(700);
-      await shot(page, "filter-open.png");
+      await shot(page, "filter-open.png", false);
 
       const soccerOpt = page
         .getByRole("option")
         .filter({ hasText: /legacy black 2014/i })
         .first();
       if (await soccerOpt.isVisible().catch(() => false)) {
-        await soccerOpt.click();
+        await soccerOpt.scrollIntoViewIfNeeded().catch(() => {});
+        // Radix Select options can fail the default actionability check during
+        // the open/close animation; force the click to avoid flaky timeouts.
+        await soccerOpt.click({ force: true, timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(1200);
         await shot(page, "profile-filtered.png");
       }
@@ -214,7 +220,8 @@ test("capture game recap walkthrough screenshots", async ({ page }) => {
           .filter({ hasText: /basketball/i })
           .first();
         if (await bballOpt.isVisible().catch(() => false)) {
-          await bballOpt.click();
+          await bballOpt.scrollIntoViewIfNeeded().catch(() => {});
+          await bballOpt.click({ force: true, timeout: 5000 }).catch(() => {});
           await page.waitForTimeout(1200);
           await shot(page, "profile-basketball.png");
         }

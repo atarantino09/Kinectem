@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface TypewriterTextProps {
@@ -64,25 +64,69 @@ export function ScreenshotScene({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Renders a full-page screenshot at full frame width and slowly scrolls it
+ * top -> bottom over `duration` seconds so the whole page is revealed.
+ * When `scroll` is false (short beats like the filter dropdown) the image is
+ * pinned to the top with a gentle Ken-Burns zoom instead.
+ */
 export function ScreenshotPan({
   src,
-  anchor = 'top',
+  scroll = true,
+  duration = 7,
 }: {
   src: string;
-  anchor?: 'top' | 'center';
+  scroll?: boolean;
+  duration?: number;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [maxScroll, setMaxScroll] = useState(0);
+
+  // Reset measured overflow when the screenshot swaps so a cached image load
+  // can't carry stale scroll distance from the previous beat.
+  useEffect(() => {
+    setMaxScroll(0);
+  }, [src]);
+
+  const measure = (img: HTMLImageElement) => {
+    const container = containerRef.current;
+    if (!container) return;
+    // Image is rendered at full width (h-auto), so clientHeight already
+    // reflects its scaled-to-fit-width height.
+    const overflow = img.clientHeight - container.clientHeight;
+    setMaxScroll(overflow > 0 ? overflow : 0);
+  };
+
   return (
-    <motion.img
-      src={`${import.meta.env.BASE_URL}shots/${src}`}
-      alt=""
-      className={`absolute inset-0 w-full h-full object-cover bg-[#F4F4F5] ${
-        anchor === 'top' ? 'object-top' : 'object-center'
-      }`}
-      initial={{ opacity: 0, scale: 1.0 }}
-      animate={{ opacity: 1, scale: 1.05 }}
-      exit={{ opacity: 0, scale: 1.07 }}
-      transition={{ opacity: { duration: 0.7 }, scale: { duration: 11, ease: 'linear' } }}
-    />
+    <motion.div
+      ref={containerRef}
+      className="absolute inset-0 overflow-hidden bg-white"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.6 }}
+    >
+      {scroll ? (
+        <motion.img
+          src={`${import.meta.env.BASE_URL}shots/${src}`}
+          alt=""
+          className="w-full h-auto block"
+          onLoad={(e) => measure(e.currentTarget)}
+          initial={{ y: 0 }}
+          animate={{ y: maxScroll > 0 ? -maxScroll : 0 }}
+          transition={{ y: { duration, ease: 'easeInOut' } }}
+        />
+      ) : (
+        <motion.img
+          src={`${import.meta.env.BASE_URL}shots/${src}`}
+          alt=""
+          className="absolute inset-x-0 top-0 w-full h-auto block"
+          initial={{ scale: 1.0 }}
+          animate={{ scale: 1.04 }}
+          transition={{ scale: { duration, ease: 'linear' } }}
+        />
+      )}
+    </motion.div>
   );
 }
 

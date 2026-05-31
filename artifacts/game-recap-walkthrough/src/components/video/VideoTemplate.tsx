@@ -9,11 +9,11 @@ import { Scene5 } from './video_scenes/Scene5';
 import { BrowserChrome } from './components/Chrome';
 
 export const SCENE_DURATIONS = {
-  teamPage: 12000,
-  feedOrg: 10000,
-  playerProfile: 9000,
-  filterSports: 9000,
-  endCard: 8000,
+  teamPage: 14500,
+  feedOrg: 13200,
+  playerProfile: 9600,
+  filterSports: 7500,
+  endCard: 8700,
 };
 
 const SCENE_COMPONENTS: Record<string, React.ComponentType> = {
