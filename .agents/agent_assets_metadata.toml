@@ -119,13 +119,13 @@ title = "vo_3a"
 id = "RWtl12G8vPdE96d_JUlOb"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_3b.mp3"
 type = "audio"
-title = "vo_3b"
+title = "vo_3b growing searchable digital storybook"
 
 [[outputs]]
 id = "T7mLdlEPg6IfrRjq_3OUr"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_4a.mp3"
 type = "audio"
-title = "vo_4a"
+title = "vo_4a filter game recaps by team faster"
 
 [[outputs]]
 id = "Hbw5hyt8dS8fU_toUeu6C"

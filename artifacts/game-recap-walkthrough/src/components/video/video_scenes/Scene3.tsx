@@ -21,7 +21,7 @@ export function Scene3({ t }: { t: number }) {
         opacity={captionOpacity(t, 0, 4200)}
       />
       <Caption
-        text="It lives on their profile forever — a growing, searchable storybook."
+        text="It lives on their profile forever — a growing, searchable digital storybook."
         opacity={captionOpacity(t, 4200, 9600)}
       />
     </ScreenshotScene>

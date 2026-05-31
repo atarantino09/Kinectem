@@ -31,8 +31,8 @@ ffmpeg -y \
     [5:a]afade=t=in:st=0:d=0.05,adelay=23900|23900[a4]; \
     [6:a]afade=t=in:st=0:d=0.05,adelay=29200|29200[a5]; \
     [7:a]afade=t=in:st=0:d=0.05,adelay=33120|33120[a6]; \
-    [8:a]afade=t=in:st=0:d=0.05,adelay=38800|38800[a7]; \
-    [9:a]afade=t=in:st=0:d=0.05,adelay=41970|41970[a8]; \
+    [8:a]afade=t=in:st=0:d=0.05,adelay=38500|38500[a7]; \
+    [9:a]afade=t=in:st=0:d=0.05,adelay=42400|42400[a8]; \
     [10:a]afade=t=in:st=0:d=0.05,adelay=46400|46400[a9]; \
     [bg][a1][a2][a3][a4][a5][a6][a7][a8][a9]amix=inputs=10:duration=longest:normalize=0,alimiter=limit=0.95[out]" \
   -map "[out]" -t 54.7 -ar 44100 -b:a 192k composite_audio.mp3
