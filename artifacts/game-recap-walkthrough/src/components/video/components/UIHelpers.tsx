@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { clamp01, easeInOut } from '../timing';
 
 interface TypewriterTextProps {
   text: string;
@@ -14,11 +15,11 @@ export function TypewriterText({ text, delay = 0, speed = 50, className = '', on
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
-    
+
     // Initial delay
     const startTimeout = setTimeout(() => {
       let currentIndex = 0;
-      
+
       const typeNextChar = () => {
         if (currentIndex < text.length) {
           setDisplayedText(text.slice(0, currentIndex + 1));
@@ -28,7 +29,7 @@ export function TypewriterText({ text, delay = 0, speed = 50, className = '', on
           onComplete();
         }
       };
-      
+
       typeNextChar();
     }, delay);
 
@@ -50,34 +51,39 @@ export function TypewriterText({ text, delay = 0, speed = 50, className = '', on
   );
 }
 
-export function ScreenshotScene({ children }: { children: React.ReactNode }) {
+export function ScreenshotScene({
+  children,
+  opacity = 1,
+}: {
+  children: React.ReactNode;
+  opacity?: number;
+}) {
   return (
-    <motion.div
+    <div
       className="absolute inset-0 bg-[#F4F4F5] overflow-hidden"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.6 }}
+      style={{ opacity }}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
 /**
- * Renders a full-page screenshot at full frame width and slowly scrolls it
- * top -> bottom over `duration` seconds so the whole page is revealed.
- * When `scroll` is false (short beats like the filter dropdown) the image is
- * pinned to the top with a gentle Ken-Burns zoom instead.
+ * Renders a full-page screenshot at full frame width. Fully controlled by the
+ * master clock: `progress` (0..1) drives the scroll (or Ken-Burns zoom when
+ * `scroll` is false) and `opacity` drives the cross-fade. No internal timers —
+ * the same props always produce the same frame, so it scrubs cleanly.
  */
 export function ScreenshotPan({
   src,
   scroll = true,
-  duration = 7,
+  progress,
+  opacity = 1,
 }: {
   src: string;
   scroll?: boolean;
-  duration?: number;
+  progress: number;
+  opacity?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [maxScroll, setMaxScroll] = useState(0);
@@ -97,36 +103,28 @@ export function ScreenshotPan({
     setMaxScroll(overflow > 0 ? overflow : 0);
   };
 
+  const p = clamp01(progress);
+  const y = scroll ? -(maxScroll * easeInOut(p)) : 0;
+  const scale = scroll ? 1 : 1 + 0.04 * p;
+
   return (
-    <motion.div
+    <div
       ref={containerRef}
       className="absolute inset-0 overflow-hidden bg-white"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.6 }}
+      style={{ opacity }}
     >
-      {scroll ? (
-        <motion.img
-          src={`${import.meta.env.BASE_URL}shots/${src}`}
-          alt=""
-          className="w-full h-auto block"
-          onLoad={(e) => measure(e.currentTarget)}
-          initial={{ y: 0 }}
-          animate={{ y: maxScroll > 0 ? -maxScroll : 0 }}
-          transition={{ y: { duration, ease: 'easeInOut' } }}
-        />
-      ) : (
-        <motion.img
-          src={`${import.meta.env.BASE_URL}shots/${src}`}
-          alt=""
-          className="absolute inset-x-0 top-0 w-full h-auto block"
-          initial={{ scale: 1.0 }}
-          animate={{ scale: 1.04 }}
-          transition={{ scale: { duration, ease: 'linear' } }}
-        />
-      )}
-    </motion.div>
+      <img
+        src={`${import.meta.env.BASE_URL}shots/${src}`}
+        alt=""
+        onLoad={(e) => measure(e.currentTarget)}
+        className={scroll ? 'w-full h-auto block' : 'absolute inset-x-0 top-0 w-full h-auto block'}
+        style={{
+          transform: scroll ? `translateY(${y}px)` : `scale(${scale})`,
+          transformOrigin: 'top center',
+          willChange: 'transform',
+        }}
+      />
+    </div>
   );
 }
 

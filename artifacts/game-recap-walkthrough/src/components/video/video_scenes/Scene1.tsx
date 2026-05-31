@@ -1,33 +1,29 @@
-import { useState, useEffect } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { ScreenshotScene, ScreenshotPan } from '../components/UIHelpers';
+import { panProgress, fadeInOpacity, captionOpacity } from '../timing';
 
-export function Scene1() {
-  const [phase, setPhase] = useState(0);
-
-  useEffect(() => {
-    const t = setTimeout(() => setPhase(2), 4600);
-    return () => clearTimeout(t);
-  }, []);
-
+export function Scene1({ t }: { t: number }) {
   return (
-    <ScreenshotScene>
-      <AnimatePresence>
-        {phase < 2 ? (
-          <ScreenshotPan key="team-page" src="team-page.png" duration={4} />
-        ) : (
-          <ScreenshotPan key="composer" src="composer.png" duration={9} />
-        )}
-      </AnimatePresence>
+    <ScreenshotScene opacity={fadeInOpacity(t, 0, 500)}>
+      <ScreenshotPan
+        src="team-page.png"
+        progress={panProgress(t, 0, 4000)}
+        opacity={fadeInOpacity(t, 0, 400)}
+      />
+      <ScreenshotPan
+        src="composer.png"
+        progress={panProgress(t, 4600, 9000)}
+        opacity={fadeInOpacity(t, 4600, 500)}
+      />
 
-      <AnimatePresence mode="wait">
-        {phase < 2 ? (
-          <Caption key="cap1" text="Every season tells a story. It starts on your team's page." />
-        ) : (
-          <Caption key="cap2" text="Your coach writes the game recap — going way past the box score." />
-        )}
-      </AnimatePresence>
+      <Caption
+        text="Every season tells a story. It starts on your team's page."
+        opacity={captionOpacity(t, 0, 4600)}
+      />
+      <Caption
+        text="Your coach writes the game recap — going way past the box score."
+        opacity={captionOpacity(t, 4600, 14500)}
+      />
     </ScreenshotScene>
   );
 }

@@ -1,40 +1,44 @@
-import { useState, useEffect } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { ScreenshotScene, ScreenshotPan } from '../components/UIHelpers';
+import { panProgress, fadeInOpacity, captionOpacity } from '../timing';
 
-const SHOTS = [
-  'filter-open.png', // dropdown showing all three teams/sports
-  'profile-filtered.png', // filtered to the soccer team
-  'profile-basketball.png', // filtered to the basketball team
-  'profile.png', // back to every sport, combined timeline
-];
-
-export function Scene4() {
-  const [phase, setPhase] = useState(0);
-
-  useEffect(() => {
-    const timers = [
-      setTimeout(() => setPhase(1), 1500), // soccer
-      setTimeout(() => setPhase(2), 3470), // basketball (caption switches here)
-      setTimeout(() => setPhase(3), 5300), // every sport, combined
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
+export function Scene4({ t }: { t: number }) {
   return (
-    <ScreenshotScene>
-      <AnimatePresence>
-        <ScreenshotPan key={SHOTS[phase]} src={SHOTS[phase]} scroll={false} duration={2.5} />
-      </AnimatePresence>
+    <ScreenshotScene opacity={fadeInOpacity(t, 0, 500)}>
+      {/* Ken-Burns stack: each shot fades in over the one before it. */}
+      <ScreenshotPan
+        src="filter-open.png"
+        scroll={false}
+        progress={panProgress(t, 0, 2500)}
+        opacity={fadeInOpacity(t, 0, 300)}
+      />
+      <ScreenshotPan
+        src="profile-filtered.png"
+        scroll={false}
+        progress={panProgress(t, 1500, 2500)}
+        opacity={fadeInOpacity(t, 1500, 300)}
+      />
+      <ScreenshotPan
+        src="profile-basketball.png"
+        scroll={false}
+        progress={panProgress(t, 3470, 2500)}
+        opacity={fadeInOpacity(t, 3470, 300)}
+      />
+      <ScreenshotPan
+        src="profile.png"
+        scroll={false}
+        progress={panProgress(t, 5300, 2500)}
+        opacity={fadeInOpacity(t, 5300, 300)}
+      />
 
-      <AnimatePresence mode="wait">
-        {phase < 2 ? (
-          <Caption key="cap1" text="Filter the game recaps by team..." />
-        ) : (
-          <Caption key="cap2" text="...or by sport. One profile, every team, every season." />
-        )}
-      </AnimatePresence>
+      <Caption
+        text="Filter the game recaps by team..."
+        opacity={captionOpacity(t, 0, 3470)}
+      />
+      <Caption
+        text="...or by sport. One profile, every team, every season."
+        opacity={captionOpacity(t, 3470, 7500)}
+      />
     </ScreenshotScene>
   );
 }

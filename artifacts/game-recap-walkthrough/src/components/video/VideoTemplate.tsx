@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { useVideoPlayer } from '@/lib/video/hooks';
+import { motion } from 'framer-motion';
 import { Scene1 } from './video_scenes/Scene1';
 import { Scene2 } from './video_scenes/Scene2';
 import { Scene3 } from './video_scenes/Scene3';
@@ -16,7 +15,9 @@ export const SCENE_DURATIONS = {
   endCard: 8700,
 };
 
-const SCENE_COMPONENTS: Record<string, React.ComponentType> = {
+export const TOTAL_MS = Object.values(SCENE_DURATIONS).reduce((a, b) => a + b, 0);
+
+const SCENE_COMPONENTS: Record<string, React.ComponentType<{ t: number }>> = {
   teamPage: Scene1,
   feedOrg: Scene2,
   playerProfile: Scene3,
@@ -24,49 +25,77 @@ const SCENE_COMPONENTS: Record<string, React.ComponentType> = {
   endCard: Scene5,
 };
 
-const SCENE_START_SEC: Record<string, number> = (() => {
-  const out: Record<string, number> = {};
-  let cumulativeMs = 0;
-  for (const [key, ms] of Object.entries(SCENE_DURATIONS)) {
-    out[key] = cumulativeMs / 1000;
-    cumulativeMs += ms;
-  }
-  return out;
+// Precompute each scene's absolute start offset on the master timeline.
+const SCENE_LIST = (() => {
+  let start = 0;
+  return Object.entries(SCENE_DURATIONS).map(([key, dur]) => {
+    const entry = { key, start, dur };
+    start += dur;
+    return entry;
+  });
 })();
 
-const AUDIO_SEEK_EPSILON_SEC = 0.18;
+function sceneAt(ms: number) {
+  let current = SCENE_LIST[0];
+  for (const s of SCENE_LIST) {
+    if (s.start <= ms) current = s;
+    else break;
+  }
+  return {
+    key: current.key,
+    localMs: Math.max(0, Math.min(ms - current.start, current.dur)),
+  };
+}
+
+const AUDIO_DRIFT_SEC = 0.25;
 
 export default function VideoTemplate({
-  durations = SCENE_DURATIONS,
-  loop = true,
+  currentMs,
+  playing,
   muted = false,
-  onSceneChange,
 }: {
-  durations?: Record<string, number>;
-  loop?: boolean;
+  currentMs: number;
+  playing: boolean;
   muted?: boolean;
-  onSceneChange?: (sceneKey: string) => void;
-} = {}) {
-  const { currentSceneKey } = useVideoPlayer({ durations, loop });
-  const baseSceneKey = currentSceneKey.replace(/_r[12]$/, '');
-
-  useEffect(() => {
-    onSceneChange?.(currentSceneKey);
-  }, [currentSceneKey, onSceneChange]);
+}) {
+  const { key, localMs } = sceneAt(currentMs);
+  const SceneComponent = SCENE_COMPONENTS[key] ?? Scene1;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+
+  // Play/pause follows the master clock's play state.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.volume = 1.0;
-    const targetTime = SCENE_START_SEC[baseSceneKey] ?? 0;
-    if (Math.abs(audio.currentTime - targetTime) > AUDIO_SEEK_EPSILON_SEC) {
-      audio.currentTime = targetTime;
-    }
-    audio.play().catch(() => {});
-  }, [currentSceneKey, baseSceneKey, muted]);
+    if (playing) audio.play().catch(() => {});
+    else audio.pause();
+  }, [playing]);
 
-  const SceneComponent = SCENE_COMPONENTS[baseSceneKey] || Scene1;
+  // Resilient start: if the first play() attempt happens before the media is
+  // ready (common in the autoplay export path), retry once it can play.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onReady = () => {
+      if (playingRef.current) audio.play().catch(() => {});
+    };
+    audio.addEventListener('canplay', onReady);
+    return () => audio.removeEventListener('canplay', onReady);
+  }, []);
+
+  // Keep audio locked to the playhead. Only correct on meaningful drift so
+  // normal playback doesn't stutter, but scrubs snap immediately.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const target = currentMs / 1000;
+    if (Math.abs(audio.currentTime - target) > AUDIO_DRIFT_SEC) {
+      audio.currentTime = target;
+    }
+  }, [currentMs]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#09090B] flex items-center justify-center">
@@ -92,9 +121,7 @@ export default function VideoTemplate({
         <BrowserChrome />
 
         <div className="absolute inset-x-0 top-12 bottom-0 overflow-hidden bg-[#F4F4F5]">
-          <AnimatePresence mode="popLayout">
-            <SceneComponent key={currentSceneKey} />
-          </AnimatePresence>
+          <SceneComponent key={key} t={localMs} />
         </div>
       </div>
 
@@ -102,7 +129,6 @@ export default function VideoTemplate({
         ref={audioRef}
         src={`${import.meta.env.BASE_URL}audio/composite_audio.mp3`}
         preload="auto"
-        autoPlay
         muted={muted}
       />
     </div>

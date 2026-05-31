@@ -1,42 +1,39 @@
-import { motion } from 'framer-motion';
+import { clamp01 } from '../timing';
 
-export function Scene5() {
+export function Scene5({ t }: { t: number }) {
+  const container = clamp01(t / 1000);
+  const logo = clamp01((t - 500) / 800);
+  const heading = clamp01((t - 800) / 800);
+  const tagline = clamp01((t - 1500) / 800);
+
   return (
-    <motion.div 
+    <div
       className="absolute inset-0 bg-white flex flex-col items-center justify-center z-50"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 1 }}
+      style={{ opacity: container }}
     >
-      <motion.img 
-        src={`${import.meta.env.BASE_URL}logo-horizontal.png`} 
-        alt="Kinectem" 
+      <img
+        src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+        alt="Kinectem"
         className="h-20 mb-12"
-        initial={{ scale: 0.8, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.8, type: "spring" }}
+        style={{
+          opacity: logo,
+          transform: `translateY(${(1 - logo) * 20}px) scale(${0.8 + 0.2 * logo})`,
+        }}
       />
-      
-      <motion.h2 
+
+      <h2
         className="text-5xl font-display font-bold text-[#09090B] mb-6 text-center"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8, duration: 0.8 }}
+        style={{ opacity: heading, transform: `translateY(${(1 - heading) * 20}px)` }}
       >
         <span className="block mb-2">Every game recap. One bigger story.</span>
         <span className="text-transparent bg-clip-text bg-[linear-gradient(135deg,#2563EB_0%,#7C3AED_100%)]">
           Your team. Your players. Their whole journey.
         </span>
-      </motion.h2>
-      
-      <motion.p 
-        className="text-2xl text-[#71717A] font-bold"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.5, duration: 0.8 }}
-      >
+      </h2>
+
+      <p className="text-2xl text-[#71717A] font-bold" style={{ opacity: tagline }}>
         Start your organization at kinectem.com
-      </motion.p>
-    </motion.div>
+      </p>
+    </div>
   );
 }

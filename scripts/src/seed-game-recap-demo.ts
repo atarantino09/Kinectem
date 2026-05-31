@@ -24,7 +24,7 @@ import {
   rosterEntries,
   users,
 } from "@workspace/db";
-import { and, eq, ilike, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNull, like, or } from "drizzle-orm";
 
 const SOCCER_TEAM = "e2da9c36-af84-40a0-a769-d31368f77c46"; // Legacy Black 2014
 const BASKETBALL_TEAM = "be3f681b-63ff-45f0-bc84-4e84e6f04c81"; // Varsity Boys Basketball
@@ -65,7 +65,7 @@ const RECAPS: Recap[] = [
     authorId: MARCUS,
     title: "Legacy Black Battle Back to Win the Middletown Cup",
     summary: "Down 1-0 at the half, the squad roared back for a 3-2 stoppage-time classic.",
-    body: "It looked grim at the half. Trailing 1-0 and pinned in their own end, Legacy Black 2014 needed a spark — and Samira Carter delivered. Two second-half goals and a cool finish in stoppage time sealed a 3-2 comeback and the Middletown Cup. The back line held firm down the stretch, and the bench erupted as the final whistle blew on the program's biggest win of the spring.",
+    body: "It looked grim at the half. Trailing 1-0 and pinned in their own end, Legacy Black 2014 needed a spark — and Sam Carter delivered. Two second-half goals and a cool finish in stoppage time sealed a 3-2 comeback and the Middletown Cup. The back line held firm down the stretch, and the bench erupted as the final whistle blew on the program's biggest win of the spring.",
     opponentName: "Riverside United",
     teamScore: 3,
     opponentScore: 2,
@@ -88,8 +88,8 @@ const RECAPS: Recap[] = [
     teamId: SOCCER_TEAM,
     authorId: MARCUS,
     title: "Late Equalizer Earns a Hard-Fought Draw",
-    summary: "Samira's header in the 88th rescues a point against the league leaders.",
-    body: "Against the toughest opponent on the schedule, Legacy Black 2014 refused to fold. Samira Carter rose highest off a corner in the 88th minute to level it, 1-1, and the team weathered a frantic finish to walk away with a deserved point.",
+    summary: "Sam's header in the 88th rescues a point against the league leaders.",
+    body: "Against the toughest opponent on the schedule, Legacy Black 2014 refused to fold. Sam Carter rose highest off a corner in the 88th minute to level it, 1-1, and the team weathered a frantic finish to walk away with a deserved point.",
     opponentName: "North Valley SC",
     teamScore: 1,
     opponentScore: 1,
@@ -138,7 +138,7 @@ const RECAPS: Recap[] = [
     authorId: DANIELA,
     title: "Buzzer-Beater Lifts Varsity in the City Final",
     summary: "A contested three at the horn caps a 58-56 thriller for the title.",
-    body: "Tied at 56 with the clock winding down, Varsity ran their out-of-bounds set to perfection. The shot went up, the horn sounded, and the gym exploded — 58-56, city champions. Samira Carter's two-way effort in the fourth quarter set the stage for the game-winner.",
+    body: "Tied at 56 with the clock winding down, Varsity ran their out-of-bounds set to perfection. The shot went up, the horn sounded, and the gym exploded — 58-56, city champions. Sam Carter's two-way effort in the fourth quarter set the stage for the game-winner.",
     opponentName: "Central Prep",
     teamScore: 58,
     opponentScore: 56,
@@ -181,6 +181,25 @@ const RECAPS: Recap[] = [
     gameDate: "2026-04-15",
     tag: [DANIELA],
   },
+];
+
+// A full made-up squad for the soccer team so the team page roster panel shows a
+// believable roster (not just Sam #7). Seeded as accepted "player" roster rows.
+const ROSTER_EMAIL_PREFIX = "legacy-roster-";
+const DEMO_PLAYERS: { name: string; jerseyNumber: number; position: string }[] = [
+  { name: "Ethan Brooks", jerseyNumber: 1, position: "Goalkeeper" },
+  { name: "Noah Mitchell", jerseyNumber: 2, position: "Defender" },
+  { name: "Liam Foster", jerseyNumber: 3, position: "Defender" },
+  { name: "Mason Reed", jerseyNumber: 4, position: "Defender" },
+  { name: "Lucas Bennett", jerseyNumber: 5, position: "Defender" },
+  { name: "Oliver Hayes", jerseyNumber: 6, position: "Midfielder" },
+  { name: "Aiden Cole", jerseyNumber: 8, position: "Midfielder" },
+  { name: "Caleb Ward", jerseyNumber: 9, position: "Forward" },
+  { name: "Jordan Price", jerseyNumber: 10, position: "Midfielder" },
+  { name: "Dylan Morgan", jerseyNumber: 11, position: "Forward" },
+  { name: "Henry Sullivan", jerseyNumber: 12, position: "Defender" },
+  { name: "Owen Parker", jerseyNumber: 13, position: "Midfielder" },
+  { name: "Gabriel Ramos", jerseyNumber: 14, position: "Forward" },
 ];
 
 async function main() {
@@ -287,12 +306,39 @@ async function main() {
   }
   console.log("Rostered Samira on soccer + basketball (accepted).");
 
-  // 4. Make the demo player profile public so the owner capture renders fully.
+  // 4. Make the demo player profile public + rename to "Sam Carter" so the
+  // owner capture renders fully and the name reads "Sam Carter" everywhere.
   await db
     .update(users)
-    .set({ profileVisibility: "public" })
+    .set({ profileVisibility: "public", name: "Sam Carter" })
     .where(inArray(users.id, [SAMIRA]));
-  console.log("Set Samira Carter profile to public (demo).");
+  console.log("Set Sam Carter profile to public + renamed (demo).");
+
+  // 5. Seed a full made-up roster on the soccer team so the team page roster
+  // panel shows a believable squad (not just Sam). Idempotent: delete the
+  // previously-seeded demo players by email prefix (cascades their roster rows),
+  // then re-insert users + accepted roster entries.
+  await db.delete(users).where(like(users.email, `${ROSTER_EMAIL_PREFIX}%`));
+  for (const p of DEMO_PLAYERS) {
+    const slug = p.name.toLowerCase().replace(/[^a-z]+/g, "-");
+    const [u] = await db
+      .insert(users)
+      .values({
+        email: `${ROSTER_EMAIL_PREFIX}${slug}@kinectem.demo`,
+        name: p.name,
+        role: "athlete",
+      })
+      .returning({ id: users.id });
+    await db.insert(rosterEntries).values({
+      teamId: SOCCER_TEAM,
+      userId: u.id,
+      role: "player",
+      position: p.position,
+      jerseyNumber: p.jerseyNumber,
+      status: "accepted",
+    });
+  }
+  console.log(`Seeded ${DEMO_PLAYERS.length} demo roster players on soccer.`);
 
   console.log("Done.");
 }
