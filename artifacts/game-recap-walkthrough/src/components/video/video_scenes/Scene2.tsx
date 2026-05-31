@@ -18,7 +18,7 @@ export function Scene2({ t }: { t: number }) {
       />
 
       <Caption
-        text="Every game recap publishes right to the team page. Season after season, those recaps build the team's story."
+        text="Every game recap publishes right to the team page. And season after season, year after year, those game recaps are what build the teams story."
         opacity={captionOpacity(t, 0, 9100)}
       />
       <Caption
