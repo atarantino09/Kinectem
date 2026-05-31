@@ -22,7 +22,7 @@ export function Scene2({ t }: { t: number }) {
         opacity={captionOpacity(t, 0, 9100)}
       />
       <Caption
-        text="And it's showcased on your organization's page, alongside every team."
+        text="And it's showcased on your organization's page, alongside every other team."
         opacity={captionOpacity(t, 9100, 14400)}
       />
     </ScreenshotScene>
