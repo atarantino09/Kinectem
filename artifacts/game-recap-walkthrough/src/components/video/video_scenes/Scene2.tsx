@@ -7,7 +7,7 @@ export function Scene2() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => setPhase(2), 8200);
+    const t = setTimeout(() => setPhase(2), 9100);
     return () => clearTimeout(t);
   }, []);
 
@@ -15,15 +15,15 @@ export function Scene2() {
     <ScreenshotScene>
       <AnimatePresence>
         {phase < 2 ? (
-          <ScreenshotPan key="team-page" src="team-page.png" duration={7.5} />
+          <ScreenshotPan key="team-page" src="team-page.png" duration={8.8} />
         ) : (
-          <ScreenshotPan key="org-page" src="org-page.png" duration={4.5} />
+          <ScreenshotPan key="org-page" src="org-page.png" duration={5} />
         )}
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
         {phase < 2 ? (
-          <Caption key="cap1" text="It publishes straight to the team page — building the team's story, year after year." />
+          <Caption key="cap1" text="Every game recap publishes right to the team page. Season after season, those recaps build the team's story." />
         ) : (
           <Caption key="cap2" text="And it's showcased on your organization's page, alongside every team." />
         )}

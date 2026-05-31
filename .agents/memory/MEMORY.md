@@ -1,1 +1,2 @@
-- [Kinectem screenshot capture](kinectem-screenshot-capture.md) — Playwright capture of the live app for video artifacts; base path `/app`, no networkidle, minor profiles 404, recap detail uses derived post id, full-page auto-scroll display, idempotent demo-data seeding.
+- [Kinectem screenshot capture](kinectem-screenshot-capture.md) — capturing/displaying live-app screenshots in video artifacts + seeding believable demo data.
+- [Video artifact audio timeline](video-artifact-audio.md) — single composite track seeked per-scene; VO adelay offsets must stay in lockstep with SCENE_DURATIONS; seamless music loop via acrossfade.

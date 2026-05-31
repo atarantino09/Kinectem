@@ -10,7 +10,7 @@ import { BrowserChrome } from './components/Chrome';
 
 export const SCENE_DURATIONS = {
   teamPage: 14500,
-  feedOrg: 13200,
+  feedOrg: 14400,
   playerProfile: 9600,
   filterSports: 7500,
   endCard: 8700,
