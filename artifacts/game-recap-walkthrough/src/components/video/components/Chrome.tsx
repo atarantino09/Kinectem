@@ -4,8 +4,8 @@ export function Caption({ text, opacity = 1 }: { text: string; opacity?: number 
       className="absolute bottom-12 left-0 right-0 z-50 flex justify-center px-12 pointer-events-none"
       style={{ opacity, transform: `translateY(${(1 - opacity) * 16}px)` }}
     >
-      <div className="bg-black/80 backdrop-blur-md px-8 py-4 rounded-xl border border-white/10 shadow-2xl max-w-4xl text-center">
-        <p className="text-2xl md:text-3xl font-body text-white leading-tight">
+      <div className="bg-black/50 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 shadow-xl max-w-2xl text-center">
+        <p className="text-xl md:text-2xl font-body text-white leading-tight drop-shadow">
           {text}
         </p>
       </div>

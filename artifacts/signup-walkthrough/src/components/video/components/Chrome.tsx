@@ -9,8 +9,8 @@ export function Caption({ text }: { text: string }) {
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.5 }}
     >
-      <div className="bg-black/80 backdrop-blur-md px-8 py-4 rounded-xl border border-white/10 shadow-2xl max-w-4xl text-center">
-        <p className="text-2xl md:text-3xl font-body text-white leading-tight">
+      <div className="bg-black/50 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 shadow-xl max-w-2xl text-center">
+        <p className="text-xl md:text-2xl font-body text-white leading-tight drop-shadow">
           {text}
         </p>
       </div>
