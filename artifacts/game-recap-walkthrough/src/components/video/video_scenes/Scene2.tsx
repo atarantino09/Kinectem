@@ -17,7 +17,7 @@ export function Scene2() {
         {phase < 2 ? (
           <ScreenshotPan key="team-page" src="team-page.png" duration={8.8} />
         ) : (
-          <ScreenshotPan key="org-page" src="org-page.png" duration={5} />
+          <ScreenshotPan key="org-page" src="org-page.png" duration={8} />
         )}
       </AnimatePresence>
 
