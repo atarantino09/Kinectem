@@ -10,10 +10,10 @@ export function Scene2({ t }: { t: number }) {
         progress={panProgress(t, 0, 8800)}
         opacity={fadeInOpacity(t, 0, 400)}
       />
-      {/* Org page scrolls deliberately slowly (12s pan over a ~5.3s window). */}
+      {/* Org page scrolls deliberately slowly (18s pan over a ~5.3s window). */}
       <ScreenshotPan
         src="org-page.png"
-        progress={panProgress(t, 9100, 12000)}
+        progress={panProgress(t, 9100, 18000)}
         opacity={fadeInOpacity(t, 9100, 500)}
       />
 

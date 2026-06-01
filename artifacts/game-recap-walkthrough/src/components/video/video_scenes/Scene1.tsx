@@ -7,7 +7,7 @@ export function Scene1({ t }: { t: number }) {
     <ScreenshotScene opacity={fadeInOpacity(t, 0, 500)}>
       <ScreenshotPan
         src="team-page.png"
-        progress={panProgress(t, 0, 4000)}
+        progress={panProgress(t, 1000, 3600)}
         opacity={fadeInOpacity(t, 0, 400)}
       />
       <ScreenshotPan
