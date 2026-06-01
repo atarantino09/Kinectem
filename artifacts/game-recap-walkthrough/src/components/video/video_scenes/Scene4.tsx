@@ -38,12 +38,12 @@ export function Scene4({ t }: { t: number }) {
       />
 
       <Caption
-        text="On each athlete's profile, you can filter the game recaps by team..."
-        opacity={captionOpacity(t, 0, 4000)}
+        text="On each athlete's profile, you can filter the game recaps by team or by sport."
+        opacity={captionOpacity(t, 0, 4400)}
       />
       <Caption
-        text="...or by sport. One profile, every team, every season."
-        opacity={captionOpacity(t, 3900, 7500)}
+        text="One profile, every team, every season."
+        opacity={captionOpacity(t, 4400, 7500)}
       />
     </ScreenshotScene>
   );
