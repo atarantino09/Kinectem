@@ -21,7 +21,7 @@ export function Scene1({ t }: { t: number }) {
         opacity={captionOpacity(t, 0, 4600)}
       />
       <Caption
-        text="Your coach writes the game recap — going way past the box score."
+        text="Your coach or team author writes the game recap — going way past the box score."
         opacity={captionOpacity(t, 4600, 8800)}
       />
       <Caption

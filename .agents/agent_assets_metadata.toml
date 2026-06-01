@@ -101,7 +101,7 @@ title = "background music"
 id = "HdMADroD97s8IHTxrLabZ"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_1b.mp3"
 type = "audio"
-title = "vo_1b"
+title = "scene1 coach recap line"
 
 [[outputs]]
 id = "bqkYnul3kCasrz4rBVZ_c"
