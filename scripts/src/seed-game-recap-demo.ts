@@ -310,7 +310,13 @@ async function main() {
   // owner capture renders fully and the name reads "Sam Carter" everywhere.
   await db
     .update(users)
-    .set({ profileVisibility: "public", name: "Sam Carter" })
+    .set({
+      profileVisibility: "public",
+      name: "Sam Carter",
+      // Served from artifacts/kinectem/public; URL is intentionally tied to
+      // Kinectem's /app base path so it loads during the walkthrough capture.
+      avatarUrl: "/app/sam-carter-avatar.jpg",
+    })
     .where(inArray(users.id, [SAMIRA]));
   console.log("Set Sam Carter profile to public + renamed (demo).");
 
