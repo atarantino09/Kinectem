@@ -12,7 +12,7 @@ export function Scene3({ t }: { t: number }) {
       />
       <ScreenshotPan
         src="profile.png"
-        progress={panProgress(t, 4200, 5000)}
+        progress={panProgress(t, 4200, 8000)}
         opacity={fadeInOpacity(t, 4200, 500)}
       />
 
