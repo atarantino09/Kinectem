@@ -300,11 +300,11 @@ export function MinorControls({ child }: Props) {
   return (
     <Card className="rounded-xl border-border">
       <CardContent className="p-4 space-y-5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="font-black tracking-tight">
             Communication controls — {child.firstName}
           </h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link href={`/users/${child.id}`}>
               <Button size="sm" variant="outline">
                 <ExternalLink className="w-3 h-3 mr-1" /> Open timeline

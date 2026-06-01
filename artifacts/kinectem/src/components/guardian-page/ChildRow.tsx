@@ -91,68 +91,75 @@ export function ChildRow({
       className="flex flex-col gap-3 p-3 rounded-lg border border-border scroll-mt-4"
       data-testid={`row-child-${c.id}`}
     >
-      <div className="flex items-center gap-3">
-        <UserAvatar
-          avatarUrl={c.avatarUrl}
-          displayName={`${c.firstName} ${c.lastName}`}
-          size="lg"
-          className="border border-border shrink-0"
-          fallbackClassName="bg-slate-900 text-white"
-        />
-        <div className="flex-1 min-w-0">
-          <Link href={`/users/${c.id}`}>
-            <p className="font-bold text-sm cursor-pointer hover:text-primary truncate">
-              {c.firstName} {c.lastName}
-            </p>
-          </Link>
-          <p className="text-xs text-muted-foreground truncate">
-            {c.email ?? "No email on file"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            className="font-bold rounded-full gap-1.5"
-            disabled={loadingEditFor === c.id}
-            onClick={() => onEdit(c)}
-            data-testid={`btn-edit-child-${c.id}`}
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            {loadingEditFor === c.id ? "Loading…" : "Edit profile"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="font-bold rounded-full gap-1.5 text-destructive hover:text-destructive"
-            disabled={isUnlinking}
-            onClick={() => setConfirmUnlink(true)}
-            data-testid={`btn-unlink-child-${c.id}`}
-          >
-            <Unlink2 className="w-3.5 h-3.5" />
-            {isUnlinking ? "Unlinking…" : "Unlink"}
-          </Button>
-          <div className="text-right text-xs">
-            <p className="font-bold">Require tag consent</p>
-            <p className="text-muted-foreground">
-              {c.requireTagConsent
-                ? "Coaches must ask first"
-                : "Anyone may tag"}
-            </p>
-            <p
-              className="text-[10px] text-muted-foreground mt-0.5"
-              data-testid={`text-consent-helper-${c.id}`}
-            >
-              {c.requireTagConsent
-                ? "New tags will arrive as Pending and require your Approve to be visible."
-                : "New tags appear automatically. You can still Remove anything you don't want."}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3 min-w-0 sm:flex-1">
+          <UserAvatar
+            avatarUrl={c.avatarUrl}
+            displayName={`${c.firstName} ${c.lastName}`}
+            size="lg"
+            className="border border-border shrink-0"
+            fallbackClassName="bg-slate-900 text-white"
+          />
+          <div className="flex-1 min-w-0">
+            <Link href={`/users/${c.id}`}>
+              <p className="font-bold text-sm cursor-pointer hover:text-primary truncate">
+                {c.firstName} {c.lastName}
+              </p>
+            </Link>
+            <p className="text-xs text-muted-foreground truncate">
+              {c.email ?? "No email on file"}
             </p>
           </div>
-          <Switch
-            checked={c.requireTagConsent}
-            onCheckedChange={(v) => onConsentChange(c, v)}
-            data-testid={`switch-consent-${c.id}`}
-          />
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:shrink-0">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="font-bold rounded-full gap-1.5 flex-1 sm:flex-none"
+              disabled={loadingEditFor === c.id}
+              onClick={() => onEdit(c)}
+              data-testid={`btn-edit-child-${c.id}`}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {loadingEditFor === c.id ? "Loading…" : "Edit profile"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="font-bold rounded-full gap-1.5 text-destructive hover:text-destructive flex-1 sm:flex-none"
+              disabled={isUnlinking}
+              onClick={() => setConfirmUnlink(true)}
+              data-testid={`btn-unlink-child-${c.id}`}
+            >
+              <Unlink2 className="w-3.5 h-3.5" />
+              {isUnlinking ? "Unlinking…" : "Unlink"}
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2 sm:justify-start">
+            <div className="text-xs sm:text-right">
+              <p className="font-bold">Require tag consent</p>
+              <p className="text-muted-foreground">
+                {c.requireTagConsent
+                  ? "Coaches must ask first"
+                  : "Anyone may tag"}
+              </p>
+              <p
+                className="text-[10px] text-muted-foreground mt-0.5"
+                data-testid={`text-consent-helper-${c.id}`}
+              >
+                {c.requireTagConsent
+                  ? "New tags will arrive as Pending and require your Approve to be visible."
+                  : "New tags appear automatically. You can still Remove anything you don't want."}
+              </p>
+            </div>
+            <Switch
+              checked={c.requireTagConsent}
+              onCheckedChange={(v) => onConsentChange(c, v)}
+              className="shrink-0"
+              data-testid={`switch-consent-${c.id}`}
+            />
+          </div>
         </div>
       </div>
 
