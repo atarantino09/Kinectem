@@ -156,3 +156,21 @@ id = "M2Epa3EtS-9ZsKrvwLRQF"
 uri = "file://.local/sam-carter-avatar-preview.jpg"
 type = "image"
 title = "Sam Carter avatar — wider action crop"
+
+[[outputs]]
+id = "AFQwb1PcIyLJQhQrjjM--"
+uri = "file://.local/vo4b_takeA.mp3"
+type = "audio"
+title = "Take A — expressive"
+
+[[outputs]]
+id = "thvSoHuOdmu6-VzeGRiDU"
+uri = "file://.local/vo4b_takeB.mp3"
+type = "audio"
+title = "Take B — slightly faster"
+
+[[outputs]]
+id = "ZDJTUskpCIYK245aEbegv"
+uri = "file://.local/vo4b_takeC.mp3"
+type = "audio"
+title = "Take C — most upbeat"
