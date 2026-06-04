@@ -29,21 +29,20 @@ interface CaptionCue {
 
 // Timed against the recorded walkthrough.mp4 timeline (see walkthrough-markers.json).
 const CAPTIONS: CaptionCue[] = [
-  { start: 0, end: 2400, text: "Meet Kinectem — built for youth-sports admins." },
-  { start: 2600, end: 8000, text: "Create your account." },
-  { start: 8000, end: 14200, text: "Pick a role and you're in." },
-  {
-    start: 14600,
-    end: 20000,
-    text: "Spin up your organization — name it, pick a sport, drop a logo.",
-  },
-  { start: 20000, end: 23900, text: "Your dashboard guides you through six setup steps." },
-  { start: 24400, end: 28000, text: "Add your first team." },
-  { start: 28000, end: 33000, text: "Invite a coach, add a player, send the parent an invite." },
-  { start: 33000, end: 35200, text: "Everyone's connected from day one." },
-  { start: 35700, end: 40500, text: "Game day? Publish a recap from the team page." },
-  { start: 40500, end: 44000, text: "Score, headline, write-up — done." },
-  { start: 44000, end: 47912, text: "It's pinned to the team, ready for parents and players." },
+  { start: 0, end: 2400, text: "Meet Kinectem — built for youth sports organizations." },
+  { start: 2600, end: 5300, text: "Getting started takes minutes." },
+  { start: 5500, end: 8800, text: "Create your account." },
+  { start: 8800, end: 14200, text: "Select your role and you're in." },
+  { start: 14600, end: 17500, text: "Create your organization." },
+  { start: 17500, end: 21000, text: "Fill out the basic info of your org, add your logo." },
+  { start: 21000, end: 23900, text: "Your dashboard guides you through six setup steps." },
+  { start: 24400, end: 30500, text: "Add your teams, invite your coaches, players and parents." },
+  { start: 30500, end: 35200, text: "Everyone is connected from day one." },
+  { start: 35700, end: 39500, text: "Game day. From the team page publish a game recap." },
+  { start: 39500, end: 42200, text: "Add the score, a headline, and the write-up." },
+  { start: 42200, end: 44500, text: "It auto tags every player on the roster." },
+  { start: 44500, end: 46800, text: "Parents can add their own photos right to the article." },
+  { start: 47000, end: 48640, text: "Start your org at kinectem.com" },
 ];
 
 const CAPTION_FADE_MS = 320;
