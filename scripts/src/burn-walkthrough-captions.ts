@@ -70,9 +70,11 @@ function buildAss(): string {
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    // BorderStyle 3 = opaque box (BackColour). Outline acts as box padding.
-    // Colours are &HAABBGGRR; BackColour AA=80 ≈ 50% black to match bg-black/50.
-    "Style: Caption,DejaVu Sans,32,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,3,14,0,2,300,300,72,1",
+    // BorderStyle 3 = opaque box; Outline draws the box padding border in
+    // OutlineColour, the inner fill uses BackColour. Both must share the same
+    // alpha or the opaque border dominates. Colours are &HAABBGGRR; AA=B0 ≈
+    // 31% opaque black for a light translucent box.
+    "Style: Caption,DejaVu Sans,32,&H00FFFFFF,&H00FFFFFF,&HB0000000,&HB0000000,0,0,0,0,100,100,0,0,3,14,0,2,300,300,72,1",
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
