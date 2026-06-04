@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { AnimatedCursor, TypewriterText } from '../components/UIHelpers';
+import { useElapsed } from '../useElapsed';
+import { captionOpacity } from '../timing';
 
 export function Scene4() {
   const [phase, setPhase] = useState(0);
+  const t = useElapsed();
 
   useEffect(() => {
     const timers = [
@@ -126,7 +129,18 @@ export function Scene4() {
         isClicking={phase === 2 || phase === 3 || phase === 4 || phase === 5} 
       />
 
-      <Caption text="Add your first team. Invite a coach, add a player, send the parent an invite. Everyone's connected from day one." />
+      <Caption
+        text="Add your first team."
+        opacity={captionOpacity(t, 0, 2400)}
+      />
+      <Caption
+        text="Invite a coach, add a player, send the parent an invite."
+        opacity={captionOpacity(t, 2400, 6000)}
+      />
+      <Caption
+        text="Everyone's connected from day one."
+        opacity={captionOpacity(t, 6000, 8000)}
+      />
     </motion.div>
   );
 }

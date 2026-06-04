@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { AnimatedCursor, TypewriterText } from '../components/UIHelpers';
+import { useElapsed } from '../useElapsed';
+import { captionOpacity } from '../timing';
 
 export function Scene3() {
   const [phase, setPhase] = useState(0);
+  const t = useElapsed();
 
   useEffect(() => {
     const timers = [
@@ -151,7 +154,14 @@ export function Scene3() {
         isClicking={phase === 2 || phase === 4} 
       />
 
-      <Caption text="Spin up your organization — name it, pick a sport, drop a logo. Your dashboard guides you through six setup steps." />
+      <Caption
+        text="Spin up your organization — name it, pick a sport, drop a logo."
+        opacity={captionOpacity(t, 0, 5000)}
+      />
+      <Caption
+        text="Your dashboard guides you through six setup steps."
+        opacity={captionOpacity(t, 5000, 8000)}
+      />
     </motion.div>
   );
 }

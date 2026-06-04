@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { AnimatedCursor, TypewriterText } from '../components/UIHelpers';
+import { useElapsed } from '../useElapsed';
+import { captionOpacity } from '../timing';
 
 export function Scene2() {
   const [phase, setPhase] = useState(0);
+  const t = useElapsed();
 
   useEffect(() => {
     const timers = [
@@ -83,7 +86,14 @@ export function Scene2() {
         isClicking={phase === 3 || phase === 4} 
       />
 
-      <Caption text="Create your account. Pick a role and you're in." />
+      <Caption
+        text="Create your account."
+        opacity={captionOpacity(t, 0, 3500)}
+      />
+      <Caption
+        text="Pick a role and you're in."
+        opacity={captionOpacity(t, 3500, 7000)}
+      />
     </motion.div>
   );
 }

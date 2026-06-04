@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { AnimatedCursor, TypewriterText } from '../components/UIHelpers';
+import { useElapsed } from '../useElapsed';
+import { captionOpacity } from '../timing';
 
 export function Scene5() {
   const [phase, setPhase] = useState(0);
+  const t = useElapsed();
 
   useEffect(() => {
     const timers = [
@@ -150,7 +153,22 @@ export function Scene5() {
         )}
       </AnimatePresence>
 
-      {phase < 6 && <Caption text="Game day? Publish a recap from the team page. Score, headline, write-up — done. It's pinned to the team, ready for parents and players. Start your org at kinectem.com." />}
+      {phase < 6 && (
+        <>
+          <Caption
+            text="Game day? Publish a recap from the team page."
+            opacity={captionOpacity(t, 0, 3000)}
+          />
+          <Caption
+            text="Score, headline, write-up — done."
+            opacity={captionOpacity(t, 3000, 5000)}
+          />
+          <Caption
+            text="It's pinned to the team, ready for parents and players."
+            opacity={captionOpacity(t, 5000, 7500)}
+          />
+        </>
+      )}
     </motion.div>
   );
 }
