@@ -11,6 +11,7 @@
     "backfill-avatars": "tsx ./src/backfill-avatars.ts",
     "backfill-parent-team-follows": "tsx ./src/backfill-parent-team-follows.ts",
     "backfill-self-team-follows": "tsx ./src/backfill-self-team-follows.ts",
+    "burn-walkthrough-captions": "tsx ./src/burn-walkthrough-captions.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
     "record-walkthrough": "tsx ./src/record-walkthrough.ts",

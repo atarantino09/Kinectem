@@ -36,3 +36,25 @@ typecheck gate in dev/build path).
 **Why:** template config, accepted across both artifacts. **How to apply:** do NOT "fix"
 by editing tsconfig — these are not regressions. When adding code, just don't introduce
 NEW error classes beyond this known DOM-lib gap.
+
+# Pushing captions to the STATIC marketing landing page (burn-in)
+
+The marketing site (`artifacts/marketing`) is static multi-page HTML (`index.html` embeds
+a plain `<video src="./walkthrough.mp4" controls>`), so the React caption overlay from
+`App.tsx` cannot transfer. To "push the captioned version" to marketing, captions are
+**burned into the mp4** via `pnpm --filter @workspace/scripts run burn-walkthrough-captions`
+(`scripts/src/burn-walkthrough-captions.ts`): it emits an ASS subtitle file (libass) and
+runs `ffmpeg -vf subtitles=...` (x264 crf20, audio copied), reading the CLEAN source
+`artifacts/signup-walkthrough/public/walkthrough.mp4` and writing the captioned
+`artifacts/marketing/public/walkthrough.mp4`. Poster regenerated with
+`ffmpeg -ss <t> -frames:v 1`.
+
+**Why this split:** signup-walkthrough's own mp4 must stay caption-free (its app overlays
+captions live in React); only marketing gets burn-in. ASS style mirrors the game-recap box
+(BorderStyle=3 opaque box, BackColour `&H80000000` ≈ bg-black/50, white DejaVu Sans,
+bottom-center, `\fad(320,320)`). DM Sans is NOT installed system-wide — DejaVu Sans is the
+burn font.
+
+**How to apply / drift risk:** the cue list is DUPLICATED — `CAPTIONS` in `App.tsx` and the
+`CAPTIONS` array in the burn script. If you change caption text/timings, update BOTH and
+re-run the burn script. ffmpeg has libass (`subtitles`/`ass`) + `drawtext` available.
