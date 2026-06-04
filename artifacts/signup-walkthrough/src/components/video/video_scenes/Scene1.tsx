@@ -2,12 +2,9 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Caption } from '../components/Chrome';
 import { AnimatedCursor } from '../components/UIHelpers';
-import { useElapsed } from '../useElapsed';
-import { captionOpacity } from '../timing';
 
 export function Scene1() {
   const [phase, setPhase] = useState(0);
-  const t = useElapsed();
 
   useEffect(() => {
     const timers = [
@@ -84,14 +81,7 @@ export function Scene1() {
         isClicking={phase >= 4} 
       />
 
-      <Caption
-        text="Meet Kinectem — built for youth-sports admins."
-        opacity={captionOpacity(t, 0, 3400)}
-      />
-      <Caption
-        text="Getting started takes minutes."
-        opacity={captionOpacity(t, 3400, 6000)}
-      />
+      <Caption text="Meet Kinectem — built for youth-sports admins. Getting started takes minutes." />
     </motion.div>
   );
 }
