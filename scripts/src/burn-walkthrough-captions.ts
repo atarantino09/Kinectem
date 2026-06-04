@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,12 @@ const SOURCE = resolve(
 // Captions are burned in for the static marketing landing page, which embeds a
 // plain <video> and cannot run the React overlay.
 const OUTPUT = resolve(WORKSPACE_ROOT, "artifacts/marketing/public/walkthrough.mp4");
+// A captioned copy the signup-walkthrough app offers as a download (its own
+// walkthrough.mp4 stays caption-free for live React-overlay playback).
+const DOWNLOAD_COPY = resolve(
+  WORKSPACE_ROOT,
+  "artifacts/signup-walkthrough/public/walkthrough-captioned.mp4",
+);
 
 const VIDEO_W = 1280;
 const VIDEO_H = 720;
@@ -127,6 +133,9 @@ function main() {
       ],
       { stdio: "inherit" },
     );
+
+    copyFileSync(OUTPUT, DOWNLOAD_COPY);
+    console.log("  download copy:", DOWNLOAD_COPY);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
