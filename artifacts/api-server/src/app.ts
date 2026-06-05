@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import docsRouter from "./routes/docs";
+import foundingAdminPageRouter from "./routes/founding-admin-page";
 import { logger } from "./lib/logger";
 import { loadSession } from "./lib/auth";
 
@@ -33,6 +34,7 @@ app.get("/api/healthz", (_req, res) => {
   res.json({ ok: true });
 });
 app.use("/api", docsRouter);
+app.use("/api", foundingAdminPageRouter);
 app.use("/api/v1", router);
 
 export default app;

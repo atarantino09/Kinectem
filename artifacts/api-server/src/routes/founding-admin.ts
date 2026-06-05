@@ -17,8 +17,16 @@ function adminPassword(): string | null {
   return pw && pw.length > 0 ? pw : null;
 }
 
-function tokenSecret(): string {
-  return process.env.SESSION_SECRET ?? "founding-admin-dev-secret";
+function tokenSecret(): string | null {
+  const s = process.env.SESSION_SECRET;
+  return s && s.length > 0 ? s : null;
+}
+
+// The feature is only usable when BOTH the password and a signing secret are
+// present. We never fall back to a hardcoded secret — a missing SESSION_SECRET
+// would otherwise let anyone forge a valid bearer token.
+function isConfigured(): boolean {
+  return adminPassword() !== null && tokenSecret() !== null;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -28,19 +36,21 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-function signToken(expMs: number): string {
-  const mac = createHmac("sha256", tokenSecret()).update(String(expMs)).digest("hex");
+function signToken(expMs: number, secret: string): string {
+  const mac = createHmac("sha256", secret).update(String(expMs)).digest("hex");
   return `${expMs}.${mac}`;
 }
 
 function verifyToken(token: string | undefined): boolean {
   if (!token) return false;
+  const secret = tokenSecret();
+  if (!secret) return false;
   const dot = token.indexOf(".");
   if (dot < 0) return false;
   const expPart = token.slice(0, dot);
   const expMs = Number(expPart);
   if (!Number.isFinite(expMs) || expMs < Date.now()) return false;
-  const expected = signToken(expMs);
+  const expected = signToken(expMs, secret);
   return safeEqual(token, expected);
 }
 
@@ -53,7 +63,7 @@ function bearerToken(req: Request): string | undefined {
 }
 
 function requireFoundingAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!adminPassword()) {
+  if (!isConfigured()) {
     apiError(res, 503, "Founding 100 admin is not configured.", {
       code: "NOT_CONFIGURED",
     });
@@ -86,7 +96,8 @@ router.post(
   loginLimiter,
   asyncHandler(async (req, res) => {
     const pw = adminPassword();
-    if (!pw) {
+    const secret = tokenSecret();
+    if (!pw || !secret) {
       apiError(res, 503, "Founding 100 admin is not configured.", {
         code: "NOT_CONFIGURED",
       });
@@ -102,7 +113,7 @@ router.post(
       return;
     }
     const expMs = Date.now() + TOKEN_TTL_MS;
-    res.json({ token: signToken(expMs), expiresAt: new Date(expMs).toISOString() });
+    res.json({ token: signToken(expMs, secret), expiresAt: new Date(expMs).toISOString() });
   }),
 );
 
@@ -176,7 +187,7 @@ router.patch(
         sport: body.sport,
         updatedAt: new Date(),
       })
-      .where(eq(foundingSignups.id, req.params.id))
+      .where(eq(foundingSignups.id, String(req.params.id)))
       .returning();
     if (!row) {
       apiError(res, 404, "Signup not found.", { code: "NOT_FOUND" });
@@ -192,7 +203,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     const [row] = await db
       .delete(foundingSignups)
-      .where(eq(foundingSignups.id, req.params.id))
+      .where(eq(foundingSignups.id, String(req.params.id)))
       .returning();
     if (!row) {
       apiError(res, 404, "Signup not found.", { code: "NOT_FOUND" });

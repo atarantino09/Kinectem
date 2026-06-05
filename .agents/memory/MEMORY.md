@@ -2,3 +2,4 @@
 - [Video artifact audio timeline](video-artifact-audio.md) — single composite track; VO adelay offsets must stay in lockstep with SCENE_DURATIONS; seamless music loop via acrossfade.
 - [Video artifact master-clock player](video-artifact-player.md) — game-recap video runs on one usePlayhead clock; scenes are pure functions of local `t`; scrubbable timeline + export/recording path split in VideoWithControls.
 - [Signup-walkthrough captions](signup-walkthrough-captions.md) — signup vid is a screen recording w/ live React caption overlay; marketing is static HTML so captions are burned into its mp4 via ffmpeg libass (cue list duplicated — keep in sync).
+- [Standalone admin page when artifact cap is hit](founding-admin-standalone.md) — at 7-artifact cap, serve a self-contained password-gated HTML page from api-server under /api instead of a new artifact; fail closed if SESSION_SECRET missing.
