@@ -1293,6 +1293,12 @@ header { position: sticky; top: 0; z-index: 100; }
   transition: color 0.15s;
 }
 .footer__link:hover { color: var(--white); }
+.footer__link--disabled {
+  color: rgba(255,255,255,0.25);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.footer__link--disabled:hover { color: rgba(255,255,255,0.25); }
 
 .footer__social {
   display: flex;
