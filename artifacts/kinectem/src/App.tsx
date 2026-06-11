@@ -1,42 +1,50 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/Layout";
-import NotFound from "@/pages/not-found";
-import FeedPage from "@/pages/FeedPage";
-import OrganizationsListPage from "@/pages/OrganizationsListPage";
-import MyOrgsPage from "@/pages/MyOrgsPage";
-import OrganizationPage from "@/pages/OrganizationPage";
-import MyTeamsPage from "@/pages/MyTeamsPage";
-import TeamPage from "@/pages/TeamPage";
-import UserProfilePage from "@/pages/UserProfilePage";
-import PostPage from "@/pages/PostPage";
-import NewPostPage from "@/pages/NewPostPage";
-import SearchPage from "@/pages/SearchPage";
-import MessagesPage from "@/pages/MessagesPage";
-import PendingTagsPage from "@/pages/PendingTagsPage";
-import DraftsPage from "@/pages/DraftsPage";
-import MyTagsPage from "@/pages/MyTagsPage";
-import GuardianPage from "@/pages/GuardianPage";
-import FollowRequestsPage from "@/pages/FollowRequestsPage";
-import ChildConversationPage from "@/pages/ChildConversationPage";
-import InviteAcceptPage from "@/pages/InviteAcceptPage";
-import OrgInviteAcceptPage from "@/pages/OrgInviteAcceptPage";
-import LoginPage from "@/pages/LoginPage";
-import ResetPasswordPage from "@/pages/ResetPasswordPage";
-import GuardianConfirmPage from "@/pages/GuardianConfirmPage";
-import GuardianConsentPage from "@/pages/GuardianConsentPage";
-import GuardianConsentFinalizePage from "@/pages/GuardianConsentFinalizePage";
-import GuardianRevokePage from "@/pages/GuardianRevokePage";
-import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
-import CoppaNoticePage from "@/pages/CoppaNoticePage";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import AdminUsers from "@/pages/admin/AdminUsers";
-import AdminModeration from "@/pages/admin/AdminModeration";
-import AdminActivity from "@/pages/admin/AdminActivity";
-import AdminFounding100 from "@/pages/admin/AdminFounding100";
-import AdminAiKeys from "@/pages/admin/AdminAiKeys";
+import { PageLoader } from "@/components/PageLoader";
+
+// Route components are lazy-loaded so each page ships as its own chunk and
+// the first visit only downloads the code needed for the current route.
+// The Layout shell stays eager so navigation keeps the chrome on screen.
+const NotFound = lazy(() => import("@/pages/not-found"));
+const FeedPage = lazy(() => import("@/pages/FeedPage"));
+const OrganizationsListPage = lazy(() => import("@/pages/OrganizationsListPage"));
+const MyOrgsPage = lazy(() => import("@/pages/MyOrgsPage"));
+const OrganizationPage = lazy(() => import("@/pages/OrganizationPage"));
+const MyTeamsPage = lazy(() => import("@/pages/MyTeamsPage"));
+const TeamPage = lazy(() => import("@/pages/TeamPage"));
+const UserProfilePage = lazy(() => import("@/pages/UserProfilePage"));
+const PostPage = lazy(() => import("@/pages/PostPage"));
+const NewPostPage = lazy(() => import("@/pages/NewPostPage"));
+const SearchPage = lazy(() => import("@/pages/SearchPage"));
+const MessagesPage = lazy(() => import("@/pages/MessagesPage"));
+const PendingTagsPage = lazy(() => import("@/pages/PendingTagsPage"));
+const DraftsPage = lazy(() => import("@/pages/DraftsPage"));
+const MyTagsPage = lazy(() => import("@/pages/MyTagsPage"));
+const GuardianPage = lazy(() => import("@/pages/GuardianPage"));
+const FollowRequestsPage = lazy(() => import("@/pages/FollowRequestsPage"));
+const ChildConversationPage = lazy(() => import("@/pages/ChildConversationPage"));
+const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
+const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
+const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
+const GuardianConfirmPage = lazy(() => import("@/pages/GuardianConfirmPage"));
+const GuardianConsentPage = lazy(() => import("@/pages/GuardianConsentPage"));
+const GuardianConsentFinalizePage = lazy(
+  () => import("@/pages/GuardianConsentFinalizePage"),
+);
+const GuardianRevokePage = lazy(() => import("@/pages/GuardianRevokePage"));
+const PrivacyPolicyPage = lazy(() => import("@/pages/PrivacyPolicyPage"));
+const CoppaNoticePage = lazy(() => import("@/pages/CoppaNoticePage"));
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminModeration = lazy(() => import("@/pages/admin/AdminModeration"));
+const AdminActivity = lazy(() => import("@/pages/admin/AdminActivity"));
+const AdminFounding100 = lazy(() => import("@/pages/admin/AdminFounding100"));
+const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +57,7 @@ const queryClient = new QueryClient({
 
 function Router() {
   return (
+    <Suspense fallback={<PageLoader />}>
     <Switch>
       {/* Fullscreen routes (no layout) */}
       <Route path="/login" component={LoginPage} />
@@ -72,6 +81,7 @@ function Router() {
       {/* Layout routes */}
       <Route>
         <Layout>
+          <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/" component={FeedPage} />
             <Route path="/search" component={SearchPage} />
@@ -106,9 +116,11 @@ function Router() {
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
             <Route component={NotFound} />
           </Switch>
+          </Suspense>
         </Layout>
       </Route>
     </Switch>
+    </Suspense>
   );
 }
 

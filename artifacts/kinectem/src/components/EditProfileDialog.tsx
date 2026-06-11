@@ -50,7 +50,7 @@ import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { US_STATES } from "@/lib/usStates";
 import { SPORTS } from "@/lib/sports";
 import { DOB_MONTHS, DOB_DAYS, DOB_YEARS, parseDob } from "@/lib/dob";
-import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 
 const MAX_USER_SPORTS = 5;
 

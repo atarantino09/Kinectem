@@ -1,4 +1,4 @@
-import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 
 // Locked to the team-page hero banner shape so what the admin sees in
 // the cropper matches what shows up on the team page. The hero is

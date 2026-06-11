@@ -32,7 +32,7 @@ import {
 } from "@/lib/shrinkImage";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
-import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 
 type OrgLike = {
   id: string;

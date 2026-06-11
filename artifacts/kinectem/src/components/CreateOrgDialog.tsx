@@ -38,7 +38,7 @@ import {
 import { apiErrorMessage } from "@/lib/api-errors";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
-import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 
 function slugify(s: string) {
   return s
