@@ -1,5 +1,5 @@
-import { pgTable, text, integer, timestamp, uuid, pgEnum, boolean, primaryKey, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, integer, timestamp, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent"]);
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
@@ -248,7 +248,13 @@ export const users = pgTable("users", {
   lastSignInAt: timestamp("last_sign_in_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — trigram GIN indexes back the `ilike '%q%'` name/email
+  // matches in cross-entity search so they stop scanning the whole
+  // table. Requires the `pg_trgm` extension (created in the migration).
+  nameTrgmIdx: index("users_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+  emailTrgmIdx: index("users_email_trgm_idx").using("gin", sql`${t.email} gin_trgm_ops`),
+}));
 
 export const passwordResets = pgTable("password_resets", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -328,7 +334,10 @@ export const organizations = pgTable("organizations", {
   bannerUrl: text("banner_url"),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.
+  nameTrgmIdx: index("organizations_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+}));
 
 // Despite the legacy table name, this records every member of an
 // organization — owners and admins (who can manage the org) as well as
@@ -344,13 +353,23 @@ export const organizationAdmins = pgTable("organization_admins", {
   // NULL = checklist is shown on the org dashboard for this user;
   // non-NULL = user dismissed it at this time. Re-opening clears it.
   dismissedSetupAt: timestamp("dismissed_setup_at"),
-}, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
+}, (t) => ({
+  pk: primaryKey({ columns: [t.organizationId, t.userId] }),
+  // Task #592 — PK leads with organization_id, so "orgs this user
+  // manages" lookups need an index on user_id.
+  userIdIdx: index("organization_admins_user_id_idx").on(t.userId),
+}));
 
 export const organizationFollowers = pgTable("organization_followers", {
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => ({ pk: primaryKey({ columns: [t.organizationId, t.userId] }) }));
+}, (t) => ({
+  pk: primaryKey({ columns: [t.organizationId, t.userId] }),
+  // Task #592 — PK leads with organization_id; the feed fan-in needs
+  // "orgs this user follows" keyed by user_id.
+  userIdIdx: index("organization_followers_user_id_idx").on(t.userId),
+}));
 
 // When a user manually unfollows an organization, we record an opt-out so
 // that automatic follow flows (e.g. joining a team in the org) do not silently
@@ -378,7 +397,12 @@ export const userFollowers = pgTable("user_followers", {
     { onDelete: "set null" },
   ),
   decidedAt: timestamp("decided_at"),
-}, (t) => ({ pk: primaryKey({ columns: [t.followingUserId, t.followerUserId] }) }));
+}, (t) => ({
+  pk: primaryKey({ columns: [t.followingUserId, t.followerUserId] }),
+  // Task #592 — PK leads with following_user_id; the feed needs "users
+  // this user follows" keyed by follower_user_id.
+  followerUserIdIdx: index("user_followers_follower_user_id_idx").on(t.followerUserId),
+}));
 
 // Task #504 — Per-user sports list backing the multi-select picker on
 // EditProfileDialog (Task #500). Self-only on read + write at the
@@ -414,13 +438,23 @@ export const teams = pgTable("teams", {
     (): AnyPgColumn => users.id,
     { onDelete: "set null" },
   ),
-});
+}, (t) => ({
+  // Task #592 — FK index for team→org joins (every team read path) and
+  // a trigram GIN index for `ilike '%q%'` team-name search.
+  organizationIdIdx: index("teams_organization_id_idx").on(t.organizationId),
+  nameTrgmIdx: index("teams_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+}));
 
 export const teamFollowers = pgTable("team_followers", {
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => ({ pk: primaryKey({ columns: [t.teamId, t.userId] }) }));
+}, (t) => ({
+  pk: primaryKey({ columns: [t.teamId, t.userId] }),
+  // Task #592 — PK leads with team_id, so "teams this user follows"
+  // (feed fan-in) needs its own index on user_id.
+  userIdIdx: index("team_followers_user_id_idx").on(t.userId),
+}));
 
 export const rosterEntries = pgTable("roster_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -432,7 +466,12 @@ export const rosterEntries = pgTable("roster_entries", {
   jerseyNumber: integer("jersey_number"),
   invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — both FKs are filtered on hot paths: team_id on team
+  // roster reads, user_id on "this user's teams" profile reads.
+  teamIdIdx: index("roster_entries_team_id_idx").on(t.teamId),
+  userIdIdx: index("roster_entries_user_id_idx").on(t.userId),
+}));
 
 // Task #541 — Email/admin invites at the organization level. Mirrors
 // rosterInvites but for org membership (not team roster). Token is
@@ -455,7 +494,12 @@ export const organizationInvites = pgTable("organization_invites", {
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — pending org invites are listed per org and looked up by
+  // invitee email on accept.
+  organizationIdIdx: index("organization_invites_organization_id_idx").on(t.organizationId),
+  invitedEmailIdx: index("organization_invites_invited_email_idx").on(t.invitedEmail),
+}));
 
 export const rosterInvites = pgTable("roster_invites", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -470,7 +514,12 @@ export const rosterInvites = pgTable("roster_invites", {
   status: inviteStatusEnum("status").notNull().default("pending"),
   invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — pending roster invites are listed per team and looked
+  // up by invitee email when matching an invite to a signing-up user.
+  teamIdIdx: index("roster_invites_team_id_idx").on(t.teamId),
+  invitedEmailIdx: index("roster_invites_invited_email_idx").on(t.invitedEmail),
+}));
 
 export const articles = pgTable("articles", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -492,7 +541,12 @@ export const articles = pgTable("articles", {
   hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — FK indexes: team_id (feed/team/org joins) and author_id
+  // (profile "my recaps" + feed author fan-in).
+  teamIdIdx: index("articles_team_id_idx").on(t.teamId),
+  authorIdIdx: index("articles_author_id_idx").on(t.authorId),
+}));
 
 export const articleAuthors = pgTable("article_authors", {
   articleId: uuid("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
@@ -525,7 +579,14 @@ export const highlights = pgTable("highlights", {
   approvedAt: timestamp("approved_at"),
   approvedByUserId: uuid("approved_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — FK indexes: team_id (feed/team/org joins) and
+  // uploader_id (profile "my highlights" + feed uploader fan-in). The
+  // existing `highlights_team_pending_idx` is a partial index for the
+  // approval queue only; this is the general-purpose team_id index.
+  teamIdIdx: index("highlights_team_id_idx").on(t.teamId),
+  uploaderIdIdx: index("highlights_uploader_id_idx").on(t.uploaderId),
+}));
 
 export const orgPosts = pgTable("org_posts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -542,7 +603,12 @@ export const orgPosts = pgTable("org_posts", {
   hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — FK indexes: organization_id (followed-org feed fan-in)
+  // and author_id (profile + feed author joins).
+  organizationIdIdx: index("org_posts_organization_id_idx").on(t.organizationId),
+  authorIdIdx: index("org_posts_author_id_idx").on(t.authorId),
+}));
 
 export const articleTags = pgTable("article_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -553,7 +619,12 @@ export const articleTags = pgTable("article_tags", {
   source: tagSourceEnum("source").notNull().default("manual"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — article_id (tagged users for a post) and user_id (feed
+  // "articles tagging users I follow") are both filtered hot paths.
+  articleIdIdx: index("article_tags_article_id_idx").on(t.articleId),
+  userIdIdx: index("article_tags_user_id_idx").on(t.userId),
+}));
 
 export const highlightTags = pgTable("highlight_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -563,7 +634,12 @@ export const highlightTags = pgTable("highlight_tags", {
   status: tagStatusEnum("status").notNull().default("approved"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — highlight_id (tagged users for a highlight) and user_id
+  // (feed "highlights tagging users I follow") are both filtered.
+  highlightIdIdx: index("highlight_tags_highlight_id_idx").on(t.highlightId),
+  userIdIdx: index("highlight_tags_user_id_idx").on(t.userId),
+}));
 
 // Re-shares of game-recap articles or highlights to the sharer's
 // own profile/feed. Polymorphic over (postKind, postRefId) — only
@@ -579,6 +655,10 @@ export const postShares = pgTable("post_shares", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   uniqPostSharer: uniqueIndex("post_shares_kind_ref_sharer_uniq").on(t.postKind, t.postRefId, t.sharerUserId),
+  // Task #592 — the unique index leads with post_kind, so the feed's
+  // "shares by me or users I follow" (filtered on sharer_user_id alone)
+  // needs its own index.
+  sharerUserIdIdx: index("post_shares_sharer_user_id_idx").on(t.sharerUserId),
 }));
 
 export const postReactions = pgTable("post_reactions", {
@@ -610,7 +690,11 @@ export const postComments = pgTable("post_comments", {
   ),
   decidedAt: timestamp("decided_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — comment listing + stat counts filter on
+  // (post_kind, post_ref_id); this index serves those lookups.
+  postRefIdx: index("post_comments_kind_ref_idx").on(t.postKind, t.postRefId),
+}));
 
 export const contentReports = pgTable("content_reports", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -791,7 +875,11 @@ export const notifications = pgTable("notifications", {
   actorUserId: uuid("actor_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // Task #592 — the notification bell lists/counts by user_id ordered
+  // by created_at desc; a composite index serves both shapes.
+  userCreatedIdx: index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt.desc()),
+}));
 
 // Per-child soft-hide for an individual message. Used when a parent
 // removes a `message:<id>` from the family dashboard: the message stays

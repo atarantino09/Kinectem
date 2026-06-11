@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, users, organizations, teams } from "@workspace/db";
-import { and, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { filterOutMinors } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
@@ -74,6 +74,14 @@ router.get(
       { id: viewerId, role: req.realUser?.role ?? null },
       userRows.map((u) => u.id),
     );
+    // Task #592 — batch the team→organization name lookup. Previously
+    // each team result fired its own `SELECT ... FROM organizations`
+    // (an N+1); now we fetch every referenced org in one query.
+    const teamOrgIds = Array.from(new Set(teamRows.map((t) => t.organizationId)));
+    const orgRowsForTeams = teamOrgIds.length
+      ? await db.select().from(organizations).where(inArray(organizations.id, teamOrgIds))
+      : [];
+    const orgById = new Map(orgRowsForTeams.map((o) => [o.id, o]));
     res.json({
       users: {
         data: userRows.map((u) => ({
@@ -95,24 +103,20 @@ router.get(
         pagination: emptyPagination(),
       },
       teams: {
-        data: await Promise.all(
-          teamRows.map(async (t) => {
-            const [org] = await db
-              .select()
-              .from(organizations)
-              .where(eq(organizations.id, t.organizationId))
-              .limit(1);
-            return {
-              entityType: "team" as const,
-              id: t.id,
-              name: t.name,
-              slug: t.name.toLowerCase().replace(/\s+/g, "-"),
-              avatarUrl: t.logoUrl ?? null,
-              organizationName: org?.name ?? null,
-              organizationSlug: org ? org.name.toLowerCase().replace(/\s+/g, "-") : null,
-            };
-          }),
-        ),
+        // Task #592 — batch the team→org name lookup into a single
+        // query keyed by org id instead of one query per team row.
+        data: teamRows.map((t) => {
+          const org = orgById.get(t.organizationId) ?? null;
+          return {
+            entityType: "team" as const,
+            id: t.id,
+            name: t.name,
+            slug: t.name.toLowerCase().replace(/\s+/g, "-"),
+            avatarUrl: t.logoUrl ?? null,
+            organizationName: org?.name ?? null,
+            organizationSlug: org ? org.name.toLowerCase().replace(/\s+/g, "-") : null,
+          };
+        }),
         pagination: emptyPagination(),
       },
     });
