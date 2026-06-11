@@ -4,8 +4,11 @@ import { eq } from "drizzle-orm";
 import { decryptSecret } from "./secret-crypto";
 
 // Sensible default when an admin hasn't pinned a specific model. The admin
-// can override this per provider from /admin/ai-keys.
-export const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest";
+// can override this per provider from /admin/ai-keys. Pinned to a dated
+// Sonnet release rather than a `-latest` alias so the model can't silently
+// disappear out from under us (the old `claude-3-5-sonnet-latest` alias is
+// no longer served and returned 404 "not_found_error: model").
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
 
 // Thrown when no Anthropic key has been configured by an admin yet. Routes
 // translate this into a 503 with a friendly "ask an admin" message.
