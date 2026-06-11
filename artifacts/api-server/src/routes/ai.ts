@@ -11,6 +11,7 @@ import { encryptSecret } from "../lib/secret-crypto";
 import {
   generatePostText,
   generateContextSuggestion,
+  listAnthropicModels,
   AiNotConfiguredError,
   DEFAULT_ANTHROPIC_MODEL,
 } from "../lib/ai";
@@ -123,6 +124,34 @@ router.get(
       };
     });
     res.json({ data, defaultModel: DEFAULT_ANTHROPIC_MODEL });
+  }),
+);
+
+// Admin-only: list the Claude models the saved key can use, to populate the
+// model dropdown. Requires a configured key (the list is key-scoped).
+router.get(
+  "/admin/ai-providers/:provider/models",
+  requireAdmin,
+  aiAssistLimiter,
+  asyncHandler(async (req, res) => {
+    const provider = String(req.params.provider);
+    if (!isProvider(provider)) {
+      apiError(res, 404, "Unknown provider.", { code: "NOT_FOUND" });
+      return;
+    }
+    try {
+      const models = await listAnthropicModels();
+      res.json({ data: models, defaultModel: DEFAULT_ANTHROPIC_MODEL });
+    } catch (err) {
+      if (err instanceof AiNotConfiguredError) {
+        apiError(res, 503, err.message, { code: "AI_NOT_CONFIGURED" });
+        return;
+      }
+      req.log.error({ err }, "Listing AI models failed");
+      apiError(res, 502, "Could not load models. Check the saved API key.", {
+        code: "AI_REQUEST_FAILED",
+      });
+    }
   }),
 );
 

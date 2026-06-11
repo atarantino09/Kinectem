@@ -37,6 +37,22 @@ async function getAnthropicConfig(): Promise<{
   };
 }
 
+// Lists the Claude models available to the configured API key, newest first.
+// Used to populate the model dropdown on the admin AI Assist page so admins
+// pick from real model ids instead of typing one (and risking a 404).
+export async function listAnthropicModels(): Promise<
+  { id: string; displayName: string }[]
+> {
+  const { apiKey } = await getAnthropicConfig();
+  const client = new Anthropic({ apiKey });
+  const models: { id: string; displayName: string }[] = [];
+  // Page through all models (the SDK exposes async iteration).
+  for await (const model of client.models.list({ limit: 100 })) {
+    models.push({ id: model.id, displayName: model.display_name ?? model.id });
+  }
+  return models;
+}
+
 export type AssistMode = "draft" | "polish";
 export type AssistPostType = "short" | "long";
 

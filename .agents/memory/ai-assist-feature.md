@@ -17,6 +17,10 @@ description: How AI-generated post copy and self-managed provider API keys work 
   - **Why:** the `claude-3-5-sonnet-latest` alias stopped being served and returned `404 not_found_error: model`, which surfaced to users as `502 AI_REQUEST_FAILED`. Dated releases (e.g. `claude-sonnet-4-5-20250929`) are stable.
   - **How to apply:** when bumping the default model or accepting an admin override, verify the id against the live models list before trusting it.
 
+- **Admin picks the model from a live dropdown, not free text.** `GET /admin/ai-providers/:provider/models` calls the Anthropic SDK `client.models.list` (admin-only, requires a saved key, same rate limiter) so the dropdown shows real, current model ids.
+  - **Why:** typing a model id risks pinning a stale/aliased id that 404s (see the `-latest` lesson above); the live list always reflects what the key can actually call.
+  - **How to apply:** the frontend always keeps the saved model selectable even if the list fails to load; keep that fallback so a fetch error never silently wipes the admin's pinned model.
+
 - **Admin "context & personality" tunes the AI voice.** Optional nullable `ai_provider_keys.system_context` is prepended to the system prompt of every generation; admins can have the AI draft this field itself via admin-only `POST /admin/ai-providers/:provider/assist-context` (requires a saved key, same per-user rate limiter as `/ai/assist`).
   - **Why:** orgs wanted generated copy to carry their own voice/values without code changes.
   - **How to apply:** any new generation path must prepend `systemContext` too, or it will silently ignore the admin's tuning.

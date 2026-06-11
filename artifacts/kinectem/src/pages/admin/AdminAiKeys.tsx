@@ -8,6 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -16,7 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, KeyRound, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, KeyRound, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
 type ProviderStatus = {
   provider: string;
@@ -27,6 +34,13 @@ type ProviderStatus = {
   updatedAt: string | null;
 };
 type ProvidersResponse = { data: ProviderStatus[]; defaultModel: string };
+
+type ModelOption = { id: string; displayName: string };
+type ModelsResponse = { data: ModelOption[]; defaultModel: string };
+
+// Sentinel value for the "use the platform default" Select option (empty
+// string isn't allowed as a Radix Select item value).
+const DEFAULT_MODEL_VALUE = "__default__";
 
 export default function AdminAiKeys() {
   const { toast } = useToast();
@@ -49,6 +63,35 @@ export default function AdminAiKeys() {
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
 
+  // Live model list from the saved key — populates the model dropdown. Only
+  // fetched once a key is configured (the list is key-scoped).
+  const {
+    data: modelsData,
+    isFetching: modelsLoading,
+    error: modelsError,
+    refetch: refetchModels,
+  } = useQuery<ModelsResponse>({
+    queryKey: ["admin", "ai-models", "anthropic"],
+    enabled: !!anthropic?.configured,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    queryFn: () =>
+      customFetch<ModelsResponse>(
+        `/api/v1/admin/ai-providers/anthropic/models`,
+        { method: "GET" },
+      ),
+  });
+
+  // Ensure the currently-saved model is always selectable even if the live
+  // list fails to load or doesn't include it.
+  const modelOptions: ModelOption[] = (() => {
+    const opts = modelsData?.data ? [...modelsData.data] : [];
+    if (model && !opts.some((m) => m.id === model)) {
+      opts.unshift({ id: model, displayName: `${model} (current)` });
+    }
+    return opts;
+  })();
+
   // Seed the editable fields from the stored values once they load.
   useEffect(() => {
     setModel(anthropic?.model ?? "");
@@ -57,8 +100,12 @@ export default function AdminAiKeys() {
     setSystemContext(anthropic?.systemContext ?? "");
   }, [anthropic?.systemContext]);
 
-  const refresh = () =>
+  const refresh = () => {
     qc.invalidateQueries({ queryKey: ["admin", "ai-providers"] });
+    // The available model list is key-scoped, so refresh it whenever the key
+    // changes (save/remove).
+    qc.invalidateQueries({ queryKey: ["admin", "ai-models", "anthropic"] });
+  };
 
   const save = async () => {
     if (!anthropic?.configured && !apiKey.trim()) {
@@ -196,22 +243,63 @@ export default function AdminAiKeys() {
               </div>
 
               <div>
-                <Label
-                  htmlFor="anthropic-model"
-                  className="text-xs font-bold uppercase tracking-wide text-muted-foreground"
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="anthropic-model"
+                    className="text-xs font-bold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Model (optional)
+                  </Label>
+                  {anthropic?.configured && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={() => refetchModels()}
+                      disabled={modelsLoading}
+                      data-testid="button-refresh-models"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 ${modelsLoading ? "animate-spin" : ""}`}
+                      />
+                      Refresh
+                    </Button>
+                  )}
+                </div>
+                <Select
+                  value={model || DEFAULT_MODEL_VALUE}
+                  onValueChange={(v) =>
+                    setModel(v === DEFAULT_MODEL_VALUE ? "" : v)
+                  }
+                  disabled={!anthropic?.configured || modelsLoading}
                 >
-                  Model (optional)
-                </Label>
-                <Input
-                  id="anthropic-model"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder={defaultModel}
-                  className="mt-1.5 font-mono"
-                  data-testid="input-anthropic-model"
-                />
+                  <SelectTrigger
+                    id="anthropic-model"
+                    className="mt-1.5"
+                    data-testid="select-anthropic-model"
+                  >
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DEFAULT_MODEL_VALUE}>
+                      Platform default{defaultModel ? ` (${defaultModel})` : ""}
+                    </SelectItem>
+                    {modelOptions.map((m) => (
+                      <SelectItem key={m.id} value={m.id} className="font-mono">
+                        {m.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Leave blank to use the default ({defaultModel || "provider default"}).
+                  {!anthropic?.configured
+                    ? "Save an API key first to load available models."
+                    : modelsLoading
+                      ? "Loading available models…"
+                      : modelsError
+                        ? "Couldn't load the model list — using the saved value. Check the API key, then Refresh."
+                        : "Choose a Claude model, or leave on the platform default."}
                 </p>
               </div>
 
