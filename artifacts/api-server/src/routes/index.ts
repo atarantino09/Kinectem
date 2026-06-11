@@ -26,6 +26,7 @@ import reportsRouter from "./reports";
 import masqueradeRouter from "./masquerade";
 import foundingSignupsRouter from "./founding-signups";
 import foundingAdminRouter from "./founding-admin";
+import aiRouter from "./ai";
 
 const router: Router = Router();
 
@@ -62,5 +63,6 @@ router.use(reportsRouter);
 router.use(masqueradeRouter);
 router.use(foundingSignupsRouter);
 router.use(foundingAdminRouter);
+router.use(aiRouter);
 
 export default router;

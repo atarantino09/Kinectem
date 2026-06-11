@@ -15,6 +15,7 @@ import { FileText, Info, Play, Save, X } from "lucide-react";
 import { Link } from "wouter";
 import { TeamAvatar, UserAvatar } from "@/components/UserAvatar";
 import { MediaSection } from "./MediaSection";
+import { AiAssistButton } from "./AiAssistButton";
 import {
   RosterTagPicker,
   type RosterPickerMember,
@@ -128,6 +129,12 @@ export function PostFormFields({
   // Org Updates use the long form but hide gameDate / tagRoster /
   // on-behalf-of (which only apply to recap articles).
   const isOrgPost = loadedKind === "org_post";
+  // Best-effort team name for AI Assist context: the loaded post's team
+  // (edit path) or the currently-selected team in the composer.
+  const aiTeamName =
+    loadedTeamName ??
+    myTeams?.data.find((m) => m.teamId === teamId)?.teamName ??
+    null;
   return (
     <form id="new-post-form" onSubmit={onSubmit} className="space-y-5">
       {isEditingPublished && !canDelete && (
@@ -281,14 +288,24 @@ export function PostFormFields({
       )}
 
       <div>
-        <Label
-          htmlFor="body"
-          className="text-xs font-black uppercase tracking-widest text-muted-foreground"
-        >
-          {/* Same input is reused across all three post kinds:
-              recap "Recap", highlight "Description", org "Update". */}
-          {isShort ? "Description" : isOrgPost ? "Update" : "Recap"}
-        </Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label
+            htmlFor="body"
+            className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+          >
+            {/* Same input is reused across all three post kinds:
+                recap "Recap", highlight "Description", org "Update". */}
+            {isShort ? "Description" : isOrgPost ? "Update" : "Recap"}
+          </Label>
+          <AiAssistButton
+            postType={postType}
+            title={title}
+            body={body}
+            gameDate={gameDate}
+            teamName={aiTeamName}
+            onInsert={onBodyChange}
+          />
+        </div>
         <Textarea
           id="body"
           value={body}
