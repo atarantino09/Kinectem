@@ -149,6 +149,25 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.1; }
 .founding-cta:focus-visible {
   box-shadow: 0 0 0 3px rgba(124,58,237,0.45);
 }
+.nav__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.nav__login {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey-700);
+  border: 1.5px solid var(--grey-100);
+  border-radius: 9999px;
+  padding: 9px 20px;
+  background: var(--white);
+  transition: border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.nav__login:hover { border-color: var(--purple); color: var(--purple); }
+
 .founding-cta--nav { width: 200px; max-width: 40vw; }
 .founding-cta--hero { width: 260px; max-width: 80vw; }
 .founding-cta--mobile {
@@ -1359,7 +1378,7 @@ header { position: sticky; top: 0; z-index: 100; }
   .hero { padding: 60px 20px 80px; }
   .personas, .features, .signup { padding: 72px 20px; }
   .persona-row { margin-bottom: 72px; }
-  .nav__links, .btn--nav, .founding-cta--nav { display: none; }
+  .nav__links, .btn--nav, .founding-cta--nav, .nav__actions { display: none; }
   .nav__mobile-toggle { display: flex; }
   .stats-strip__item { font-size: 12px; padding: 8px 16px; }
   .stats-strip__divider { display: none; }
