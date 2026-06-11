@@ -19,7 +19,11 @@ export class AiNotConfiguredError extends Error {
   }
 }
 
-async function getAnthropicConfig(): Promise<{ apiKey: string; model: string }> {
+async function getAnthropicConfig(): Promise<{
+  apiKey: string;
+  model: string;
+  systemContext: string | null;
+}> {
   const [row] = await db
     .select()
     .from(aiProviderKeys)
@@ -29,6 +33,7 @@ async function getAnthropicConfig(): Promise<{ apiKey: string; model: string }> 
   return {
     apiKey: decryptSecret(row.keyCiphertext),
     model: row.model || DEFAULT_ANTHROPIC_MODEL,
+    systemContext: row.systemContext?.trim() || null,
   };
 }
 
@@ -76,19 +81,53 @@ function buildPrompt(input: AssistInput): { system: string; user: string } {
   return { system, user };
 }
 
-export async function generatePostText(input: AssistInput): Promise<string> {
-  const { apiKey, model } = await getAnthropicConfig();
-  const client = new Anthropic({ apiKey });
-  const { system, user } = buildPrompt(input);
-  const message = await client.messages.create({
-    model,
-    max_tokens: 2048,
-    system,
-    messages: [{ role: "user", content: user }],
-  });
+function textFromMessage(message: Anthropic.Message): string {
   return message.content
     .filter((block): block is Anthropic.TextBlock => block.type === "text")
     .map((block) => block.text)
     .join("")
     .trim();
+}
+
+export async function generatePostText(input: AssistInput): Promise<string> {
+  const { apiKey, model, systemContext } = await getAnthropicConfig();
+  const client = new Anthropic({ apiKey });
+  const { system, user } = buildPrompt(input);
+  // The admin-authored context & personality (if any) takes precedence —
+  // prepend it so it frames every generation.
+  const finalSystem = systemContext ? `${systemContext}\n\n${system}` : system;
+  const message = await client.messages.create({
+    model,
+    max_tokens: 2048,
+    system: finalSystem,
+    messages: [{ role: "user", content: user }],
+  });
+  return textFromMessage(message);
+}
+
+// Meta-assist: helps an admin author the "context & personality" instruction
+// itself (the field that is later prepended to post-generation prompts).
+export async function generateContextSuggestion(
+  instruction?: string,
+): Promise<string> {
+  const { apiKey, model } = await getAnthropicConfig();
+  const client = new Anthropic({ apiKey });
+  const system = [
+    "You are helping a Kinectem platform administrator write a short \"context & personality\" instruction.",
+    "This instruction is prepended to the system prompt of an AI assistant that drafts youth-sports posts (game recaps and highlight captions) for coaches and team admins.",
+    "Write clear, second-person guidance describing the desired voice, tone, values, and any organization-specific context the assistant should follow.",
+    "Keep it concise — roughly 3 to 6 sentences, or a short bulleted list.",
+    "Emphasize positivity, encouragement, teamwork, and age-appropriateness for youth sports; never anything that criticizes or negatively singles out a child.",
+    "Return only the instruction text, with no preamble, labels, or surrounding quotation marks.",
+  ].join(" ");
+  const user = instruction?.trim()
+    ? `Write the context & personality instruction based on what the admin wants:\n\n"""\n${instruction.trim()}\n"""`
+    : "Write a sensible default context & personality instruction for a youth-sports platform that wants warm, encouraging, family-friendly posts.";
+  const message = await client.messages.create({
+    model,
+    max_tokens: 1024,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+  return textFromMessage(message);
 }

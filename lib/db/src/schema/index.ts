@@ -1001,6 +1001,10 @@ export const aiProviderKeys = pgTable("ai_provider_keys", {
   id: uuid("id").primaryKey().defaultRandom(),
   provider: text("provider").notNull().unique(),
   model: text("model"),
+  // Optional admin-authored "context & personality" instruction. Prepended
+  // to the system prompt of every AI Assist generation so an operator can
+  // tune the assistant's voice, values, and organization-specific context.
+  systemContext: text("system_context"),
   keyCiphertext: text("key_ciphertext").notNull(),
   keyLast4: text("key_last4").notNull(),
   createdById: uuid("created_by_id").references(

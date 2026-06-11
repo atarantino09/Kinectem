@@ -10,6 +10,7 @@ import { canAuthorRecapAnywhere } from "../lib/permissions";
 import { encryptSecret } from "../lib/secret-crypto";
 import {
   generatePostText,
+  generateContextSuggestion,
   AiNotConfiguredError,
   DEFAULT_ANTHROPIC_MODEL,
 } from "../lib/ai";
@@ -116,6 +117,7 @@ router.get(
         provider,
         configured: !!r,
         model: r?.model ?? null,
+        systemContext: r?.systemContext ?? null,
         keyLast4: r?.keyLast4 ?? null,
         updatedAt: r?.updatedAt ? r.updatedAt.toISOString() : null,
       };
@@ -127,6 +129,7 @@ router.get(
 const UpsertBody = z.object({
   apiKey: z.string().trim().min(8).max(400).optional(),
   model: z.string().trim().max(100).optional().nullable(),
+  systemContext: z.string().trim().max(4000).optional().nullable(),
 });
 
 router.put(
@@ -145,9 +148,15 @@ router.put(
       });
       return;
     }
-    const { apiKey, model } = parsed.data;
+    const { apiKey, model, systemContext } = parsed.data;
     const normalizedModel =
       model === undefined ? undefined : model && model.length ? model : null;
+    const normalizedContext =
+      systemContext === undefined
+        ? undefined
+        : systemContext && systemContext.length
+          ? systemContext
+          : null;
 
     const [existing] = await db
       .select()
@@ -173,6 +182,9 @@ router.put(
           .set({
             ...values,
             ...(normalizedModel !== undefined ? { model: normalizedModel } : {}),
+            ...(normalizedContext !== undefined
+              ? { systemContext: normalizedContext }
+              : {}),
             updatedAt: new Date(),
           })
           .where(eq(aiProviderKeys.provider, provider));
@@ -181,6 +193,7 @@ router.put(
           provider,
           ...values,
           model: normalizedModel ?? null,
+          systemContext: normalizedContext ?? null,
           createdById: req.realUser?.id ?? null,
         });
       }
@@ -189,6 +202,9 @@ router.put(
         .update(aiProviderKeys)
         .set({
           ...(normalizedModel !== undefined ? { model: normalizedModel } : {}),
+          ...(normalizedContext !== undefined
+            ? { systemContext: normalizedContext }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(aiProviderKeys.provider, provider));
@@ -203,9 +219,58 @@ router.put(
       provider,
       configured: !!row,
       model: row?.model ?? null,
+      systemContext: row?.systemContext ?? null,
       keyLast4: row?.keyLast4 ?? null,
       updatedAt: row?.updatedAt ? row.updatedAt.toISOString() : null,
     });
+  }),
+);
+
+const ContextAssistBody = z.object({
+  instruction: z.string().trim().max(2000).optional(),
+});
+
+// Admin-only meta-assist: let the AI help write the "context & personality"
+// instruction itself. Requires the provider key to already be configured.
+router.post(
+  "/admin/ai-providers/:provider/assist-context",
+  requireAdmin,
+  aiAssistLimiter,
+  asyncHandler(async (req, res) => {
+    const provider = String(req.params.provider);
+    if (!isProvider(provider)) {
+      apiError(res, 404, "Unknown provider.", { code: "NOT_FOUND" });
+      return;
+    }
+    const parsed = ContextAssistBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid request.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    try {
+      const text = await generateContextSuggestion(parsed.data.instruction);
+      if (!text) {
+        apiError(res, 502, "The AI returned an empty response. Please try again.", {
+          code: "AI_EMPTY",
+        });
+        return;
+      }
+      res.json({ text });
+    } catch (err) {
+      if (err instanceof AiNotConfiguredError) {
+        apiError(res, 503, err.message, { code: "AI_NOT_CONFIGURED" });
+        return;
+      }
+      req.log.error({ err }, "AI context assist request failed");
+      apiError(
+        res,
+        502,
+        "AI request failed. Check the API key and model in admin settings.",
+        { code: "AI_REQUEST_FAILED" },
+      );
+    }
   }),
 );
 

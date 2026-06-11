@@ -641,6 +641,14 @@ ALTER TABLE organization_admins
   ADD COLUMN IF NOT EXISTS dismissed_setup_at timestamp;
 `;
 
+// AI Assist "context & personality" — an optional admin-authored instruction
+// block prepended to the AI Assist system prompt so operators can tune the
+// assistant's voice and organization-specific context. Nullable, no backfill.
+const AI_PROVIDER_SYSTEM_CONTEXT = `
+ALTER TABLE ai_provider_keys
+  ADD COLUMN IF NOT EXISTS system_context text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -725,6 +733,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-05-21-task-548-org-admin-dismissed-setup-at",
     sql: TASK_548_ORG_ADMIN_DISMISSED_SETUP_AT,
+  },
+  {
+    name: "2026-06-11-ai-provider-system-context",
+    sql: AI_PROVIDER_SYSTEM_CONTEXT,
   },
 ];
 
