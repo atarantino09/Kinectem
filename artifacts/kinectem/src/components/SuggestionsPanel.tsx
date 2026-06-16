@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -61,24 +61,27 @@ export function SuggestionsPanel({
     try {
       await followOrg.mutateAsync({ orgId });
       await refresh();
-    } catch {
+    } catch (err) {
       toast({ title: "Couldn't follow", variant: "destructive" });
+      throw err;
     }
   };
   const handleFollowTeam = async (teamId: string) => {
     try {
       await followTeam.mutateAsync({ teamId });
       await refresh();
-    } catch {
+    } catch (err) {
       toast({ title: "Couldn't follow", variant: "destructive" });
+      throw err;
     }
   };
   const handleFollowUser = async (userId: string) => {
     try {
       await followUser.mutateAsync({ userId });
       await refresh();
-    } catch {
+    } catch (err) {
       toast({ title: "Couldn't follow", variant: "destructive" });
+      throw err;
     }
   };
 
@@ -335,6 +338,37 @@ function SuggestionSection({
   );
 }
 
+/**
+ * Drives the "fade out + collapse, then follow" interaction for a suggestion
+ * row. On click the row animates out for 300ms before the follow mutation
+ * fires; if the mutation rejects, the row is restored so it can be retried.
+ * The pending timer is cleared on unmount to avoid a follow firing after the
+ * row is gone.
+ */
+function useFollowExit(onFollow: () => void | Promise<void>) {
+  const [exiting, setExiting] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
+  const handleFollow = () => {
+    if (exiting) return;
+    setExiting(true);
+    timerRef.current = window.setTimeout(async () => {
+      try {
+        await onFollow();
+      } catch {
+        if (mountedRef.current) setExiting(false);
+      }
+    }, 300);
+  };
+  return { exiting, handleFollow };
+}
+
 function SuggestionRow({
   href,
   avatar,
@@ -348,37 +382,45 @@ function SuggestionRow({
   avatar: React.ReactNode;
   title: string;
   subtitle?: string;
-  onFollow: () => void;
+  onFollow: () => void | Promise<void>;
   disabled: boolean;
   testId: string;
 }) {
+  const { exiting, handleFollow } = useFollowExit(onFollow);
   return (
-    <div className="flex items-center gap-3 py-1.5">
-      <Link href={href} className="shrink-0">
-        {avatar}
-      </Link>
-      <div className="flex-1 min-w-0">
-        <Link href={href}>
-          <p className="font-bold text-sm leading-tight truncate hover:text-primary cursor-pointer">
-            {title}
-          </p>
+    <div
+      className={cn(
+        "overflow-hidden transition-all duration-300 ease-out animate-in fade-in slide-in-from-bottom-1",
+        exiting ? "max-h-0 opacity-0 -translate-x-3" : "max-h-32 opacity-100",
+      )}
+    >
+      <div className="flex items-center gap-3 py-1.5">
+        <Link href={href} className="shrink-0">
+          {avatar}
         </Link>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-            {subtitle}
-          </p>
-        )}
+        <div className="flex-1 min-w-0">
+          <Link href={href}>
+            <p className="font-bold text-sm leading-tight truncate hover:text-primary cursor-pointer">
+              {title}
+            </p>
+          </Link>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <Button
+          variant="brand"
+          size="sm"
+          className="shrink-0"
+          onClick={handleFollow}
+          disabled={disabled || exiting}
+          data-testid={testId}
+        >
+          {exiting ? "Following" : "Follow"}
+        </Button>
       </div>
-      <Button
-        variant="brand"
-        size="sm"
-        className="shrink-0"
-        onClick={onFollow}
-        disabled={disabled}
-        data-testid={testId}
-      >
-        Follow
-      </Button>
     </div>
   );
 }
@@ -396,37 +438,45 @@ function CompactRow({
   avatar: React.ReactNode;
   title: string;
   subtitle?: string;
-  onFollow: () => void;
+  onFollow: () => void | Promise<void>;
   disabled: boolean;
   testId: string;
 }) {
+  const { exiting, handleFollow } = useFollowExit(onFollow);
   return (
-    <div className="flex items-center gap-2.5">
-      <Link href={href} className="shrink-0">
-        {avatar}
-      </Link>
-      <div className="flex-1 min-w-0">
-        <Link href={href}>
-          <p className="font-bold text-xs leading-tight truncate hover:text-primary cursor-pointer">
-            {title}
-          </p>
+    <div
+      className={cn(
+        "overflow-hidden transition-all duration-300 ease-out animate-in fade-in slide-in-from-bottom-1",
+        exiting ? "max-h-0 opacity-0 -translate-x-3" : "max-h-24 opacity-100",
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <Link href={href} className="shrink-0">
+          {avatar}
         </Link>
-        {subtitle && (
-          <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
-            {subtitle}
-          </p>
-        )}
+        <div className="flex-1 min-w-0">
+          <Link href={href}>
+            <p className="font-bold text-xs leading-tight truncate hover:text-primary cursor-pointer">
+              {title}
+            </p>
+          </Link>
+          {subtitle && (
+            <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2.5 text-[11px] font-bold shrink-0"
+          onClick={handleFollow}
+          disabled={disabled || exiting}
+          data-testid={testId}
+        >
+          {exiting ? "Following" : "Follow"}
+        </Button>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 px-2.5 text-[11px] font-bold shrink-0"
-        onClick={onFollow}
-        disabled={disabled}
-        data-testid={testId}
-      >
-        Follow
-      </Button>
     </div>
   );
 }
