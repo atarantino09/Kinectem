@@ -33,6 +33,7 @@ import {
   Building2,
   ChevronDown,
   ExternalLink,
+  ListPlus,
   Pencil,
   Plus,
   Settings,
@@ -48,6 +49,7 @@ import {
   RolesPermissionsCard,
 } from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
+import { BulkAddTeamsDialog } from "@/components/BulkAddTeamsDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
@@ -70,6 +72,7 @@ export default function OrganizationPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
+  const [bulkTeamsOpen, setBulkTeamsOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
@@ -149,6 +152,11 @@ export default function OrganizationPage() {
         orgId={orgId}
         open={createTeamOpen}
         onOpenChange={setCreateTeamOpen}
+      />
+      <BulkAddTeamsDialog
+        orgId={orgId}
+        open={bulkTeamsOpen}
+        onOpenChange={setBulkTeamsOpen}
       />
       <Dialog
         open={welcomeOrgName !== null && isOrgManager}
@@ -443,6 +451,7 @@ export default function OrganizationPage() {
                 teams={teams}
                 canManage={isOrgManager}
                 onAddTeam={() => setCreateTeamOpen(true)}
+                onBulkAddTeams={() => setBulkTeamsOpen(true)}
               />
               {isOrgManager && archivedTeams.length > 0 && (
                 <ArchivedTeamsCard teams={archivedTeams} />
@@ -545,6 +554,7 @@ export default function OrganizationPage() {
               teams={teams}
               canManage={isOrgManager}
               onAddTeam={() => setCreateTeamOpen(true)}
+              onBulkAddTeams={() => setBulkTeamsOpen(true)}
             />
             {isOrgManager && archivedTeams.length > 0 && (
               <ArchivedTeamsCard teams={archivedTeams} />
@@ -560,10 +570,12 @@ function TeamsRail({
   teams,
   canManage,
   onAddTeam,
+  onBulkAddTeams,
 }: {
   teams: TeamRailItem[];
   canManage: boolean;
   onAddTeam: () => void;
+  onBulkAddTeams: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
@@ -612,14 +624,25 @@ function TeamsRail({
           </Badge>
         </div>
         {canManage && (
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={onAddTeam}
-            data-testid="btn-add-team"
-          >
-            <Plus className="w-4 h-4 mr-1" /> Add team
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold rounded-full"
+              onClick={onBulkAddTeams}
+              data-testid="btn-bulk-add-teams"
+            >
+              <ListPlus className="w-4 h-4 mr-1" /> Bulk add
+            </Button>
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={onAddTeam}
+              data-testid="btn-add-team"
+            >
+              <Plus className="w-4 h-4 mr-1" /> Add team
+            </Button>
+          </div>
         )}
       </div>
 
