@@ -174,3 +174,9 @@ id = "ZDJTUskpCIYK245aEbegv"
 uri = "file://.local/vo4b_takeC.mp3"
 type = "audio"
 title = "Take C — most upbeat"
+
+[[outputs]]
+id = "3YRs3GCVWqrdTawxUJaGt"
+uri = "file://CODE_REVIEW.md"
+type = "text"
+title = "Kinectem — Full Code Review (Security & UX Speed)"
