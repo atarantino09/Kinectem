@@ -18,6 +18,8 @@ import {
   takedownRequests,
   consentAuditLog,
   notifications,
+  organizationAdmins,
+  organizationClaimRequests,
 } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1360,6 +1362,241 @@ router.post(
     if (!ref) return notFound(res, "Takedown not found");
     const transitioned = await decideTakedown(req, ref, "declined");
     res.json({ ok: true, decision: "declined", affected: transitioned.length });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #603 — Organization page claims
+// ---------------------------------------------------------------------------
+// Platform admins review claim requests on ownerless (bulk-imported) org
+// pages. Approval atomically inserts the owner `organization_admins` row and
+// stamps `organizations.createdById`, refusing if an owner already exists
+// (race-safe via a conditional insert). The claimer is notified on both
+// approve and decline. Hand-written validation + customFetch precedent.
+
+router.get(
+  "/org-claims",
+  asyncHandler(async (req, res) => {
+    const status =
+      typeof req.query["status"] === "string" ? req.query["status"] : "pending";
+    const filter =
+      status === "pending" || status === "approved" || status === "declined"
+        ? eq(organizationClaimRequests.status, status)
+        : undefined;
+    const limitRaw = parseInt(
+      typeof req.query["limit"] === "string" ? req.query["limit"] : "",
+      10,
+    );
+    const offsetRaw = parseInt(
+      typeof req.query["offset"] === "string" ? req.query["offset"] : "",
+      10,
+    );
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 500
+        ? limitRaw
+        : 100;
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
+    const rows = await db
+      .select({
+        c: organizationClaimRequests,
+        org: {
+          id: organizations.id,
+          name: organizations.name,
+          city: organizations.city,
+          state: organizations.state,
+          logoUrl: organizations.logoUrl,
+        },
+        requester: {
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          avatarUrl: users.avatarUrl,
+        },
+      })
+      .from(organizationClaimRequests)
+      .leftJoin(
+        organizations,
+        eq(organizations.id, organizationClaimRequests.organizationId),
+      )
+      .leftJoin(users, eq(users.id, organizationClaimRequests.requestedByUserId))
+      .where(filter)
+      .orderBy(desc(organizationClaimRequests.createdAt))
+      .limit(limit)
+      .offset(offset);
+    const out = rows.map((r) => ({
+      id: r.c.id,
+      status: r.c.status,
+      createdAt: r.c.createdAt.toISOString(),
+      decidedAt: r.c.decidedAt?.toISOString() ?? null,
+      organization: r.org,
+      requester: r.requester,
+    }));
+    res.json({ data: out });
+  }),
+);
+
+// Approve or decline a claim atomically. On approve we conditionally insert
+// the owner row only if the org still has no owner (defends against a page
+// that was claimed/created between list and decision). The status transition
+// is itself gated on `status = 'pending'` so concurrent approve/decline races
+// collapse to a single winner. Notifications fire OUTSIDE the transaction so a
+// notification failure never rolls back the (committed) ownership grant.
+async function decideOrgClaim(
+  req: import("express").Request,
+  claimId: string,
+  decision: "approved" | "declined",
+): Promise<
+  | { ok: true; claim: { organizationId: string; requestedByUserId: string } }
+  | { ok: false; reason: "not_found" | "already_decided" | "already_claimed" }
+> {
+  return db.transaction(async (tx) => {
+    const [claim] = await tx
+      .select()
+      .from(organizationClaimRequests)
+      .where(eq(organizationClaimRequests.id, claimId))
+      .limit(1);
+    if (!claim) return { ok: false, reason: "not_found" as const };
+    if (claim.status !== "pending") {
+      return { ok: false, reason: "already_decided" as const };
+    }
+    if (decision === "approved") {
+      // Refuse if an owner already exists for this org.
+      const [owner] = await tx
+        .select({ userId: organizationAdmins.userId })
+        .from(organizationAdmins)
+        .where(
+          and(
+            eq(organizationAdmins.organizationId, claim.organizationId),
+            eq(organizationAdmins.role, "owner"),
+          ),
+        )
+        .limit(1);
+      if (owner) return { ok: false, reason: "already_claimed" as const };
+      // Grant ownership: insert the owner row + auto-follow, stamp creator.
+      await tx
+        .insert(organizationAdmins)
+        .values({
+          organizationId: claim.organizationId,
+          userId: claim.requestedByUserId,
+          role: "owner",
+        })
+        .onConflictDoNothing();
+      await tx
+        .insert(organizationFollowers)
+        .values({
+          organizationId: claim.organizationId,
+          userId: claim.requestedByUserId,
+        })
+        .onConflictDoNothing();
+      await tx
+        .update(organizations)
+        .set({ createdById: claim.requestedByUserId })
+        .where(eq(organizations.id, claim.organizationId));
+      // Auto-decline any other pending claims on the same org.
+      await tx
+        .update(organizationClaimRequests)
+        .set({
+          status: "declined",
+          decidedByUserId: req.realUser!.id,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(
+              organizationClaimRequests.organizationId,
+              claim.organizationId,
+            ),
+            eq(organizationClaimRequests.status, "pending"),
+            sql`${organizationClaimRequests.id} <> ${claim.id}`,
+          ),
+        );
+    }
+    const [updated] = await tx
+      .update(organizationClaimRequests)
+      .set({
+        status: decision,
+        decidedByUserId: req.realUser!.id,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationClaimRequests.id, claim.id),
+          eq(organizationClaimRequests.status, "pending"),
+        ),
+      )
+      .returning({
+        organizationId: organizationClaimRequests.organizationId,
+        requestedByUserId: organizationClaimRequests.requestedByUserId,
+      });
+    if (!updated) return { ok: false, reason: "already_decided" as const };
+    return { ok: true, claim: updated };
+  });
+}
+
+async function notifyOrgClaimDecision(
+  req: import("express").Request,
+  claim: { organizationId: string; requestedByUserId: string },
+  decision: "approved" | "declined",
+) {
+  const [org] = await db
+    .select({ name: organizations.name })
+    .from(organizations)
+    .where(eq(organizations.id, claim.organizationId))
+    .limit(1);
+  const orgName = org?.name ?? "the organization";
+  try {
+    await db.insert(notifications).values({
+      userId: claim.requestedByUserId,
+      kind: decision === "approved" ? "org_claim_approved" : "org_claim_declined",
+      message:
+        decision === "approved"
+          ? `Your claim for ${orgName} was approved. You're now the owner of the page.`
+          : `Your claim for ${orgName} was declined by a moderator.`,
+      link: `/organizations/${claim.organizationId}`,
+      actorUserId: req.realUser!.id,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to write org-claim decision notification");
+  }
+}
+
+router.post(
+  "/org-claims/:claimId/approve",
+  asyncHandler(async (req, res) => {
+    const result = await decideOrgClaim(req, p(req.params.claimId), "approved");
+    if (!result.ok) {
+      if (result.reason === "not_found") return notFound(res, "Claim not found");
+      return res.status(409).json({
+        error:
+          result.reason === "already_claimed"
+            ? "This organization already has an owner"
+            : "This claim has already been decided",
+        code:
+          result.reason === "already_claimed"
+            ? "ALREADY_CLAIMED"
+            : "ALREADY_DECIDED",
+      });
+    }
+    await notifyOrgClaimDecision(req, result.claim, "approved");
+    res.json({ ok: true, decision: "approved" });
+  }),
+);
+
+router.post(
+  "/org-claims/:claimId/decline",
+  asyncHandler(async (req, res) => {
+    const result = await decideOrgClaim(req, p(req.params.claimId), "declined");
+    if (!result.ok) {
+      if (result.reason === "not_found") return notFound(res, "Claim not found");
+      return res.status(409).json({
+        error: "This claim has already been decided",
+        code: "ALREADY_DECIDED",
+      });
+    }
+    await notifyOrgClaimDecision(req, result.claim, "declined");
+    res.json({ ok: true, decision: "declined" });
   }),
 );
 

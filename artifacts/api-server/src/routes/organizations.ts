@@ -18,6 +18,7 @@ import {
   orgPosts,
   notifications,
   organizationJoinRequests,
+  organizationClaimRequests,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -275,7 +276,150 @@ router.get(
       .select({ followerCount: sql<number>`count(*)::int` })
       .from(organizationFollowers)
       .where(eq(organizationFollowers.organizationId, org.id));
-    res.json(toOrganization(org, { isMember, role, isFollowing, followerCount }));
+    // Task #603 — an org page is "claimable" when it has no owner row.
+    // Bulk-imported pages start ownerless (createdById null, no admins).
+    const [owner] = await db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, org.id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .limit(1);
+    const hasOwner = !!owner;
+    let myClaimStatus: "pending" | "approved" | "declined" | null = null;
+    if (me) {
+      const [claim] = await db
+        .select({ status: organizationClaimRequests.status })
+        .from(organizationClaimRequests)
+        .where(
+          and(
+            eq(organizationClaimRequests.organizationId, org.id),
+            eq(organizationClaimRequests.requestedByUserId, me.id),
+          ),
+        )
+        .orderBy(desc(organizationClaimRequests.createdAt))
+        .limit(1);
+      myClaimStatus = claim?.status ?? null;
+    }
+    res.json(
+      toOrganization(org, {
+        isMember,
+        role,
+        isFollowing,
+        followerCount,
+        hasOwner,
+        myClaimStatus,
+      }),
+    );
+  }),
+);
+
+// Task #603 — Claim a pre-made (ownerless) org page. A signed-in admin-role
+// user submits a claim request; this is NOT an instant transfer. A platform
+// admin reviews it under /admin/org-claims and the approval inserts the owner
+// row. Eligibility mirrors the task spec: only admin-role accounts can claim.
+// Hand-written validation + customFetch precedent (Founding-100 / AI Assist) —
+// the locked openapi.yaml has no path for this route.
+const orgClaimLimiter = rateLimit({
+  name: "org-claim",
+  windowMs: 60_000,
+  max: 10,
+  keys: (req) => [ipKey(req)],
+});
+router.post(
+  "/organizations/:orgId/claims",
+  orgClaimLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (me.role !== "admin") {
+      return apiError(
+        res,
+        403,
+        "Only organization admin accounts can claim a page",
+        { code: "CLAIM_FORBIDDEN" },
+      );
+    }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    // Refuse if the page already has an owner — claimed pages are off-limits.
+    const [owner] = await db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, org.id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .limit(1);
+    if (owner) {
+      return apiError(res, 409, "This organization has already been claimed", {
+        code: "ALREADY_CLAIMED",
+      });
+    }
+    // Idempotent-ish: surface the existing pending claim instead of erroring
+    // so a double-submit from the UI is harmless.
+    const [existingPending] = await db
+      .select()
+      .from(organizationClaimRequests)
+      .where(
+        and(
+          eq(organizationClaimRequests.organizationId, org.id),
+          eq(organizationClaimRequests.requestedByUserId, me.id),
+          eq(organizationClaimRequests.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (existingPending) {
+      return res.status(200).json({
+        id: existingPending.id,
+        organizationId: existingPending.organizationId,
+        status: existingPending.status,
+        createdAt: existingPending.createdAt.toISOString(),
+      });
+    }
+    try {
+      const [claim] = await db
+        .insert(organizationClaimRequests)
+        .values({ organizationId: org.id, requestedByUserId: me.id })
+        .returning();
+      return res.status(201).json({
+        id: claim.id,
+        organizationId: claim.organizationId,
+        status: claim.status,
+        createdAt: claim.createdAt.toISOString(),
+      });
+    } catch (err) {
+      // Unique partial index races (two concurrent submits) collapse here.
+      const [raced] = await db
+        .select()
+        .from(organizationClaimRequests)
+        .where(
+          and(
+            eq(organizationClaimRequests.organizationId, org.id),
+            eq(organizationClaimRequests.requestedByUserId, me.id),
+            eq(organizationClaimRequests.status, "pending"),
+          ),
+        )
+        .limit(1);
+      if (raced) {
+        return res.status(200).json({
+          id: raced.id,
+          organizationId: raced.organizationId,
+          status: raced.status,
+          createdAt: raced.createdAt.toISOString(),
+        });
+      }
+      throw err;
+    }
   }),
 );
 

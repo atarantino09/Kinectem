@@ -76,6 +76,14 @@ import { useToast } from "@/hooks/use-toast";
 //                               active again)
 //                               source: lib/notifications.ts
 //                               (notifyTeamUnarchived).
+//   org_claim_approved       -> `/organizations/<orgId>` (the page the
+//                               claimer now owns)
+//                               source: routes/admin.ts
+//                               (POST /admin/org-claims/:id/approve)
+//   org_claim_declined       -> `/organizations/<orgId>` (the page whose
+//                               claim was declined)
+//                               source: routes/admin.ts
+//                               (POST /admin/org-claims/:id/decline)
 //   guardian_expired         -> `/family?childId=<childId>` (NOT the
 //                               inserted `/guardian?childId=...` link).
 //                               The bell intentionally rewrites this to

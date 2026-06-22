@@ -13,6 +13,7 @@ import {
   useGetLoggedInUser,
   getGetOrganizationByIdQueryKey,
   getListFeedQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useIsLg } from "@/hooks/use-mobile";
@@ -77,6 +78,7 @@ export default function OrganizationPage() {
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   // Task #443 — celebratory popup shown once right after a successful
   // org create. CreateOrgDialog stashes the org name under
   // `kinectem:welcome-org:<orgId>` and we consume it on mount so a
@@ -130,6 +132,32 @@ export default function OrganizationPage() {
     }
   };
 
+  // Task #603 — submit a claim request for an ownerless org page. Not an
+  // instant transfer; a platform admin reviews it before ownership is granted.
+  const onClaim = async () => {
+    if (!organization) return;
+    setClaiming(true);
+    try {
+      await customFetch(`/api/v1/organizations/${orgId}/claims`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await qc.invalidateQueries({
+        queryKey: getGetOrganizationByIdQueryKey(orgId),
+      });
+      toast({
+        title: "Claim submitted",
+        description: "A moderator will review your request shortly.",
+      });
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Couldn't submit your claim";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setClaiming(false);
+    }
+  };
+
   if (isLoading || !organization) {
     return (
       <div className="space-y-4">
@@ -145,6 +173,17 @@ export default function OrganizationPage() {
   const members = membersResp?.data ?? [];
   const isOrgManager =
     organization.role === "admin" || organization.role === "owner";
+  // Task #603 — claim affordances for ownerless (bulk-imported) org pages.
+  // `hasOwner`/`myClaimStatus` are appended by the server outside the locked
+  // openapi.yaml, so read them via a narrow cast.
+  const claimInfo = organization as {
+    hasOwner?: boolean;
+    myClaimStatus?: "pending" | "approved" | "declined" | null;
+  };
+  const isUnclaimed = claimInfo.hasOwner === false;
+  const hasPendingClaim = claimInfo.myClaimStatus === "pending";
+  // Only admin-role accounts can claim a page (task eligibility rule).
+  const canClaim = isUnclaimed && me?.role === "admin";
 
   return (
     <>
@@ -305,6 +344,37 @@ export default function OrganizationPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {isUnclaimed && (
+                  <Badge
+                    variant="outline"
+                    className="font-bold rounded-full border-amber-400 text-amber-700 dark:text-amber-300"
+                    data-testid="badge-org-unclaimed"
+                  >
+                    Unclaimed
+                  </Badge>
+                )}
+                {canClaim &&
+                  (hasPendingClaim ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="font-bold rounded-full"
+                      data-testid="btn-claim-org-pending"
+                    >
+                      <Shield className="w-4 h-4 mr-1.5" /> Claim pending review
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="brand"
+                      onClick={onClaim}
+                      disabled={claiming}
+                      className="font-bold rounded-full"
+                      data-testid="btn-claim-org"
+                    >
+                      <Shield className="w-4 h-4 mr-1.5" />
+                      {claiming ? "Submitting…" : "Claim this organization"}
+                    </Button>
+                  ))}
                 {isOrgManager && (
                   <Button
                     asChild

@@ -699,6 +699,31 @@ CREATE INDEX IF NOT EXISTS highlights_uploader_approval_team_idx
   ON highlights (uploader_id, approval_status, team_id);
 `;
 
+const TASK_603_ORG_CLAIM_REQUESTS = `
+DO $$ BEGIN
+  CREATE TYPE org_claim_status AS ENUM ('pending', 'approved', 'declined');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+CREATE TABLE IF NOT EXISTS organization_claim_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  requested_by_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status org_claim_status NOT NULL DEFAULT 'pending',
+  decided_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  decided_at timestamp,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS org_claim_unique_pending_per_user
+  ON organization_claim_requests (organization_id, requested_by_user_id)
+  WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS org_claim_by_org
+  ON organization_claim_requests (organization_id);
+CREATE INDEX IF NOT EXISTS org_claim_by_status
+  ON organization_claim_requests (status);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -799,6 +824,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-22-code-review-b3-composite-indexes",
     sql: CODE_REVIEW_B3_COMPOSITE_INDEXES,
+  },
+  {
+    name: "2026-06-22-task-603-org-claim-requests",
+    sql: TASK_603_ORG_CLAIM_REQUESTS,
   },
 ];
 

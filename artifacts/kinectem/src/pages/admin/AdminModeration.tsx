@@ -58,6 +58,7 @@ export default function AdminModeration() {
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
           <TabsTrigger value="takedowns" data-testid="tab-takedowns">Takedowns</TabsTrigger>
+          <TabsTrigger value="org-claims" data-testid="tab-org-claims">Org claims</TabsTrigger>
         </TabsList>
         <TabsContent value="reports">
           <ReportsPanel />
@@ -67,6 +68,9 @@ export default function AdminModeration() {
         </TabsContent>
         <TabsContent value="takedowns">
           <TakedownsPanel />
+        </TabsContent>
+        <TabsContent value="org-claims">
+          <OrgClaimsPanel />
         </TabsContent>
       </Tabs>
     </AdminLayout>
@@ -440,6 +444,149 @@ function ContentPanel() {
                   Delete
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
+type OrgClaim = {
+  id: string;
+  status: "pending" | "approved" | "declined";
+  createdAt: string;
+  decidedAt: string | null;
+  organization: {
+    id: string;
+    name: string;
+    city: string | null;
+    state: string | null;
+    logoUrl: string | null;
+  } | null;
+  requester: {
+    id: string;
+    name: string;
+    email: string | null;
+    avatarUrl: string | null;
+  } | null;
+};
+
+function OrgClaimsPanel() {
+  const [status, setStatus] = useState<"pending" | "approved" | "declined">(
+    "pending",
+  );
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ data: OrgClaim[] }>({
+    queryKey: ["admin", "org-claims", status],
+    queryFn: () =>
+      customFetch<{ data: OrgClaim[] }>(
+        `/api/v1/admin/org-claims?status=${status}`,
+        { method: "GET" },
+      ),
+  });
+
+  const decide = async (id: string, decision: "approve" | "decline") => {
+    if (
+      decision === "approve" &&
+      !confirm("Approve claim? This makes the requester the page owner.")
+    ) {
+      return;
+    }
+    try {
+      await customFetch(`/api/v1/admin/org-claims/${id}/${decision}`, {
+        method: "POST",
+      });
+      toast({
+        title: decision === "approve" ? "Claim approved" : "Claim declined",
+      });
+      qc.invalidateQueries({ queryKey: ["admin", "org-claims"] });
+    } catch (err) {
+      toast({
+        title: "Failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-3 mt-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold">Status:</span>
+        <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+          <SelectTrigger className="w-40" data-testid="select-claim-status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="declined">Declined</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {isLoading ? (
+        <div className="text-muted-foreground">Loading…</div>
+      ) : (data?.data ?? []).length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-muted-foreground text-sm">
+            No organization claims here.
+          </CardContent>
+        </Card>
+      ) : (
+        (data?.data ?? []).map((c) => (
+          <Card key={c.id} data-testid={`org-claim-${c.id}`}>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge
+                  variant={c.status === "pending" ? "destructive" : "secondary"}
+                >
+                  {c.status}
+                </Badge>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {new Date(c.createdAt).toLocaleString()}
+                </span>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Organization:</span>{" "}
+                <span className="font-medium">
+                  {c.organization?.name ?? "—"}
+                </span>
+                {c.organization?.city && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    — {c.organization.city}
+                    {c.organization.state ? `, ${c.organization.state}` : ""}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Requested by:</span>{" "}
+                {c.requester
+                  ? `${c.requester.name} (${c.requester.email ?? "—"})`
+                  : "—"}
+              </div>
+              {c.status === "pending" && (
+                <div className="flex gap-2 pt-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    onClick={() => decide(c.id, "approve")}
+                    data-testid={`btn-approve-claim-${c.id}`}
+                  >
+                    Approve (grant ownership)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => decide(c.id, "decline")}
+                    data-testid={`btn-decline-claim-${c.id}`}
+                  >
+                    Decline
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))

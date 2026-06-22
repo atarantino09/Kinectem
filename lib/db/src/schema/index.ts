@@ -13,6 +13,7 @@ export const reactionTypeEnum = pgEnum("reaction_type", ["like"]);
 export const conversationTypeEnum = pgEnum("conversation_type", ["direct", "user_to_org", "org_to_org"]);
 export const participantTypeEnum = pgEnum("participant_type", ["user", "organization"]);
 export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "approved", "declined", "withdrawn"]);
+export const orgClaimStatusEnum = pgEnum("org_claim_status", ["pending", "approved", "declined"]);
 export const tagStatusEnum = pgEnum("tag_status", ["pending", "approved", "declined", "removed"]);
 export const tagSourceEnum = pgEnum("tag_source", ["manual", "auto"]);
 export const assetStatusEnum = pgEnum("asset_status", ["pending", "confirmed"]);
@@ -871,6 +872,25 @@ export const organizationJoinRequests = pgTable("organization_join_requests", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const organizationClaimRequests = pgTable("organization_claim_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  status: orgClaimStatusEnum("status").notNull().default("pending"),
+  decidedByUserId: uuid("decided_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  // At most one pending claim per (org, user). Defends against duplicate
+  // submissions racing past the application-level check.
+  uniquePendingPerUser: uniqueIndex("org_claim_unique_pending_per_user")
+    .on(t.organizationId, t.requestedByUserId)
+    .where(sql`${t.status} = 'pending'`),
+  byOrg: index("org_claim_by_org").on(t.organizationId),
+  byStatus: index("org_claim_by_status").on(t.status),
+}));
 
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),

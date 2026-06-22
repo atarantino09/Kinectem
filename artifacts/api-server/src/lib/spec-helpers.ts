@@ -532,6 +532,8 @@ export function toOrganization(
     role?: "owner" | "admin" | "member" | null;
     isFollowing?: boolean;
     followerCount?: number;
+    hasOwner?: boolean;
+    myClaimStatus?: "pending" | "approved" | "declined" | null;
   } = {},
 ) {
   return {
@@ -548,6 +550,11 @@ export function toOrganization(
     role: opts.role ?? null,
     isFollowing: opts.isFollowing ?? false,
     followerCount: opts.followerCount ?? 0,
+    // Task #603 — claim status for ownerless (bulk-imported) org pages.
+    // `hasOwner` is false for pages with no `organization_admins` owner row;
+    // `myClaimStatus` reflects the viewer's own latest claim (null if none).
+    hasOwner: opts.hasOwner ?? true,
+    myClaimStatus: opts.myClaimStatus ?? null,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.createdAt.toISOString(),
   };
