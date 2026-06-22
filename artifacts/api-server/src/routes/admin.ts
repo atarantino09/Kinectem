@@ -1661,4 +1661,94 @@ router.get(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Quick "Add org" + live duplicate detection for the claim-links screen
+// ---------------------------------------------------------------------------
+// Operators discover orgs to message on social and want to spin up a claimable
+// page on the fly. As they type, GET /org-name-check surfaces any existing org
+// (claimed or not) whose name matches so duplicates are obvious before submit;
+// POST /org-claim-links creates a fresh ownerless page with a claim token,
+// refusing an exact (case-insensitive) duplicate.
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+router.get(
+  "/org-name-check",
+  asyncHandler(async (req, res) => {
+    const name = String(req.query.name ?? "").trim();
+    if (name.length < 2) {
+      return res.json({ data: [] });
+    }
+    const ownerExists = sql<boolean>`EXISTS (
+      SELECT 1 FROM ${organizationAdmins}
+      WHERE ${organizationAdmins.organizationId} = ${organizations.id}
+        AND ${organizationAdmins.role} = 'owner'
+    )`;
+    const rows = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        city: organizations.city,
+        state: organizations.state,
+        hasOwner: ownerExists,
+      })
+      .from(organizations)
+      .where(sql`${organizations.name} ILIKE ${"%" + escapeLike(name) + "%"}`)
+      .orderBy(asc(organizations.name))
+      .limit(8);
+    const needle = name.toLowerCase();
+    return res.json({
+      data: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        city: r.city,
+        state: r.state,
+        hasOwner: Boolean(r.hasOwner),
+        exact: r.name.toLowerCase() === needle,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/org-claim-links",
+  asyncHandler(async (req, res) => {
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) {
+      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+    }
+    if (name.length > 200) {
+      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+    }
+    const existing = await db
+      .select({ id: organizations.id, name: organizations.name })
+      .from(organizations)
+      .where(sql`lower(${organizations.name}) = ${name.toLowerCase()}`)
+      .limit(1);
+    if (existing.length > 0) {
+      return res.status(409).json({
+        error: "An organization with this name already exists",
+        code: "ORG_NAME_TAKEN",
+        existing: existing[0],
+      });
+    }
+    const token = generateToken();
+    const [org] = await db
+      .insert(organizations)
+      .values({ name, claimToken: token })
+      .returning();
+    return res.status(201).json({
+      data: {
+        id: org.id,
+        name: org.name,
+        city: org.city,
+        state: org.state,
+        logoUrl: org.logoUrl,
+        token,
+      },
+    });
+  }),
+);
+
 export default router;
