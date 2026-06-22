@@ -81,6 +81,25 @@ import {
 
 const router: IRouter = Router();
 
+// B1 — resolve roster member counts for many teams in one grouped query
+// (was a per-team count query inside Promise.all → N+1). Returns a map of
+// teamId → count; teams with no roster rows are simply absent from the map
+// (callers default to 0).
+async function memberCountByTeam(
+  teamIds: string[],
+): Promise<Map<string, number>> {
+  if (teamIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      teamId: rosterEntries.teamId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(rosterEntries)
+    .where(inArray(rosterEntries.teamId, teamIds))
+    .groupBy(rosterEntries.teamId);
+  return new Map(rows.map((r) => [r.teamId, r.count]));
+}
+
 class TransferRaceError extends Error {
   constructor(reason: "not-current-owner" | "target-missing") {
     super(`transfer-race:${reason}`);
@@ -598,14 +617,11 @@ router.get(
       .where(
         and(eq(teams.organizationId, org.id), isNull(teams.archivedAt)),
       );
-    const data = await Promise.all(
-      teamRows.map(async (t) => {
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(rosterEntries)
-          .where(eq(rosterEntries.teamId, t.id));
-        return toTeam(t, org, { memberCount: count });
-      }),
+    // B1 — resolve every team's member count in a single grouped query
+    // instead of one count query per team (was N+1).
+    const countByTeam = await memberCountByTeam(teamRows.map((t) => t.id));
+    const data = teamRows.map((t) =>
+      toTeam(t, org, { memberCount: countByTeam.get(t.id) ?? 0 }),
     );
     res.json(paginate(data));
   }),
@@ -636,14 +652,10 @@ router.get(
         and(eq(teams.organizationId, org.id), isNotNull(teams.archivedAt)),
       )
       .orderBy(desc(teams.archivedAt));
-    const data = await Promise.all(
-      teamRows.map(async (t) => {
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(rosterEntries)
-          .where(eq(rosterEntries.teamId, t.id));
-        return toTeam(t, org, { memberCount: count });
-      }),
+    // B1 — single grouped member-count query (was N+1).
+    const countByTeam = await memberCountByTeam(teamRows.map((t) => t.id));
+    const data = teamRows.map((t) =>
+      toTeam(t, org, { memberCount: countByTeam.get(t.id) ?? 0 }),
     );
     res.json(paginate(data));
   }),

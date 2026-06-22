@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,7 +75,7 @@ function parseSyntheticPostId(
   return { contentType: "article", contentId: id };
 }
 
-export function PostCard({ post }: { post: PostResponse | FeedPost }) {
+function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [currentPath, setLocation] = useLocation();
@@ -572,6 +572,8 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
                 <img
                   src={firstImage.url}
                   alt={post.title ?? ""}
+                  loading="lazy"
+                  decoding="async"
                   className="absolute inset-0 w-full h-full object-cover opacity-60"
                 />
                 <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-primary transition-colors z-10">
@@ -720,6 +722,12 @@ export function PostCard({ post }: { post: PostResponse | FeedPost }) {
   );
 }
 
+// Task: CODE_REVIEW F4 — feed rows are heavy; memoize so a parent list
+// re-render (e.g. sidebar toggles, pagination appending pages) doesn't
+// re-render every already-mounted card. `post` comes from the query
+// cache so its reference is stable across unrelated re-renders.
+export const PostCard = memo(PostCardImpl);
+
 
 function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -753,6 +761,8 @@ function PhotoAlbum({ images, postId }: { images: string[]; postId: string }) {
               <img
                 src={src}
                 alt={`Photo ${i + 1}`}
+                loading="lazy"
+                decoding="async"
                 className="absolute inset-0 w-full h-full object-cover"
               />
               {isLastTile && (

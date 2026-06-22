@@ -546,6 +546,11 @@ export const articles = pgTable("articles", {
   // (profile "my recaps" + feed author fan-in).
   teamIdIdx: index("articles_team_id_idx").on(t.teamId),
   authorIdIdx: index("articles_author_id_idx").on(t.authorId),
+  statusAuthorTeamIdx: index("articles_status_author_team_idx").on(
+    t.status,
+    t.authorId,
+    t.teamId,
+  ),
 }));
 
 export const articleAuthors = pgTable("article_authors", {
@@ -586,6 +591,11 @@ export const highlights = pgTable("highlights", {
   // approval queue only; this is the general-purpose team_id index.
   teamIdIdx: index("highlights_team_id_idx").on(t.teamId),
   uploaderIdIdx: index("highlights_uploader_id_idx").on(t.uploaderId),
+  uploaderApprovalTeamIdx: index("highlights_uploader_approval_team_idx").on(
+    t.uploaderId,
+    t.approvalStatus,
+    t.teamId,
+  ),
 }));
 
 export const orgPosts = pgTable("org_posts", {
@@ -937,6 +947,25 @@ export const parentChildNotificationReads = pgTable(
       t.childId,
       t.itemKey,
     ),
+  }),
+);
+
+// Shared, Postgres-backed store for the rate-limit middleware (code
+// review S6). Replaces a per-process in-memory Map so abuse protections
+// survive restarts and apply across Autoscale instances. Keyed by
+// (name, key_hash); `key_hash` is a sha256 of the raw limiter key so raw
+// IPs / emails are never stored at rest.
+export const rateLimitBuckets = pgTable(
+  "rate_limit_buckets",
+  {
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull(),
+    count: integer("count").notNull().default(0),
+    resetAt: timestamp("reset_at").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.name, t.keyHash] }),
+    resetAtIdx: index("rate_limit_buckets_reset_at_idx").on(t.resetAt),
   }),
 );
 

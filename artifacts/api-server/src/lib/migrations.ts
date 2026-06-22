@@ -649,6 +649,56 @@ ALTER TABLE ai_provider_keys
   ADD COLUMN IF NOT EXISTS system_context text;
 `;
 
+// Code review B3 — converge the live DB with the FK / hot-filter indexes
+// that were declared in the Drizzle schema (Task #592) but never pushed
+// to the running database. Pure `CREATE INDEX IF NOT EXISTS`, so it is
+// idempotent and the names match the schema exactly (a later
+// `drizzle-kit push` then sees no diff). These back the feed / profile /
+// notification read paths and are the single biggest latency win there.
+const CODE_REVIEW_B3_HOT_INDEXES = `
+CREATE INDEX IF NOT EXISTS articles_team_id_idx
+  ON articles (team_id);
+CREATE INDEX IF NOT EXISTS articles_author_id_idx
+  ON articles (author_id);
+CREATE INDEX IF NOT EXISTS highlights_team_id_idx
+  ON highlights (team_id);
+CREATE INDEX IF NOT EXISTS highlights_uploader_id_idx
+  ON highlights (uploader_id);
+CREATE INDEX IF NOT EXISTS post_shares_sharer_user_id_idx
+  ON post_shares (sharer_user_id);
+CREATE INDEX IF NOT EXISTS notifications_user_id_created_at_idx
+  ON notifications (user_id, created_at DESC);
+`;
+
+// Code review S6 — shared, Postgres-backed rate-limit store so the
+// signup / login / founding-signup / AI limiters survive process
+// restarts and apply across multiple Autoscale instances (the previous
+// store was a per-process in-memory Map, trivially bypassed round-robin
+// and reset on every deploy). `key_hash` is a sha256 of the raw limiter
+// key, so raw IPs / emails are never persisted at rest. Idempotent.
+const CODE_REVIEW_S6_RATE_LIMIT_BUCKETS = `
+CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+  name      text NOT NULL,
+  key_hash  text NOT NULL,
+  count     integer NOT NULL DEFAULT 0,
+  reset_at  timestamp NOT NULL,
+  PRIMARY KEY (name, key_hash)
+);
+
+CREATE INDEX IF NOT EXISTS rate_limit_buckets_reset_at_idx
+  ON rate_limit_buckets (reset_at);
+`;
+
+// B3 (code review) — composite indexes for the multi-column filters on the
+// hot feed/profile paths. Complements the single-column indexes in
+// CODE_REVIEW_B3_HOT_INDEXES; idempotent.
+const CODE_REVIEW_B3_COMPOSITE_INDEXES = `
+CREATE INDEX IF NOT EXISTS articles_status_author_team_idx
+  ON articles (status, author_id, team_id);
+CREATE INDEX IF NOT EXISTS highlights_uploader_approval_team_idx
+  ON highlights (uploader_id, approval_status, team_id);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -737,6 +787,18 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-11-ai-provider-system-context",
     sql: AI_PROVIDER_SYSTEM_CONTEXT,
+  },
+  {
+    name: "2026-06-22-code-review-b3-hot-indexes",
+    sql: CODE_REVIEW_B3_HOT_INDEXES,
+  },
+  {
+    name: "2026-06-22-code-review-s6-rate-limit-buckets",
+    sql: CODE_REVIEW_S6_RATE_LIMIT_BUCKETS,
+  },
+  {
+    name: "2026-06-22-code-review-b3-composite-indexes",
+    sql: CODE_REVIEW_B3_COMPOSITE_INDEXES,
   },
 ];
 

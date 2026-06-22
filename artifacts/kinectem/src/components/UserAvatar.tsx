@@ -82,7 +82,12 @@ const BaseAvatar = React.forwardRef<HTMLSpanElement, BaseAvatarProps>(
          * Always render AvatarImage — never gate it with `avatarUrl && ...`.
          * See the file-level comment above for why this matters.
          */}
-        <AvatarImage src={avatarUrl ?? undefined} alt={alt ?? displayName} />
+        <AvatarImage
+          src={avatarUrl ?? undefined}
+          alt={alt ?? displayName}
+          loading="lazy"
+          decoding="async"
+        />
         <AvatarFallback
           className={cn(
             sizeClasses.text,

@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ChevronRight, ChevronDown } from "lucide-react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
   useGetLoggedInUser,
-  useListFeed,
+  listFeed,
   useListUserOrganizations,
   useListUserTeams,
   queryOpts,
@@ -72,7 +74,89 @@ export default function FeedPage() {
   const [expandedOrgs, setExpandedOrgs] = useState<Record<string, boolean>>({});
   const toggleOrg = (orgId: string) =>
     setExpandedOrgs((prev) => ({ ...prev, [orgId]: !prev[orgId] }));
-  const { data: feed, isLoading: feedLoading } = useListFeed();
+  // CODE_REVIEW F2 — cursor pagination. The /feed endpoint already
+  // accepts cursor + limit, so consume it with useInfiniteQuery and
+  // flatten the pages into one list. No generated infinite hook exists,
+  // so build it on the raw `listFeed` fetcher.
+  const FEED_PAGE_SIZE = 20;
+  const {
+    data: feedPages,
+    isLoading: feedLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["/api/v1/feed", "infinite"] as const,
+    queryFn: ({ pageParam }) =>
+      listFeed({
+        limit: FEED_PAGE_SIZE,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore
+        ? lastPage.pagination.nextCursor ?? undefined
+        : undefined,
+  });
+
+  const posts = useMemo(
+    () => feedPages?.pages.flatMap((p) => p.data) ?? [],
+    [feedPages],
+  );
+
+  // CODE_REVIEW F1 — windowed feed. The page itself (not a nested
+  // element) is the scroll container and the rails are sticky, so use
+  // the window virtualizer offset by the list's distance from the top
+  // of the document. A callback ref measures that offset the moment the
+  // list mounts (it only renders once posts have loaded) and on resize.
+  const listElRef = useRef<HTMLDivElement | null>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  const recomputeMargin = useCallback(() => {
+    const node = listElRef.current;
+    if (node) {
+      setScrollMargin(node.getBoundingClientRect().top + window.scrollY);
+    }
+  }, []);
+  const attachList = useCallback(
+    (node: HTMLDivElement | null) => {
+      listElRef.current = node;
+      if (node) recomputeMargin();
+    },
+    [recomputeMargin],
+  );
+  useEffect(() => {
+    window.addEventListener("resize", recomputeMargin);
+    return () => window.removeEventListener("resize", recomputeMargin);
+  }, [recomputeMargin]);
+
+  const virtualizer = useWindowVirtualizer({
+    count: posts.length,
+    estimateSize: () => 420,
+    overscan: 4,
+    scrollMargin,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
+  // CODE_REVIEW F2 — infinite scroll: when the last windowed row is the
+  // last loaded post, pull the next cursor page.
+  const lastItemIndex = virtualItems.length
+    ? virtualItems[virtualItems.length - 1].index
+    : -1;
+  useEffect(() => {
+    if (
+      lastItemIndex >= posts.length - 1 &&
+      hasNextPage &&
+      !isFetchingNextPage
+    ) {
+      fetchNextPage();
+    }
+  }, [
+    lastItemIndex,
+    posts.length,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  ]);
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
 
@@ -184,12 +268,42 @@ export default function FeedPage() {
             <Skeleton className="h-48 rounded-xl" />
             <Skeleton className="h-48 rounded-xl" />
           </>
-        ) : !feed || feed.data.length === 0 ? (
+        ) : posts.length === 0 ? (
           <SuggestionsPanel />
         ) : (
-          feed.data.map((post: (typeof feed.data)[number]) => (
-            <PostCard key={post.id} post={post} />
-          ))
+          <>
+            <div
+              ref={attachList}
+              style={{
+                height: virtualizer.getTotalSize(),
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              {virtualItems.map((item) => {
+                const post = posts[item.index];
+                return (
+                  <div
+                    key={post.id}
+                    data-index={item.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${item.start - scrollMargin}px)`,
+                    }}
+                  >
+                    <div className="pb-4">
+                      <PostCard post={post} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {isFetchingNextPage && <Skeleton className="h-48 rounded-xl" />}
+          </>
         )}
       </div>
 

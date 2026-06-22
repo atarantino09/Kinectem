@@ -5,6 +5,7 @@ import { seedIfEmpty } from "../src/lib/seed";
 import { resetAllRateLimits } from "../src/middlewares/rate-limit";
 
 const ALL_TABLES = [
+  "rate_limit_buckets",
   "parent_child_notification_reads",
   "takedown_requests",
   "consent_audit_log",
@@ -43,7 +44,7 @@ const ALL_TABLES = [
 ];
 
 beforeEach(async () => {
-  resetAllRateLimits();
+  await resetAllRateLimits();
   await db.execute(
     sql.raw(
       `TRUNCATE TABLE ${ALL_TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`,

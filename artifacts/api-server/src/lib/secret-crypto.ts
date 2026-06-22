@@ -5,29 +5,46 @@ import {
   scryptSync,
 } from "node:crypto";
 
+import { logger } from "./logger";
+
 // Symmetric encryption for secrets we must store at rest and later read
 // back in plaintext (unlike passwords / tokens, which are one-way hashed).
 // Currently used for admin-entered AI provider API keys.
 //
 // Key derivation: prefer a dedicated AI_KEYS_ENCRYPTION_KEY env var; fall
 // back to SESSION_SECRET so dev works out of the box. The derivation salt
-// is fixed so the same env value always yields the same key. Rotating the
-// source secret invalidates existing ciphertext — the admin simply re-enters
-// the API key, which is acceptable for this low-volume, admin-only data.
+// is fixed so the same env value always yields the same key.
+//
+// Code review S9 — production should set a dedicated AI_KEYS_ENCRYPTION_KEY
+// so that rotating SESSION_SECRET (a routine security action) does not brick
+// already-encrypted AI keys. We keep the fallback to stay non-breaking but
+// warn once when it is used. Rotating the source secret invalidates existing
+// ciphertext — the admin simply re-enters the API key (low-volume, admin-only
+// data), so no automated re-encryption is required.
 
 const ALGO = "aes-256-gcm";
 const SALT = "kinectem-ai-keys-v1";
 
+let warnedFallback = false;
+
 function getKey(): Buffer {
   const explicit = process.env.AI_KEYS_ENCRYPTION_KEY;
-  const source =
-    explicit && explicit.length >= 16 ? explicit : process.env.SESSION_SECRET;
-  if (!source) {
+  if (explicit && explicit.length >= 16) {
+    return scryptSync(explicit, SALT, 32);
+  }
+  const fallback = process.env.SESSION_SECRET;
+  if (!fallback) {
     throw new Error(
       "Cannot encrypt secrets: set AI_KEYS_ENCRYPTION_KEY or SESSION_SECRET.",
     );
   }
-  return scryptSync(source, SALT, 32);
+  if (!warnedFallback) {
+    warnedFallback = true;
+    logger.warn(
+      "AI-key encryption is using the SESSION_SECRET fallback; set a dedicated AI_KEYS_ENCRYPTION_KEY (>=32 chars). Rotating SESSION_SECRET will invalidate already-encrypted AI keys (admins must re-enter them).",
+    );
+  }
+  return scryptSync(fallback, SALT, 32);
 }
 
 // Returns a self-describing "iv.tag.ciphertext" string (each part base64).

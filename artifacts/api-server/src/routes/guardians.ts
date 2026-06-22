@@ -201,14 +201,24 @@ router.post(
         guardianConfirmTokenExpiresAt: new Date(
           Date.now() + GUARDIAN_TOKEN_TTL_MS,
         ),
+        guardianExpiredEmailSentAt: null,
       })
       .where(eq(users.id, child.id));
-    // In production this URL would be emailed to child.guardianEmail.
-    res.json({
-      ok: true,
-      guardianEmail: child.guardianEmail,
-      guardianConfirmUrl: `/guardian-confirm/${newToken}`,
-    });
+    // Code review S10 — the raw confirmation token is a secret that must be
+    // delivered only over email; never return it in the API response.
+    try {
+      await sendGuardianConfirmationEmail(
+        child.guardianEmail,
+        child.name,
+        newToken,
+      );
+    } catch (err) {
+      logger.error(
+        { err },
+        "Failed to send guardian confirmation email (resend)",
+      );
+    }
+    res.json({ ok: true, guardianEmail: child.guardianEmail });
   }),
 );
 

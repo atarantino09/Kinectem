@@ -25,6 +25,8 @@ export function OrgLogoFallback({
       <img
         src={kinectemKIcon}
         alt={alt}
+        loading="lazy"
+        decoding="async"
         className="w-full h-full object-contain"
       />
     </div>
@@ -68,6 +70,8 @@ export function OrgLogo({
         alt={altText}
         onError={() => setFailed(true)}
         data-testid={dataTestId}
+        loading="lazy"
+        decoding="async"
         className={imgClassName ?? className}
       />
     );

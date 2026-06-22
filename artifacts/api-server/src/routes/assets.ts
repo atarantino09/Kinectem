@@ -1,10 +1,11 @@
 import express, { Router, type IRouter, type Request } from "express";
 import { db, assets, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   ALLOWED_MINOR_UPLOAD_MIMES,
   stripMetadataForMinor,
 } from "../lib/exif-strip";
+import { isDeclaredTypeMismatch } from "../lib/magic-bytes";
 import { logConsentEvent } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
@@ -108,6 +109,18 @@ router.put(
       return apiError(res, 413, "Upload exceeds 10 MB");
     }
     const mime = a.fileType || "application/octet-stream";
+    // Code review S13 — reject uploads whose magic bytes contradict the
+    // client-declared content-type (defense-in-depth against content
+    // smuggling behind an image/* MIME). Only fingerprintable types are
+    // policed; unknown declared types fall through to the existing
+    // allow-lists below.
+    if (isDeclaredTypeMismatch(buf, mime)) {
+      return apiError(
+        res,
+        400,
+        "Uploaded file contents do not match the declared file type.",
+      );
+    }
     // Task #359 — minor uploads are restricted to JPEG/PNG (so we can
     // walk every metadata segment) and have EXIF/XMP/IPTC/ICC and PNG
     // textual chunks stripped before the bytes hit the database. We
@@ -177,6 +190,23 @@ router.get(
       .where(eq(assets.id, req.params.assetId))
       .limit(1);
     if (!a) return notFound(res);
+    // S4 — asset rows carry the data URL, so they are private: only the owner,
+    // the owner's linked guardian, or a platform admin may read one. Assets
+    // whose owner was deleted (ownerId null) are readable only by admins.
+    const ownerId = a.ownerId;
+    const isOwner = ownerId !== null && ownerId === me.id;
+    if (!isOwner && me.role !== "admin") {
+      let isGuardianOfOwner = false;
+      if (ownerId !== null) {
+        const [child] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, ownerId), eq(users.parentId, me.id)))
+          .limit(1);
+        isGuardianOfOwner = Boolean(child);
+      }
+      if (!isGuardianOfOwner) return apiError(res, 403, "Forbidden");
+    }
     res.json(toAssetResponse(a));
   }),
 );

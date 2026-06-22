@@ -5,3 +5,4 @@
 - [Signup-walkthrough captions](signup-walkthrough-captions.md) — signup vid is a screen recording w/ live React caption overlay; marketing is static HTML so captions are burned into its mp4 via ffmpeg libass (cue list duplicated — keep in sync).
 - [Standalone admin page when artifact cap is hit](founding-admin-standalone.md) — at 7-artifact cap, serve a self-contained password-gated HTML page from api-server under /api instead of a new artifact; fail closed if SESSION_SECRET missing.
 - [api-server test infra & baseline failures](api-server-test-infra.md) — test DB is pg_dumped from live DB (not schema file); posts.test.ts(17) + tag-emails fail pre-existing; vitest4 dropped --reporter=basic; bg runs get reaped.
+- [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.

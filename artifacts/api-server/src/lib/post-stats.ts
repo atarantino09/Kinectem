@@ -1,5 +1,6 @@
 import { db, articles, highlights, orgPosts, postReactions, postComments, postShares, users } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { logger } from "./logger.js";
 
 export interface PostStats {
   reactionCount: number;
@@ -19,6 +20,22 @@ function statsKey(kind: StatsKind, refId: string): string {
   return `${kind}:${refId}`;
 }
 
+// B5 (code review) — defensive cap so a future uncapped caller can't
+// issue an unbounded `inArray`. Feed/profile callers already cap upstream
+// (~70 ids), so this only guards against regressions; any truncated ids
+// keep their seeded zero-stats.
+const MAX_STATS_BATCH = 500;
+function capBatch(ids: string[]): string[] {
+  if (ids.length > MAX_STATS_BATCH) {
+    logger.warn(
+      { count: ids.length, cap: MAX_STATS_BATCH },
+      "post-stats batch exceeded cap; truncating",
+    );
+    return ids.slice(0, MAX_STATS_BATCH);
+  }
+  return ids;
+}
+
 export async function loadPostStats(
   meId: string | null,
   items: Array<{ kind: StatsKind; refId: string }>,
@@ -33,9 +50,9 @@ export async function loadPostStats(
       recentReactorName: null,
     });
   }
-  const articleIds = items.filter((i) => i.kind === "article").map((i) => i.refId);
-  const highlightIds = items.filter((i) => i.kind === "highlight").map((i) => i.refId);
-  const orgPostIds = items.filter((i) => i.kind === "org_post").map((i) => i.refId);
+  const articleIds = capBatch(items.filter((i) => i.kind === "article").map((i) => i.refId));
+  const highlightIds = capBatch(items.filter((i) => i.kind === "highlight").map((i) => i.refId));
+  const orgPostIds = capBatch(items.filter((i) => i.kind === "org_post").map((i) => i.refId));
 
   const tasks: Promise<unknown>[] = [];
 
@@ -273,8 +290,8 @@ export async function loadPostShareStats(
   for (const it of items) {
     map.set(statsKey(it.kind, it.refId), { shareCount: 0, hasShared: false });
   }
-  const articleIds = items.filter((i) => i.kind === "article").map((i) => i.refId);
-  const highlightIds = items.filter((i) => i.kind === "highlight").map((i) => i.refId);
+  const articleIds = capBatch(items.filter((i) => i.kind === "article").map((i) => i.refId));
+  const highlightIds = capBatch(items.filter((i) => i.kind === "highlight").map((i) => i.refId));
 
   const tasks: Promise<unknown>[] = [];
   for (const [kind, refIds] of [

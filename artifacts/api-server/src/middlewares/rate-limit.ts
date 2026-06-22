@@ -1,21 +1,25 @@
 import { createHash } from "node:crypto";
 import type { Request, RequestHandler } from "express";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { db, rateLimitBuckets } from "@workspace/db";
+import { logger } from "../lib/logger";
 
-type Bucket = { count: number; resetAt: number };
-
-const stores = new Map<string, Map<string, Bucket>>();
-
-function getStore(name: string): Map<string, Bucket> {
-  let store = stores.get(name);
-  if (!store) {
-    store = new Map();
-    stores.set(name, store);
-  }
-  return store;
+// Hash every limiter key before it touches the database so raw IPs /
+// emails / refresh tokens are never persisted at rest. (The in-memory
+// predecessor only ever held these in process memory.)
+function hashKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
 }
 
-export function resetAllRateLimits(): void {
-  for (const store of stores.values()) store.clear();
+// Best-effort wipe of every bucket — used by the test harness between
+// cases. Fails open: a transient DB error must never abort a test run or
+// a request path.
+export async function resetAllRateLimits(): Promise<void> {
+  try {
+    await db.delete(rateLimitBuckets);
+  } catch (err) {
+    logger.error({ err }, "Failed to reset rate-limit buckets");
+  }
 }
 
 export type RateLimitOptions = {
@@ -31,54 +35,103 @@ export function rateLimit(opts: RateLimitOptions): RequestHandler {
   const message =
     opts.message ?? "Too many requests. Please try again later.";
   return (req, res, next) => {
-    const store = getStore(opts.name);
-    const now = Date.now();
-    const keys = opts.keys(req).filter((k): k is string => Boolean(k));
-    if (keys.length === 0) {
-      next();
-      return;
-    }
+    void enforce();
 
-    for (const key of keys) {
-      const bucket = store.get(key);
-      if (bucket && bucket.resetAt <= now) {
-        store.delete(key);
-      }
-    }
+    async function enforce(): Promise<void> {
+      try {
+        const rawKeys = opts
+          .keys(req)
+          .filter((k): k is string => Boolean(k));
+        if (rawKeys.length === 0) {
+          next();
+          return;
+        }
+        const hashed = rawKeys.map(hashKey);
+        const now = Date.now();
 
-    for (const key of keys) {
-      const bucket = store.get(key);
-      if (bucket && bucket.count >= opts.max) {
-        const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
-        res.setHeader("Retry-After", String(retryAfter));
-        res.status(429).json({ error: message, retryAfter });
-        return;
-      }
-    }
+        // Pre-check the current (unexpired) windows and reject *without*
+        // incrementing if any key is already at/over the limit — mirrors
+        // the previous in-memory check-before-increment behavior.
+        const existing = await db
+          .select({
+            count: rateLimitBuckets.count,
+            resetAt: rateLimitBuckets.resetAt,
+          })
+          .from(rateLimitBuckets)
+          .where(
+            and(
+              eq(rateLimitBuckets.name, opts.name),
+              inArray(rateLimitBuckets.keyHash, hashed),
+            ),
+          );
 
-    const tracked: string[] = [];
-    for (const key of keys) {
-      let bucket = store.get(key);
-      if (!bucket) {
-        bucket = { count: 0, resetAt: now + opts.windowMs };
-        store.set(key, bucket);
-      }
-      bucket.count += 1;
-      tracked.push(key);
-    }
-
-    if (opts.skipSuccessfulRequests) {
-      res.on("finish", () => {
-        if (res.statusCode < 400) {
-          for (const key of tracked) {
-            const bucket = store.get(key);
-            if (bucket && bucket.count > 0) bucket.count -= 1;
+        for (const row of existing) {
+          if (row.resetAt.getTime() > now && row.count >= opts.max) {
+            const retryAfter = Math.max(
+              1,
+              Math.ceil((row.resetAt.getTime() - now) / 1000),
+            );
+            res.setHeader("Retry-After", String(retryAfter));
+            res.status(429).json({ error: message, retryAfter });
+            return;
           }
         }
-      });
-    }
 
-    next();
+        // Atomically increment each key, resetting any window whose
+        // reset_at has elapsed. One round trip per key.
+        for (const keyHash of hashed) {
+          await db.execute(sql`
+            INSERT INTO rate_limit_buckets (name, key_hash, count, reset_at)
+            VALUES (
+              ${opts.name},
+              ${keyHash},
+              1,
+              now() + ${opts.windowMs} * interval '1 millisecond'
+            )
+            ON CONFLICT (name, key_hash) DO UPDATE SET
+              count = CASE
+                WHEN rate_limit_buckets.reset_at <= now() THEN 1
+                ELSE rate_limit_buckets.count + 1
+              END,
+              reset_at = CASE
+                WHEN rate_limit_buckets.reset_at <= now()
+                  THEN now() + ${opts.windowMs} * interval '1 millisecond'
+                ELSE rate_limit_buckets.reset_at
+              END
+          `);
+        }
+
+        if (opts.skipSuccessfulRequests) {
+          res.on("finish", () => {
+            if (res.statusCode < 400) {
+              void db
+                .update(rateLimitBuckets)
+                .set({ count: sql`GREATEST(${rateLimitBuckets.count} - 1, 0)` })
+                .where(
+                  and(
+                    eq(rateLimitBuckets.name, opts.name),
+                    inArray(rateLimitBuckets.keyHash, hashed),
+                    sql`${rateLimitBuckets.resetAt} > now()`,
+                  ),
+                )
+                .catch((err: unknown) =>
+                  logger.error({ err }, "rate-limit decrement failed"),
+                );
+            }
+          });
+        }
+
+        next();
+      } catch (err) {
+        // Fail open: abuse protection degrades on a DB hiccup, but
+        // legitimate auth/signup traffic is never blocked by it.
+        logger.error(
+          { err, limiter: opts.name },
+          "Rate limiter error; failing open",
+        );
+        next();
+      }
+    }
   };
 }
 
@@ -93,8 +146,8 @@ export function emailKey(req: Request): string | null {
 }
 
 // Bucket repeated attempts against the same refresh token without putting
-// the raw secret into the in-memory rate-limit map. A short hash prefix is
-// enough to keep separate tokens in separate buckets.
+// the raw secret into the rate-limit store. A short hash prefix is enough
+// to keep separate tokens in separate buckets.
 export function refreshTokenKey(req: Request): string | null {
   const raw = (req.body as { refreshToken?: unknown } | undefined)
     ?.refreshToken;

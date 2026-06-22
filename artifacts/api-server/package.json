@@ -23,6 +23,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "helmet": "^8.2.0",
     "pino": "^9",
     "pino-http": "^10",
     "yaml": "^2.8.3",

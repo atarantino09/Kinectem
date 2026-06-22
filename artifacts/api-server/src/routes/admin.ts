@@ -1119,65 +1119,98 @@ router.get(
       .limit(limit)
       .offset(offset);
 
-    // Resolve guardian + post snapshot per row (small N).
-    const out = await Promise.all(
-      rows.map(async (r) => {
-        let guardian: { id: string; name: string; email: string | null } | null =
-          null;
-        if (r.t.requestedByGuardianId) {
-          const [g] = await db
-            .select({ id: users.id, name: users.name, email: users.email })
-            .from(users)
-            .where(eq(users.id, r.t.requestedByGuardianId))
-            .limit(1);
-          guardian = g ?? null;
-        }
-        let post: {
-          id: string;
-          kind: "article" | "highlight" | "org_post";
-          title: string | null;
-          exists: boolean;
-        } = {
-          id: r.t.postRefId,
-          kind: r.t.postKind as "article" | "highlight" | "org_post",
-          title: null,
-          exists: false,
-        };
-        if (r.t.postKind === "article") {
-          const [a] = await db
-            .select({ id: articles.id, title: articles.title })
-            .from(articles)
-            .where(eq(articles.id, r.t.postRefId))
-            .limit(1);
-          if (a) post = { ...post, title: a.title, exists: true };
-        } else if (r.t.postKind === "highlight") {
-          const [h] = await db
-            .select({ id: highlights.id, title: highlights.title })
-            .from(highlights)
-            .where(eq(highlights.id, r.t.postRefId))
-            .limit(1);
-          if (h) post = { ...post, title: h.title, exists: true };
-        } else if (r.t.postKind === "org_post") {
-          // Task #524 — surface org_post title/snippet in the moderator queue.
-          const [p] = await db
-            .select({ id: orgPosts.id, title: orgPosts.title })
-            .from(orgPosts)
-            .where(eq(orgPosts.id, r.t.postRefId))
-            .limit(1);
-          if (p) post = { ...post, title: p.title, exists: true };
-        }
-        return {
-          id: r.t.id,
-          status: r.t.status,
-          reason: r.t.reason,
-          createdAt: r.t.createdAt.toISOString(),
-          decidedAt: r.t.decidedAt?.toISOString() ?? null,
-          child: r.child,
-          guardian,
-          post,
-        };
-      }),
-    );
+    // B2 — resolve guardians + post snapshots in batched queries (one per
+    // entity type) instead of two queries per row (was N+1). Collect the
+    // distinct ids per kind, fetch them in a single `inArray` each, then
+    // hydrate every row synchronously from the resulting maps.
+    const guardianIds = [
+      ...new Set(
+        rows
+          .map((r) => r.t.requestedByGuardianId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const articleIds = [
+      ...new Set(
+        rows.filter((r) => r.t.postKind === "article").map((r) => r.t.postRefId),
+      ),
+    ];
+    const highlightIds = [
+      ...new Set(
+        rows
+          .filter((r) => r.t.postKind === "highlight")
+          .map((r) => r.t.postRefId),
+      ),
+    ];
+    const orgPostIds = [
+      ...new Set(
+        rows
+          .filter((r) => r.t.postKind === "org_post")
+          .map((r) => r.t.postRefId),
+      ),
+    ];
+
+    const [guardianRows, articleRows, highlightRows, orgPostRows] =
+      await Promise.all([
+        guardianIds.length
+          ? db
+              .select({ id: users.id, name: users.name, email: users.email })
+              .from(users)
+              .where(inArray(users.id, guardianIds))
+          : Promise.resolve([]),
+        articleIds.length
+          ? db
+              .select({ id: articles.id, title: articles.title })
+              .from(articles)
+              .where(inArray(articles.id, articleIds))
+          : Promise.resolve([]),
+        highlightIds.length
+          ? db
+              .select({ id: highlights.id, title: highlights.title })
+              .from(highlights)
+              .where(inArray(highlights.id, highlightIds))
+          : Promise.resolve([]),
+        orgPostIds.length
+          ? db
+              .select({ id: orgPosts.id, title: orgPosts.title })
+              .from(orgPosts)
+              .where(inArray(orgPosts.id, orgPostIds))
+          : Promise.resolve([]),
+      ]);
+
+    const guardianById = new Map(guardianRows.map((g) => [g.id, g]));
+    const titleByArticle = new Map(articleRows.map((a) => [a.id, a.title]));
+    const titleByHighlight = new Map(highlightRows.map((h) => [h.id, h.title]));
+    const titleByOrgPost = new Map(orgPostRows.map((p) => [p.id, p.title]));
+
+    const out = rows.map((r) => {
+      const guardian = r.t.requestedByGuardianId
+        ? guardianById.get(r.t.requestedByGuardianId) ?? null
+        : null;
+      const kind = r.t.postKind as "article" | "highlight" | "org_post";
+      let title: string | null = null;
+      let exists = false;
+      if (kind === "article" && titleByArticle.has(r.t.postRefId)) {
+        title = titleByArticle.get(r.t.postRefId) ?? null;
+        exists = true;
+      } else if (kind === "highlight" && titleByHighlight.has(r.t.postRefId)) {
+        title = titleByHighlight.get(r.t.postRefId) ?? null;
+        exists = true;
+      } else if (kind === "org_post" && titleByOrgPost.has(r.t.postRefId)) {
+        title = titleByOrgPost.get(r.t.postRefId) ?? null;
+        exists = true;
+      }
+      return {
+        id: r.t.id,
+        status: r.t.status,
+        reason: r.t.reason,
+        createdAt: r.t.createdAt.toISOString(),
+        decidedAt: r.t.decidedAt?.toISOString() ?? null,
+        child: r.child,
+        guardian,
+        post: { id: r.t.postRefId, kind, title, exists },
+      };
+    });
     res.json({ data: out });
   }),
 );

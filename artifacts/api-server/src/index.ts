@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
 import { runStartupMigrations } from "./lib/migrations";
 import { startConsentScheduler } from "./lib/consent-scheduler";
+import { auditSecretStrength } from "./lib/secret-audit";
 
 const rawPort = process.env["PORT"];
 
@@ -19,6 +20,9 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function start() {
+  // Code review S8 / S9 — surface weak/missing secrets at boot (non-fatal).
+  auditSecretStrength();
+
   // Task #190 — Run idempotent SQL migrations *before* seeding so the
   // schema is in its current shape before any seed query touches the
   // affected tables.

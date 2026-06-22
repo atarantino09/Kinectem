@@ -1,10 +1,25 @@
 import { logger } from "./logger.js";
 
+// S5 — escape user-controlled values before interpolating them into HTML email
+// bodies. Plain-text parts don't need escaping.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export type EmailMessage = {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  // S12 — a non-PII event key (e.g. "guardian_confirm") used for log
+  // triage. The subject itself can embed minor names / post titles, so it
+  // must never be logged; this is logged instead.
+  kind?: string;
 };
 
 const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
@@ -65,7 +80,9 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   const creds = await resolveCredentials();
   if (!creds) {
     logger.warn(
-      { to: message.to, subject: message.subject },
+      // S12 — log only a non-PII event kind; the recipient address and the
+      // subject (which can embed minor names / post titles) are never logged.
+      { kind: message.kind ?? "unknown" },
       "Email not sent: SENDGRID_API_KEY and/or EMAIL_FROM are not configured.",
     );
     return;
@@ -93,9 +110,12 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    // S12 — never log the SendGrid response body; it can echo recipient PII
+    // and partial credentials. The status code is enough to diagnose.
     logger.error(
-      { status: res.status, to: message.to, subject: message.subject, body: text },
+      // S12 — status + non-PII event kind only; never the recipient address,
+      // the subject (can embed minor names / post titles), or the response body.
+      { status: res.status, kind: message.kind ?? "unknown" },
       "SendGrid email delivery failed",
     );
     throw new Error(`Email delivery failed (${res.status})`);
@@ -144,12 +164,16 @@ export async function sendOrganizationInviteEmail(
   const { organizationName, inviterDisplayName, role, token, note } = args;
   const url = buildOrganizationInviteUrl(token);
   const roleLabel = role === "admin" ? "an admin" : "a member";
+  // S5 — escape user-controlled values for the HTML body.
+  const orgHtml = escapeHtml(organizationName);
+  const inviterHtml = escapeHtml(inviterDisplayName);
   const notePlain = note && note.trim() ? `\n\nNote from ${inviterDisplayName}:\n${note.trim()}\n` : "";
   const noteHtml = note && note.trim()
-    ? `<p><em>Note from ${inviterDisplayName}:</em></p><blockquote>${note.trim().replace(/\n/g, "<br/>")}</blockquote>`
+    ? `<p><em>Note from ${inviterHtml}:</em></p><blockquote>${escapeHtml(note.trim()).replace(/\n/g, "<br/>")}</blockquote>`
     : "";
   await sendEmail({
     to,
+    kind: "organization_invite",
     subject: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem`,
     text: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem as ${roleLabel}.
 ${notePlain}
@@ -157,7 +181,7 @@ Open this link to accept:
 ${url}
 
 If you don't have a Kinectem account yet, you can sign up from the same link.`,
-    html: `<p><strong>${inviterDisplayName}</strong> invited you to join <strong>${organizationName}</strong> on Kinectem as ${roleLabel}.</p>
+    html: `<p><strong>${inviterHtml}</strong> invited you to join <strong>${orgHtml}</strong> on Kinectem as ${roleLabel}.</p>
 ${noteHtml}
 <p>Open this link to accept:</p>
 <p><a href="${url}">${url}</a></p>
@@ -182,9 +206,11 @@ export async function sendTagNotificationEmail(
   args: { postTitle: string; postUrl: string; pending: boolean },
 ): Promise<void> {
   const { postTitle, postUrl, pending } = args;
+  const titleHtml = escapeHtml(postTitle);
   if (pending) {
     await sendEmail({
       to,
+      kind: "tag_notification_pending",
       subject: `Please review a tag on you in "${postTitle}"`,
       text: `Someone tagged you in "${postTitle}" on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.
 
@@ -192,7 +218,7 @@ Open the post to approve or remove the tag:
 ${postUrl}
 
 If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.`,
-      html: `<p>Someone tagged you in <strong>${postTitle}</strong> on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.</p>
+      html: `<p>Someone tagged you in <strong>${titleHtml}</strong> on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.</p>
 <p>Open the post to approve or remove the tag:</p>
 <p><a href="${postUrl}">${postUrl}</a></p>
 <p>If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.</p>`,
@@ -201,6 +227,7 @@ If you'd rather not see these emails, change tag-consent settings on your Kinect
   }
   await sendEmail({
     to,
+    kind: "tag_notification",
     subject: `You were tagged in "${postTitle}"`,
     text: `You were tagged in "${postTitle}" on Kinectem.
 
@@ -208,7 +235,7 @@ Open the post to see it:
 ${postUrl}
 
 If you'd rather not be tagged, you can remove the tag from the post page.`,
-    html: `<p>You were tagged in <strong>${postTitle}</strong> on Kinectem.</p>
+    html: `<p>You were tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
 <p>Open the post to see it:</p>
 <p><a href="${postUrl}">${postUrl}</a></p>
 <p>If you'd rather not be tagged, you can remove the tag from the post page.</p>`,
@@ -222,6 +249,7 @@ export async function sendPasswordResetEmail(
   const url = buildPasswordResetUrl(token);
   await sendEmail({
     to,
+    kind: "password_reset",
     subject: "Reset your Kinectem password",
     text: `Someone asked to reset the password for your Kinectem account.
 
@@ -244,6 +272,7 @@ export async function sendGuardianConfirmationEmail(
   const url = buildGuardianConfirmUrl(token);
   await sendEmail({
     to,
+    kind: "guardian_confirm",
     subject: `Confirm ${athleteName}'s Kinectem account`,
     text: `${athleteName} just signed up for Kinectem and listed you as their parent or guardian.
 
@@ -251,7 +280,7 @@ Because they are under 13, the account cannot be used until you confirm it. Open
 ${url}
 
 If you don't recognize this signup, you can ignore this email and the account will stay locked.`,
-    html: `<p><strong>${athleteName}</strong> just signed up for Kinectem and listed you as their parent or guardian.</p>
+    html: `<p><strong>${escapeHtml(athleteName)}</strong> just signed up for Kinectem and listed you as their parent or guardian.</p>
 <p>Because they are under 13, the account cannot be used until you confirm it. Open this link to confirm:</p>
 <p><a href="${url}">${url}</a></p>
 <p>If you don't recognize this signup, you can ignore this email and the account will stay locked.</p>`,
@@ -269,6 +298,7 @@ export async function sendParentalConsentNoticeEmail(
   const url = `${appBaseUrl()}/guardian-consent/${token}`;
   await sendEmail({
     to,
+    kind: "parental_consent_notice",
     subject: `Action required: confirm consent for ${athleteName}'s Kinectem account`,
     text: `${athleteName} listed you as their parent or guardian when signing up for Kinectem.
 
@@ -280,7 +310,7 @@ ${url}
 After you submit consent, we'll email you ONE more time at this address with a "confirm" link. The account stays disabled until you click that second link — that two-step "email plus" pattern is how we verify the consent really came from you.
 
 If you don't recognize this signup, ignore this email and the account will stay locked.`,
-    html: `<p><strong>${athleteName}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
+    html: `<p><strong>${escapeHtml(athleteName)}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
 <p>Because they are under 13, federal law (COPPA) requires us to get your verifiable consent before we collect personal information from them.</p>
 <p>Please open this link to read the full notice and grant consent:</p>
 <p><a href="${url}">${url}</a></p>
@@ -299,6 +329,7 @@ export async function sendParentalConsentFollowupEmail(
   const url = `${appBaseUrl()}/guardian-consent/${token}/finalize`;
   await sendEmail({
     to,
+    kind: "parental_consent_followup",
     subject: `Final step: finish enabling ${athleteName}'s Kinectem account`,
     text: `Thanks — we received your consent for ${athleteName}'s Kinectem account.
 
@@ -308,7 +339,7 @@ ${url}
 The account will stay disabled until you click. The link is good for 7 days.
 
 If you didn't grant consent, do nothing — without this second click the account will not be activated.`,
-    html: `<p>Thanks — we received your consent for <strong>${athleteName}</strong>'s Kinectem account.</p>
+    html: `<p>Thanks — we received your consent for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account.</p>
 <p>To finish (and to verify it really came from you), open this link:</p>
 <p><a href="${url}">${url}</a></p>
 <p>The account will stay disabled until you click. The link is good for 7 days.</p>
@@ -326,6 +357,7 @@ export async function sendParentalConsentFinalizedEmail(
   const revokeUrl = `${appBaseUrl()}/guardian-revoke/${revokeToken}`;
   await sendEmail({
     to,
+    kind: "parental_consent_finalized",
     subject: `${athleteName}'s Kinectem account is now active`,
     text: `${athleteName}'s Kinectem account has been activated.
 
@@ -333,7 +365,7 @@ You can revoke consent at any time, which will immediately disable the account a
 ${revokeUrl}
 
 You can also manage the account from your Family page after signing in to Kinectem.`,
-    html: `<p><strong>${athleteName}</strong>'s Kinectem account has been activated.</p>
+    html: `<p><strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has been activated.</p>
 <p>You can revoke consent at any time, which will immediately disable the account and stop any further data collection. Keep this link handy for that:</p>
 <p><a href="${revokeUrl}">${revokeUrl}</a></p>
 <p>You can also manage the account from your Family page after signing in to Kinectem.</p>`,
@@ -347,6 +379,7 @@ export async function sendGuardianExpiredEmail(
   const url = buildFamilyUrl();
   await sendEmail({
     to,
+    kind: "guardian_expired",
     subject: `${athleteName}'s Kinectem confirmation link has expired`,
     text: `The guardian-confirmation link for ${athleteName}'s Kinectem account has expired before it was confirmed.
 
@@ -354,8 +387,8 @@ Open your Family page to send ${athleteName} a new link so they don't lose acces
 ${url}
 
 If you no longer want to confirm this account, you can ignore this email and it will stay locked.`,
-    html: `<p>The guardian-confirmation link for <strong>${athleteName}</strong>'s Kinectem account has expired before it was confirmed.</p>
-<p>Open your Family page to send ${athleteName} a new link so they don't lose access:</p>
+    html: `<p>The guardian-confirmation link for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has expired before it was confirmed.</p>
+<p>Open your Family page to send ${escapeHtml(athleteName)} a new link so they don't lose access:</p>
 <p><a href="${url}">${url}</a></p>
 <p>If you no longer want to confirm this account, you can ignore this email and it will stay locked.</p>`,
   });
