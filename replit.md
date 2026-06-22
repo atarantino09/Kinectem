@@ -15,6 +15,18 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 
 **Required Environment Variables**: _Populate as you build_
 
+## Deployment
+
+The whole monorepo publishes as a **single Autoscale Deployment** using the application router (`.replit` → `router = "application"`, `deploymentTarget = "autoscale"`). One deployment serves every artifact behind the shared proxy by path. Publishing is user-initiated from the main project (the Publish button) — a task agent cannot trigger it.
+
+- **Deployment `.replit.app` target (CNAME target for custom domains)**: `kinectem.replit.app`
+- **Marketing site**: `https://kinectem.replit.app/` (served at root `/`)
+- **Main web app**: `https://kinectem.replit.app/app/` (served at `/app/`)
+- **API server**: `https://kinectem.replit.app/api` (health: `/api/healthz`)
+- **Custom domains already attached**: `kinectem.com`, `www.kinectem.com` (both resolve to the single deployment and currently serve the marketing root `/`).
+
+Both the marketing signup form and the main app call the API via **same-origin `/api/v1/...`** paths, so they must stay co-deployed with the api-server in the same deployment. Splitting marketing and the main app into separate `.replit.app` deployments would break those same-origin calls unless each deployment bundles the api-server. Note for the downstream `app.kinectem.com → main app` task: because all custom domains hit the same application-router deployment and routing is path-based (not host-based), pointing `app.kinectem.com` at this deployment serves the marketing root `/`, not `/app/` — that routing needs a host-based rewrite/redirect decision.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
