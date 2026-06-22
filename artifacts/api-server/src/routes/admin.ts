@@ -21,7 +21,7 @@ import {
   organizationAdmins,
   organizationClaimRequests,
 } from "@workspace/db";
-import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { hashPassword, generateToken } from "../lib/passwords";
@@ -1597,6 +1597,67 @@ router.post(
     }
     await notifyOrgClaimDecision(req, result.claim, "declined");
     res.json({ ok: true, decision: "declined" });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #610 — Secret claim-invite links for ownerless org pages
+// ---------------------------------------------------------------------------
+// Lists every ownerless (no `organization_admins` owner row) org alongside
+// its durable secret claim token, which the operator copies/pastes to each
+// org. The screen is self-healing: any ownerless org still missing a token
+// gets one minted on read, so newly bulk-imported orgs surface immediately
+// without a separate backfill step. Tokens are never (re)issued for orgs that
+// already have an owner — those drop off this list once claimed.
+router.get(
+  "/org-claim-links",
+  asyncHandler(async (req, res) => {
+    const ownerExists = sql`EXISTS (
+      SELECT 1 FROM ${organizationAdmins}
+      WHERE ${organizationAdmins.organizationId} = ${organizations.id}
+        AND ${organizationAdmins.role} = 'owner'
+    )`;
+    const rows = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        city: organizations.city,
+        state: organizations.state,
+        logoUrl: organizations.logoUrl,
+        claimToken: organizations.claimToken,
+      })
+      .from(organizations)
+      .where(sql`NOT ${ownerExists}`)
+      .orderBy(asc(organizations.name));
+
+    // Mint a token for any ownerless org that lacks one (idempotent).
+    const out: Array<{
+      id: string;
+      name: string;
+      city: string | null;
+      state: string | null;
+      logoUrl: string | null;
+      token: string;
+    }> = [];
+    for (const r of rows) {
+      let token = r.claimToken;
+      if (!token) {
+        token = generateToken();
+        await db
+          .update(organizations)
+          .set({ claimToken: token })
+          .where(eq(organizations.id, r.id));
+      }
+      out.push({
+        id: r.id,
+        name: r.name,
+        city: r.city,
+        state: r.state,
+        logoUrl: r.logoUrl,
+        token,
+      });
+    }
+    res.json({ data: out });
   }),
 );
 

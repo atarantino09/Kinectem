@@ -724,6 +724,20 @@ CREATE INDEX IF NOT EXISTS org_claim_by_status
   ON organization_claim_requests (status);
 `;
 
+// Task #610 — Per-org secret claim-invite token. Plaintext (re-displayable
+// shareable invite link, not a password), only ever set for ownerless
+// pages. Nullable column + a partial unique index so the many orgs without
+// a token don't collide on NULL. Idempotent. No backfill here — tokens are
+// minted lazily by the admin screen / backfill script for ownerless orgs.
+const TASK_610_ORG_CLAIM_LINKS = `
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS claim_token text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_claim_token_idx
+  ON organizations (claim_token)
+  WHERE claim_token IS NOT NULL;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -828,6 +842,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-22-task-603-org-claim-requests",
     sql: TASK_603_ORG_CLAIM_REQUESTS,
+  },
+  {
+    name: "2026-06-22-task-610-org-claim-links",
+    sql: TASK_610_ORG_CLAIM_LINKS,
   },
 ];
 

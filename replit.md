@@ -11,7 +11,9 @@ Kinectem is a youth-sports social platform enabling users to connect, share upda
 - `pnpm --filter @workspace/scripts run backfill-parent-team-follows`: Backfill `team_followers` so every parent of a rostered child is auto-following that team (idempotent).
 - `pnpm --filter @workspace/scripts run backfill-self-team-follows`: Backfill `team_followers` so every user with an accepted roster entry is auto-following that team (idempotent).
 - `pnpm --filter @workspace/scripts run export-founding-100`: Export all `founding_signups` rows (newest first) as CSV. Defaults to `founding-100-<date>.csv` in CWD; pass `--out=path.csv` or `--stdout` to override.
-- `pnpm --filter @workspace/scripts run bulk-import-organizations`: Bulk-create unclaimed org pages from a single-column CSV of names (idempotent, case-insensitive name match). Defaults to reading `organizations.csv` in CWD; pass `--in=path.csv` to override. Creates orgs with `name` only (`createdById` null, no `organization_admins`).
+- `pnpm --filter @workspace/scripts run bulk-import-organizations`: Bulk-create unclaimed org pages from a single-column CSV of names (idempotent, case-insensitive name match). Defaults to reading `organizations.csv` in CWD; pass `--in=path.csv` to override. Creates orgs with `name` + a secret `claim_token` (`createdById` null, no `organization_admins`).
+- `pnpm --filter @workspace/scripts run backfill-org-claim-links`: Ensure every ownerless org has a `claim_token` so it has a working `/claim/<token>` invite link (idempotent; skips orgs that already have a token or an owner).
+- `pnpm --filter @workspace/scripts run export-org-claim-links`: Export ownerless orgs + their full `/claim/<token>` links as CSV. Defaults to `org-claim-links-<date>.csv` in CWD; pass `--out=path.csv`, `--stdout`, or `--base=<url>` (link base, defaults to `$APP_BASE_URL` then `https://kinectem.replit.app`; links are `<base>/app/claim/<token>`).
 
 **Required Environment Variables**: _Populate as you build_
 

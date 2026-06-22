@@ -11,10 +11,12 @@
     "backfill-avatars": "tsx ./src/backfill-avatars.ts",
     "backfill-parent-team-follows": "tsx ./src/backfill-parent-team-follows.ts",
     "backfill-self-team-follows": "tsx ./src/backfill-self-team-follows.ts",
+    "backfill-org-claim-links": "tsx ./src/backfill-org-claim-links.ts",
     "bulk-import-organizations": "tsx ./src/bulk-import-organizations.ts",
     "burn-walkthrough-captions": "tsx ./src/burn-walkthrough-captions.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
+    "export-org-claim-links": "tsx ./src/export-org-claim-links.ts",
     "record-walkthrough": "tsx ./src/record-walkthrough.ts",
     "seed-game-recap-demo": "tsx ./src/seed-game-recap-demo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

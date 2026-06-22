@@ -29,6 +29,7 @@ const FollowRequestsPage = lazy(() => import("@/pages/FollowRequestsPage"));
 const ChildConversationPage = lazy(() => import("@/pages/ChildConversationPage"));
 const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
 const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
+const ClaimOrgPage = lazy(() => import("@/pages/ClaimOrgPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 const GuardianConfirmPage = lazy(() => import("@/pages/GuardianConfirmPage"));
@@ -44,6 +45,9 @@ const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminModeration = lazy(() => import("@/pages/admin/AdminModeration"));
 const AdminActivity = lazy(() => import("@/pages/admin/AdminActivity"));
 const AdminFounding100 = lazy(() => import("@/pages/admin/AdminFounding100"));
+const AdminOrgClaimLinks = lazy(
+  () => import("@/pages/admin/AdminOrgClaimLinks"),
+);
 const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
 
 const queryClient = new QueryClient({
@@ -76,6 +80,7 @@ function Router() {
       <Route path="/coppa-notice" component={CoppaNoticePage} />
       <Route path="/invites/:token" component={InviteAcceptPage} />
       <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
+      <Route path="/claim/:token" component={ClaimOrgPage} />
       <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}
@@ -113,6 +118,7 @@ function Router() {
             <Route path="/admin/moderation" component={AdminModeration} />
             <Route path="/admin/activity" component={AdminActivity} />
             <Route path="/admin/founding-100" component={AdminFounding100} />
+            <Route path="/admin/org-claim-links" component={AdminOrgClaimLinks} />
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
             <Route component={NotFound} />
           </Switch>

@@ -7,3 +7,4 @@
 - [api-server test infra & baseline failures](api-server-test-infra.md) — test DB is pg_dumped from live DB (not schema file); posts.test.ts(17) + tag-emails fail pre-existing; vitest4 dropped --reporter=basic; bg runs get reaped.
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.
 - [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769 noise; rateLimit needs `name`.
+- [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.

@@ -334,10 +334,22 @@ export const organizations = pgTable("organizations", {
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  // Task #610 — Per-org secret claim-invite token. Stored in plaintext
+  // (like a shareable invite link, NOT a password) so the admin screen +
+  // CSV can re-display it on demand for re-sending. Only ever issued for
+  // ownerless (bulk-imported) pages; possessing the link is the
+  // authorization to become the page owner. Nullable: orgs created the
+  // normal way (with an owner) never get one.
+  claimToken: text("claim_token"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.
   nameTrgmIdx: index("organizations_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+  // Task #610 — unique secret claim token; partial so the many orgs
+  // without a token don't collide on NULL.
+  claimTokenIdx: uniqueIndex("organizations_claim_token_idx")
+    .on(t.claimToken)
+    .where(sql`${t.claimToken} IS NOT NULL`),
 }));
 
 // Despite the legacy table name, this records every member of an

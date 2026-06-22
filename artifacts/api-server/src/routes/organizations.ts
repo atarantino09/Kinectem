@@ -423,6 +423,125 @@ router.post(
   }),
 );
 
+// Task #610 — Secret claim-invite links for ownerless (bulk-imported) org
+// pages. Unlike the public claim-request flow above (admin submits → platform
+// admin reviews), possessing the secret token IS the authorization: opening
+// the link and signing up makes the recipient the owner directly, bypassing
+// both the admin-role gate and the review step. The link is single-purpose —
+// once the org has an owner it refuses to transfer ownership (it shows an
+// "already claimed" state). Hand-written validation + customFetch precedent.
+const orgClaimLinkLimiter = rateLimit({
+  name: "org-claim-link",
+  windowMs: 60_000,
+  max: 30,
+  keys: (req) => [ipKey(req)],
+});
+
+// Public — resolve a secret token to its org so the landing/signup page can
+// render the target org and the "already claimed" state. Never leaks the
+// token itself or any other secret field.
+router.get(
+  "/org-claim-links/:token",
+  orgClaimLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const token = String(req.params.token ?? "");
+    if (!token) return notFound(res);
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.claimToken, token))
+      .limit(1);
+    if (!org) return notFound(res);
+    const [owner] = await db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, org.id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .limit(1);
+    res.json({
+      organization: {
+        id: org.id,
+        name: org.name,
+        city: org.city,
+        state: org.state,
+        logoUrl: org.logoUrl,
+      },
+      alreadyClaimed: !!owner,
+    });
+  }),
+);
+
+// Auth — finalize the claim for the signed-in user. Race-safe transaction:
+// insert the owner `organization_admins` row + auto-follow + stamp
+// `createdById`, refusing if an owner already exists. The
+// `organization_admins_one_owner_per_org` partial unique index is the
+// backstop against two concurrent finalizes both passing the owner pre-check.
+router.post(
+  "/org-claim-links/:token/claim",
+  orgClaimLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const token = String(req.params.token ?? "");
+    if (!token) return notFound(res);
+    const [org] = await db
+      .select({ id: organizations.id, name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.claimToken, token))
+      .limit(1);
+    if (!org) return notFound(res);
+    try {
+      const result = await db.transaction(async (tx) => {
+        const [owner] = await tx
+          .select({ userId: organizationAdmins.userId })
+          .from(organizationAdmins)
+          .where(
+            and(
+              eq(organizationAdmins.organizationId, org.id),
+              eq(organizationAdmins.role, "owner"),
+            ),
+          )
+          .limit(1);
+        if (owner) return { ok: false as const };
+        await tx.insert(organizationAdmins).values({
+          organizationId: org.id,
+          userId: me.id,
+          role: "owner",
+        });
+        await tx
+          .insert(organizationFollowers)
+          .values({ organizationId: org.id, userId: me.id })
+          .onConflictDoNothing();
+        await tx
+          .update(organizations)
+          .set({ createdById: me.id })
+          .where(eq(organizations.id, org.id));
+        return { ok: true as const };
+      });
+      if (!result.ok) {
+        return apiError(res, 409, "This organization has already been claimed", {
+          code: "ALREADY_CLAIMED",
+        });
+      }
+      res.status(201).json({ ok: true, organizationId: org.id });
+    } catch (err) {
+      // A true race trips the one-owner-per-org unique index; surface the
+      // same "already claimed" state rather than a 500.
+      const msg = err instanceof Error ? err.message : "";
+      if (/organization_admins_one_owner_per_org|duplicate key/i.test(msg)) {
+        return apiError(res, 409, "This organization has already been claimed", {
+          code: "ALREADY_CLAIMED",
+        });
+      }
+      throw err;
+    }
+  }),
+);
+
 router.patch(
   "/organizations/:orgId",
   asyncHandler(async (req, res) => {

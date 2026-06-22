@@ -17,8 +17,16 @@
 // name and skipped, so re-running the script is safe.
 
 import { readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { db, organizations } from "@workspace/db";
 import { sql } from "drizzle-orm";
+
+// Task #610 — Mint a secret claim token for each newly created (ownerless)
+// org so it has a shareable `/claim/<token>` invite link from the moment it
+// is imported. URL-safe base64, matching the token shape used elsewhere.
+function generateClaimToken(): string {
+  return randomBytes(32).toString("base64url");
+}
 
 function parseArgs(argv: string[]): { in: string | null } {
   let inPath: string | null = null;
@@ -151,7 +159,7 @@ async function main() {
       skipped += 1;
       continue;
     }
-    await db.insert(organizations).values({ name });
+    await db.insert(organizations).values({ name, claimToken: generateClaimToken() });
     created += 1;
   }
 
