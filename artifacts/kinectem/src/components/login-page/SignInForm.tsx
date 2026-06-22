@@ -32,7 +32,7 @@ const DEMO_ACCOUNTS: Array<{
   { testid: "parent", label: "Parent", sublabel: "Lisa Carter", email: "lisa@kinectem.demo" },
   { testid: "athlete", label: "Athlete", sublabel: "Marcus Rivera", email: "marcus@kinectem.demo" },
   { testid: "child-athlete", label: "Athlete (under 13)", sublabel: "Samira Carter", email: "samira@kinectem.demo" },
-  { testid: "admin", label: "Admin", sublabel: "Sam Patel", email: "sam@kinectem.demo" },
+  { testid: "admin", label: "Admin", sublabel: "Andrew Tarantino", email: "atarantino@kinectem.com" },
 ];
 
 const DEMO_PASSWORD = "demo1234";
