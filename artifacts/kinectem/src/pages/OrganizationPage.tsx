@@ -679,7 +679,7 @@ function TeamsRail({
       className="rounded-xl border border-border shadow-sm overflow-hidden"
       data-testid="rail-teams"
     >
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           <Shield className="w-5 h-5 text-primary shrink-0" />
           <h2 className="text-base font-black tracking-tight truncate">
