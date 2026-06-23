@@ -163,7 +163,7 @@ export function TeamHeaderCard({
         )}
         {team.currentSeason && (
           <Badge
-            className="absolute top-3 right-3 bg-background/90 text-primary hover:bg-background border-none font-bold shadow-sm"
+            className="absolute top-3 left-3 bg-background/90 text-primary hover:bg-background border-none font-bold shadow-sm"
             data-testid="badge-current-season"
           >
             {team.currentSeason.name}
