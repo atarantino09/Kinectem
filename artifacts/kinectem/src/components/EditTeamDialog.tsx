@@ -27,8 +27,10 @@ import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
+  BANNER_SHRINK_MAX_DIMENSION,
+  BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
-import { TeamPhotoCropDialog } from "@/components/TeamPhotoCropDialog";
+import { BlurFillImage } from "@/components/BlurFillImage";
 import { SPORTS } from "@/lib/sports";
 
 type TeamLike = {
@@ -66,12 +68,6 @@ export function EditTeamDialog({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // Crop dialog state. We hold the picked file's data URL + filename so
-  // the user can drag/zoom into the team-page banner shape *before* we
-  // hand the cropped result to the existing shrink + PATCH pipeline.
-  const [cropSrc, setCropSrc] = useState<string | null>(null);
-  const [cropFileName, setCropFileName] = useState<string>("team-photo");
-  const [cropOpen, setCropOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -118,31 +114,14 @@ export function EditTeamDialog({
       toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
-    // Open the crop dialog with this file as a data URL. The actual
-    // upload happens once the user confirms a crop in onCroppedConfirm.
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () =>
-          reject(reader.error ?? new Error("Could not read file"));
-        reader.readAsDataURL(file);
-      });
-      setCropSrc(dataUrl);
-      setCropFileName(file.name);
-      setCropOpen(true);
-    } catch {
-      toast({ title: "Couldn't read that photo", variant: "destructive" });
-    }
-  };
-
-  const onCroppedConfirm = async (cropped: File) => {
+    // No crop step: the whole photo is uploaded as-is (aspect preserved)
+    // and the banner fits it with BlurFillImage, so nothing gets cut off.
     setUploading(true);
     try {
-      // The cropped output is already constrained in size by the cropper,
-      // but we still run it through shrinkImage for consistent JPEG
-      // encoding + the global 1024px longest-edge cap.
-      const dataUrl = await shrinkImageToDataUrl(cropped);
+      const dataUrl = await shrinkImageToDataUrl(file, {
+        maxDimension: BANNER_SHRINK_MAX_DIMENSION,
+        quality: BANNER_SHRINK_OUTPUT_QUALITY,
+      });
       await customFetch(`/api/v1/teams/${team.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -150,13 +129,8 @@ export function EditTeamDialog({
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
       toast({ title: "Team photo updated" });
-      // Only clear the staged crop source on success. On failure we
-      // re-throw below so the crop dialog stays open and the user can
-      // adjust + retry without re-picking the file.
-      setCropSrc(null);
-    } catch (err) {
+    } catch {
       toast({ title: "Failed to upload team photo", variant: "destructive" });
-      throw err;
     } finally {
       setUploading(false);
     }
@@ -215,13 +189,12 @@ export function EditTeamDialog({
                   itself always comes from your organization.
                 </p>
                 <div className="space-y-2">
-                  <div className="w-full h-28 bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center">
+                  <div className="relative w-full h-28 bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center">
                     {team.bannerUrl ? (
-                      <img
+                      <BlurFillImage
                         src={team.bannerUrl}
                         alt={`${team.name} background`}
-                        className="w-full h-full object-cover"
-                        data-testid="img-team-photo-preview"
+                        testId="img-team-photo-preview"
                       />
                     ) : (
                       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -376,16 +349,6 @@ export function EditTeamDialog({
         </form>
       </DialogContent>
     </Dialog>
-    <TeamPhotoCropDialog
-      src={cropSrc}
-      fileName={cropFileName}
-      open={cropOpen && !!cropSrc}
-      onOpenChange={(v) => {
-        setCropOpen(v);
-        if (!v) setCropSrc(null);
-      }}
-      onConfirm={onCroppedConfirm}
-    />
     </>
   );
 }

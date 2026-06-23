@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
-import { TeamPhotoCropDialog } from "@/components/TeamPhotoCropDialog";
+import { BlurFillImage } from "@/components/BlurFillImage";
 import { TeamDescription } from "./TeamDescription";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -82,16 +82,13 @@ export function TeamHeaderCard({
   const bannerUrl = team.bannerUrl ?? "";
 
   // Inline photo controls (Task #391). Admins can swap or remove the
-  // hero banner without opening EditTeamDialog. We mirror the file →
-  // crop → shrink → PATCH pipeline used by EditTeamDialog so the same
-  // TeamPhotoCropDialog framing experience is preserved here.
+  // hero banner without opening EditTeamDialog. Mirrors the file →
+  // shrink → PATCH pipeline used by EditTeamDialog (no crop step — the
+  // whole photo is kept and fitted by BlurFillImage on display).
   const qc = useQueryClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [cropSrc, setCropSrc] = useState<string | null>(null);
-  const [cropFileName, setCropFileName] = useState<string>("team-photo");
-  const [cropOpen, setCropOpen] = useState(false);
 
   const onPickPhoto = () => fileInputRef.current?.click();
 
@@ -107,26 +104,11 @@ export function TeamHeaderCard({
       toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () =>
-          reject(reader.error ?? new Error("Could not read file"));
-        reader.readAsDataURL(file);
-      });
-      setCropSrc(dataUrl);
-      setCropFileName(file.name);
-      setCropOpen(true);
-    } catch {
-      toast({ title: "Couldn't read that photo", variant: "destructive" });
-    }
-  };
-
-  const onCroppedConfirm = async (cropped: File) => {
+    // No crop step: the whole photo is uploaded as-is (aspect preserved)
+    // and the banner fits it with BlurFillImage, so nothing gets cut off.
     setUploading(true);
     try {
-      const dataUrl = await shrinkImageToDataUrl(cropped, {
+      const dataUrl = await shrinkImageToDataUrl(file, {
         maxDimension: BANNER_SHRINK_MAX_DIMENSION,
         quality: BANNER_SHRINK_OUTPUT_QUALITY,
       });
@@ -137,10 +119,8 @@ export function TeamHeaderCard({
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
       toast({ title: "Team photo updated" });
-      setCropSrc(null);
-    } catch (err) {
+    } catch {
       toast({ title: "Failed to upload team photo", variant: "destructive" });
-      throw err;
     } finally {
       setUploading(false);
     }
@@ -167,13 +147,12 @@ export function TeamHeaderCard({
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
       {/* Hero background: team-specific photo if set, otherwise the
           existing brand gradient as the empty-state. */}
-      <div className="relative aspect-[16/5] bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+      <div className="relative aspect-[16/5] overflow-hidden bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
         {bannerUrl && (
-          <img
+          <BlurFillImage
             src={bannerUrl}
             alt={`${team.name} background`}
-            className="absolute inset-0 w-full h-full object-cover"
-            data-testid="img-team-banner"
+            testId="img-team-banner"
           />
         )}
         {team.currentSeason && (
@@ -369,16 +348,6 @@ export function TeamHeaderCard({
           </div>
         </div>
       </CardContent>
-      <TeamPhotoCropDialog
-        src={cropSrc}
-        fileName={cropFileName}
-        open={cropOpen && !!cropSrc}
-        onOpenChange={(v) => {
-          setCropOpen(v);
-          if (!v) setCropSrc(null);
-        }}
-        onConfirm={onCroppedConfirm}
-      />
     </Card>
   );
 }
