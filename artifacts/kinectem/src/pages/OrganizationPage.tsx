@@ -292,7 +292,7 @@ export default function OrganizationPage() {
                         logoUrl={organization.logoUrl}
                         name={organization.name}
                         className="w-full h-full"
-                        imgClassName="w-full h-full object-cover"
+                        imgClassName="w-full h-full object-contain"
                       />
                     </div>
                   </AvatarLightbox>

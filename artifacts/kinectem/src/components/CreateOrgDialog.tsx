@@ -38,7 +38,6 @@ import {
 import { apiErrorMessage } from "@/lib/api-errors";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
-import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 
 function slugify(s: string) {
   return s
@@ -68,11 +67,6 @@ export function CreateOrgDialog({
   const [zipCode, setZipCode] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>("");
-  // Task #387 — Stage the picked file in a square crop dialog so users
-  // control framing on tall phone photos before the logo preview is set.
-  const [cropSrc, setCropSrc] = useState<string | null>(null);
-  const [cropFileName, setCropFileName] = useState<string>("logo");
-  const [cropOpen, setCropOpen] = useState(false);
   const [errors, setErrors] = useState<{
     name?: string;
     city?: string;
@@ -96,8 +90,6 @@ export function CreateOrgDialog({
     setSlugDirty(false);
     setLogoUrl("");
     setErrors({});
-    setCropSrc(null);
-    setCropOpen(false);
   };
 
   const onPickLogo = () => fileInputRef.current?.click();
@@ -124,31 +116,12 @@ export function CreateOrgDialog({
       toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
-    // Open the crop dialog with this file as a data URL. The cropped
-    // result is converted via shrinkImageToDataUrl in onCroppedConfirm.
+    // Logos upload as-is (no forced square crop) so the whole mark is kept.
+    // shrinkImageToDataUrl downscales big photos at high quality but leaves
+    // already-small logos untouched, and the org logo is displayed with
+    // object-contain so non-square marks aren't cropped.
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () =>
-          reject(reader.error ?? new Error("Could not read file"));
-        reader.readAsDataURL(file);
-      });
-      setCropSrc(dataUrl);
-      setCropFileName(file.name);
-      setCropOpen(true);
-    } catch {
-      toast({ title: "Couldn't read that image", variant: "destructive" });
-    }
-  };
-
-  const onCroppedConfirm = async (cropped: File) => {
-    // Sentinel used to bubble a "we already toasted, just keep the
-    // crop dialog open" signal out of this handler without firing the
-    // generic fallback toast in the catch block.
-    class HandledLogoError extends Error {}
-    try {
-      const dataUrl = await shrinkImageToDataUrl(cropped);
+      const dataUrl = await shrinkImageToDataUrl(file);
       // Pre-flight against the server's body limit so the user sees
       // a friendly message instead of a request that gets dropped or
       // returns a confusing 413 mid-flight.
@@ -158,10 +131,9 @@ export function CreateOrgDialog({
           description: "Try a smaller image (under ~10 MB).",
           variant: "destructive",
         });
-        throw new HandledLogoError("logo data URL exceeds DATA_URL_MAX_LENGTH");
+        return;
       }
       setLogoUrl(dataUrl);
-      setCropSrc(null);
     } catch (err) {
       if (err instanceof UnsupportedImageFormatError) {
         toast({
@@ -169,10 +141,9 @@ export function CreateOrgDialog({
           description: "Try saving it as a JPG or PNG.",
           variant: "destructive",
         });
-      } else if (!(err instanceof HandledLogoError)) {
+      } else {
         toast({ title: "Couldn't process that image", variant: "destructive" });
       }
-      throw err;
     }
   };
 
@@ -263,7 +234,6 @@ export function CreateOrgDialog({
   };
 
   return (
-    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={onSubmit} className="space-y-4">
@@ -285,7 +255,7 @@ export function CreateOrgDialog({
                     <img
                       src={logoUrl}
                       alt="Logo preview"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   ) : (
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -508,22 +478,5 @@ export function CreateOrgDialog({
         </form>
       </DialogContent>
     </Dialog>
-    <ImageCropDialog
-      src={cropSrc}
-      fileName={cropFileName}
-      aspect={1}
-      cropShape="rect"
-      title="Position your logo"
-      description="Drag to move, pinch or use the slider to zoom. The frame matches how your logo will appear."
-      confirmLabel="Save logo"
-      fallbackBaseName="logo"
-      open={cropOpen && !!cropSrc}
-      onOpenChange={(v) => {
-        setCropOpen(v);
-        if (!v) setCropSrc(null);
-      }}
-      onConfirm={onCroppedConfirm}
-    />
-    </>
   );
 }
