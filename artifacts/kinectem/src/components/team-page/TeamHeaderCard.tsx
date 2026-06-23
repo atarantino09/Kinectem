@@ -10,6 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { BlurFillImage } from "@/components/BlurFillImage";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { TeamDescription } from "./TeamDescription";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -175,32 +181,52 @@ export function TeamHeaderCard({
               onChange={onPhotoChange}
               data-testid="input-inline-team-photo"
             />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
-              onClick={onPickPhoto}
-              disabled={uploading}
-              data-testid="btn-inline-change-team-photo"
-            >
-              <Camera className="w-3.5 h-3.5 mr-1.5" />
-              {uploading
-                ? "Working..."
-                : bannerUrl
-                  ? "Change photo"
-                  : "Add photo"}
-            </Button>
-            {bannerUrl && (
+            {bannerUrl ? (
+              // With a photo set, collapse the controls into a single
+              // "Edit photo" button that opens a menu of Change / Remove.
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
+                    disabled={uploading}
+                    data-testid="btn-inline-edit-team-photo"
+                  >
+                    <Camera className="w-3.5 h-3.5 mr-1.5" />
+                    {uploading ? "Working..." : "Edit photo"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="font-bold">
+                  <DropdownMenuItem
+                    onSelect={onPickPhoto}
+                    data-testid="btn-inline-change-team-photo"
+                  >
+                    <Camera className="w-3.5 h-3.5 mr-2" />
+                    Change photo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={onRemovePhoto}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="btn-inline-remove-team-photo"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" />
+                    Remove photo
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              // No photo yet: a single action, so go straight to the picker.
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
-                onClick={onRemovePhoto}
+                onClick={onPickPhoto}
                 disabled={uploading}
-                data-testid="btn-inline-remove-team-photo"
+                data-testid="btn-inline-add-team-photo"
               >
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                Remove photo
+                <Camera className="w-3.5 h-3.5 mr-1.5" />
+                {uploading ? "Working..." : "Add photo"}
               </Button>
             )}
           </div>
