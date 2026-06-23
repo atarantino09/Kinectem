@@ -105,21 +105,29 @@ async function loadImage(
 // keeps each step a <=2x reduction, which preserves far more detail, then a
 // final exact-size pass lands on the target dimensions. imageSmoothingQuality
 // "high" (default is "low") is set on every step.
-function resizeStepped(
-  source: DrawableImage,
+export function resizeStepped(
+  source: DrawableImage | HTMLCanvasElement,
   srcW: number,
   srcH: number,
   targetW: number,
   targetH: number,
+  srcX = 0,
+  srcY = 0,
 ): HTMLCanvasElement | null {
   let curW = srcW;
   let curH = srcH;
+  // Only the first draw reads from the (possibly offset) source rect; once
+  // we've drawn into an intermediate canvas the offset is always 0,0.
+  let curX = srcX;
+  let curY = srcY;
   let curCanvas: HTMLCanvasElement | null = null;
 
   const drawTo = (
     w: number,
     h: number,
     src: DrawableImage | HTMLCanvasElement,
+    sx: number,
+    sy: number,
     sw: number,
     sh: number,
   ): HTMLCanvasElement | null => {
@@ -130,22 +138,24 @@ function resizeStepped(
     if (!cx) return null;
     cx.imageSmoothingEnabled = true;
     cx.imageSmoothingQuality = "high";
-    cx.drawImage(src, 0, 0, sw, sh, 0, 0, w, h);
+    cx.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
     return c;
   };
 
   while (curW > targetW * 2 || curH > targetH * 2) {
     const nw = Math.max(targetW, Math.round(curW / 2));
     const nh = Math.max(targetH, Math.round(curH / 2));
-    const next = drawTo(nw, nh, curCanvas ?? source, curW, curH);
+    const next = drawTo(nw, nh, curCanvas ?? source, curX, curY, curW, curH);
     if (!next) return null;
     curCanvas = next;
     curW = nw;
     curH = nh;
+    curX = 0;
+    curY = 0;
   }
 
   if (curW === targetW && curH === targetH && curCanvas) return curCanvas;
-  return drawTo(targetW, targetH, curCanvas ?? source, curW, curH);
+  return drawTo(targetW, targetH, curCanvas ?? source, curX, curY, curW, curH);
 }
 
 export async function shrinkImage(

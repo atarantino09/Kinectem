@@ -11,12 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { resizeStepped } from "@/lib/shrinkImage";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.05;
 // Cap the cropped JPEG's longest edge so we don't ship a needlessly huge
-// image. Matches `shrinkImage`'s 1024 budget on the upper end. Callers
+// image. Matches `shrinkImage`'s 1600 budget on the upper end. Callers
 // can override per instance (e.g. the team-banner cropper bumps this to
 // ~2400 / 0.92 so the hero doesn't upscale on desktop — Task #563).
 const DEFAULT_MAX_OUTPUT_WIDTH = 1600;
@@ -93,12 +94,11 @@ async function cropToFile(
   const dw = Math.max(1, Math.round(sw * scale));
   const dh = Math.max(1, Math.round(sh * scale));
 
-  const canvas = document.createElement("canvas");
-  canvas.width = dw;
-  canvas.height = dh;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas not supported");
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
+  // High-quality stepped downscale of the cropped region. A single big
+  // drawImage reduction comes out soft/aliased; resizeStepped halves toward
+  // the target with imageSmoothingQuality "high". sx/sy select the crop rect.
+  const canvas = resizeStepped(img, sw, sh, dw, dh, sx, sy);
+  if (!canvas) throw new Error("Canvas not supported");
 
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, "image/jpeg", outputQuality),
