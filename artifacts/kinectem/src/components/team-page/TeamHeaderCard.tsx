@@ -293,17 +293,6 @@ export function TeamHeaderCard({
                 teamName={team.name}
               />
             )}
-            {team.website && (
-              <a
-                href={team.website}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="mt-2 inline-block text-sm font-bold text-primary hover:underline break-all"
-                data-testid="link-team-website"
-              >
-                {team.website.replace(/^https?:\/\//, "")}
-              </a>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap mt-4">
