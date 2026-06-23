@@ -22,6 +22,13 @@ export function BlurFillImage({
         aria-hidden="true"
         className="absolute inset-0 h-full w-full scale-110 object-cover blur-md"
       />
+      {/* Very light purple (theme `primary`) gradient wash over the blurred
+          backdrop to keep the banner on the Kinectem palette. The sharp
+          photo sits on top, so the tint only reads in the blurred margins. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5"
+      />
       <img
         src={src}
         alt={alt}
