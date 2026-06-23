@@ -2,15 +2,30 @@ import { describe, expect, it } from "vitest";
 import { app, loginAs, request } from "./helpers";
 
 describe("organizations", () => {
-  it("lists seeded organizations", async () => {
+  it("lists only claimed (owned) organizations", async () => {
+    // The discover list must exclude ownerless, bulk-imported org pages.
+    // A freshly created org has the creator as owner, so it should appear;
+    // the seeded ownerless "Westfield" page must not.
+    const { agent } = await loginAs((u) => u.role === "admin");
+    const created = await agent.post("/api/v1/organizations").send({
+      name: "Owned List Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090",
+    });
+    expect(created.status).toBe(201);
+
     const res = await request(app).get("/api/v1/organizations");
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(
-      res.body.data.find((o: { name: string }) =>
-        o.name.includes("Westfield"),
-      ),
+      res.body.data.find((o: { id: string }) => o.id === created.body.id),
     ).toBeDefined();
+    expect(
+      res.body.data.find((o: { name: string }) =>
+        o.name.toLowerCase().includes("westfield baseball"),
+      ),
+    ).toBeUndefined();
   });
 
   it("returns the org detail for a known organization", async () => {

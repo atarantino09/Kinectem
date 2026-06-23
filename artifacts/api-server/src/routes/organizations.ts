@@ -115,7 +115,19 @@ class TransferRaceError extends Error {
 router.get(
   "/organizations",
   asyncHandler(async (_req, res) => {
-    const rows = await db.select().from(organizations).limit(50);
+    // Only surface claimed orgs in the public discover list. Bulk-imported
+    // pages start ownerless (createdById null, no owner admin row); they are
+    // reachable by their secret /claim/<token> link but should not appear in
+    // the browsable Organizations list until someone claims them.
+    const ownedOrgIds = db
+      .select({ id: organizationAdmins.organizationId })
+      .from(organizationAdmins)
+      .where(eq(organizationAdmins.role, "owner"));
+    const rows = await db
+      .select()
+      .from(organizations)
+      .where(inArray(organizations.id, ownedOrgIds))
+      .limit(50);
     const data = rows.map((o) => toOrganization(o));
     res.json(paginate(data));
   }),
