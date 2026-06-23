@@ -1,12 +1,13 @@
 // Client-side image downscaler used by every upload flow in the app.
 // Goal: stop the user (and their viewers) from paying the bandwidth cost of
-// raw 12 MP phone photos when a 1024 px JPEG is more than enough.
+// raw 12 MP phone photos when a ~1600 px JPEG is more than enough.
 //
 // Behaviour:
 //   - Animated GIFs are returned untouched so they keep their animation.
 //   - Files at or below SHRINK_SKIP_BYTES are returned untouched (already small).
-//   - Larger images are drawn onto a canvas at most MAX_DIMENSION on the
-//     longest side and re-encoded as JPEG at OUTPUT_QUALITY.
+//   - Larger images are stepped down to at most MAX_DIMENSION on the longest
+//     side (high-quality halving, see resizeStepped) and re-encoded as JPEG
+//     at OUTPUT_QUALITY.
 //   - If the re-encoded file isn't actually smaller than the original, we
 //     return the original (re-encoding a small PNG can grow the file).
 //   - Any failure (broken image, OOM, no canvas support) falls back to the
@@ -15,14 +16,14 @@
 // The 5 MB upper bound that the rest of the app uses as a sanity cap is
 // re-exported here so individual call sites can apply it consistently.
 
-export const SHRINK_MAX_DIMENSION = 1024;
-export const SHRINK_OUTPUT_QUALITY = 0.85;
+export const SHRINK_MAX_DIMENSION = 1600;
+export const SHRINK_OUTPUT_QUALITY = 0.9;
 export const SHRINK_SKIP_BYTES = 200 * 1024;
 export const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 // Task #563 — team hero banner renders ~1440px+ wide on desktop, so the
-// default 1024px budget upscales and looks grainy. Banners get a higher
-// budget; everything else (avatars, post photos, message attachments,
-// org logos, game-photo-album) keeps the 1024 / 0.85 default.
+// default budget upscales and looks grainy. Banners get a higher budget;
+// everything else (avatars, post photos, message attachments, org logos,
+// game-photo-album) keeps the 1600 / 0.9 default.
 export const BANNER_SHRINK_MAX_DIMENSION = 2048;
 export const BANNER_SHRINK_OUTPUT_QUALITY = 0.92;
 
@@ -98,6 +99,55 @@ async function loadImage(
   }
 }
 
+// High-quality downscale. A single big canvas reduction (e.g. 4032px phone
+// photo straight to 1600px) uses the browser's box filter and comes out
+// soft/aliased even with smoothing on. Repeatedly halving toward the target
+// keeps each step a <=2x reduction, which preserves far more detail, then a
+// final exact-size pass lands on the target dimensions. imageSmoothingQuality
+// "high" (default is "low") is set on every step.
+function resizeStepped(
+  source: DrawableImage,
+  srcW: number,
+  srcH: number,
+  targetW: number,
+  targetH: number,
+): HTMLCanvasElement | null {
+  let curW = srcW;
+  let curH = srcH;
+  let curCanvas: HTMLCanvasElement | null = null;
+
+  const drawTo = (
+    w: number,
+    h: number,
+    src: DrawableImage | HTMLCanvasElement,
+    sw: number,
+    sh: number,
+  ): HTMLCanvasElement | null => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const cx = c.getContext("2d");
+    if (!cx) return null;
+    cx.imageSmoothingEnabled = true;
+    cx.imageSmoothingQuality = "high";
+    cx.drawImage(src, 0, 0, sw, sh, 0, 0, w, h);
+    return c;
+  };
+
+  while (curW > targetW * 2 || curH > targetH * 2) {
+    const nw = Math.max(targetW, Math.round(curW / 2));
+    const nh = Math.max(targetH, Math.round(curH / 2));
+    const next = drawTo(nw, nh, curCanvas ?? source, curW, curH);
+    if (!next) return null;
+    curCanvas = next;
+    curW = nw;
+    curH = nh;
+  }
+
+  if (curW === targetW && curH === targetH && curCanvas) return curCanvas;
+  return drawTo(targetW, targetH, curCanvas ?? source, curW, curH);
+}
+
 export async function shrinkImage(
   file: File,
   options?: ShrinkOptions,
@@ -132,12 +182,8 @@ export async function shrinkImage(
     const targetW = Math.max(1, Math.round(width * scale));
     const targetH = Math.max(1, Math.round(height * scale));
 
-    const canvas = document.createElement("canvas");
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(source, 0, 0, targetW, targetH);
+    const canvas = resizeStepped(source, width, height, targetW, targetH);
+    if (!canvas) return file;
 
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", quality),
