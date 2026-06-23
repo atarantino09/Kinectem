@@ -4,6 +4,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -26,6 +27,7 @@ type ClaimLinkRow = {
   state: string | null;
   logoUrl: string | null;
   token: string;
+  messagedAt: string | null;
 };
 
 type ClaimLinksResponse = { data: ClaimLinkRow[] };
@@ -145,6 +147,22 @@ export default function AdminOrgClaimLinks() {
         (r.state ?? "").toLowerCase().includes(needle),
     );
   }, [rows, q]);
+
+  const toggleMessaged = async (id: string, messaged: boolean) => {
+    try {
+      await customFetch(`/api/v1/admin/org-claim-links/${id}/messaged`, {
+        method: "PATCH",
+        body: JSON.stringify({ messaged }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
+    } catch (err) {
+      toast({
+        title: "Couldn't update",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    }
+  };
 
   const copyLink = async (token: string) => {
     try {
@@ -282,6 +300,7 @@ export default function AdminOrgClaimLinks() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[110px]">Messaged</TableHead>
             <TableHead>Organization</TableHead>
             <TableHead>Location</TableHead>
             <TableHead>Claim link</TableHead>
@@ -291,13 +310,13 @@ export default function AdminOrgClaimLinks() {
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
+              <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : filtered.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
+              <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                 No ownerless pages.
               </TableCell>
             </TableRow>
@@ -306,6 +325,14 @@ export default function AdminOrgClaimLinks() {
               const location = [r.city, r.state].filter(Boolean).join(", ");
               return (
                 <TableRow key={r.id} data-testid={`row-claim-link-${r.id}`}>
+                  <TableCell>
+                    <Checkbox
+                      checked={!!r.messagedAt}
+                      onCheckedChange={(v) => toggleMessaged(r.id, v === true)}
+                      aria-label={`Messaged ${r.name} on Facebook`}
+                      data-testid={`checkbox-messaged-${r.id}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{r.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {location || "—"}

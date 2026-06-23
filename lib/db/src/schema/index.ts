@@ -341,6 +341,11 @@ export const organizations = pgTable("organizations", {
   // authorization to become the page owner. Nullable: orgs created the
   // normal way (with an owner) never get one.
   claimToken: text("claim_token"),
+  // Operator outreach tracking for the admin claim-links screen — set when
+  // the operator has messaged the org (e.g. on Facebook) to invite them to
+  // claim their page. Nullable timestamp: NULL = not yet messaged. Operator
+  // bookkeeping only; not exposed on any public org payload.
+  outreachMessagedAt: timestamp("outreach_messaged_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.

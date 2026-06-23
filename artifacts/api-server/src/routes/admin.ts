@@ -1625,6 +1625,7 @@ router.get(
         state: organizations.state,
         logoUrl: organizations.logoUrl,
         claimToken: organizations.claimToken,
+        outreachMessagedAt: organizations.outreachMessagedAt,
       })
       .from(organizations)
       .where(sql`NOT ${ownerExists}`)
@@ -1638,6 +1639,7 @@ router.get(
       state: string | null;
       logoUrl: string | null;
       token: string;
+      messagedAt: string | null;
     }> = [];
     for (const r of rows) {
       let token = r.claimToken;
@@ -1655,6 +1657,9 @@ router.get(
         state: r.state,
         logoUrl: r.logoUrl,
         token,
+        messagedAt: r.outreachMessagedAt
+          ? r.outreachMessagedAt.toISOString()
+          : null,
       });
     }
     res.json({ data: out });
@@ -1746,6 +1751,40 @@ router.post(
         state: org.state,
         logoUrl: org.logoUrl,
         token,
+      },
+    });
+  }),
+);
+
+// Toggle whether the operator has messaged this org (e.g. on Facebook) to
+// invite them to claim their page. messaged=true stamps now(), false clears.
+router.patch(
+  "/org-claim-links/:id/messaged",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const messaged = req.body?.messaged;
+    if (typeof messaged !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "messaged must be a boolean", code: "INVALID_BODY" });
+    }
+    const [org] = await db
+      .update(organizations)
+      .set({ outreachMessagedAt: messaged ? new Date() : null })
+      .where(eq(organizations.id, id))
+      .returning({
+        id: organizations.id,
+        messagedAt: organizations.outreachMessagedAt,
+      });
+    if (!org) {
+      return res
+        .status(404)
+        .json({ error: "organization not found", code: "ORG_NOT_FOUND" });
+    }
+    return res.json({
+      data: {
+        id: org.id,
+        messagedAt: org.messagedAt ? org.messagedAt.toISOString() : null,
       },
     });
   }),
