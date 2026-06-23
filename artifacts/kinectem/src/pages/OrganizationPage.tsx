@@ -383,7 +383,7 @@ export default function OrganizationPage() {
                     data-testid="link-org-getting-started"
                   >
                     <a
-                      href="/marketing/getting-started.html"
+                      href="/getting-started.html"
                       target="_blank"
                       rel="noreferrer"
                     >
