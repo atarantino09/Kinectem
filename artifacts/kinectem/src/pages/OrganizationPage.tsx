@@ -57,14 +57,7 @@ import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { getInitials } from "@/lib/format";
-import { PLANS, type PlanTier } from "@/lib/plans";
-
-type OrgPlanUsage = {
-  plan: PlanTier;
-  teamsUsed: number;
-  teamsLimit: number | null;
-  teamsRemaining: number | null;
-};
+import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 
 type TeamRailItem = {
   id: string;
@@ -94,6 +87,20 @@ export default function OrganizationPage() {
   const [welcomeOrgName, setWelcomeOrgName] = useState<string | null>(null);
   useEffect(() => {
     if (!orgId) return;
+    // After checkout, OrgSubscribePage stashes a bulk-add flag so we land
+    // straight on the "Bulk add teams" popup. It takes priority over the
+    // org-create welcome popup so the user never sees two modals at once.
+    try {
+      const bulkKey = `kinectem:bulk-add-org:${orgId}`;
+      if (sessionStorage.getItem(bulkKey) === "1") {
+        sessionStorage.removeItem(bulkKey);
+        sessionStorage.removeItem(`kinectem:welcome-org:${orgId}`);
+        setBulkTeamsOpen(true);
+        return;
+      }
+    } catch {
+      // sessionStorage unavailable; fall through to the welcome popup.
+    }
     let name: string | null = null;
     try {
       const key = `kinectem:welcome-org:${orgId}`;
@@ -215,11 +222,13 @@ export default function OrganizationPage() {
         orgId={orgId}
         open={createTeamOpen}
         onOpenChange={setCreateTeamOpen}
+        usage={planUsage}
       />
       <BulkAddTeamsDialog
         orgId={orgId}
         open={bulkTeamsOpen}
         onOpenChange={setBulkTeamsOpen}
+        usage={planUsage}
       />
       <Dialog
         open={welcomeOrgName !== null && isOrgManager}

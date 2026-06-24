@@ -115,6 +115,13 @@ export default function OrgSubscribePage() {
         title: "You're all set!",
         description: `Your ${selected} plan is saved. Enjoy Kinectem free until ${BILLING_DATE_LABEL}.`,
       });
+      // Land on the org page with the "Bulk add teams" popup open so the
+      // user can stand up their roster of teams right after checkout.
+      try {
+        sessionStorage.setItem(`kinectem:bulk-add-org:${orgId}`, "1");
+      } catch {
+        // sessionStorage unavailable; the org page just won't auto-open.
+      }
       setLocation(`/organizations/${orgId}`);
     } catch {
       toast({

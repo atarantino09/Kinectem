@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateTeam,
@@ -17,7 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiErrorMessage } from "@/lib/api-errors";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { PLANS, nextPlan, type OrgPlanUsage } from "@/lib/plans";
+import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
 // Mirrors CreateTeamDialog's slugify so bulk-created teams get the same
 // URL handles as ones made one-at-a-time.
@@ -58,11 +60,14 @@ export function BulkAddTeamsDialog({
   orgId,
   open,
   onOpenChange,
+  usage,
 }: {
   orgId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  usage?: OrgPlanUsage | null;
 }) {
+  const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [text, setText] = useState("");
@@ -75,6 +80,27 @@ export function BulkAddTeamsDialog({
   const createTeam = useCreateTeam();
 
   const names = useMemo(() => parseNames(text), [text]);
+
+  // Plan-limit awareness. `usage` is undefined until the parent loads it; in
+  // that case no limit UI renders and nothing is blocked client-side — the
+  // server still enforces the cap per-create.
+  const limit = usage?.teamsLimit ?? null;
+  const used = usage?.teamsUsed ?? 0;
+  const unlimited = !usage || limit == null;
+  const remaining = unlimited ? null : Math.max(0, (limit as number) - used);
+  // Live projected total as names are typed (i.e. "1/15" ticking up).
+  const projected = used + names.length;
+  const atLimit = !unlimited && (remaining as number) <= 0;
+  const overBy = unlimited ? 0 : Math.max(0, names.length - (remaining as number));
+  const wouldExceed = overBy > 0;
+  const planLabel = usage
+    ? (PLANS.find((p) => p.id === usage.plan)?.name ?? usage.plan)
+    : "";
+  const upgradePlan = usage ? nextPlan(usage.plan) : null;
+  const goUpgrade = () => {
+    onOpenChange(false);
+    setLocation(`/organizations/${orgId}/subscribe`);
+  };
 
   const handleOpenChange = (v: boolean) => {
     if (busy) return; // don't let the dialog close mid-run
@@ -91,6 +117,22 @@ export function BulkAddTeamsDialog({
     if (busy) return;
     if (names.length === 0) {
       toast({ title: "Enter at least one team name", variant: "destructive" });
+      return;
+    }
+    if (atLimit) {
+      toast({
+        title: "Team limit reached",
+        description: "Upgrade your plan to add more teams.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (wouldExceed) {
+      toast({
+        title: `You can only add ${remaining} more team${remaining === 1 ? "" : "s"}`,
+        description: "Upgrade your plan to add the rest.",
+        variant: "destructive",
+      });
       return;
     }
     setBusy(true);
@@ -125,7 +167,10 @@ export function BulkAddTeamsDialog({
       setResults([...collected]);
     }
     setBusy(false);
-    await qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(orgId) });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(orgId) }),
+      qc.invalidateQueries({ queryKey: ["org-plan-usage", orgId] }),
+    ]);
 
     const succeeded = collected.filter((r) => r.status === "success").length;
     const failed = collected.length - succeeded;
@@ -172,7 +217,7 @@ export function BulkAddTeamsDialog({
               onChange={(e) => setText(e.target.value)}
               placeholder={"Westfield U14 Boys\nWestfield U12 Girls\nWestfield U10 Coed"}
               rows={8}
-              disabled={busy}
+              disabled={busy || atLimit}
               autoFocus
               data-testid="textarea-bulk-team-names"
             />
@@ -180,11 +225,50 @@ export function BulkAddTeamsDialog({
               className="text-xs font-medium text-muted-foreground"
               data-testid="text-bulk-team-count"
             >
-              {names.length === 0
-                ? "No teams yet — add one name per line."
-                : `${names.length} team${names.length === 1 ? "" : "s"} will be created`}
+              {unlimited
+                ? names.length === 0
+                  ? "No teams yet — add one name per line."
+                  : `${names.length} team${names.length === 1 ? "" : "s"} will be created`
+                : `${projected}/${limit} teams${names.length > 0 ? ` · adding ${names.length}` : ""}`}
             </p>
           </div>
+
+          {usage && (atLimit || wouldExceed) && (
+            <div
+              className={`rounded-lg border p-3 space-y-2 ${
+                atLimit
+                  ? "border-destructive/40 bg-destructive/10"
+                  : "border-amber-300 bg-amber-50 dark:bg-amber-950/30"
+              }`}
+              data-testid="bulk-limit-warning"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  className={`w-4 h-4 shrink-0 mt-0.5 ${atLimit ? "text-destructive" : "text-amber-600"}`}
+                />
+                <p
+                  className={`text-xs font-medium ${atLimit ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}
+                >
+                  {atLimit
+                    ? `You've used all ${limit} teams on your ${planLabel} plan.`
+                    : `That's ${overBy} more than your ${planLabel} plan allows — you can add ${remaining} more.`}
+                  {upgradePlan ? " Upgrade to add more." : ""}
+                </p>
+              </div>
+              {upgradePlan && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="brand"
+                  className="w-full font-bold rounded-full"
+                  onClick={goUpgrade}
+                  data-testid="btn-bulk-upgrade"
+                >
+                  Upgrade to {upgradePlan.name}
+                </Button>
+              )}
+            </div>
+          )}
 
           {progress && (
             <p
@@ -236,7 +320,7 @@ export function BulkAddTeamsDialog({
             <Button
               type="submit"
               variant="brand"
-              disabled={busy || names.length === 0}
+              disabled={busy || names.length === 0 || atLimit || wouldExceed}
               data-testid="btn-bulk-create-teams"
             >
               {busy

@@ -60,6 +60,21 @@ export const PLANS: Plan[] = [
   },
 ];
 
+// Plan usage for an org, mirrored from GET /organizations/:orgId/subscription.
+export type OrgPlanUsage = {
+  plan: PlanTier;
+  teamsUsed: number;
+  teamsLimit: number | null;
+  teamsRemaining: number | null;
+};
+
+// The tier directly above `tier`, or null if already on the top (Elite) tier.
+export function nextPlan(tier: PlanTier): Plan | null {
+  const idx = PLANS.findIndex((p) => p.id === tier);
+  if (idx < 0 || idx >= PLANS.length - 1) return null;
+  return PLANS[idx + 1];
+}
+
 export type AppliedPromo = {
   code: string;
   description?: string | null;

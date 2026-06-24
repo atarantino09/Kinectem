@@ -33,6 +33,9 @@ import {
 } from "@/lib/shrinkImage";
 import { BlurFillImage } from "@/components/BlurFillImage";
 import { SPORTS } from "@/lib/sports";
+import { apiErrorMessage } from "@/lib/api-errors";
+import { PLANS, nextPlan, type OrgPlanUsage } from "@/lib/plans";
+import { AlertTriangle } from "lucide-react";
 
 function slugify(s: string) {
   return s
@@ -47,10 +50,12 @@ export function CreateTeamDialog({
   orgId,
   open,
   onOpenChange,
+  usage,
 }: {
   orgId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  usage?: OrgPlanUsage | null;
 }) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
@@ -70,6 +75,24 @@ export function CreateTeamDialog({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const createTeam = useCreateTeam();
+
+  // Plan-limit awareness. `usage` is undefined when the parent hasn't loaded
+  // it (or the viewer can't manage the org); in that case we render no limit
+  // UI and never block — the server stays the source of truth.
+  const limit = usage?.teamsLimit ?? null;
+  const used = usage?.teamsUsed ?? 0;
+  const unlimited = !usage || limit == null;
+  const remaining = unlimited ? null : Math.max(0, (limit as number) - used);
+  const atLimit = !unlimited && (remaining as number) <= 0;
+  const nearLimit = !unlimited && !atLimit && (remaining as number) <= 2;
+  const planLabel = usage
+    ? (PLANS.find((p) => p.id === usage.plan)?.name ?? usage.plan)
+    : "";
+  const upgradePlan = usage ? nextPlan(usage.plan) : null;
+  const goUpgrade = () => {
+    onOpenChange(false);
+    setLocation(`/organizations/${orgId}/subscribe`);
+  };
 
   const reset = () => {
     setName("");
@@ -126,6 +149,14 @@ export function CreateTeamDialog({
       toast({ title: "Name is required", variant: "destructive" });
       return;
     }
+    if (atLimit) {
+      toast({
+        title: "Team limit reached",
+        description: "Upgrade your plan to add more teams.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const team = await createTeam.mutateAsync({
         orgId,
@@ -141,12 +172,18 @@ export function CreateTeamDialog({
         },
       });
       toast({ title: "Team created!" });
-      await qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(orgId) });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(orgId) }),
+        qc.invalidateQueries({ queryKey: ["org-plan-usage", orgId] }),
+      ]);
       reset();
       onOpenChange(false);
       setLocation(`/teams/${team.id}?roster=1`);
-    } catch {
-      toast({ title: "Failed to create team", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: apiErrorMessage(err) ?? "Failed to create team",
+        variant: "destructive",
+      });
     }
   };
 
@@ -163,6 +200,46 @@ export function CreateTeamDialog({
               Add a team under this organization. You can roster players next.
             </DialogDescription>
           </DialogHeader>
+
+          {usage &&
+            (atLimit ? (
+              <div
+                className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2"
+                data-testid="create-team-limit-block"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-destructive">
+                    You've used all {limit} teams on your {planLabel} plan.
+                    {upgradePlan
+                      ? " Upgrade to add more."
+                      : " You're on the top tier."}
+                  </p>
+                </div>
+                {upgradePlan && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="brand"
+                    className="w-full font-bold rounded-full"
+                    onClick={goUpgrade}
+                    data-testid="btn-create-team-upgrade"
+                  >
+                    Upgrade to {upgradePlan.name}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p
+                className={`text-xs font-medium ${nearLimit ? "text-amber-600" : "text-muted-foreground"}`}
+                data-testid="text-create-team-usage"
+              >
+                {unlimited
+                  ? `${used} team${used === 1 ? "" : "s"} · unlimited`
+                  : `${used} of ${limit} teams used · ${remaining} remaining`}
+                {nearLimit ? " — almost at your plan limit." : ""}
+              </p>
+            ))}
 
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -341,7 +418,7 @@ export function CreateTeamDialog({
             <Button
               type="submit"
               variant="brand"
-              disabled={createTeam.isPending || photoBusy}
+              disabled={createTeam.isPending || photoBusy || atLimit}
               data-testid="btn-create-team"
             >
               {createTeam.isPending ? "Creating..." : "Create team"}
