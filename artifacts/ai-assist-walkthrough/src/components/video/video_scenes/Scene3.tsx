@@ -8,8 +8,7 @@ export function Scene3({ t }: { t: number }) {
     <ScreenshotScene opacity={fadeInOpacity(t, 0, 400)}>
       <ScreenshotPan
         src="ai-dialog-result.png"
-        scroll={false}
-        progress={panProgress(t, 0, 10000)}
+        progress={panProgress(t, 1500, 7000)}
         opacity={fadeInOpacity(t, 0, 400)}
       />
 
