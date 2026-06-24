@@ -59,6 +59,7 @@ export default function AdminPromoCodes() {
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
   const [discountValue, setDiscountValue] = useState("10");
   const [maxRedemptions, setMaxRedemptions] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
 
   const resetForm = () => {
@@ -67,6 +68,7 @@ export default function AdminPromoCodes() {
     setDiscountType("percent");
     setDiscountValue("10");
     setMaxRedemptions("");
+    setExpiresAt("");
   };
 
   const create = async () => {
@@ -85,6 +87,7 @@ export default function AdminPromoCodes() {
           discountType,
           discountValue: value,
           maxRedemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
+          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
         }),
       });
       toast({ title: "Promo code created." });
@@ -283,17 +286,29 @@ export default function AdminPromoCodes() {
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="promo-max">Max redemptions (optional)</Label>
-              <Input
-                id="promo-max"
-                type="number"
-                min={1}
-                value={maxRedemptions}
-                onChange={(e) => setMaxRedemptions(e.target.value)}
-                placeholder="Unlimited"
-                data-testid="input-new-max"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="promo-max">Max redemptions (optional)</Label>
+                <Input
+                  id="promo-max"
+                  type="number"
+                  min={1}
+                  value={maxRedemptions}
+                  onChange={(e) => setMaxRedemptions(e.target.value)}
+                  placeholder="Unlimited"
+                  data-testid="input-new-max"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="promo-expires">Expiry date (optional)</Label>
+                <Input
+                  id="promo-expires"
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  data-testid="input-new-expires"
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
