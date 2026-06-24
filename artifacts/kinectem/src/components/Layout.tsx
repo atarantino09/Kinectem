@@ -336,7 +336,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-16 md:pb-0">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-16 md:pb-8">{children}</main>
 
       {isMobile && (
         <MobileBottomNav
