@@ -59,6 +59,7 @@ export default function AdminPromoCodes() {
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
   const [discountValue, setDiscountValue] = useState("10");
   const [maxRedemptions, setMaxRedemptions] = useState("");
+  const [expiryMode, setExpiryMode] = useState<"lifetime" | "date">("lifetime");
   const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -68,6 +69,7 @@ export default function AdminPromoCodes() {
     setDiscountType("percent");
     setDiscountValue("10");
     setMaxRedemptions("");
+    setExpiryMode("lifetime");
     setExpiresAt("");
   };
 
@@ -87,7 +89,10 @@ export default function AdminPromoCodes() {
           discountType,
           discountValue: value,
           maxRedemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
-          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+          expiresAt:
+            expiryMode === "date" && expiresAt
+              ? new Date(expiresAt).toISOString()
+              : null,
         }),
       });
       toast({ title: "Promo code created." });
@@ -300,14 +305,32 @@ export default function AdminPromoCodes() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="promo-expires">Expiry date (optional)</Label>
-                <Input
-                  id="promo-expires"
-                  type="date"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  data-testid="input-new-expires"
-                />
+                <Label htmlFor="promo-expiry-mode">Expiry</Label>
+                <Select
+                  value={expiryMode}
+                  onValueChange={(v) => setExpiryMode(v as "lifetime" | "date")}
+                >
+                  <SelectTrigger id="promo-expiry-mode" data-testid="select-expiry-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lifetime">Lifetime (never expires)</SelectItem>
+                    <SelectItem value="date">Expires on date</SelectItem>
+                  </SelectContent>
+                </Select>
+                {expiryMode === "date" ? (
+                  <Input
+                    id="promo-expires"
+                    type="date"
+                    value={expiresAt}
+                    onChange={(e) => setExpiresAt(e.target.value)}
+                    data-testid="input-new-expires"
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Discount applies as long as they stay a member.
+                  </p>
+                )}
               </div>
             </div>
           </div>
