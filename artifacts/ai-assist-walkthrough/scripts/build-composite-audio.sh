@@ -8,6 +8,13 @@
 #
 # Scene starts (seconds): 0 / 13.0 / 21.5 / 31.5 / 47.0, total 53.0.
 #
+# Leading silence: the export/recording path (ExportPlayer) opens on a held
+# poster frame for EXPORT_POSTER_HOLD_MS before the playthrough starts, and the
+# exporter overlays this track from 0 aligned to recording start. So we prepend
+# the SAME amount of silence here (PREROLL=1.8s) — the VO/music content then
+# begins exactly when the visual playthrough does, keeping audio and captions in
+# sync in the exported file. AUDIO_PREROLL_MS in VideoTemplate.tsx must match.
+#
 # Music continuity: bg_music.mp3 is ~48s, shorter than the timeline. Instead of a
 # hard -stream_loop seam (audible jump at 48s) we acrossfade two copies of the
 # track so the loop point is smoothed and the bed stays constant the whole time.
@@ -33,6 +40,12 @@ ffmpeg -y \
     [7:a]afade=t=in:st=0:d=0.05,adelay=38500|38500[a6]; \
     [8:a]afade=t=in:st=0:d=0.05,adelay=47700|47700[a7]; \
     [bg][a1][a2][a3][a4][a5][a6][a7]amix=inputs=8:duration=longest:normalize=0,alimiter=limit=0.95[out]" \
-  -map "[out]" -t 53.0 -ar 44100 -b:a 192k composite_audio.mp3
+  -map "[out]" -t 53.0 -ar 44100 -b:a 192k composite_base.mp3
+
+# Prepend PREROLL silence (1.8s, see header) as a second pass so the export poster
+# hold has silence and the playthrough audio lines up with the visuals. (adelay
+# inlined in the mix filtergraph above did not take, so we pad the finished mix.)
+ffmpeg -y -i composite_base.mp3 -af "adelay=1800|1800" -ar 44100 -b:a 192k composite_audio.mp3
+rm -f composite_base.mp3
 
 echo "Wrote composite_audio.mp3"

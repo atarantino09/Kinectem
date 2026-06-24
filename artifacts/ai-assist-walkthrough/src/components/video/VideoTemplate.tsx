@@ -51,6 +51,12 @@ function sceneAt(ms: number) {
 // frame advance — only then do we re-seek the audio to match the playhead.
 const AUDIO_RESYNC_JUMP_MS = 350;
 
+// composite_audio.mp3 has this much leading silence (see build-composite-audio.sh),
+// so the export poster hold has silence and the playthrough audio still lines up
+// with the visuals. Audio position = playhead time + this offset. Must equal the
+// silence baked into the track and EXPORT_POSTER_HOLD_MS in VideoWithControls.tsx.
+const AUDIO_PREROLL_MS = 1800;
+
 export default function VideoTemplate({
   currentMs,
   playing,
@@ -104,7 +110,7 @@ export default function VideoTemplate({
     if (poster) return;
     const prev = lastMsRef.current;
     lastMsRef.current = currentMs;
-    const target = currentMs / 1000;
+    const target = (currentMs + AUDIO_PREROLL_MS) / 1000;
     if (!playing) {
       if (Math.abs(audio.currentTime - target) > 0.05) audio.currentTime = target;
     } else if (Math.abs(currentMs - prev) > AUDIO_RESYNC_JUMP_MS) {
