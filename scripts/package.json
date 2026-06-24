@@ -18,6 +18,7 @@
     "export-founding-100": "tsx ./src/export-founding-100.ts",
     "export-org-claim-links": "tsx ./src/export-org-claim-links.ts",
     "record-walkthrough": "tsx ./src/record-walkthrough.ts",
+    "seed-ai-assist-demo": "tsx ./src/seed-ai-assist-demo.ts",
     "seed-game-recap-demo": "tsx ./src/seed-game-recap-demo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

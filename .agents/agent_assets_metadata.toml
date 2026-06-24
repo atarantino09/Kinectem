@@ -180,3 +180,45 @@ id = "3YRs3GCVWqrdTawxUJaGt"
 uri = "file://CODE_REVIEW.md"
 type = "text"
 title = "Kinectem — Full Code Review (Security & UX Speed)"
+
+[[outputs]]
+id = "ozANDl0YOF4XHpcZQcBb4"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_1a.mp3"
+type = "audio"
+title = "vo_1a"
+
+[[outputs]]
+id = "s1kvXI18P7X2zPIvRKF50"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_1b.mp3"
+type = "audio"
+title = "vo_1b"
+
+[[outputs]]
+id = "QOIsDc_2CxpsLIRSFjKzm"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_2.mp3"
+type = "audio"
+title = "vo_2"
+
+[[outputs]]
+id = "4pvEVK5mQN96EVhySQN35"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_3.mp3"
+type = "audio"
+title = "vo_3"
+
+[[outputs]]
+id = "nNHo1Q9wFQ7r_f6_Pt7qD"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_4a.mp3"
+type = "audio"
+title = "vo_4a"
+
+[[outputs]]
+id = "UfGoRiULhNxf7MkhzRu27"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_4b.mp3"
+type = "audio"
+title = "vo_4b"
+
+[[outputs]]
+id = "wTUVLs9qGz8y7QwrOiVnc"
+uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_5.mp3"
+type = "audio"
+title = "vo_5"
