@@ -26,10 +26,10 @@ function formatTime(ms: number) {
 }
 
 // Export / recording path: opens on the AI Assist poster (frame at ~23s, no
-// captions, no audio) with a centered play button, holds briefly, then runs one
-// self-driving playthrough (no loop), unmuted, firing the recording markers the
-// capture pipeline hooks into. Recording starts on mount so the poster intro is
-// captured at the head of the exported video.
+// captions, no audio), holds briefly, then runs one self-driving playthrough
+// (no loop), unmuted, firing the recording markers the capture pipeline hooks
+// into. Recording starts on mount so the poster intro is captured at the head of
+// the exported video.
 function ExportPlayer() {
   const { currentMs, playing, play } = usePlayhead(TOTAL_MS, {
     autoPlay: false,
@@ -52,20 +52,7 @@ function ExportPlayer() {
 
   const displayMs = started ? currentMs : POSTER_MS;
 
-  return (
-    <div className="relative w-full h-screen">
-      <VideoTemplate currentMs={displayMs} playing={playing} muted={false} poster={!started} />
-
-      {/* Play overlay shown over the poster intro before playback begins. */}
-      {!started && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
-          <div className="w-24 h-24 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center shadow-2xl">
-            <Play className="w-12 h-12 text-white translate-x-0.5" fill="white" />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <VideoTemplate currentMs={displayMs} playing={playing} muted={false} poster={!started} />;
 }
 
 // Interactive path: single scrubbable timeline + play/pause, no auto-loop.
