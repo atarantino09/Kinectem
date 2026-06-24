@@ -10,6 +10,10 @@ declare global {
   }
 }
 
+// Poster frame shown before the first play: the AI Assist screen at ~23s, so
+// the still frame previews AI Assist instead of the blank composer.
+const POSTER_MS = 23000;
+
 function formatTime(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));
   const m = Math.floor(total / 60);
@@ -39,6 +43,20 @@ function InteractivePlayer() {
     usePlayhead(TOTAL_MS, { autoPlay: false, loop: false });
 
   const [muted, setMuted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  // Before the first play, freeze the frame on the AI Assist screen (~23s) as a
+  // poster. The first play resets to the start so the whole video plays through.
+  const displayMs = hasStarted ? currentMs : POSTER_MS;
+  const handleToggle = useCallback(() => {
+    if (!hasStarted) {
+      setHasStarted(true);
+      seek(0);
+      play();
+    } else {
+      toggle();
+    }
+  }, [hasStarted, seek, play, toggle]);
 
   // Controls reveal on hover (mouse) or tap (touch) so they never cover the
   // captions during playback.
@@ -77,6 +95,7 @@ function InteractivePlayer() {
   const onScrubStart = useCallback(() => {
     if (scrubbingRef.current) return;
     scrubbingRef.current = true;
+    setHasStarted(true);
     wasPlayingRef.current = playing;
     pause();
   }, [playing, pause]);
@@ -88,12 +107,12 @@ function InteractivePlayer() {
 
   return (
     <div className="relative w-full h-screen">
-      <VideoTemplate currentMs={currentMs} playing={playing} muted={muted} />
+      <VideoTemplate currentMs={displayMs} playing={playing} muted={muted} />
 
       {/* Click anywhere on the frame toggles play/pause. */}
       <button
         type="button"
-        onClick={toggle}
+        onClick={handleToggle}
         className="absolute inset-0 z-40 cursor-pointer"
         aria-label={playing ? 'Pause' : 'Play'}
       />
@@ -125,7 +144,7 @@ function InteractivePlayer() {
           aria-hidden={!barVisible}
         >
           <button
-            onClick={toggle}
+            onClick={handleToggle}
             className="w-14 h-14 flex items-center justify-center text-white bg-white/15 hover:bg-white/25 transition-colors rounded-lg shrink-0"
             title={playing ? 'Pause' : 'Play'}
             aria-label={playing ? 'Pause' : 'Play'}
