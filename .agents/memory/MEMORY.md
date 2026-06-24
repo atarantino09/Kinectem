@@ -1,6 +1,7 @@
 - [Kinectem screenshot capture](kinectem-screenshot-capture.md) — capturing/displaying live-app screenshots in video artifacts + seeding believable demo data.
 - [Video artifact audio timeline](video-artifact-audio.md) — single composite track; VO adelay offsets must stay in lockstep with SCENE_DURATIONS; seamless music loop via acrossfade.
 - [Video artifact master-clock player](video-artifact-player.md) — game-recap video runs on one usePlayhead clock; scenes are pure functions of local `t`; scrubbable timeline + export/recording path split in VideoWithControls.
+- [Video artifact MP4 export (smooth scroll)](video-artifact-mp4-export.md) — recordVideo drops frames on fast pans → choppy; deterministic per-frame `?capture` render + freezeBg fixes it; walkthrough artifacts have a broken typecheck baseline (no dom lib).
 - [AI Assist / provider keys](ai-assist-feature.md) — self-managed Anthropic key encrypted at rest; external-AI egress gated by canAuthorRecapAnywhere (COPPA), not just requireAuth.
 - [Signup-walkthrough captions](signup-walkthrough-captions.md) — signup vid is a screen recording w/ live React caption overlay; marketing is static HTML so captions are burned into its mp4 via ffmpeg libass (cue list duplicated — keep in sync).
 - [Standalone admin page when artifact cap is hit](founding-admin-standalone.md) — at 7-artifact cap, serve a self-contained password-gated HTML page from api-server under /api instead of a new artifact; fail closed if SESSION_SECRET missing.

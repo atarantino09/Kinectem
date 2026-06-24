@@ -62,11 +62,15 @@ export default function VideoTemplate({
   playing,
   muted = false,
   poster = false,
+  freezeBg = false,
 }: {
   currentMs: number;
   playing: boolean;
   muted?: boolean;
   poster?: boolean;
+  // Freeze the ambient background blobs (used by the deterministic frame-capture
+  // export harness so every frame is a pure function of currentMs).
+  freezeBg?: boolean;
 }) {
   const { key, localMs } = sceneAt(currentMs);
   const SceneComponent = SCENE_COMPONENTS[key] ?? Scene1;
@@ -126,14 +130,22 @@ export default function VideoTemplate({
         <motion.div
           className="absolute top-0 right-0 w-[800px] h-[800px] rounded-full blur-[120px] opacity-30"
           style={{ background: 'radial-gradient(circle, #2563EB 0%, transparent 70%)' }}
-          animate={{ x: ['10%', '-10%', '10%'], y: ['-10%', '10%', '-10%'] }}
-          transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+          {...(freezeBg
+            ? {}
+            : {
+                animate: { x: ['10%', '-10%', '10%'], y: ['-10%', '10%', '-10%'] },
+                transition: { duration: 20, repeat: Infinity, ease: 'linear' },
+              })}
         />
         <motion.div
           className="absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full blur-[100px] opacity-20"
           style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }}
-          animate={{ x: ['-10%', '10%', '-10%'], y: ['10%', '-10%', '10%'] }}
-          transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
+          {...(freezeBg
+            ? {}
+            : {
+                animate: { x: ['-10%', '10%', '-10%'], y: ['10%', '-10%', '10%'] },
+                transition: { duration: 15, repeat: Infinity, ease: 'linear' },
+              })}
         />
       </div>
 
