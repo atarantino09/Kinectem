@@ -27,6 +27,7 @@ import masqueradeRouter from "./masquerade";
 import foundingSignupsRouter from "./founding-signups";
 import foundingAdminRouter from "./founding-admin";
 import aiRouter from "./ai";
+import subscriptionsRouter from "./subscriptions";
 
 const router: Router = Router();
 
@@ -64,5 +65,6 @@ router.use(masqueradeRouter);
 router.use(foundingSignupsRouter);
 router.use(foundingAdminRouter);
 router.use(aiRouter);
+router.use(subscriptionsRouter);
 
 export default router;

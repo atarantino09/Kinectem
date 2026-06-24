@@ -223,7 +223,7 @@ export function CreateOrgDialog({
         // sessionStorage may be unavailable (private mode, etc.) —
         // the popup is a nice-to-have, so swallow and continue.
       }
-      setLocation(`/organizations/${org.id}`);
+      setLocation(`/organizations/${org.id}/subscribe`);
     } catch (err) {
       const detail = apiErrorMessage(err);
       toast({

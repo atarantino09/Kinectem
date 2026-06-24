@@ -1188,3 +1188,67 @@ export const consentAuditLog = pgTable("consent_audit_log", {
   details: text("details"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Org subscriptions + promo codes
+//
+// Multi-tier annual plans (mirrors the marketing pricing page). Stripe is not
+// wired up yet — these tables capture the org's plan selection and any applied
+// promo code so the checkout flow can run end-to-end now and be connected to
+// Stripe later (the nullable stripe* columns are the future hook).
+// ---------------------------------------------------------------------------
+export const planTierEnum = pgEnum("plan_tier", ["starter", "pro", "elite"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+]);
+export const promoDiscountTypeEnum = pgEnum("promo_discount_type", ["percent", "amount"]);
+
+// Admin-managed discount codes. `discountValue` is interpreted by
+// `discountType`: a percent (0–100) for "percent", or a number of whole US
+// dollars off the annual price for "amount". `code` is stored lowercased and
+// is matched case-insensitively at validation time.
+export const promoCodes = pgTable("promo_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  discountType: promoDiscountTypeEnum("discount_type").notNull(),
+  discountValue: integer("discount_value").notNull(),
+  active: boolean("active").notNull().default(true),
+  // Optional redemption cap. Null = unlimited. `redemptionCount` tracks how
+  // many times the code has been applied to a subscription.
+  maxRedemptions: integer("max_redemptions"),
+  redemptionCount: integer("redemption_count").notNull().default(0),
+  expiresAt: timestamp("expires_at"),
+  createdById: uuid("created_by_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// One subscription record per organization (the org's chosen plan). Created /
+// updated from the post-creation checkout page. During the free launch window
+// the status stays "trialing" and `billingStartsAt` marks when real billing
+// begins (2026-10-01 at launch).
+export const orgSubscriptions = pgTable("org_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .references(() => organizations.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+  plan: planTierEnum("plan").notNull(),
+  status: subscriptionStatusEnum("status").notNull().default("trialing"),
+  promoCodeId: uuid("promo_code_id").references((): AnyPgColumn => promoCodes.id, {
+    onDelete: "set null",
+  }),
+  // Future Stripe hooks — populated when card payments are connected.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  billingStartsAt: timestamp("billing_starts_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
