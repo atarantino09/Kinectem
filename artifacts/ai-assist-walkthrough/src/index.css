@@ -48,3 +48,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Hide caption boxes on the pre-play poster frame. */
+.hide-captions .walkthrough-caption {
+  display: none;
+}

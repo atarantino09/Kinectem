@@ -55,10 +55,12 @@ export default function VideoTemplate({
   currentMs,
   playing,
   muted = false,
+  poster = false,
 }: {
   currentMs: number;
   playing: boolean;
   muted?: boolean;
+  poster?: boolean;
 }) {
   const { key, localMs } = sceneAt(currentMs);
   const SceneComponent = SCENE_COMPONENTS[key] ?? Scene1;
@@ -96,6 +98,10 @@ export default function VideoTemplate({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    // Poster (pre-play still): leave the audio untouched at 0 so the first play
+    // starts cleanly from the beginning — never park it at the poster frame's
+    // timestamp, which would leak a split-second of that voice-over on play.
+    if (poster) return;
     const prev = lastMsRef.current;
     lastMsRef.current = currentMs;
     const target = currentMs / 1000;
@@ -104,7 +110,7 @@ export default function VideoTemplate({
     } else if (Math.abs(currentMs - prev) > AUDIO_RESYNC_JUMP_MS) {
       audio.currentTime = target;
     }
-  }, [currentMs, playing]);
+  }, [currentMs, playing, poster]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#09090B] flex items-center justify-center">
@@ -129,7 +135,7 @@ export default function VideoTemplate({
       <div className="relative w-[90vw] h-[85vh] bg-white rounded-xl shadow-2xl overflow-hidden z-10 border border-white/20">
         <BrowserChrome />
 
-        <div className="absolute inset-x-0 top-12 bottom-0 overflow-hidden bg-[#F4F4F5]">
+        <div className={`absolute inset-x-0 top-12 bottom-0 overflow-hidden bg-[#F4F4F5]${poster ? ' hide-captions' : ''}`}>
           <SceneComponent key={key} t={localMs} />
         </div>
       </div>

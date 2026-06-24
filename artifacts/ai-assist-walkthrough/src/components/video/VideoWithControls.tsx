@@ -107,7 +107,7 @@ function InteractivePlayer() {
 
   return (
     <div className="relative w-full h-screen">
-      <VideoTemplate currentMs={displayMs} playing={playing} muted={muted} />
+      <VideoTemplate currentMs={displayMs} playing={playing} muted={muted} poster={!hasStarted} />
 
       {/* Click anywhere on the frame toggles play/pause. */}
       <button
