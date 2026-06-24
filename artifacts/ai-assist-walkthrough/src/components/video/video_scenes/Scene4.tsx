@@ -24,7 +24,7 @@ export function Scene4({ t }: { t: number }) {
       />
       <Caption
         text="Your players — and their families — get a recap worth remembering."
-        opacity={captionOpacity(t, 6800, 13000)}
+        opacity={captionOpacity(t, 6800, 15000)}
       />
     </ScreenshotScene>
   );

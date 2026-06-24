@@ -6,7 +6,7 @@
 # VO clips must sit at fixed absolute offsets that match SCENE_DURATIONS in
 # VideoTemplate.tsx. Keep this script and those durations in lockstep.
 #
-# Scene starts (seconds): 0 / 13.0 / 21.5 / 31.5 / 44.5, total 53.0.
+# Scene starts (seconds): 0 / 13.0 / 21.5 / 31.5 / 47.0, total 53.0.
 #
 # Music continuity: bg_music.mp3 is ~48s, shorter than the timeline. Instead of a
 # hard -stream_loop seam (audible jump at 48s) we acrossfade two copies of the
@@ -31,7 +31,7 @@ ffmpeg -y \
     [5:a]afade=t=in:st=0:d=0.05,adelay=22000|22000[a4]; \
     [6:a]afade=t=in:st=0:d=0.05,adelay=31800|31800[a5]; \
     [7:a]afade=t=in:st=0:d=0.05,adelay=38500|38500[a6]; \
-    [8:a]afade=t=in:st=0:d=0.05,adelay=45200|45200[a7]; \
+    [8:a]afade=t=in:st=0:d=0.05,adelay=47700|47700[a7]; \
     [bg][a1][a2][a3][a4][a5][a6][a7]amix=inputs=8:duration=longest:normalize=0,alimiter=limit=0.95[out]" \
   -map "[out]" -t 53.0 -ar 44100 -b:a 192k composite_audio.mp3
 

@@ -11,8 +11,8 @@ export const SCENE_DURATIONS = {
   composerEmpty: 13000,
   notes: 8500,
   aiResult: 10000,
-  insertPublish: 13000,
-  endCard: 8500,
+  insertPublish: 15500,
+  endCard: 6000,
 };
 
 export const TOTAL_MS = Object.values(SCENE_DURATIONS).reduce((a, b) => a + b, 0);
