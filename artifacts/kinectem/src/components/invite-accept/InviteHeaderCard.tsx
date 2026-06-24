@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { formatOrgName } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,7 @@ export function InviteHeaderCard({
     <Card className="rounded-xl border-border overflow-hidden">
       <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-6 text-white">
         <p className="text-xs uppercase tracking-widest font-bold opacity-90">
-          {organizationName}
+          {formatOrgName(organizationName)}
         </p>
         <h1 className="text-3xl font-black tracking-tight mt-1">
           You're invited to{" "}

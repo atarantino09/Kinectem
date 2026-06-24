@@ -34,7 +34,7 @@ import {
   ChevronDown,
   Trash2,
 } from "lucide-react";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, formatOrgName } from "@/lib/format";
 import { linkify } from "@/lib/linkify";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
@@ -444,7 +444,7 @@ export default function PostPage() {
                 className="font-bold cursor-pointer"
                 data-testid="link-post-context-organization"
               >
-                {post.context.orgName}
+                {formatOrgName(post.context.orgName)}
               </Badge>
             </Link>
           )}

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { Inbox } from "lucide-react";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, formatOrgName } from "@/lib/format";
 import type { Child, PendingTeamInvite } from "./types";
 
 interface Props {
@@ -68,7 +68,7 @@ export function ChildPendingInvites({
                 {inv.teamName}
               </p>
               <p className="text-xs text-muted-foreground truncate">
-                {inv.organization.name} · {positionLabel}
+                {formatOrgName(inv.organization.name)} · {positionLabel}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {inv.invitedBy

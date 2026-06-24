@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -333,7 +334,7 @@ export default function AdminOrgClaimLinks() {
                       data-testid={`checkbox-messaged-${r.id}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="font-medium">{formatOrgName(r.name)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {location || "—"}
                   </TableCell>

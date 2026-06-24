@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import {
   Dialog,
   DialogContent,
@@ -57,7 +58,7 @@ export function OrganizationDescription({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-black tracking-tight">
-              About {organizationName}
+              About {formatOrgName(organizationName)}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">

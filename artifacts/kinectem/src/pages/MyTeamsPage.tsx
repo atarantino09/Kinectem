@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { formatOrgName } from "@/lib/format";
 import {
   useGetLoggedInUser,
   useListUserTeams,
@@ -83,7 +84,7 @@ export default function MyTeamsPage() {
                             className="w-3 h-3 rounded-sm shrink-0"
                             imgClassName="w-3 h-3 rounded-sm object-cover bg-muted shrink-0"
                           />
-                          {t.organization.name}
+                          {formatOrgName(t.organization.name)}
                         </Badge>
                         {t.position === "parent" && (
                           <Badge

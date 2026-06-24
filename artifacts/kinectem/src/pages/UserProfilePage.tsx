@@ -20,7 +20,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { linkify } from "@/lib/linkify";
-import { friendlyAgeLabel } from "@/lib/format";
+import { friendlyAgeLabel, formatOrgName } from "@/lib/format";
 import { useIsLg } from "@/hooks/use-mobile";
 import {
   Select,
@@ -193,7 +193,7 @@ export default function UserProfilePage() {
             imgClassName="w-10 h-10 rounded-lg object-cover bg-muted shrink-0"
           />
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-sm truncate">{org.name}</p>
+            <p className="font-bold text-sm truncate">{formatOrgName(org.name)}</p>
             {org.role && (
               <Badge
                 variant="outline"
@@ -246,7 +246,7 @@ export default function UserProfilePage() {
                   variant="outline"
                   className="text-[10px] uppercase tracking-wider font-bold"
                 >
-                  {t.organization.name}
+                  {formatOrgName(t.organization.name)}
                 </Badge>
                 {t.position === "parent" && (
                   <Badge

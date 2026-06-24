@@ -19,7 +19,7 @@ import {
   type PostResponse,
   type FeedPost,
 } from "@workspace/api-client-react";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, formatOrgName } from "@/lib/format";
 import { linkify } from "@/lib/linkify";
 import {
   DropdownMenu,
@@ -367,7 +367,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                     className="text-xs text-muted-foreground truncate hover:underline"
                     data-testid={`text-post-parent-org-${post.id}`}
                   >
-                    {post.context.orgName}
+                    {formatOrgName(post.context.orgName)}
                   </p>
                 </Link>
               )}

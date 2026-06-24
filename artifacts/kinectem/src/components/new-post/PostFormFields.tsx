@@ -1,4 +1,5 @@
 import type { PaginatedUserTeamMembershipsResponse } from "@workspace/api-client-react";
+import { formatOrgName } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -369,7 +370,7 @@ export function PostFormFields({
                   <div className="flex flex-col items-start">
                     <span className="font-semibold">{m.teamName}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {m.organization.name}
+                      {formatOrgName(m.organization.name)}
                     </span>
                   </div>
                 </SelectItem>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -185,7 +186,7 @@ export function SuggestionsPanel({
                     size="sm"
                   />
                 }
-                title={o.name}
+                title={formatOrgName(o.name)}
                 subtitle={o.description ?? undefined}
                 onFollow={() => handleFollowOrg(o.id)}
                 disabled={followOrg.isPending}
@@ -205,7 +206,7 @@ export function SuggestionsPanel({
                   />
                 }
                 title={t.name}
-                subtitle={t.organization.name}
+                subtitle={formatOrgName(t.organization.name)}
                 onFollow={() => handleFollowTeam(t.id)}
                 disabled={followTeam.isPending}
                 testId={`button-follow-suggested-team-${t.id}`}
@@ -247,7 +248,7 @@ export function SuggestionsPanel({
                     size="md"
                   />
                 }
-                title={org.name}
+                title={formatOrgName(org.name)}
                 subtitle={org.description ?? undefined}
                 onFollow={() => handleFollowOrg(org.id)}
                 disabled={followOrg.isPending}
@@ -275,7 +276,7 @@ export function SuggestionsPanel({
                   />
                 }
                 title={team.name}
-                subtitle={team.organization.name}
+                subtitle={formatOrgName(team.organization.name)}
                 onFollow={() => handleFollowTeam(team.id)}
                 disabled={followTeam.isPending}
                 testId={`button-follow-suggested-team-${team.id}`}

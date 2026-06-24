@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -184,7 +185,7 @@ export default function AdminFounding100() {
                 <TableCell className="text-sm whitespace-nowrap">
                   {new Date(r.submittedAt).toLocaleDateString()}
                 </TableCell>
-                <TableCell className="font-medium">{r.orgName}</TableCell>
+                <TableCell className="font-medium">{formatOrgName(r.orgName)}</TableCell>
                 <TableCell>{r.adminName}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {r.adminEmail}

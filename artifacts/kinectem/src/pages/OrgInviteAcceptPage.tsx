@@ -1,4 +1,5 @@
 import { useRoute, useLocation, Link } from "wouter";
+import { formatOrgName } from "@/lib/format";
 import {
   usePreviewOrganizationInvite,
   useAcceptOrganizationInvite,
@@ -33,7 +34,7 @@ export default function OrgInviteAcceptPage() {
       onSuccess: async (member) => {
         const orgId = preview.data?.organization.id;
         toast({
-          title: `Welcome to ${preview.data?.organization.name ?? "the organization"}!`,
+          title: `Welcome to ${formatOrgName(preview.data?.organization.name) || "the organization"}!`,
         });
         if (orgId) {
           await Promise.all([
@@ -110,7 +111,7 @@ export default function OrgInviteAcceptPage() {
                 You've been invited to join
               </p>
               <h1 className="text-xl font-black tracking-tight truncate">
-                {invite.organization.name}
+                {formatOrgName(invite.organization.name)}
               </h1>
               <Badge variant="secondary" className="mt-1 text-[10px] font-bold gap-1">
                 <RoleIcon className="w-3 h-3" /> {roleLabel}
@@ -145,7 +146,7 @@ export default function OrgInviteAcceptPage() {
               onClick={() => accept.mutate({ token })}
               data-testid="btn-org-invite-accept"
             >
-              {accept.isPending ? "Accepting…" : `Join ${invite.organization.name}`}
+              {accept.isPending ? "Accepting…" : `Join ${formatOrgName(invite.organization.name)}`}
             </Button>
           )}
         </CardContent>

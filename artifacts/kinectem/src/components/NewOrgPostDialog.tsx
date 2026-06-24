@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateOrgPost,
@@ -127,7 +128,7 @@ export function NewOrgPostDialog({
             New announcement
           </DialogTitle>
           <DialogDescription>
-            Share an update with everyone who follows {orgName}.
+            Share an update with everyone who follows {formatOrgName(orgName)}.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">

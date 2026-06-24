@@ -48,6 +48,10 @@ export function friendlyAgeLabel(
   return `Age ${age}`;
 }
 
+export function formatOrgName(name?: string | null): string {
+  return (name ?? "").toUpperCase();
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")

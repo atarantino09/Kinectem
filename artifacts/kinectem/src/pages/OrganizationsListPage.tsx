@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { formatOrgName } from "@/lib/format";
 import { useListOrganizations } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,7 +62,7 @@ export default function OrganizationsListPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="font-black text-base sm:text-lg leading-tight tracking-tight group-hover:text-primary transition-colors break-words min-w-0">
-                          {org.name}
+                          {formatOrgName(org.name)}
                         </h3>
                         <ChevronRight className="w-5 h-5 text-primary shrink-0" />
                       </div>

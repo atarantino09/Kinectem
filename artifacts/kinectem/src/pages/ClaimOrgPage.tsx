@@ -1,4 +1,5 @@
 import { useRoute, useLocation, Link } from "wouter";
+import { formatOrgName } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,7 +60,7 @@ export default function ClaimOrgPage() {
         `/api/v1/org-claim-links/${encodeURIComponent(token)}/claim`,
         { method: "POST" },
       );
-      toast({ title: `You now own ${orgName ?? "this page"}!` });
+      toast({ title: `You now own ${formatOrgName(orgName) || "this page"}!` });
       navigate(`/organizations/${res.organizationId}`);
     } catch (err) {
       toast({
@@ -139,7 +140,7 @@ export default function ClaimOrgPage() {
                 Claim this organization page
               </p>
               <h1 className="text-xl font-black tracking-tight truncate">
-                {org.name}
+                {formatOrgName(org.name)}
               </h1>
               {location ? (
                 <p className="text-xs text-muted-foreground">{location}</p>
@@ -197,8 +198,8 @@ export default function ClaimOrgPage() {
                 </span>
                 .{" "}
                 {claiming
-                  ? `Setting you up as the owner of ${org.name}…`
-                  : `Tap below if claiming ${org.name} doesn't start automatically.`}
+                  ? `Setting you up as the owner of ${formatOrgName(org.name)}…`
+                  : `Tap below if claiming ${formatOrgName(org.name)} doesn't start automatically.`}
               </p>
               <Button
                 className="font-bold w-full"
@@ -206,7 +207,7 @@ export default function ClaimOrgPage() {
                 onClick={finalize}
                 data-testid="btn-claim-finalize"
               >
-                {claiming ? "Claiming…" : `Claim ${org.name}`}
+                {claiming ? "Claiming…" : `Claim ${formatOrgName(org.name)}`}
               </Button>
             </div>
           )}

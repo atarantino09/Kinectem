@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -271,7 +272,7 @@ export function TeamHeaderCard({
               className="mt-2 font-bold text-sm text-muted-foreground hover:text-primary uppercase tracking-wider text-center sm:text-left max-w-[8rem] block leading-tight cursor-pointer"
               data-testid="link-team-org"
             >
-              {team.organization.name}
+              {formatOrgName(team.organization.name)}
             </Link>
           </div>
           <div className="flex-1 min-w-0 sm:pb-2">

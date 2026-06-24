@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -247,7 +248,7 @@ export default function FeedPage() {
                         teamId={t.id}
                         teamName={t.name}
                         teamLogoUrl={t.logoUrl}
-                        subtitle={t.orgName}
+                        subtitle={formatOrgName(t.orgName)}
                       />
                     ))}
                   </div>
@@ -382,7 +383,7 @@ function OrgLinkRow({
             className="w-5 h-5 rounded-lg shrink-0"
             imgClassName="w-5 h-5 rounded-lg object-cover shrink-0"
           />
-          <span className="truncate flex-1">{orgName}</span>
+          <span className="truncate flex-1">{formatOrgName(orgName)}</span>
         </div>
       </Link>
     </div>

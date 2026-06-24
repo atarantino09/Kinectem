@@ -56,7 +56,7 @@ import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
-import { getInitials } from "@/lib/format";
+import { getInitials, formatOrgName } from "@/lib/format";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 
 type TeamRailItem = {
@@ -242,7 +242,7 @@ export default function OrganizationPage() {
         >
           <DialogHeader>
             <DialogTitle className="font-black tracking-tight">
-              Congratulations on creating {welcomeOrgName}!
+              Congratulations on creating {formatOrgName(welcomeOrgName)}!
             </DialogTitle>
             <DialogDescription>
               Next step: create teams and invite coaches, players, and
@@ -281,7 +281,7 @@ export default function OrganizationPage() {
       <FollowListDialog
         open={followersOpen}
         onOpenChange={setFollowersOpen}
-        title={`${organization.name} followers`}
+        title={`${formatOrgName(organization.name)} followers`}
         variant={{ kind: "org-followers", orgId }}
       />
       {isOrgManager && (
@@ -313,7 +313,7 @@ export default function OrganizationPage() {
                 <div className="shrink-0">
                   <AvatarLightbox
                     avatarUrl={organization.logoUrl}
-                    displayName={organization.name}
+                    displayName={formatOrgName(organization.name)}
                     ariaLabel={`View ${organization.name}'s logo`}
                     triggerClassName="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     triggerTestId="btn-open-org-logo-lightbox"
@@ -332,7 +332,7 @@ export default function OrganizationPage() {
                 </div>
                 <div className="pb-1 sm:pb-2 min-w-0 flex-1">
                   <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
-                    {organization.name}
+                    {formatOrgName(organization.name)}
                   </h1>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium flex-wrap">
                     <span className="font-bold text-foreground">@{organization.slug}</span>
@@ -529,7 +529,7 @@ export default function OrganizationPage() {
                         You're the only admin
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Promote a member to help you run {organization.name}.
+                        Promote a member to help you run {formatOrgName(organization.name)}.
                       </p>
                     </div>
                   </div>

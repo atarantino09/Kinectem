@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
 import {
   customFetch,
@@ -223,7 +224,7 @@ export default function MyTagsPage() {
                     <span className="font-bold truncate">{t.title}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 font-semibold">
-                    {t.teamName} · {t.orgName} ·{" "}
+                    {t.teamName} · {formatOrgName(t.orgName)} ·{" "}
                     {new Date(t.createdAt).toLocaleDateString()}
                   </p>
                 </Link>

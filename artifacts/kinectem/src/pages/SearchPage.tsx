@@ -1,4 +1,5 @@
 import { Link, useSearch } from "wouter";
+import { formatOrgName } from "@/lib/format";
 import { useCrossEntitySearch, queryOpts } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -99,7 +100,7 @@ export default function SearchPage() {
                     fallbackClassName="bg-slate-100 text-slate-800"
                   />
                   <div className="min-w-0">
-                    <p className="font-bold text-sm truncate">{o.name}</p>
+                    <p className="font-bold text-sm truncate">{formatOrgName(o.name)}</p>
                     <p className="text-xs text-muted-foreground truncate">
                       /{o.slug}
                     </p>
@@ -127,7 +128,7 @@ export default function SearchPage() {
                   <div className="min-w-0">
                     <p className="font-bold text-sm truncate">{t.name}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {t.organizationName}
+                      {formatOrgName(t.organizationName)}
                     </p>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatOrgName } from "@/lib/format";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -178,7 +179,7 @@ export default function AdminDashboard() {
                   <ul className="space-y-1 text-sm">
                     {data.top.followedOrganizations.map((o) => (
                       <li key={o.orgId} className="flex justify-between">
-                        <span>{o.name ?? "Unknown"}</span>
+                        <span>{formatOrgName(o.name) || "Unknown"}</span>
                         <span className="text-muted-foreground">
                           {o.count} follower{o.count === 1 ? "" : "s"}
                         </span>

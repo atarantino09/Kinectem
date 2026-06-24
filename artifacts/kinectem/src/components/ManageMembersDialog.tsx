@@ -45,7 +45,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Crown, Shield, User, Loader2, UserPlus, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getInitials } from "@/lib/format";
+import { getInitials, formatOrgName } from "@/lib/format";
 
 type Role = "owner" | "admin" | "member";
 
@@ -247,7 +247,7 @@ export function ManageMembersDialog({
               Manage admins & members
             </DialogTitle>
             <DialogDescription>
-              {orgName} has {members.length}{" "}
+              {formatOrgName(orgName)} has {members.length}{" "}
               {members.length === 1 ? "member" : "members"}. Promote a member
               to admin to let them manage teams, members, and posts on behalf
               of the org. Only the owner can transfer ownership.
@@ -458,7 +458,7 @@ export function ManageMembersDialog({
         <AlertDialogContent data-testid="dialog-confirm-remove-member">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Remove {removeTarget?.displayName} from {orgName}?
+              Remove {removeTarget?.displayName} from {formatOrgName(orgName)}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               They'll lose access to anything restricted to organization
@@ -488,7 +488,7 @@ export function ManageMembersDialog({
         <AlertDialogContent data-testid="dialog-confirm-transfer-ownership">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Transfer ownership of {orgName} to {transferTarget?.displayName}?
+              Transfer ownership of {formatOrgName(orgName)} to {transferTarget?.displayName}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               {transferTarget?.displayName} will become the owner and gain full
