@@ -14,6 +14,10 @@ declare global {
 // the still frame previews AI Assist instead of the blank composer.
 const POSTER_MS = 23000;
 
+// How long the export recording holds on the poster (AI Assist frame + play
+// button, no audio) before the playthrough begins.
+const EXPORT_POSTER_HOLD_MS = 1800;
+
 function formatTime(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));
   const m = Math.floor(total / 60);
@@ -21,20 +25,47 @@ function formatTime(ms: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Export / recording path: one self-driving playthrough (no loop), unmuted,
-// firing the recording markers the capture pipeline hooks into.
+// Export / recording path: opens on the AI Assist poster (frame at ~23s, no
+// captions, no audio) with a centered play button, holds briefly, then runs one
+// self-driving playthrough (no loop), unmuted, firing the recording markers the
+// capture pipeline hooks into. Recording starts on mount so the poster intro is
+// captured at the head of the exported video.
 function ExportPlayer() {
-  const { currentMs, playing } = usePlayhead(TOTAL_MS, {
-    autoPlay: true,
+  const { currentMs, playing, play } = usePlayhead(TOTAL_MS, {
+    autoPlay: false,
     loop: false,
     onEnded: () => window.stopRecording?.(),
   });
 
+  const [started, setStarted] = useState(false);
+  const playRef = useRef(play);
+  playRef.current = play;
+
   useEffect(() => {
     window.startRecording?.();
+    const id = setTimeout(() => {
+      setStarted(true);
+      playRef.current();
+    }, EXPORT_POSTER_HOLD_MS);
+    return () => clearTimeout(id);
   }, []);
 
-  return <VideoTemplate currentMs={currentMs} playing={playing} muted={false} />;
+  const displayMs = started ? currentMs : POSTER_MS;
+
+  return (
+    <div className="relative w-full h-screen">
+      <VideoTemplate currentMs={displayMs} playing={playing} muted={false} poster={!started} />
+
+      {/* Play overlay shown over the poster intro before playback begins. */}
+      {!started && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
+          <div className="w-24 h-24 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+            <Play className="w-12 h-12 text-white translate-x-0.5" fill="white" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Interactive path: single scrubbable timeline + play/pause, no auto-loop.
