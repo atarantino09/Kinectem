@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
 import { db, promoCodes, orgSubscriptions } from "@workspace/db";
 import { desc, eq, sql } from "drizzle-orm";
+import {
+  PLAN_TEAM_LIMITS,
+  DEFAULT_PLAN,
+  teamLimitForPlan,
+  countActiveTeams,
+} from "../lib/plan-limits";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
@@ -27,6 +33,7 @@ const PLAN_CATALOG: Array<{
   name: string;
   priceYearly: number;
   teamRange: string;
+  maxTeams: number | null;
   popular: boolean;
   features: string[];
 }> = [
@@ -35,6 +42,7 @@ const PLAN_CATALOG: Array<{
     name: "Starter",
     priceYearly: 1000,
     teamRange: "1–15 teams",
+    maxTeams: PLAN_TEAM_LIMITS.starter,
     popular: false,
     features: [
       "Up to 15 teams",
@@ -48,6 +56,7 @@ const PLAN_CATALOG: Array<{
     name: "Pro",
     priceYearly: 1750,
     teamRange: "16–40 teams",
+    maxTeams: PLAN_TEAM_LIMITS.pro,
     popular: true,
     features: [
       "Up to 40 teams",
@@ -61,6 +70,7 @@ const PLAN_CATALOG: Array<{
     name: "Elite",
     priceYearly: 2500,
     teamRange: "41+ teams",
+    maxTeams: PLAN_TEAM_LIMITS.elite,
     popular: false,
     features: [
       "Unlimited teams",
@@ -201,10 +211,21 @@ router.get(
       }
     }
 
+    const plan = (sub?.plan as PlanTier | undefined) ?? DEFAULT_PLAN;
+    const teamsLimit = teamLimitForPlan(plan);
+    const teamsUsed = await countActiveTeams(orgId);
+
     res.json({
       subscription: serializeSubscription(sub, promo),
       plans: PLAN_CATALOG,
       billingStartsAt: BILLING_STARTS_AT,
+      usage: {
+        plan,
+        teamsUsed,
+        teamsLimit,
+        teamsRemaining:
+          teamsLimit == null ? null : Math.max(0, teamsLimit - teamsUsed),
+      },
     });
   }),
 );

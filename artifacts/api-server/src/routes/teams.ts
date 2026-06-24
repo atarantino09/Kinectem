@@ -30,6 +30,7 @@ import {
   canCreateRecap,
   getOrgRole,
 } from "../lib/permissions";
+import { getOrgPlan, teamLimitForPlan } from "../lib/plan-limits";
 import {
   createSession,
   destroySession,
@@ -92,6 +93,14 @@ router.post(
     if (!(await canManageOrganization(me.id, org.id))) {
       return apiError(res, 403, "Only organization admins can create teams");
     }
+    // Resolve the org's plan team cap. Archived teams don't count; `null`
+    // limit (Elite) is unlimited. Orgs without a selected subscription fall
+    // back to the entry tier (see plan-limits.ts). The authoritative
+    // count + enforcement happens inside the insert transaction below
+    // (behind a per-org advisory lock) so the cap can't be overrun by
+    // concurrent create requests.
+    const plan = await getOrgPlan(org.id);
+    const teamLimit = teamLimitForPlan(plan);
     const name = String(req.body?.name ?? "").trim();
     if (!name) return apiError(res, 400, "name required");
     const ALLOWED_GENDERS = ["boys", "girls", "coed"] as const;
@@ -119,7 +128,26 @@ router.post(
     // roster as Admin. We deliberately skip the "you were invited to a
     // team" notification here — the creator just made the team and would
     // find a self-invite confusing.
-    const team = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
+      // Enforce the plan team cap atomically. A transaction-scoped advisory
+      // lock keyed by orgId serializes concurrent creates for the same org,
+      // so the re-count below can't race another insert (TOCTOU). Unlimited
+      // (Elite) tiers skip the lock + count. The limited branch does no
+      // writes, so committing simply releases the lock.
+      if (teamLimit != null) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${org.id}))`,
+        );
+        const [row] = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(teams)
+          .where(
+            and(eq(teams.organizationId, org.id), isNull(teams.archivedAt)),
+          );
+        if ((row?.count ?? 0) >= teamLimit) {
+          return { limited: true as const };
+        }
+      }
       const [t] = await tx
         .insert(teams)
         .values({
@@ -144,9 +172,17 @@ router.post(
         position: "admin",
         invitedById: me.id,
       });
-      return t;
+      return { limited: false as const, team: t };
     });
-    res.status(201).json(toTeam(team, org, { memberCount: 1 }));
+    if (result.limited) {
+      return apiError(
+        res,
+        403,
+        `Your ${plan} plan allows up to ${teamLimit} teams. Upgrade your plan to add more.`,
+        { code: "TEAM_LIMIT_REACHED", extras: { limit: teamLimit, plan } },
+      );
+    }
+    res.status(201).json(toTeam(result.team, org, { memberCount: 1 }));
   }),
 );
 

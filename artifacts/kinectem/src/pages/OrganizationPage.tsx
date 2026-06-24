@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   useGetOrganizationById,
   useListOrgTeams,
@@ -57,6 +57,14 @@ import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { getInitials } from "@/lib/format";
+import { PLANS, type PlanTier } from "@/lib/plans";
+
+type OrgPlanUsage = {
+  plan: PlanTier;
+  teamsUsed: number;
+  teamsLimit: number | null;
+  teamsRemaining: number | null;
+};
 
 type TeamRailItem = {
   id: string;
@@ -113,6 +121,17 @@ export default function OrganizationPage() {
   );
   const { data: postsResp } = useListOrgPosts(orgId);
   const { data: membersResp } = useListMembers(orgId);
+  const { data: planUsageResp } = useQuery<{ usage: OrgPlanUsage }>({
+    queryKey: ["org-plan-usage", orgId],
+    enabled:
+      !!orgId &&
+      (organization?.role === "owner" || organization?.role === "admin"),
+    queryFn: () =>
+      customFetch<{ usage: OrgPlanUsage }>(
+        `/api/v1/organizations/${orgId}/subscription`,
+        { method: "GET" },
+      ),
+  });
   const followOrg = useFollowOrg();
   const unfollowOrg = useUnfollowOrg();
   const onToggleFollow = async () => {
@@ -173,6 +192,11 @@ export default function OrganizationPage() {
   const members = membersResp?.data ?? [];
   const isOrgManager =
     organization.role === "admin" || organization.role === "owner";
+  const planUsage = planUsageResp?.usage;
+  const atTeamLimit =
+    !!planUsage &&
+    planUsage.teamsLimit != null &&
+    planUsage.teamsUsed >= planUsage.teamsLimit;
   // Task #603 — claim affordances for ownerless (bulk-imported) org pages.
   // `hasOwner`/`myClaimStatus` are appended by the server outside the locked
   // openapi.yaml, so read them via a narrow cast.
@@ -455,6 +479,10 @@ export default function OrganizationPage() {
             )}
           </div>
 
+          {isOrgManager && planUsage && (
+            <OrgPlanUsageCard usage={planUsage} orgId={orgId} />
+          )}
+
           {isOrgManager && (
             <OrgSetupChecklist
               orgId={orgId}
@@ -520,6 +548,7 @@ export default function OrganizationPage() {
               <TeamsRail
                 teams={teams}
                 canManage={isOrgManager}
+                atLimit={atTeamLimit}
                 onAddTeam={() => setCreateTeamOpen(true)}
                 onBulkAddTeams={() => setBulkTeamsOpen(true)}
               />
@@ -623,6 +652,7 @@ export default function OrganizationPage() {
             <TeamsRail
               teams={teams}
               canManage={isOrgManager}
+              atLimit={atTeamLimit}
               onAddTeam={() => setCreateTeamOpen(true)}
               onBulkAddTeams={() => setBulkTeamsOpen(true)}
             />
@@ -636,14 +666,99 @@ export default function OrganizationPage() {
   );
 }
 
+function OrgPlanUsageCard({
+  usage,
+  orgId,
+}: {
+  usage: OrgPlanUsage;
+  orgId: string;
+}) {
+  const planName =
+    PLANS.find((p) => p.id === usage.plan)?.name ??
+    usage.plan.charAt(0).toUpperCase() + usage.plan.slice(1);
+  const unlimited = usage.teamsLimit == null;
+  const atLimit = !unlimited && usage.teamsUsed >= (usage.teamsLimit as number);
+  const pct = unlimited
+    ? 0
+    : Math.min(
+        100,
+        Math.round(
+          (usage.teamsUsed / Math.max(1, usage.teamsLimit as number)) * 100,
+        ),
+      );
+  return (
+    <Card
+      className="rounded-xl border border-border shadow-sm"
+      data-testid="card-plan-usage"
+    >
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Shield className="w-5 h-5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p
+                className="text-sm font-black tracking-tight"
+                data-testid="text-plan-name"
+              >
+                {planName} plan
+              </p>
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="text-plan-usage"
+              >
+                {unlimited
+                  ? `${usage.teamsUsed} teams · unlimited`
+                  : `${usage.teamsUsed} of ${usage.teamsLimit} teams used · ${usage.teamsRemaining} remaining`}
+              </p>
+            </div>
+          </div>
+          <Button
+            asChild
+            size="sm"
+            variant={atLimit ? "brand" : "outline"}
+            className="font-bold rounded-full shrink-0"
+          >
+            <Link
+              href={`/organizations/${orgId}/subscribe`}
+              data-testid="btn-plan-usage-upgrade"
+            >
+              {atLimit ? "Upgrade" : "Change plan"}
+            </Link>
+          </Button>
+        </div>
+        {!unlimited && (
+          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-full rounded-full ${
+                atLimit ? "bg-destructive" : "bg-primary"
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+        {atLimit && (
+          <p
+            className="text-xs font-medium text-destructive"
+            data-testid="text-plan-limit-reached"
+          >
+            You've reached your team limit. Upgrade your plan to add more teams.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TeamsRail({
   teams,
   canManage,
+  atLimit = false,
   onAddTeam,
   onBulkAddTeams,
 }: {
   teams: TeamRailItem[];
   canManage: boolean;
+  atLimit?: boolean;
   onAddTeam: () => void;
   onBulkAddTeams: () => void;
 }) {
@@ -700,6 +815,12 @@ function TeamsRail({
               size="sm"
               className="font-bold rounded-full"
               onClick={onBulkAddTeams}
+              disabled={atLimit}
+              title={
+                atLimit
+                  ? "You've reached your plan's team limit. Upgrade to add more."
+                  : undefined
+              }
               data-testid="btn-bulk-add-teams"
             >
               <ListPlus className="w-4 h-4 mr-1" /> Bulk add
@@ -708,6 +829,12 @@ function TeamsRail({
               variant="brand"
               size="sm"
               onClick={onAddTeam}
+              disabled={atLimit}
+              title={
+                atLimit
+                  ? "You've reached your plan's team limit. Upgrade to add more."
+                  : undefined
+              }
               data-testid="btn-add-team"
             >
               <Plus className="w-4 h-4 mr-1" /> Add team

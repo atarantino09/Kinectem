@@ -9,6 +9,8 @@ export type Plan = {
   name: string;
   priceYearly: number;
   teamRange: string;
+  // Max active teams allowed on this tier. `null` = unlimited (Elite).
+  maxTeams: number | null;
   popular: boolean;
   features: string[];
 };
@@ -19,6 +21,7 @@ export const PLANS: Plan[] = [
     name: "Starter",
     priceYearly: 1000,
     teamRange: "1–15 teams",
+    maxTeams: 15,
     popular: false,
     features: [
       "Up to 15 teams",
@@ -32,6 +35,7 @@ export const PLANS: Plan[] = [
     name: "Pro",
     priceYearly: 1750,
     teamRange: "16–40 teams",
+    maxTeams: 40,
     popular: true,
     features: [
       "Up to 40 teams",
@@ -45,6 +49,7 @@ export const PLANS: Plan[] = [
     name: "Elite",
     priceYearly: 2500,
     teamRange: "41+ teams",
+    maxTeams: null,
     popular: false,
     features: [
       "Unlimited teams",
