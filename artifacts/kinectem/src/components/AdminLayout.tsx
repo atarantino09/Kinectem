@@ -8,6 +8,7 @@ import {
   Bot,
   Link2,
   Tag,
+  Building2,
   ArrowLeft,
   Lock,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const NAV = [
   { href: "/admin/org-claim-links", label: "Claim links", icon: Link2 },
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },
   { href: "/admin/promo-codes", label: "Promo codes", icon: Tag },
+  { href: "/admin/organizations", label: "Organizations", icon: Building2 },
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {

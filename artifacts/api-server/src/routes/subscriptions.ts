@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, promoCodes, orgSubscriptions } from "@workspace/db";
-import { desc, eq, sql } from "drizzle-orm";
+import { db, promoCodes, orgSubscriptions, organizations } from "@workspace/db";
+import { desc, eq, sql, isNotNull } from "drizzle-orm";
 import {
   PLAN_TEAM_LIMITS,
   DEFAULT_PLAN,
@@ -372,6 +372,78 @@ router.get(
       .from(promoCodes)
       .orderBy(desc(promoCodes.createdAt));
     res.json({ data: rows.map(adminPromo) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Admin organizations + subscriptions overview.
+//
+// Lists every organization left-joined to its (optional) subscription and the
+// applied promo code, so admins can see each org's plan, status, and whether a
+// discount is in play — all in one place. `?promoOnly=true` narrows the list to
+// only orgs that have a promo code applied. Sorted most-recently-subscribed
+// first, with un-subscribed orgs last.
+// ---------------------------------------------------------------------------
+type AdminOrgRow = {
+  orgId: string;
+  orgName: string;
+  plan: (typeof orgSubscriptions.$inferSelect)["plan"] | null;
+  status: (typeof orgSubscriptions.$inferSelect)["status"] | null;
+  billingStartsAt: Date | null;
+  subscriptionUpdatedAt: Date | null;
+  subscriptionCreatedAt: Date | null;
+  promoCode: string | null;
+  promoDiscountType: (typeof promoCodes.$inferSelect)["discountType"] | null;
+  promoDiscountValue: number | null;
+  promoExpiresAt: Date | null;
+};
+
+function adminOrgRow(r: AdminOrgRow) {
+  return {
+    organizationId: r.orgId,
+    organizationName: r.orgName,
+    plan: r.plan,
+    status: r.status,
+    billingStartsAt: r.billingStartsAt?.toISOString() ?? null,
+    subscribedAt:
+      (r.subscriptionUpdatedAt ?? r.subscriptionCreatedAt)?.toISOString() ??
+      null,
+    promoCode: r.promoCode,
+    promoDiscountType: r.promoDiscountType,
+    promoDiscountValue: r.promoDiscountValue,
+    promoExpiresAt: r.promoExpiresAt?.toISOString() ?? null,
+  };
+}
+
+router.get(
+  "/admin/organizations",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const promoOnly =
+      req.query.promoOnly === "true" || req.query.promoOnly === "1";
+    const rows = await db
+      .select({
+        orgId: organizations.id,
+        orgName: organizations.name,
+        plan: orgSubscriptions.plan,
+        status: orgSubscriptions.status,
+        billingStartsAt: orgSubscriptions.billingStartsAt,
+        subscriptionUpdatedAt: orgSubscriptions.updatedAt,
+        subscriptionCreatedAt: orgSubscriptions.createdAt,
+        promoCode: promoCodes.code,
+        promoDiscountType: promoCodes.discountType,
+        promoDiscountValue: promoCodes.discountValue,
+        promoExpiresAt: promoCodes.expiresAt,
+      })
+      .from(organizations)
+      .leftJoin(
+        orgSubscriptions,
+        eq(orgSubscriptions.organizationId, organizations.id),
+      )
+      .leftJoin(promoCodes, eq(promoCodes.id, orgSubscriptions.promoCodeId))
+      .where(promoOnly ? isNotNull(orgSubscriptions.promoCodeId) : undefined)
+      .orderBy(sql`${orgSubscriptions.updatedAt} DESC NULLS LAST`);
+    res.json({ data: rows.map(adminOrgRow) });
   }),
 );
 

@@ -50,6 +50,9 @@ const AdminOrgClaimLinks = lazy(
 );
 const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
 const AdminPromoCodes = lazy(() => import("@/pages/admin/AdminPromoCodes"));
+const AdminOrganizations = lazy(
+  () => import("@/pages/admin/AdminOrganizations"),
+);
 const OrgSubscribePage = lazy(() => import("@/pages/OrgSubscribePage"));
 
 const queryClient = new QueryClient({
@@ -127,6 +130,7 @@ function Router() {
             <Route path="/admin/org-claim-links" component={AdminOrgClaimLinks} />
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
             <Route path="/admin/promo-codes" component={AdminPromoCodes} />
+            <Route path="/admin/organizations" component={AdminOrganizations} />
             <Route component={NotFound} />
           </Switch>
           </Suspense>
