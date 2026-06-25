@@ -1311,6 +1311,8 @@ export const scheduleEvents = pgTable("schedule_events", {
   homeAway: scheduleHomeAwayEnum("home_away"),
   locationName: text("location_name"),
   locationAddress: text("location_address"),
+  // Field / court / diamond number within the venue (e.g. "Field 3", "Court 2").
+  locationField: text("location_field"),
   startAt: timestamp("start_at", { withTimezone: true }).notNull(),
   endAt: timestamp("end_at", { withTimezone: true }),
   allDay: boolean("all_day").notNull().default(false),

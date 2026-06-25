@@ -50,6 +50,7 @@ function toScheduleEvent(
     homeAway: e.homeAway,
     locationName: e.locationName,
     locationAddress: e.locationAddress,
+    locationField: e.locationField,
     startAt: iso(e.startAt),
     endAt: iso(e.endAt),
     allDay: e.allDay,
@@ -105,6 +106,7 @@ const createZ = z.object({
   homeAway: homeAwayZ.nullish(),
   locationName: z.string().trim().max(300).nullish(),
   locationAddress: z.string().trim().max(500).nullish(),
+  locationField: z.string().trim().max(100).nullish(),
   startAt: z.string().datetime({ offset: true }).optional(),
   endAt: z.string().datetime({ offset: true }).nullish(),
   allDay: z.boolean().optional(),
@@ -120,6 +122,7 @@ const updateZ = z.object({
   homeAway: homeAwayZ.nullish(),
   locationName: z.string().trim().max(300).nullish(),
   locationAddress: z.string().trim().max(500).nullish(),
+  locationField: z.string().trim().max(100).nullish(),
   startAt: z.string().datetime({ offset: true }).optional(),
   endAt: z.string().datetime({ offset: true }).nullish(),
   allDay: z.boolean().optional(),
@@ -259,6 +262,7 @@ router.post(
       homeAway: body.homeAway ?? null,
       locationName: body.locationName ?? null,
       locationAddress: body.locationAddress ?? null,
+      locationField: body.locationField ?? null,
       allDay: body.allDay ?? false,
       notes: body.notes ?? null,
       createdById: me.id,
@@ -399,6 +403,8 @@ router.patch(
     if (body.locationName !== undefined) shared.locationName = body.locationName ?? null;
     if (body.locationAddress !== undefined)
       shared.locationAddress = body.locationAddress ?? null;
+    if (body.locationField !== undefined)
+      shared.locationField = body.locationField ?? null;
     if (body.allDay !== undefined) shared.allDay = body.allDay;
     if (body.notes !== undefined) shared.notes = body.notes ?? null;
 

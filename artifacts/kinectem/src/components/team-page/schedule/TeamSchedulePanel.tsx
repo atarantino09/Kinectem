@@ -61,10 +61,12 @@ function EventRow({
         >
           {eventTitle(event)}
         </span>
-        {event.locationName && (
+        {(event.locationName || event.locationField) && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground truncate">
             <MapPin className="w-3 h-3 shrink-0" />
-            {event.locationName}
+            {[event.locationName, event.locationField]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         )}
       </span>

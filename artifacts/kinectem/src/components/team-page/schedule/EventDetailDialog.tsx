@@ -196,10 +196,12 @@ export function EventDetailDialog({
               </span>
             </div>
           )}
-          {event.locationName && (
+          {(event.locationName || event.locationField) && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="w-4 h-4" />
-              {event.locationName}
+              {[event.locationName, event.locationField]
+                .filter(Boolean)
+                .join(" · ")}
             </div>
           )}
           {event.statusReason && (

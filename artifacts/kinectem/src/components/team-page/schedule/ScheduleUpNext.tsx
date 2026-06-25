@@ -68,11 +68,13 @@ export function ScheduleUpNext({ teamId, onOpenSchedule }: ScheduleUpNextProps) 
                 </span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground truncate">
                   {e.allDay ? "All day" : formatTime(e.startAt)}
-                  {e.locationName && (
+                  {(e.locationName || e.locationField) && (
                     <>
                       <span>·</span>
                       <MapPin className="w-3 h-3 shrink-0" />
-                      {e.locationName}
+                      {[e.locationName, e.locationField]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </>
                   )}
                 </span>

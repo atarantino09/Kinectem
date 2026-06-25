@@ -101,6 +101,7 @@ export function EventFormDialog({
   const [endTime, setEndTime] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [locationName, setLocationName] = useState("");
+  const [locationField, setLocationField] = useState("");
   const [notes, setNotes] = useState("");
 
   // Recurrence (practice-only, create-only).
@@ -128,6 +129,7 @@ export function EventFormDialog({
       setEndTime(editEvent.endAt ? splitIso(editEvent.endAt).time : "");
       setAllDay(editEvent.allDay);
       setLocationName(editEvent.locationName ?? "");
+      setLocationField(editEvent.locationField ?? "");
       setNotes(editEvent.notes ?? "");
       setRepeat(false);
       setScope("single");
@@ -141,6 +143,7 @@ export function EventFormDialog({
       setEndTime("");
       setAllDay(false);
       setLocationName("");
+      setLocationField("");
       setNotes("");
       setRepeat(false);
       setDays(new Set());
@@ -202,6 +205,7 @@ export function EventFormDialog({
       const trimmedTitle = title.trim();
       const trimmedOpponent = opponent.trim();
       const trimmedLocation = locationName.trim();
+      const trimmedField = locationField.trim();
       const trimmedNotes = notes.trim();
 
       if (canRepeat && repeat) {
@@ -209,6 +213,7 @@ export function EventFormDialog({
           eventType: "practice",
           title: trimmedTitle || null,
           locationName: trimmedLocation || null,
+          locationField: trimmedField || null,
           notes: trimmedNotes || null,
           tzOffsetMinutes,
           recurrence: {
@@ -226,6 +231,7 @@ export function EventFormDialog({
           opponent: isGameLike ? trimmedOpponent || null : null,
           homeAway: isGameLike ? homeAway : null,
           locationName: trimmedLocation || null,
+          locationField: trimmedField || null,
           notes: trimmedNotes || null,
           allDay,
         };
@@ -249,6 +255,7 @@ export function EventFormDialog({
           opponent: isGameLike ? trimmedOpponent || null : null,
           homeAway: isGameLike ? homeAway : null,
           locationName: trimmedLocation || null,
+          locationField: trimmedField || null,
           notes: trimmedNotes || null,
           allDay,
           startAt: toIso(date, allDay ? "00:00" : startTime),
@@ -511,7 +518,7 @@ export function EventFormDialog({
             </div>
           )}
 
-          {!isGameLike && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label
                 htmlFor="eventLocation"
@@ -528,7 +535,23 @@ export function EventFormDialog({
                 data-testid="input-event-location"
               />
             </div>
-          )}
+            <div>
+              <Label
+                htmlFor="eventField"
+                className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+              >
+                Field / Court # (optional)
+              </Label>
+              <Input
+                id="eventField"
+                value={locationField}
+                onChange={(e) => setLocationField(e.target.value)}
+                placeholder="e.g. Field 3, Court 2"
+                className="mt-2"
+                data-testid="input-event-field"
+              />
+            </div>
+          </div>
 
           <div>
             <Label

@@ -30,6 +30,7 @@ export interface ScheduleEvent {
   homeAway: HomeAway | null;
   locationName: string | null;
   locationAddress: string | null;
+  locationField: string | null;
   startAt: string;
   endAt: string | null;
   allDay: boolean;
@@ -59,6 +60,7 @@ export interface CreateEventInput {
   homeAway?: HomeAway | null;
   locationName?: string | null;
   locationAddress?: string | null;
+  locationField?: string | null;
   startAt?: string;
   endAt?: string | null;
   allDay?: boolean;
@@ -74,6 +76,7 @@ export interface UpdateEventInput {
   homeAway?: HomeAway | null;
   locationName?: string | null;
   locationAddress?: string | null;
+  locationField?: string | null;
   startAt?: string;
   endAt?: string | null;
   allDay?: boolean;

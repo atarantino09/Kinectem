@@ -738,6 +738,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_claim_token_idx
   WHERE claim_token IS NOT NULL;
 `;
 
+// Additive: field / court / diamond number within the venue. Idempotent.
+const SCHEDULE_LOCATION_FIELD = `
+ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS location_field text;
+`;
+
 // Team Schedule — new additive tables for practices/games posted to a team.
 // Idempotent: CREATE TYPE is guarded, every table/index uses IF NOT EXISTS.
 const SCHEDULE_TABLES = `
@@ -914,6 +919,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-25-team-schedule-tables",
     sql: SCHEDULE_TABLES,
+  },
+  {
+    name: "2026-06-25-team-schedule-location-field",
+    sql: SCHEDULE_LOCATION_FIELD,
   },
 ];
 
