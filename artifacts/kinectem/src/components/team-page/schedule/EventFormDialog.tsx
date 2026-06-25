@@ -165,6 +165,8 @@ export function EventFormDialog({
   // makes sense for a single-opponent game/scrimmage.
   const showOpponent = isGameLike || isTournament;
   const isGameGroup = GAME_TYPES.includes(eventType);
+  // Games/scrimmages/tournaments capture only a start time — no end time.
+  const showEndTime = !isGameGroup;
   const canRepeat = !isEdit && eventType === "practice";
 
   const toggleDay = (d: number) => {
@@ -188,7 +190,7 @@ export function EventFormDialog({
       return null;
     }
     if (!allDay && !startTime) return "Add a start time.";
-    if (!allDay && endTime && endTime <= startTime) {
+    if (showEndTime && !allDay && endTime && endTime <= startTime) {
       return "End time must be after the start time.";
     }
     return null;
@@ -203,6 +205,7 @@ export function EventFormDialog({
     startTime,
     endTime,
     allDay,
+    showEndTime,
   ]);
 
   const onSubmit = async () => {
@@ -259,7 +262,8 @@ export function EventFormDialog({
         } else {
           base.scope = "single";
           base.startAt = toIso(date, allDay ? "00:00" : startTime);
-          base.endAt = allDay || !endTime ? null : toIso(date, endTime);
+          base.endAt =
+            !showEndTime || allDay || !endTime ? null : toIso(date, endTime);
         }
         await updateEvent(teamId, editEvent.id, base);
       } else {
@@ -274,7 +278,8 @@ export function EventFormDialog({
           notes: trimmedNotes || null,
           allDay,
           startAt: toIso(date, allDay ? "00:00" : startTime),
-          endAt: allDay || !endTime ? null : toIso(date, endTime),
+          endAt:
+            !showEndTime || allDay || !endTime ? null : toIso(date, endTime),
         };
         await createEvent(teamId, input);
       }
@@ -540,7 +545,7 @@ export function EventFormDialog({
           </label>
 
           {!allDay && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className={showEndTime ? "grid grid-cols-2 gap-3" : ""}>
               <div>
                 <Label
                   htmlFor="eventStart"
@@ -557,22 +562,24 @@ export function EventFormDialog({
                   data-testid="input-event-start-time"
                 />
               </div>
-              <div>
-                <Label
-                  htmlFor="eventEnd"
-                  className="text-xs font-black uppercase tracking-widest text-muted-foreground"
-                >
-                  End time (optional)
-                </Label>
-                <Input
-                  id="eventEnd"
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="mt-2"
-                  data-testid="input-event-end-time"
-                />
-              </div>
+              {showEndTime && (
+                <div>
+                  <Label
+                    htmlFor="eventEnd"
+                    className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+                  >
+                    End time (optional)
+                  </Label>
+                  <Input
+                    id="eventEnd"
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="mt-2"
+                    data-testid="input-event-end-time"
+                  />
+                </div>
+              )}
             </div>
           )}
 

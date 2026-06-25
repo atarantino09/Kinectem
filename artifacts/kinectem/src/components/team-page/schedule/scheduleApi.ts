@@ -185,16 +185,19 @@ export const EVENT_TYPE_CHIP: Record<EventType, string> = {
 
 // A short, human title for an event when the coach didn't set one.
 export function eventTitle(e: ScheduleEvent): string {
-  if (e.title && e.title.trim()) return e.title.trim();
-  if (e.eventType === "game" || e.eventType === "scrimmage") {
-    const label = EVENT_TYPE_LABEL[e.eventType];
-    if (e.opponent) {
-      const vs = e.homeAway === "away" ? "at" : "vs";
-      return `${label} ${vs} ${e.opponent}`;
-    }
-    return label;
+  const custom = e.title?.trim();
+  const isGameGroup =
+    e.eventType === "game" ||
+    e.eventType === "scrimmage" ||
+    e.eventType === "tournament";
+  const base = custom || EVENT_TYPE_LABEL[e.eventType];
+  // Surface the opponent on the card for any game-type event — including
+  // tournaments and games that already have a custom title.
+  if (isGameGroup && e.opponent) {
+    const vs = e.homeAway === "away" ? "at" : "vs";
+    return `${base} ${vs} ${e.opponent}`;
   }
-  return EVENT_TYPE_LABEL[e.eventType];
+  return base;
 }
 
 export function isPast(e: ScheduleEvent): boolean {
