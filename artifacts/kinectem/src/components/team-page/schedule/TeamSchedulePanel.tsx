@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   List,
+  Lock,
   MapPin,
 } from "lucide-react";
 import {
@@ -281,6 +282,17 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
             </Button>
           )}
         </div>
+      </div>
+
+      <div
+        className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200"
+        data-testid="schedule-visibility-note"
+      >
+        <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <span>
+          Only this team's coaches, admins, players, and their parents can see
+          this schedule. It's never shown to other team followers or the public.
+        </span>
       </div>
 
       {isLoading ? (
