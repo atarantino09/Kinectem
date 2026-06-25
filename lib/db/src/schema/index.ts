@@ -1326,6 +1326,10 @@ export const scheduleEvents = pgTable("schedule_events", {
   // Set when a coach publishes a game recap from this event; flips status to
   // completed and links back to the article.
   gameRecapId: uuid("game_recap_id").references((): AnyPgColumn => articles.id, { onDelete: "set null" }),
+  // Stamped once the "write your game recap" reminder notification has been
+  // sent (a couple hours after a game's start) so the durable sweep never
+  // double-notifies.
+  recapReminderSentAt: timestamp("recap_reminder_sent_at", { withTimezone: true }),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

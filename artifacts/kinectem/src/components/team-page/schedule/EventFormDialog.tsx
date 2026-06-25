@@ -631,6 +631,17 @@ export function EventFormDialog({
             />
           </div>
 
+          {isGameLike && !isEdit && (
+            <div
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200"
+              data-testid="note-recap-reminder"
+            >
+              <span className="font-bold">After the game,</span> come back here to
+              write a game recap — you&apos;ll get a reminder a couple hours after
+              kickoff.
+            </div>
+          )}
+
           {isRecurringEdit && (
             <div>
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">

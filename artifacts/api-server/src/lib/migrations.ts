@@ -743,6 +743,11 @@ const SCHEDULE_LOCATION_FIELD = `
 ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS location_field text;
 `;
 
+const SCHEDULE_RECAP_REMINDER = `
+ALTER TABLE schedule_events
+  ADD COLUMN IF NOT EXISTS recap_reminder_sent_at timestamptz;
+`;
+
 // Team Schedule — new additive tables for practices/games posted to a team.
 // Idempotent: CREATE TYPE is guarded, every table/index uses IF NOT EXISTS.
 const SCHEDULE_TABLES = `
@@ -923,6 +928,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-25-team-schedule-location-field",
     sql: SCHEDULE_LOCATION_FIELD,
+  },
+  {
+    name: "2026-06-25-team-schedule-recap-reminder",
+    sql: SCHEDULE_RECAP_REMINDER,
   },
 ];
 

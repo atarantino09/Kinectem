@@ -211,6 +211,67 @@ export async function notifyHighlightDecision(args: {
   });
 }
 
+export const GAME_RECAP_REMINDER_NOTIF_KIND = "game_recap_reminder";
+
+// When a game's start time is a couple hours behind us and no recap has been
+// linked yet, nudge the team's recap-writing staff to write one. Recipients
+// mirror `notifyStaffOfPendingHighlight` (org owners/admins + coach-role
+// roster + author/manager positions) — the same people who see the "Write
+// game recap" prompt on the event. Returns the number of rows inserted so the
+// caller can log it. There is no actor (system-generated), so `actorUserId`
+// is left null.
+export async function notifyStaffOfGameRecapReminder(args: {
+  teamId: string;
+  organizationId: string;
+  teamName: string | null;
+  opponent: string | null;
+  eventId: string;
+}): Promise<number> {
+  const link = `/teams/${args.teamId}`;
+  const [adminRows, staffRosterRows] = await Promise.all([
+    db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, args.organizationId),
+          inArray(organizationAdmins.role, [...ADMIN_ROLES]),
+        ),
+      ),
+    db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, args.teamId),
+          eq(rosterEntries.status, "accepted"),
+          or(
+            eq(rosterEntries.role, "coach"),
+            inArray(rosterEntries.position, ["author", "manager"]),
+          ),
+        ),
+      ),
+  ]);
+  const recipients = Array.from(
+    new Set([...adminRows, ...staffRosterRows].map((r) => r.userId)),
+  );
+  if (recipients.length === 0) return 0;
+  const teamLabel = args.teamName?.trim() ? args.teamName.trim() : "your team";
+  const opponentLabel = args.opponent?.trim()
+    ? ` vs ${args.opponent.trim()}`
+    : "";
+  const message = `${teamLabel}'s game${opponentLabel} has wrapped up — don't forget to write the game recap.`;
+  await db.insert(notifications).values(
+    recipients.map((userId) => ({
+      userId,
+      kind: GAME_RECAP_REMINDER_NOTIF_KIND,
+      message,
+      link,
+    })),
+  );
+  return recipients.length;
+}
+
 export const TEAM_ARCHIVED_NOTIF_KIND = "team_archived";
 export const TEAM_UNARCHIVED_NOTIF_KIND = "team_unarchived";
 

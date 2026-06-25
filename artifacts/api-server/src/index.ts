@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
 import { runStartupMigrations } from "./lib/migrations";
 import { startConsentScheduler } from "./lib/consent-scheduler";
+import { startGameRecapReminderScheduler } from "./lib/game-recap-reminder-scheduler";
 import { auditSecretStrength } from "./lib/secret-audit";
 
 const rawPort = process.env["PORT"];
@@ -44,6 +45,17 @@ async function start() {
     startConsentScheduler();
   } catch (err) {
     logger.error({ err }, "Failed to start consent scheduler (non-fatal)");
+  }
+
+  // Durable "write your game recap" reminder sweep — nudges recap-writing
+  // staff a couple hours after a game starts if no recap is linked yet.
+  try {
+    startGameRecapReminderScheduler();
+  } catch (err) {
+    logger.error(
+      { err },
+      "Failed to start game-recap reminder scheduler (non-fatal)",
+    );
   }
 
   app.listen(port, (err) => {
