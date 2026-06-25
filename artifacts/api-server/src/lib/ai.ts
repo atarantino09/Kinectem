@@ -121,6 +121,92 @@ export async function generatePostText(input: AssistInput): Promise<string> {
   return textFromMessage(message);
 }
 
+// ---------------------------------------------------------------------------
+// Monthly recap newsletter (task #623)
+// ---------------------------------------------------------------------------
+
+// A single published recap fed into the newsletter prompt. Only already-public
+// recap metadata (title, team, date, score, summary) is sent — no minor PII
+// beyond what the recap already exposes.
+export interface NewsletterRecapInput {
+  title: string;
+  teamName?: string | null;
+  gameDate?: string | null;
+  opponentName?: string | null;
+  teamScore?: number | null;
+  opponentScore?: number | null;
+  summary?: string | null;
+}
+
+export interface NewsletterInput {
+  orgName: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  recaps: NewsletterRecapInput[];
+}
+
+function buildNewsletterPrompt(input: NewsletterInput): {
+  system: string;
+  user: string;
+} {
+  const system = [
+    "You are an assistant that helps youth-sports organizations write a recurring newsletter for the Kinectem platform.",
+    "Weave the supplied game recaps into a single, cohesive newsletter that an organization can post for its parents and followers.",
+    "Audience: players, parents, and fans. Tone: positive, energetic, encouraging, and age-appropriate for youth sports.",
+    "Open with a short, warm intro that frames the time period, then summarize each recap as its own short highlight (a sentence or two), and close with a brief, upbeat sign-off.",
+    "Celebrate effort and teamwork across all the teams. Never criticize or negatively single out a child.",
+    "Only use the scores, dates, team names, and details provided. Do not invent specific scores, stats, or player names that were not provided.",
+    "Use plain paragraphs and simple line breaks. Do not output Markdown formatting, headings with '#', or surrounding quotation marks.",
+    "Return only the finished newsletter text, with no preamble or labels.",
+  ].join(" ");
+
+  const range =
+    input.startDate || input.endDate
+      ? `Time period: ${input.startDate ?? "the start"} to ${input.endDate ?? "now"}.`
+      : "";
+  const header = [`Organization: ${input.orgName}.`, range]
+    .filter(Boolean)
+    .join("\n");
+
+  const recapBlocks = input.recaps
+    .map((r, i) => {
+      const lines: string[] = [`Recap ${i + 1}: ${r.title}`];
+      if (r.teamName) lines.push(`Team: ${r.teamName}`);
+      if (r.gameDate) lines.push(`Game date: ${r.gameDate}`);
+      if (r.opponentName) lines.push(`Opponent: ${r.opponentName}`);
+      if (r.teamScore != null && r.opponentScore != null) {
+        lines.push(`Score: ${r.teamScore}-${r.opponentScore}`);
+      }
+      if (r.summary && r.summary.trim()) {
+        lines.push(`Summary: ${r.summary.trim()}`);
+      }
+      return lines.join("\n");
+    })
+    .join("\n\n");
+
+  const user = `${header}\n\nWrite the newsletter based on these ${input.recaps.length} game recap(s):\n\n"""\n${recapBlocks}\n"""`;
+
+  return { system, user };
+}
+
+export async function generateNewsletterText(
+  input: NewsletterInput,
+): Promise<string> {
+  const { apiKey, model, systemContext } = await getAnthropicConfig();
+  const client = new Anthropic({ apiKey });
+  const { system, user } = buildNewsletterPrompt(input);
+  // The admin-authored context & personality (if any) frames every
+  // generation, exactly like the single-post path.
+  const finalSystem = systemContext ? `${systemContext}\n\n${system}` : system;
+  const message = await client.messages.create({
+    model,
+    max_tokens: 4096,
+    system: finalSystem,
+    messages: [{ role: "user", content: user }],
+  });
+  return textFromMessage(message);
+}
+
 // Meta-assist: helps an admin author the "context & personality" instruction
 // itself (the field that is later prepended to post-generation prompts).
 export async function generateContextSuggestion(

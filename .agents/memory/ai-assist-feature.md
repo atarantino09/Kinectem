@@ -26,3 +26,7 @@ description: How AI-generated post copy and self-managed provider API keys work 
   - **How to apply:** any new generation path must prepend `systemContext` too, or it will silently ignore the admin's tuning.
 
 - **No runtime OpenAPI validation in api-server** — `openapi.yaml` is codegen-only. New admin/feature endpoints follow the Founding-100 precedent: hand-written zod validation + plain JSON responses + client `customFetch`, with NO `openapi.yaml` edit.
+
+- **The Claude engine is reused for the org recap newsletter, not just single posts.** A `generateNewsletterText()` lives alongside `generatePostText()` in `lib/ai.ts` (same `getAnthropicConfig()` + `systemContext` prepend + dated-model rules). Its org-scoped endpoints (`GET/POST /organizations/:orgId/newsletter/{recaps,generate}`) live in `routes/organizations.ts`, NOT `routes/ai.ts`, because they need org data + `canManageOrganization`.
+  - **Why:** newsletter is org-owner/admin-scoped and reads the org's published recaps; co-locating with other org routes was cleaner than ai.ts.
+  - **How to apply:** the generate endpoint still mirrors the COPPA egress gate (`canAuthorRecapAnywhere` in addition to `canManageOrganization`) — keep that double gate on any org-scoped AI egress. Recaps are date-filtered on `coalesce(game_date, published_at, created_at)` so recaps with a null game date still appear by publish date.

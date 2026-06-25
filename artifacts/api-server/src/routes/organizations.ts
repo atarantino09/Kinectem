@@ -27,12 +27,18 @@ import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canManageOrganization,
+  canAuthorRecapAnywhere,
   canCreateRecap,
   canApproveTeamHighlight,
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
   getOrgRole,
 } from "../lib/permissions";
+import {
+  generateNewsletterText,
+  AiNotConfiguredError,
+  type NewsletterRecapInput,
+} from "../lib/ai";
 import {
   notifyAdminsOfTeamHighlight,
   notifyHighlightDecision,
@@ -1511,6 +1517,273 @@ router.post(
     res.status(201).json(
       orgPostToPost(p, { org, author: me, minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT }),
     );
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #623 — Monthly AI recap newsletter.
+//
+// Two org-scoped, manage-gated endpoints power the "Create newsletter" flow:
+//   GET  /organizations/:orgId/newsletter/recaps  — the date-filtered list of
+//        published recaps to pick from (id, title, team, gameDate, score).
+//   POST /organizations/:orgId/newsletter/generate — feed the selected recaps
+//        into the existing AI Assist (Claude) engine and return a draft.
+// Posting is NOT done here — the client submits the (edited) draft through the
+// existing POST /organizations/:orgId/posts announcement path. The locked
+// openapi.yaml has no entries for these routes, so they follow the same
+// hand-written-validation + customFetch precedent used elsewhere (Founding-100,
+// AI Assist, org claims/billing).
+// ---------------------------------------------------------------------------
+
+// Cap how many recaps can be stuffed into one prompt so an org with a huge
+// back-catalog can't blow up the token budget / provider bill.
+const NEWSLETTER_MAX_RECAPS = 25;
+
+// Resolve the published recaps for an org's teams within an (inclusive) date
+// window, keyed off the game date, falling back to the publish/create date for
+// recaps that never recorded a game date. Optionally narrowed to a specific
+// set of recap ids.
+async function loadOrgNewsletterRecaps(
+  orgId: string,
+  startMs: number | null,
+  endMs: number | null,
+  recapIds: string[] | null,
+): Promise<
+  Array<{
+    id: string;
+    title: string;
+    teamId: string;
+    teamName: string;
+    gameDate: Date | null;
+    opponentName: string | null;
+    teamScore: number | null;
+    opponentScore: number | null;
+    summary: string | null;
+  }>
+> {
+  // coalesce(game_date, published_at, created_at) is the effective date we
+  // filter and sort on.
+  const effDate = sql<Date>`coalesce(${articles.gameDate}, ${articles.publishedAt}, ${articles.createdAt})`;
+  const conds = [
+    eq(teams.organizationId, orgId),
+    eq(articles.status, "published"),
+    isNull(articles.hiddenAt),
+  ];
+  if (startMs != null) conds.push(sql`${effDate} >= ${new Date(startMs)}`);
+  if (endMs != null) conds.push(sql`${effDate} <= ${new Date(endMs)}`);
+  if (recapIds != null) {
+    if (recapIds.length === 0) return [];
+    conds.push(inArray(articles.id, recapIds));
+  }
+  const rows = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      teamId: teams.id,
+      teamName: teams.name,
+      gameDate: articles.gameDate,
+      opponentName: articles.opponentName,
+      teamScore: articles.teamScore,
+      opponentScore: articles.opponentScore,
+      summary: articles.summary,
+      publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+    })
+    .from(articles)
+    .innerJoin(teams, eq(articles.teamId, teams.id))
+    .where(and(...conds))
+    .orderBy(desc(effDate))
+    .limit(200);
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    teamId: r.teamId,
+    teamName: r.teamName,
+    gameDate: r.gameDate,
+    opponentName: r.opponentName,
+    teamScore: r.teamScore,
+    opponentScore: r.opponentScore,
+    summary: r.summary,
+  }));
+}
+
+// Parse a `YYYY-MM-DD` (or any Date-parseable) string into epoch ms, or null.
+// `endOfDay` pushes a bare date to 23:59:59.999 so the window is inclusive of
+// the whole end day.
+function parseDateParam(
+  value: unknown,
+  endOfDay = false,
+): number | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const d = new Date(value.trim());
+  if (Number.isNaN(d.getTime())) return null;
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    d.setHours(23, 59, 59, 999);
+  }
+  return d.getTime();
+}
+
+const newsletterLimiter = rateLimit({
+  name: "org-newsletter",
+  windowMs: 60_000,
+  max: 20,
+  keys: (req) => [req.sessionUser?.id ?? ipKey(req)],
+  message:
+    "You're generating newsletters too quickly. Please wait a moment and try again.",
+});
+
+router.get(
+  "/organizations/:orgId/newsletter/recaps",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const orgId = req.params.orgId;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Org admins only");
+    }
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    const startMs = parseDateParam(req.query.start);
+    const endMs = parseDateParam(req.query.end, true);
+    const recaps = await loadOrgNewsletterRecaps(orgId, startMs, endMs, null);
+    res.json({
+      data: recaps.map((r) => ({
+        id: r.id,
+        title: r.title,
+        teamId: r.teamId,
+        teamName: r.teamName,
+        gameDate: r.gameDate ? r.gameDate.toISOString() : null,
+        opponentName: r.opponentName,
+        teamScore: r.teamScore,
+        opponentScore: r.opponentScore,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/organizations/:orgId/newsletter/generate",
+  newsletterLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const orgId = req.params.orgId;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Org admins only");
+    }
+    // Mirror the COPPA egress boundary on POST /ai/assist: only users who
+    // can author recaps anywhere may push content to the third-party AI
+    // provider. Org owner/admins always satisfy this, but the explicit
+    // check keeps the guarantee local to the AI egress.
+    if (!(await canAuthorRecapAnywhere(me.id))) {
+      return apiError(res, 403, "You don't have permission to use AI Assist.", {
+        code: "AI_FORBIDDEN",
+      });
+    }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+
+    const body = req.body ?? {};
+    const startMs = parseDateParam(body.startDate);
+    const endMs = parseDateParam(body.endDate, true);
+    if (startMs != null && endMs != null && startMs > endMs) {
+      return apiError(res, 400, "Start date must be before end date.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    let recapIds: string[] | null = null;
+    if (body.recapIds != null) {
+      if (!Array.isArray(body.recapIds)) {
+        return apiError(res, 400, "recapIds must be a list.", {
+          code: "VALIDATION_FAILED",
+        });
+      }
+      recapIds = Array.from(
+        new Set(
+          body.recapIds.filter(
+            (x: unknown): x is string => typeof x === "string" && !!x,
+          ),
+        ),
+      );
+      if (recapIds.length === 0) {
+        return apiError(res, 400, "Select at least one recap to include.", {
+          code: "VALIDATION_FAILED",
+        });
+      }
+    }
+
+    const recaps = await loadOrgNewsletterRecaps(orgId, startMs, endMs, recapIds);
+    if (recaps.length === 0) {
+      return apiError(
+        res,
+        400,
+        "No published recaps match your selection. Pick a wider date range or different recaps.",
+        { code: "NEWSLETTER_EMPTY" },
+      );
+    }
+    if (recaps.length > NEWSLETTER_MAX_RECAPS) {
+      return apiError(
+        res,
+        400,
+        `Too many recaps selected (${recaps.length}). Please narrow it down to ${NEWSLETTER_MAX_RECAPS} or fewer.`,
+        { code: "NEWSLETTER_TOO_MANY" },
+      );
+    }
+
+    const fmtDate = (d: Date | null) =>
+      d ? d.toISOString().slice(0, 10) : null;
+    const recapInputs: NewsletterRecapInput[] = recaps.map((r) => ({
+      title: r.title,
+      teamName: r.teamName,
+      gameDate: fmtDate(r.gameDate),
+      opponentName: r.opponentName,
+      teamScore: r.teamScore,
+      opponentScore: r.opponentScore,
+      summary: r.summary,
+    }));
+
+    try {
+      const text = await generateNewsletterText({
+        orgName: org.name,
+        startDate:
+          typeof body.startDate === "string" && body.startDate.trim()
+            ? body.startDate.trim()
+            : null,
+        endDate:
+          typeof body.endDate === "string" && body.endDate.trim()
+            ? body.endDate.trim()
+            : null,
+        recaps: recapInputs,
+      });
+      if (!text) {
+        return apiError(
+          res,
+          502,
+          "The AI returned an empty response. Please try again.",
+          { code: "AI_EMPTY" },
+        );
+      }
+      res.json({ text, recapCount: recaps.length });
+    } catch (err) {
+      if (err instanceof AiNotConfiguredError) {
+        return apiError(res, 503, err.message, { code: "AI_NOT_CONFIGURED" });
+      }
+      req.log.error({ err }, "Newsletter generation failed");
+      apiError(
+        res,
+        502,
+        "AI request failed. An admin may need to check the API key in admin settings.",
+        { code: "AI_REQUEST_FAILED" },
+      );
+    }
   }),
 );
 

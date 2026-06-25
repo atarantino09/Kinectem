@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ExternalLink,
   ListPlus,
+  Newspaper,
   Pencil,
   Plus,
   Settings,
@@ -54,6 +55,7 @@ import { BulkAddTeamsDialog } from "@/components/BulkAddTeamsDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
+import { NewsletterDialog } from "@/components/NewsletterDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { getInitials, formatOrgName } from "@/lib/format";
@@ -78,6 +80,7 @@ export default function OrganizationPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
+  const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
   // Task #443 — celebratory popup shown once right after a successful
@@ -278,6 +281,14 @@ export default function OrganizationPage() {
         open={newPostOpen}
         onOpenChange={setNewPostOpen}
       />
+      {isOrgManager && (
+        <NewsletterDialog
+          orgId={orgId}
+          orgName={organization.name}
+          open={newsletterOpen}
+          onOpenChange={setNewsletterOpen}
+        />
+      )}
       <FollowListDialog
         open={followersOpen}
         onOpenChange={setFollowersOpen}
@@ -621,14 +632,25 @@ export default function OrganizationPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-black tracking-tight">Recent Posts</h2>
               {isOrgManager && (
-                <Button
-                  size="sm"
-                  onClick={() => setNewPostOpen(true)}
-                  className="font-bold rounded-full"
-                  data-testid="btn-new-org-post"
-                >
-                  <Plus className="w-4 h-4 mr-1" /> New post
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setNewsletterOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-org-newsletter"
+                  >
+                    <Newspaper className="w-4 h-4 mr-1" /> Newsletter
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setNewPostOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-new-org-post"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> New post
+                  </Button>
+                </div>
               )}
             </div>
             <div className="space-y-3">
