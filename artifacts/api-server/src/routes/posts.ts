@@ -1812,6 +1812,12 @@ router.post(
           opponentScore = Number(m[2]);
         }
       }
+      // A combined season/tournament recap (woven from many game recaps
+      // via the team Combined Recap dialog) carries this marker so the
+      // post card can render a distinct pill. Only "combined" is accepted;
+      // anything else is a normal single-game recap (null).
+      const recapKind: string | null =
+        body.recapKind === "combined" ? "combined" : null;
       const [a] = await db
         .insert(articles)
         .values({
@@ -1827,6 +1833,7 @@ router.post(
           teamScore,
           opponentScore,
           gameDate,
+          recapKind,
           status,
           publishedAt: status === "published" ? new Date() : null,
         })

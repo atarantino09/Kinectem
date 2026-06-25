@@ -193,10 +193,15 @@ export function SeasonRecapDialog({
           postType: "long",
           title: trimmedTitle,
           body: draft.trim(),
-          // openapi-generated CreatePostRequest doesn't surface `context`,
-          // but the server reads it to scope the post to a team — mirror
-          // the spread-cast trick used by the new-post composer.
-          ...({ context: { type: "team", id: teamId } } as object),
+          // openapi-generated CreatePostRequest doesn't surface `context`
+          // or `recapKind`, but the server reads both — `context` scopes
+          // the post to a team and `recapKind: "combined"` marks it as a
+          // multi-game recap so the post card shows a distinct pill.
+          // Mirror the spread-cast trick used by the new-post composer.
+          ...({
+            context: { type: "team", id: teamId },
+            recapKind: "combined",
+          } as object),
         },
       });
       // Non-admin authors have recaps held for approval; the create

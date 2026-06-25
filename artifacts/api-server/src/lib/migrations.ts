@@ -748,6 +748,13 @@ ALTER TABLE schedule_events
   ADD COLUMN IF NOT EXISTS recap_reminder_sent_at timestamptz;
 `;
 
+// Combined season/tournament recaps (woven from many game recaps) carry
+// this marker so the post card can render a distinct pill. NULL = normal
+// single-game recap; "combined" = multi-game recap. Idempotent.
+const ARTICLE_RECAP_KIND = `
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS recap_kind text;
+`;
+
 // Team Schedule — new additive tables for practices/games posted to a team.
 // Idempotent: CREATE TYPE is guarded, every table/index uses IF NOT EXISTS.
 const SCHEDULE_TABLES = `
@@ -932,6 +939,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-25-team-schedule-recap-reminder",
     sql: SCHEDULE_RECAP_REMINDER,
+  },
+  {
+    name: "2026-06-25-article-recap-kind",
+    sql: ARTICLE_RECAP_KIND,
   },
 ];
 

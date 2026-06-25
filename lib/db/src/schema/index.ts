@@ -553,6 +553,10 @@ export const articles = pgTable("articles", {
   teamScore: integer("team_score"),
   opponentScore: integer("opponent_score"),
   gameDate: timestamp("game_date"),
+  // Distinguishes a combined season/tournament recap (woven from many
+  // game recaps) from a normal single-game recap. NULL = single game;
+  // "combined" = multi-game recap. Drives a distinct post card pill.
+  recapKind: text("recap_kind"),
   status: articleStatusEnum("status").notNull().default("published"),
   publishedAt: timestamp("published_at"),
   hiddenAt: timestamp("hidden_at"),

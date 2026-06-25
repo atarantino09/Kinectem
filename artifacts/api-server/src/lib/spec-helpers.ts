@@ -810,6 +810,7 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     createdAt: (a.publishedAt ?? a.createdAt).toISOString(),
     updatedAt: a.updatedAt.toISOString(),
     gameDate: a.gameDate ? a.gameDate.toISOString() : null,
+    recapKind: a.recapKind ?? null,
     extras,
   });
 }
@@ -895,6 +896,9 @@ function basePost(p: {
   // (highlight) and org posts pass undefined and the response just
   // omits the field downstream consumers expect to see as null.
   gameDate?: string | null;
+  // Only combined season/tournament recaps set this ("combined"); all
+  // other posts omit it and the response serializes null.
+  recapKind?: string | null;
   extras: PostExtras;
 }) {
   const author = p.extras.author
@@ -957,6 +961,7 @@ function basePost(p: {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     gameDate: p.gameDate ?? null,
+    recapKind: p.recapKind ?? null,
     author,
     context,
     assets: p.assets,

@@ -153,12 +153,20 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   // author or org-admin for Updates), so the menu item just mirrors
   // that flag — no client-side kind gate.
   const canEditPost = post.canEdit === true;
+  // Combined season/tournament recaps (woven from many game recaps) are
+  // article-backed long posts carrying a `recapKind` marker the server
+  // serializes outside the openapi PostResponse — read it via a narrow
+  // cast (Newsletter/org-claim precedent) to show a distinct pill.
+  const isCombinedRecap =
+    (post as { recapKind?: string | null }).recapKind === "combined";
   const label =
     reportTarget.contentType === "highlight"
       ? "Highlight"
       : reportTarget.contentType === "org_post"
         ? "Update"
-        : "Game Recap";
+        : isCombinedRecap
+          ? "Combined Recap"
+          : "Game Recap";
   const badgeClass = "brand-pill";
 
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
