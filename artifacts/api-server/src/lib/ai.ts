@@ -207,6 +207,75 @@ export async function generateNewsletterText(
   return textFromMessage(message);
 }
 
+// A team-scoped season/tournament recap: weave a team's individual game
+// recaps over a date range into ONE cohesive long-form recap article
+// (great for a tournament's worth of games or a whole season).
+export interface SeasonRecapInput {
+  teamName: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  recaps: NewsletterRecapInput[];
+}
+
+function buildSeasonRecapPrompt(input: SeasonRecapInput): {
+  system: string;
+  user: string;
+} {
+  const system = [
+    "You are an assistant that helps youth-sports coaches write a single, cohesive season or tournament recap for the Kinectem platform.",
+    "Weave the supplied individual game recaps into one flowing recap article that tells the story of the team's run across the whole period.",
+    "Audience: players, parents, and fans. Tone: positive, energetic, encouraging, and age-appropriate for youth sports.",
+    "Open with a short intro that frames the stretch of games, walk through the games in order as one connected narrative (not a list of separate posts), highlight the team's growth, key moments, and teamwork, and close with a warm, forward-looking sign-off.",
+    "Celebrate effort and teamwork. Never criticize or negatively single out a child.",
+    "Only use the scores, dates, opponents, and details provided. Do not invent specific scores, stats, or player names that were not provided.",
+    "Use plain paragraphs and simple line breaks. Do not output Markdown formatting, headings with '#', or surrounding quotation marks.",
+    "Return only the finished recap text, with no preamble or labels.",
+  ].join(" ");
+
+  const range =
+    input.startDate || input.endDate
+      ? `Time period: ${input.startDate ?? "the start"} to ${input.endDate ?? "now"}.`
+      : "";
+  const header = [`Team: ${input.teamName}.`, range].filter(Boolean).join("\n");
+
+  const recapBlocks = input.recaps
+    .map((r, i) => {
+      const lines: string[] = [`Game ${i + 1}: ${r.title}`];
+      if (r.gameDate) lines.push(`Game date: ${r.gameDate}`);
+      if (r.opponentName) lines.push(`Opponent: ${r.opponentName}`);
+      if (r.teamScore != null && r.opponentScore != null) {
+        lines.push(`Score: ${r.teamScore}-${r.opponentScore}`);
+      }
+      if (r.summary && r.summary.trim()) {
+        lines.push(`Summary: ${r.summary.trim()}`);
+      }
+      return lines.join("\n");
+    })
+    .join("\n\n");
+
+  const user = `${header}\n\nWrite one cohesive recap based on these ${input.recaps.length} game recap(s), presented in order:\n\n"""\n${recapBlocks}\n"""`;
+
+  return { system, user };
+}
+
+export async function generateSeasonRecapText(
+  input: SeasonRecapInput,
+): Promise<string> {
+  const { apiKey, model, systemContext } = await getAnthropicConfig();
+  const client = new Anthropic({ apiKey });
+  const { system, user } = buildSeasonRecapPrompt(input);
+  // The admin-authored context & personality (if any) frames every
+  // generation, exactly like the single-post and newsletter paths.
+  const finalSystem = systemContext ? `${systemContext}\n\n${system}` : system;
+  const message = await client.messages.create({
+    model,
+    max_tokens: 4096,
+    system: finalSystem,
+    messages: [{ role: "user", content: user }],
+  });
+  return textFromMessage(message);
+}
+
 // Meta-assist: helps an admin author the "context & personality" instruction
 // itself (the field that is later prepended to post-generation prompts).
 export async function generateContextSuggestion(

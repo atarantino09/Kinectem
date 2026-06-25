@@ -252,6 +252,7 @@ export default function TeamPage() {
               isAdmin={isAdmin}
               isTeamMember={isTeamMember}
               canPostRecap={canPostRecap}
+              teamName={team.name}
               posts={recentPosts}
             />
           </>

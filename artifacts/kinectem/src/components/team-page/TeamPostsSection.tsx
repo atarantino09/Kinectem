@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
+import { SeasonRecapDialog } from "@/components/team-page/SeasonRecapDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListTeamPendingPosts,
@@ -23,6 +25,7 @@ import {
   Pencil,
   Check,
   X,
+  Trophy,
 } from "lucide-react";
 
 interface TeamPostsSectionProps {
@@ -39,6 +42,8 @@ interface TeamPostsSectionProps {
   // approval" pending-recaps section below — non-authors don't see it
   // and the underlying request never fires.
   canPostRecap: boolean;
+  // Team display name — used to title the AI season/tournament recap.
+  teamName: string;
   posts: PostResponse[];
 }
 
@@ -68,9 +73,11 @@ export function TeamPostsSection({
   isAdmin,
   isTeamMember,
   canPostRecap,
+  teamName,
   posts,
 }: TeamPostsSectionProps) {
   const canPostHighlight = isAdmin || isTeamMember;
+  const [seasonRecapOpen, setSeasonRecapOpen] = useState(false);
   // Task #452 — only fetch the pending-recaps list when the viewer
   // has author capability on the team. Non-authors never trigger the
   // request and never see the section.
@@ -165,8 +172,27 @@ export function TeamPostsSection({
               </Button>
             </Link>
           )}
+          {canPostRecap && (
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={() => setSeasonRecapOpen(true)}
+              data-testid="btn-season-recap"
+            >
+              <Trophy className="w-3.5 h-3.5 mr-1.5" />
+              Season Recap
+            </Button>
+          )}
         </div>
       </div>
+      {canPostRecap && (
+        <SeasonRecapDialog
+          teamId={teamId}
+          teamName={teamName}
+          open={seasonRecapOpen}
+          onOpenChange={setSeasonRecapOpen}
+        />
+      )}
       {canPostRecap && pendingRecaps.length > 0 && (
         <Card
           className="rounded-xl border border-amber-200 bg-amber-50/50"

@@ -10,9 +10,11 @@ import {
   rosterInvites,
   notifications,
   adminActivityLog,
+  articles,
 } from "@workspace/db";
 import {
   and,
+  asc,
   desc,
   eq,
   inArray,
@@ -28,8 +30,10 @@ import {
   isTeamMember,
   canManageTeam,
   canCreateRecap,
+  canAuthorRecapAnywhere,
   getOrgRole,
 } from "../lib/permissions";
+import { generateSeasonRecapText, AiNotConfiguredError } from "../lib/ai";
 import { getOrgPlan, teamLimitForPlan } from "../lib/plan-limits";
 import {
   createSession,
@@ -1250,6 +1254,243 @@ router.post(
       .from(rosterEntries)
       .where(eq(rosterEntries.teamId, updated.id));
     return res.json(toTeam(updated, org, { memberCount: count }));
+  }),
+);
+
+// ---- Season / tournament recap (AI) ----
+// Lets a coach/author weave a team's published game recaps over a date
+// range into one cohesive long-form recap (a tournament's worth of games
+// or a whole season). Mirrors the org newsletter endpoints, scoped to one
+// team. openapi.yaml is locked, so the web client talks to these via
+// customFetch + narrow casts (Newsletter/AI precedent).
+const TEAM_SEASON_RECAP_MAX = 25;
+
+// Parse a `YYYY-MM-DD` (or any Date-parseable) string into epoch ms, or
+// null. `endOfDay` pushes a bare date to 23:59:59.999 so the window is
+// inclusive of the whole end day.
+function parseSeasonDateParam(value: unknown, endOfDay = false): number | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const d = new Date(value.trim());
+  if (Number.isNaN(d.getTime())) return null;
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    d.setHours(23, 59, 59, 999);
+  }
+  return d.getTime();
+}
+
+// Resolve a team's published recaps within an (inclusive) date window,
+// keyed off the game date and falling back to the publish/create date.
+// Ordered chronologically so the AI can narrate the games in order.
+async function loadTeamSeasonRecaps(
+  teamId: string,
+  startMs: number | null,
+  endMs: number | null,
+  recapIds: string[] | null,
+): Promise<
+  Array<{
+    id: string;
+    title: string;
+    gameDate: Date | null;
+    opponentName: string | null;
+    teamScore: number | null;
+    opponentScore: number | null;
+    summary: string | null;
+  }>
+> {
+  const effDate = sql<Date>`coalesce(${articles.gameDate}, ${articles.publishedAt}, ${articles.createdAt})`;
+  const conds = [
+    eq(articles.teamId, teamId),
+    eq(articles.status, "published"),
+    isNull(articles.hiddenAt),
+  ];
+  if (startMs != null) conds.push(sql`${effDate} >= ${new Date(startMs)}`);
+  if (endMs != null) conds.push(sql`${effDate} <= ${new Date(endMs)}`);
+  if (recapIds != null) {
+    if (recapIds.length === 0) return [];
+    conds.push(inArray(articles.id, recapIds));
+  }
+  return db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      gameDate: articles.gameDate,
+      opponentName: articles.opponentName,
+      teamScore: articles.teamScore,
+      opponentScore: articles.opponentScore,
+      summary: articles.summary,
+    })
+    .from(articles)
+    .where(and(...conds))
+    .orderBy(asc(effDate))
+    .limit(200);
+}
+
+const teamSeasonRecapLimiter = rateLimit({
+  name: "team-season-recap",
+  windowMs: 60_000,
+  max: 20,
+  keys: (req) => [req.sessionUser?.id ?? ipKey(req)],
+  message:
+    "You're generating recaps too quickly. Please wait a moment and try again.",
+});
+
+router.get(
+  "/teams/:teamId/season-recap/recaps",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    if (!(await canCreateRecap(me.id, team))) {
+      return apiError(
+        res,
+        403,
+        "You don't have permission to author recaps for this team.",
+      );
+    }
+    const startMs = parseSeasonDateParam(req.query.start);
+    const endMs = parseSeasonDateParam(req.query.end, true);
+    const recaps = await loadTeamSeasonRecaps(teamId, startMs, endMs, null);
+    res.json({
+      data: recaps.map((r) => ({
+        id: r.id,
+        title: r.title,
+        gameDate: r.gameDate ? r.gameDate.toISOString() : null,
+        opponentName: r.opponentName,
+        teamScore: r.teamScore,
+        opponentScore: r.opponentScore,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/teams/:teamId/season-recap/generate",
+  teamSeasonRecapLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    if (!(await canCreateRecap(me.id, team))) {
+      return apiError(
+        res,
+        403,
+        "You don't have permission to author recaps for this team.",
+      );
+    }
+    // Mirror the COPPA egress boundary on POST /ai/assist: only users who
+    // can author recaps anywhere may push content to the third-party AI
+    // provider. Team staff always satisfy this, but the explicit check
+    // keeps the guarantee local to the AI egress.
+    if (!(await canAuthorRecapAnywhere(me.id))) {
+      return apiError(res, 403, "You don't have permission to use AI Assist.", {
+        code: "AI_FORBIDDEN",
+      });
+    }
+
+    const body = req.body ?? {};
+    const startMs = parseSeasonDateParam(body.startDate);
+    const endMs = parseSeasonDateParam(body.endDate, true);
+    if (startMs != null && endMs != null && startMs > endMs) {
+      return apiError(res, 400, "Start date must be before end date.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    let recapIds: string[] | null = null;
+    if (body.recapIds != null) {
+      if (!Array.isArray(body.recapIds)) {
+        return apiError(res, 400, "recapIds must be a list.", {
+          code: "VALIDATION_FAILED",
+        });
+      }
+      recapIds = Array.from(
+        new Set(
+          body.recapIds.filter(
+            (x: unknown): x is string => typeof x === "string" && !!x,
+          ),
+        ),
+      );
+      if (recapIds.length === 0) {
+        return apiError(res, 400, "Select at least one recap to include.", {
+          code: "VALIDATION_FAILED",
+        });
+      }
+    }
+
+    const recaps = await loadTeamSeasonRecaps(teamId, startMs, endMs, recapIds);
+    if (recaps.length === 0) {
+      return apiError(
+        res,
+        400,
+        "No published recaps match your selection. Pick a wider date range or different recaps.",
+        { code: "SEASON_RECAP_EMPTY" },
+      );
+    }
+    if (recaps.length > TEAM_SEASON_RECAP_MAX) {
+      return apiError(
+        res,
+        400,
+        `Too many recaps selected (${recaps.length}). Please narrow it down to ${TEAM_SEASON_RECAP_MAX} or fewer.`,
+        { code: "SEASON_RECAP_TOO_MANY" },
+      );
+    }
+
+    const fmtDate = (d: Date | null) =>
+      d ? d.toISOString().slice(0, 10) : null;
+    const recapInputs = recaps.map((r) => ({
+      title: r.title,
+      gameDate: fmtDate(r.gameDate),
+      opponentName: r.opponentName,
+      teamScore: r.teamScore,
+      opponentScore: r.opponentScore,
+      summary: r.summary,
+    }));
+
+    try {
+      const text = await generateSeasonRecapText({
+        teamName: team.name,
+        startDate:
+          typeof body.startDate === "string" && body.startDate.trim()
+            ? body.startDate.trim()
+            : null,
+        endDate:
+          typeof body.endDate === "string" && body.endDate.trim()
+            ? body.endDate.trim()
+            : null,
+        recaps: recapInputs,
+      });
+      if (!text) {
+        return apiError(
+          res,
+          502,
+          "The AI returned an empty response. Please try again.",
+          { code: "AI_EMPTY" },
+        );
+      }
+      res.json({ text, recapCount: recaps.length });
+    } catch (err) {
+      if (err instanceof AiNotConfiguredError) {
+        return apiError(res, 503, err.message, { code: "AI_NOT_CONFIGURED" });
+      }
+      req.log.error({ err }, "Season recap generation failed");
+      apiError(
+        res,
+        502,
+        "AI request failed. An admin may need to check the API key in admin settings.",
+        { code: "AI_REQUEST_FAILED" },
+      );
+    }
   }),
 );
 
