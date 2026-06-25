@@ -196,12 +196,25 @@ export function EventDetailDialog({
               </span>
             </div>
           )}
-          {(event.locationName || event.locationField) && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <MapPin className="w-4 h-4" />
-              {[event.locationName, event.locationField]
-                .filter(Boolean)
-                .join(" · ")}
+          {(event.locationName ||
+            event.locationField ||
+            event.locationAddress) && (
+            <div className="flex items-start gap-2 text-muted-foreground">
+              <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                {(event.locationName || event.locationField) && (
+                  <span className="block">
+                    {[event.locationName, event.locationField]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                )}
+                {event.locationAddress && (
+                  <span className="block text-xs">
+                    {event.locationAddress}
+                  </span>
+                )}
+              </span>
             </div>
           )}
           {event.statusReason && (

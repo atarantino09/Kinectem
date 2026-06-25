@@ -102,6 +102,7 @@ export function EventFormDialog({
   const [allDay, setAllDay] = useState(false);
   const [locationName, setLocationName] = useState("");
   const [locationField, setLocationField] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
   const [notes, setNotes] = useState("");
 
   // Recurrence (practice-only, create-only).
@@ -130,6 +131,7 @@ export function EventFormDialog({
       setAllDay(editEvent.allDay);
       setLocationName(editEvent.locationName ?? "");
       setLocationField(editEvent.locationField ?? "");
+      setLocationAddress(editEvent.locationAddress ?? "");
       setNotes(editEvent.notes ?? "");
       setRepeat(false);
       setScope("single");
@@ -144,6 +146,7 @@ export function EventFormDialog({
       setAllDay(false);
       setLocationName("");
       setLocationField("");
+      setLocationAddress("");
       setNotes("");
       setRepeat(false);
       setDays(new Set());
@@ -206,6 +209,7 @@ export function EventFormDialog({
       const trimmedOpponent = opponent.trim();
       const trimmedLocation = locationName.trim();
       const trimmedField = locationField.trim();
+      const trimmedAddress = locationAddress.trim();
       const trimmedNotes = notes.trim();
 
       if (canRepeat && repeat) {
@@ -214,6 +218,7 @@ export function EventFormDialog({
           title: trimmedTitle || null,
           locationName: trimmedLocation || null,
           locationField: trimmedField || null,
+          locationAddress: trimmedAddress || null,
           notes: trimmedNotes || null,
           tzOffsetMinutes,
           recurrence: {
@@ -232,6 +237,7 @@ export function EventFormDialog({
           homeAway: isGameLike ? homeAway : null,
           locationName: trimmedLocation || null,
           locationField: trimmedField || null,
+          locationAddress: trimmedAddress || null,
           notes: trimmedNotes || null,
           allDay,
         };
@@ -256,6 +262,7 @@ export function EventFormDialog({
           homeAway: isGameLike ? homeAway : null,
           locationName: trimmedLocation || null,
           locationField: trimmedField || null,
+          locationAddress: trimmedAddress || null,
           notes: trimmedNotes || null,
           allDay,
           startAt: toIso(date, allDay ? "00:00" : startTime),
@@ -551,6 +558,23 @@ export function EventFormDialog({
                 data-testid="input-event-field"
               />
             </div>
+          </div>
+
+          <div>
+            <Label
+              htmlFor="eventAddress"
+              className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+            >
+              Address (optional)
+            </Label>
+            <Input
+              id="eventAddress"
+              value={locationAddress}
+              onChange={(e) => setLocationAddress(e.target.value)}
+              placeholder="e.g. 123 Main St, Springfield"
+              className="mt-2"
+              data-testid="input-event-address"
+            />
           </div>
 
           <div>
