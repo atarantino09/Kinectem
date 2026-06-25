@@ -160,6 +160,10 @@ export function EventFormDialog({
   }, [open, editEvent]);
 
   const isGameLike = eventType === "game" || eventType === "scrimmage";
+  const isTournament = eventType === "tournament";
+  // Opponent is captured for games/scrimmages and tournaments; home/away only
+  // makes sense for a single-opponent game/scrimmage.
+  const showOpponent = isGameLike || isTournament;
   const isGameGroup = GAME_TYPES.includes(eventType);
   const canRepeat = !isEdit && eventType === "practice";
 
@@ -237,7 +241,7 @@ export function EventFormDialog({
       } else if (isEdit && editEvent) {
         const base: UpdateEventInput = {
           title: trimmedTitle || null,
-          opponent: isGameLike ? trimmedOpponent || null : null,
+          opponent: showOpponent ? trimmedOpponent || null : null,
           homeAway: isGameLike ? homeAway : null,
           locationName: trimmedLocation || null,
           locationField: trimmedField || null,
@@ -262,7 +266,7 @@ export function EventFormDialog({
         const input: CreateEventInput = {
           eventType,
           title: trimmedTitle || null,
-          opponent: isGameLike ? trimmedOpponent || null : null,
+          opponent: showOpponent ? trimmedOpponent || null : null,
           homeAway: isGameLike ? homeAway : null,
           locationName: trimmedLocation || null,
           locationField: trimmedField || null,
@@ -363,8 +367,12 @@ export function EventFormDialog({
             </div>
           )}
 
-          {isGameLike && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {showOpponent && (
+            <div
+              className={
+                isGameLike ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : ""
+              }
+            >
               <div>
                 <Label
                   htmlFor="eventOpponent"
@@ -381,26 +389,28 @@ export function EventFormDialog({
                   data-testid="input-event-opponent"
                 />
               </div>
-              <div>
-                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                  Location
-                </Label>
-                <div className="flex gap-2 mt-2">
-                  {HOME_AWAY.map((h) => (
-                    <Button
-                      key={h.value}
-                      type="button"
-                      size="sm"
-                      variant={homeAway === h.value ? "default" : "outline"}
-                      className="font-bold rounded-full"
-                      onClick={() => setHomeAway(h.value)}
-                      data-testid={`btn-home-away-${h.value}`}
-                    >
-                      {h.label}
-                    </Button>
-                  ))}
+              {isGameLike && (
+                <div>
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Location
+                  </Label>
+                  <div className="flex gap-2 mt-2">
+                    {HOME_AWAY.map((h) => (
+                      <Button
+                        key={h.value}
+                        type="button"
+                        size="sm"
+                        variant={homeAway === h.value ? "default" : "outline"}
+                        className="font-bold rounded-full"
+                        onClick={() => setHomeAway(h.value)}
+                        data-testid={`btn-home-away-${h.value}`}
+                      >
+                        {h.label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -409,16 +419,20 @@ export function EventFormDialog({
               htmlFor="eventTitle"
               className="text-xs font-black uppercase tracking-widest text-muted-foreground"
             >
-              Title{eventType === "other" ? "" : " (optional)"}
+              {isTournament
+                ? "Tournament name"
+                : `Title${eventType === "other" ? "" : " (optional)"}`}
             </Label>
             <Input
               id="eventTitle"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={
-                eventType === "other"
-                  ? "e.g. Team photo day"
-                  : "Override the default title"
+                isTournament
+                  ? "e.g. Spring Classic Invitational"
+                  : eventType === "other"
+                    ? "e.g. Team photo day"
+                    : "Override the default title"
               }
               className="mt-2"
               data-testid="input-event-title"
