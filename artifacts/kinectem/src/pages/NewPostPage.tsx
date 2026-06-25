@@ -37,6 +37,10 @@ export default function NewPostPage() {
   const initialEditId = params.get("editId");
   const initialTeamId = params.get("teamId");
   const initialFrom = params.get("from");
+  // Team Schedule "Write game recap" deep-link params (optional).
+  const initialScheduleEventId = params.get("scheduleEventId");
+  const initialGameDate = params.get("gameDate");
+  const initialOpponent = params.get("opponent");
 
   const form = useNewPostForm({
     initialType,
@@ -44,6 +48,9 @@ export default function NewPostPage() {
     initialEditId,
     initialTeamId,
     initialFrom,
+    initialScheduleEventId,
+    initialGameDate,
+    initialOpponent,
   });
 
   const { data: me } = useGetLoggedInUser();

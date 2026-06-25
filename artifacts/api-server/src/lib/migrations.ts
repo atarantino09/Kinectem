@@ -738,6 +738,70 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_claim_token_idx
   WHERE claim_token IS NOT NULL;
 `;
 
+// Team Schedule — new additive tables for practices/games posted to a team.
+// Idempotent: CREATE TYPE is guarded, every table/index uses IF NOT EXISTS.
+const SCHEDULE_TABLES = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'schedule_event_type') THEN
+    CREATE TYPE schedule_event_type AS ENUM ('practice','game','scrimmage','tournament','other');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'schedule_home_away') THEN
+    CREATE TYPE schedule_home_away AS ENUM ('home','away','neutral');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'schedule_event_status') THEN
+    CREATE TYPE schedule_event_status AS ENUM ('scheduled','canceled','postponed','completed');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'schedule_frequency') THEN
+    CREATE TYPE schedule_frequency AS ENUM ('weekly');
+  END IF;
+END$migration$;
+
+CREATE TABLE IF NOT EXISTS schedule_recurrences (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  frequency schedule_frequency NOT NULL DEFAULT 'weekly',
+  days_of_week integer[] NOT NULL,
+  start_time text NOT NULL,
+  end_time text,
+  series_start_date text NOT NULL,
+  series_end_date text NOT NULL,
+  created_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS schedule_recurrences_team_id_idx
+  ON schedule_recurrences (team_id);
+
+CREATE TABLE IF NOT EXISTS schedule_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  event_type schedule_event_type NOT NULL,
+  title text,
+  opponent text,
+  home_away schedule_home_away,
+  location_name text,
+  location_address text,
+  start_at timestamptz NOT NULL,
+  end_at timestamptz,
+  all_day boolean NOT NULL DEFAULT false,
+  notes text,
+  status schedule_event_status NOT NULL DEFAULT 'scheduled',
+  status_reason text,
+  recurrence_id uuid REFERENCES schedule_recurrences(id) ON DELETE SET NULL,
+  game_recap_id uuid REFERENCES articles(id) ON DELETE SET NULL,
+  created_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS schedule_events_team_start_idx
+  ON schedule_events (team_id, start_at);
+CREATE INDEX IF NOT EXISTS schedule_events_organization_id_idx
+  ON schedule_events (organization_id);
+CREATE INDEX IF NOT EXISTS schedule_events_recurrence_id_idx
+  ON schedule_events (recurrence_id);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -846,6 +910,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-22-task-610-org-claim-links",
     sql: TASK_610_ORG_CLAIM_LINKS,
+  },
+  {
+    name: "2026-06-25-team-schedule-tables",
+    sql: SCHEDULE_TABLES,
   },
 ];
 

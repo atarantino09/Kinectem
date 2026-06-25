@@ -33,9 +33,10 @@ import {
   Pencil,
   Camera,
   Trash2,
+  CalendarDays,
 } from "lucide-react";
 
-export type TeamPanel = "posts" | "roster" | "admin";
+export type TeamPanel = "posts" | "roster" | "schedule" | "admin";
 
 interface Team {
   id: string;
@@ -64,6 +65,7 @@ interface TeamHeaderCardProps {
   playerCount: number;
   staffCount: number;
   followPending: boolean;
+  canViewSchedule?: boolean;
   onSetExpanded: (p: TeamPanel) => void;
   onToggleFollow: () => void;
   onEdit: () => void;
@@ -77,6 +79,7 @@ export function TeamHeaderCard({
   playerCount,
   staffCount,
   followPending,
+  canViewSchedule = false,
   onSetExpanded,
   onToggleFollow,
   onEdit,
@@ -343,6 +346,18 @@ export function TeamHeaderCard({
               Roster ({playerCount}
               {staffCount > 0 ? ` · ${staffCount}` : ""})
             </Button>
+            {canViewSchedule && (
+              <Button
+                size="sm"
+                variant={expanded === "schedule" ? "default" : "outline"}
+                className="font-bold rounded-full"
+                onClick={() => onSetExpanded("schedule")}
+                data-testid="btn-toggle-schedule"
+              >
+                <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+                Schedule
+              </Button>
+            )}
             {isAdmin && (
               <Button
                 size="sm"

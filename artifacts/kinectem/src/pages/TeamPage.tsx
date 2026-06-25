@@ -32,6 +32,8 @@ import {
   type RosterInvite,
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
+import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
+import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
 import { useIsLg } from "@/hooks/use-mobile";
 
 export default function TeamPage() {
@@ -107,6 +109,23 @@ export default function TeamPage() {
     allMembersForGate.some(
       (m) => m.userId === me.id && m.status === "active",
     );
+  // Mirrors the server's `canViewTeamSchedule`: the schedule is
+  // members-only, where "members" also includes the parent of an
+  // accepted (status === "active") roster athlete via the `users.parentId`
+  // link. The roster API exposes each minor's linked parents as
+  // `parents[]` with the parent's user id, so a parent qualifies when any
+  // active member lists them. Without this, parents — who are read-only by
+  // design — would be locked out of the Schedule tab client-side even
+  // though the server would serve them.
+  const isParentOfActiveMember =
+    !!me?.id &&
+    allMembersForGate.some(
+      (m) =>
+        m.status === "active" &&
+        Array.isArray(m.parents) &&
+        m.parents.some((p) => p.id === me.id),
+    );
+  const canViewSchedule = isTeamMember || canManage || isParentOfActiveMember;
   // Server-derived authoring capability for this team — single source
   // of truth for both the "Create Game Recap" CTA and the "Waiting
   // for approval" pending-recaps section in TeamPostsSection. Mirrors
@@ -194,6 +213,7 @@ export default function TeamPage() {
           playerCount={players.length}
           staffCount={staff.length}
           followPending={followTeam.isPending || unfollowTeam.isPending}
+          canViewSchedule={canViewSchedule}
           onSetExpanded={setExpanded}
           onToggleFollow={onToggleFollow}
           onEdit={() => setEditOpen(true)}
@@ -220,13 +240,25 @@ export default function TeamPage() {
         )}
 
         {expanded === "posts" && (
-          <TeamPostsSection
-            teamId={teamId}
-            isAdmin={isAdmin}
-            isTeamMember={isTeamMember}
-            canPostRecap={canPostRecap}
-            posts={recentPosts}
-          />
+          <>
+            {canViewSchedule && (
+              <ScheduleUpNext
+                teamId={teamId}
+                onOpenSchedule={() => setExpanded("schedule")}
+              />
+            )}
+            <TeamPostsSection
+              teamId={teamId}
+              isAdmin={isAdmin}
+              isTeamMember={isTeamMember}
+              canPostRecap={canPostRecap}
+              posts={recentPosts}
+            />
+          </>
+        )}
+
+        {expanded === "schedule" && canViewSchedule && (
+          <TeamSchedulePanel teamId={teamId} canManage={canManage} />
         )}
 
         {expanded === "roster" && (

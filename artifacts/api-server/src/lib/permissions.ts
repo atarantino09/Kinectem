@@ -4,6 +4,7 @@ import {
   organizationAdmins,
   rosterEntries,
   teams,
+  users,
   type teams as TeamsT,
 } from "@workspace/db";
 import { and, eq, inArray, or } from "drizzle-orm";
@@ -88,6 +89,33 @@ export async function isTeamMember(userId: string, teamId: string): Promise<bool
         eq(rosterEntries.teamId, teamId),
         eq(rosterEntries.userId, userId),
         eq(rosterEntries.status, "accepted"),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+// Team Schedule — who may VIEW a team's schedule. Members-only by design
+// (the schedule is never part of the public team page): org owners/admins,
+// the team's coaches, accepted rostered athletes, and the parents of those
+// athletes. Coaches and accepted players are both covered by `isTeamMember`
+// (an accepted roster row); org managers by `canManageOrganization`; parents
+// via the `users.parentId` link to an accepted child on this team.
+export async function canViewTeamSchedule(
+  userId: string,
+  team: Team,
+): Promise<boolean> {
+  if (await canManageOrganization(userId, team.organizationId)) return true;
+  if (await isTeamMember(userId, team.id)) return true;
+  const [row] = await db
+    .select({ id: rosterEntries.id })
+    .from(rosterEntries)
+    .innerJoin(users, eq(users.id, rosterEntries.userId))
+    .where(
+      and(
+        eq(rosterEntries.teamId, team.id),
+        eq(rosterEntries.status, "accepted"),
+        eq(users.parentId, userId),
       ),
     )
     .limit(1);

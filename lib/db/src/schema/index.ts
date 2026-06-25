@@ -1252,3 +1252,83 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Team Schedule. Coaches and org admins post practices/games to a team;
+// rostered members + their parents view them read-only. Visibility is
+// members-only (never part of the public team page). Recurring weekly
+// practices are expanded into concrete `scheduleEvents` rows that share one
+// `recurrenceId` — no virtual/computed events.
+// ---------------------------------------------------------------------------
+export const scheduleEventTypeEnum = pgEnum("schedule_event_type", [
+  "practice",
+  "game",
+  "scrimmage",
+  "tournament",
+  "other",
+]);
+export const scheduleHomeAwayEnum = pgEnum("schedule_home_away", [
+  "home",
+  "away",
+  "neutral",
+]);
+export const scheduleEventStatusEnum = pgEnum("schedule_event_status", [
+  "scheduled",
+  "canceled",
+  "postponed",
+  "completed",
+]);
+export const scheduleFrequencyEnum = pgEnum("schedule_frequency", ["weekly"]);
+
+export const scheduleRecurrences = pgTable("schedule_recurrences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  frequency: scheduleFrequencyEnum("frequency").notNull().default("weekly"),
+  // ISO weekday numbers (0=Sun .. 6=Sat) the practice repeats on.
+  daysOfWeek: integer("days_of_week").array().notNull(),
+  // Local wall-clock "HH:MM" (24h). Concrete occurrences carry the resolved
+  // start_at/end_at; these are retained so "edit whole series" can rebuild.
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time"),
+  seriesStartDate: text("series_start_date").notNull(),
+  seriesEndDate: text("series_end_date").notNull(),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  teamIdIdx: index("schedule_recurrences_team_id_idx").on(t.teamId),
+}));
+
+export const scheduleEvents = pgTable("schedule_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  // Denormalized parent org so org-admin permission checks and org-scoped
+  // reads don't need a teams join on every row.
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  eventType: scheduleEventTypeEnum("event_type").notNull(),
+  // Required only for "other"; games surface the opponent instead.
+  title: text("title"),
+  opponent: text("opponent"),
+  homeAway: scheduleHomeAwayEnum("home_away"),
+  locationName: text("location_name"),
+  locationAddress: text("location_address"),
+  startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+  endAt: timestamp("end_at", { withTimezone: true }),
+  allDay: boolean("all_day").notNull().default(false),
+  notes: text("notes"),
+  status: scheduleEventStatusEnum("status").notNull().default("scheduled"),
+  // Short coach/admin reason shown to families when canceled/postponed.
+  statusReason: text("status_reason"),
+  // Set when generated from a recurring weekly practice; all occurrences in
+  // one series share the same recurrenceId.
+  recurrenceId: uuid("recurrence_id").references((): AnyPgColumn => scheduleRecurrences.id, { onDelete: "set null" }),
+  // Set when a coach publishes a game recap from this event; flips status to
+  // completed and links back to the article.
+  gameRecapId: uuid("game_recap_id").references((): AnyPgColumn => articles.id, { onDelete: "set null" }),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  teamStartIdx: index("schedule_events_team_start_idx").on(t.teamId, t.startAt),
+  organizationIdIdx: index("schedule_events_organization_id_idx").on(t.organizationId),
+  recurrenceIdIdx: index("schedule_events_recurrence_id_idx").on(t.recurrenceId),
+}));

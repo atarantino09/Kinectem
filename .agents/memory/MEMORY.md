@@ -13,3 +13,4 @@
 - [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.
 - [Stripe org billing](stripe-org-billing.md) — card-on-file now, first charge Oct 1 via Checkout trial_end; connector has NO webhook secret so reconcile-on-return is source of truth; Sept-15 reminder is a standalone non-idempotent script.
 - [Per-tier team cap enforcement](team-cap-enforcement.md) — caps live in plan-limits.ts; enforce INSIDE insert tx behind pg_advisory_xact_lock(orgId) + recount, not a pre-check (TOCTOU).
+- [Team Schedule visibility parity](team-schedule-visibility.md) — schedule is members-only incl. parents of active athletes; client gates must mirror server canViewTeamSchedule or parents get locked out.

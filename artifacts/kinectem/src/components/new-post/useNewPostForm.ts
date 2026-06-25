@@ -80,6 +80,12 @@ interface UseNewPostFormParams {
   initialEditId: string | null;
   initialTeamId: string | null;
   initialFrom?: string | null;
+  // Team Schedule "Write game recap" deep-link. When a coach launches the
+  // composer from a past game, these prefill the recap and, on publish,
+  // link it back to the schedule event (flips it to "completed").
+  initialGameDate?: string | null;
+  initialOpponent?: string | null;
+  initialScheduleEventId?: string | null;
 }
 
 export function useNewPostForm({
@@ -88,6 +94,9 @@ export function useNewPostForm({
   initialEditId,
   initialTeamId,
   initialFrom = null,
+  initialGameDate = null,
+  initialOpponent = null,
+  initialScheduleEventId = null,
 }: UseNewPostFormParams) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -210,7 +219,11 @@ export function useNewPostForm({
   // so coaches who don't touch the picker still publish a recap
   // dated today (the backend uses this date to drive the auto-tag
   // fan-out, gated by the `tagRoster` checkbox below).
-  const [gameDate, setGameDate] = useState<string>(todayLocalIso());
+  const [gameDate, setGameDate] = useState<string>(
+    initialGameDate && initialGameDate.length >= 10
+      ? initialGameDate.slice(0, 10)
+      : todayLocalIso(),
+  );
   // Defaults to true so a recap published without touching the form
   // still tags every rostered player. Unchecking sends `gameDate:
   // null` and skips the fan-out.
@@ -679,8 +692,30 @@ export function useNewPostForm({
         : {}),
       ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
       ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
+      ...(!isShort && initialOpponent && initialOpponent.trim()
+        ? ({ opponentName: initialOpponent.trim() } as object)
+        : {}),
       ...(status ? ({ status } as object) : {}),
     };
+  };
+
+  // Team Schedule deep-link: attach a freshly-published recap to the
+  // originating game event (flips it to "completed"). Non-blocking — the
+  // recap is already live even if the link round-trip fails.
+  const linkScheduleRecap = async (recapId: string) => {
+    if (!initialScheduleEventId || !initialTeamId) return;
+    try {
+      await customFetch(
+        `/api/v1/teams/${initialTeamId}/schedule/${initialScheduleEventId}/link-recap`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recapId }),
+        },
+      );
+    } catch {
+      // Intentionally swallowed — see note above.
+    }
   };
 
   const patchAt = async (id: string) =>
@@ -839,6 +874,7 @@ export function useNewPostForm({
           authorId: loadedAuthorId ?? me?.id ?? null,
           teamId: loadedTeamId ?? initialTeamId ?? null,
         });
+        await linkScheduleRecap(draftId);
         toast({ title: "Published!" });
         setBaseline(sentSnapshot);
         setLocation(
@@ -896,6 +932,7 @@ export function useNewPostForm({
               ? result.context.id
               : null,
         });
+        await linkScheduleRecap(result.id);
         // Task #447 — server marks non-admin recap submissions as
         // `pending_approval` and echoes `requiresApproval: true` on
         // the create response. In that case, replace the "Posted!"

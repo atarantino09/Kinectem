@@ -1,0 +1,47 @@
+Add a new "Team Schedule" feature to my existing Kinectem app. This is an ADD-ON to what already exists — reuse my current database, authentication, user/role system, Team model, and Roster model. Do NOT create a new auth system or a parallel membership system. Match my existing in-app design language (blue primary action buttons, card-based layout) — not the marketing purple.
+
+GOAL: Coaches and org admins can post practices and games to a team's page. Team members (athletes and parents) can view the schedule. Games connect back into the existing game recap flow.
+
+Build the MVP below first, in the order listed, and PAUSE for my review before doing the Phase 2 section at the bottom. Don't build everything at once.
+
+WHERE IT LIVES:
+- A new "Schedule" tab on the existing Team Page, next to the team's game recaps and roster.
+- Default view on that tab is an agenda/list of upcoming events (mobile-friendly). Add a toggle for a month calendar view.
+- Add a small "Up Next" card on the main team page showing the next 1–3 events, linking into the Schedule tab.
+
+DATA MODEL:
+Create a table `schedule_events` with: id (UUID PK), team_id (FK to teams, required), org_id (FK to orgs, denormalized), event_type (enum: practice, game, scrimmage, tournament, other), title (string, optional — required only for "other"), opponent (string, nullable, games/scrimmages only), home_away (enum: home, away, neutral, nullable), location_name (string, nullable), location_address (string, nullable), start_at (timestamp with timezone, required), end_at (timestamp with timezone, nullable), all_day (boolean, default false), notes (text, nullable), status (enum: scheduled, canceled, postponed, completed — default scheduled), status_reason (string, nullable), recurrence_id (FK to schedule_recurrences, nullable), game_recap_id (FK to my existing game_recaps table, nullable), score_team (int, nullable), score_opponent (int, nullable), created_by (FK to users), created_at, updated_at.
+
+Create a table `schedule_recurrences` for repeating practices with: id (UUID PK), team_id (FK), frequency (enum, weekly only for now), days_of_week (which weekdays), start_time, end_time, series_start_date, series_end_date, created_by.
+
+RECURRENCE — keep it simple: when a coach creates a recurring weekly practice, GENERATE concrete schedule_events rows for each occurrence in the date range, all sharing one recurrence_id. Editing one occurrence edits that single row. "Edit whole series" updates all future rows in the series. Do not use virtual/computed events.
+
+PERMISSIONS (enforce server-side, reuse my existing roles):
+- Org Admin: create/edit/delete/cancel events on ANY team in their org.
+- Coach: create/edit/delete/cancel events only on teams they are assigned to.
+- Athlete and Parent: view only.
+Never trust the client to decide who can edit — check on the server.
+
+VISIBILITY (important child-safety rule):
+The schedule is visible ONLY to authenticated members of that team (org admins, that team's coaches, and rostered athletes + their parents). It is NOT part of the public team page. Do NOT expose event times or addresses to logged-out/public visitors, and never put address data in a URL parameter.
+
+CREATE/EDIT EVENT FORM (coach + org admin): one "Add Event" form whose fields adapt to event_type:
+- Practice: date, start time, end time, location name, address, notes, optional "repeat weekly" (pick weekdays + end date).
+- Game / Scrimmage: date, start time, opponent, home/away, location name, address, notes.
+- Tournament / Other: title, date(s), all-day toggle, location, notes.
+Validation: start_at required; if end_at is set it must be after start_at.
+
+VIEWS:
+- Agenda/list (default): upcoming events grouped by date as cards; past events collapsible below.
+- Month calendar: standard month grid, events as colored chips colored by event_type; tapping a day shows that day's events.
+- Event detail: shows all fields and status; coaches/admins see Edit and Cancel buttons.
+
+CANCEL / POSTPONE: coach or admin can set an event to canceled or postponed with a short reason. Canceled events stay visible but clearly marked (struck-through/badged) so families see the change instead of it silently disappearing.
+
+GAME → GAME RECAP INTEGRATION (this is core, include it in the MVP):
+When a "game" event's start_at is in the past and its status is still "scheduled," show the coach a "Write game recap" prompt on that event. Clicking it opens my EXISTING game recap editor, pre-filled with opponent, game date, home/away, and score if entered. When the recap is published, set the event's status to "completed" and store its game_recap_id on the event. Do not change my existing recap behavior that auto-tags every player on the full roster.
+
+MVP ACCEPTANCE TEST (make sure this works end to end):
+A coach logs in, opens their team's Schedule tab, adds a weekly Tue/Thu practice for the season plus three games with opponents — all appear in agenda and calendar views. A rostered parent logs in and sees the same schedule read-only. The coach cancels one practice with a reason and the parent sees it marked canceled. A past game shows the coach a "Write game recap" prompt that opens the existing recap editor pre-filled.
+
+After the MVP works, STOP and let me review. Then we'll do Phase 2: RSVP/availability per event, automated email reminders 24h before events (routing to the parent email for under-13 athletes), per-team iCal subscribe feed, bulk/CSV season import, and optional final-score capture.
