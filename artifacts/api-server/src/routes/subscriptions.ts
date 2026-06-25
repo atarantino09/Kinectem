@@ -13,6 +13,10 @@ import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAuth, requireAdmin } from "../lib/auth";
 import { apiError } from "../lib/spec-helpers";
 import { canManageOrganization } from "../lib/permissions";
+import {
+  createCardOnFileCheckout,
+  readCheckoutSession,
+} from "../lib/stripe-billing";
 
 const router: IRouter = Router();
 
@@ -94,6 +98,14 @@ const promoValidateLimiter = rateLimit({
   message: "Too many promo code attempts. Please wait a moment and try again.",
 });
 
+const billingCheckoutLimiter = rateLimit({
+  name: "billing-checkout",
+  windowMs: ONE_MINUTE,
+  max: 10,
+  keys: (req) => [ipKey(req)],
+  message: "Too many checkout attempts. Please wait a moment and try again.",
+});
+
 // Resolve a redeemable promo code by its (case-insensitive) code. Returns the
 // row only when it is active, not expired, and under its redemption cap.
 async function findRedeemablePromo(rawCode: string) {
@@ -166,6 +178,7 @@ function serializeSubscription(
     plan: sub.plan,
     status: sub.status,
     promo,
+    hasCardOnFile: Boolean(sub.stripeSubscriptionId),
     billingStartsAt: sub.billingStartsAt?.toISOString() ?? null,
     createdAt: sub.createdAt.toISOString(),
     updatedAt: sub.updatedAt.toISOString(),
@@ -340,6 +353,159 @@ router.put(
         }
       : null;
 
+    res.json({ subscription: serializeSubscription(sub, promo) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// POST /organizations/:orgId/billing/checkout-session — start the "add a card
+// on file" flow. Returns a Stripe Checkout URL. The card is saved now and the
+// first charge runs automatically on BILLING_STARTS_AT (Oct 1); nothing is
+// charged today. The org must have chosen a plan first (PUT subscription).
+// ---------------------------------------------------------------------------
+router.post(
+  "/organizations/:orgId/billing/checkout-session",
+  requireAuth,
+  billingCheckoutLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) {
+      apiError(res, 401, "Not authenticated", { code: "UNAUTHENTICATED" });
+      return;
+    }
+    const orgId = req.params.orgId;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      apiError(res, 403, "You don't manage this organization.", {
+        code: "FORBIDDEN",
+      });
+      return;
+    }
+    const [sub] = await db
+      .select()
+      .from(orgSubscriptions)
+      .where(eq(orgSubscriptions.organizationId, orgId))
+      .limit(1);
+    if (!sub) {
+      apiError(res, 400, "Choose a plan before adding a card.", {
+        code: "NO_PLAN",
+      });
+      return;
+    }
+
+    let promo:
+      | { code: string; discountType: "percent" | "amount"; discountValue: number }
+      | null = null;
+    if (sub.promoCodeId) {
+      const [row] = await db
+        .select()
+        .from(promoCodes)
+        .where(eq(promoCodes.id, sub.promoCodeId))
+        .limit(1);
+      if (row) {
+        promo = {
+          code: row.code,
+          discountType: row.discountType,
+          discountValue: row.discountValue,
+        };
+      }
+    }
+
+    const result = await createCardOnFileCheckout({
+      orgId,
+      plan: sub.plan,
+      customerEmail: me.email ?? null,
+      existingCustomerId: sub.stripeCustomerId,
+      promo,
+    });
+    if ("error" in result) {
+      const msg =
+        result.error === "STRIPE_NOT_CONFIGURED"
+          ? "Card payments aren't available right now. Please try again later."
+          : "Couldn't start checkout. Please try again.";
+      apiError(res, 503, msg, { code: result.error });
+      return;
+    }
+    res.json({ url: result.url });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// POST /organizations/:orgId/billing/reconcile — finalize after Checkout. The
+// success redirect carries the session id; we read it back from Stripe and
+// persist the customer + subscription ids and status onto the org.
+// ---------------------------------------------------------------------------
+const ReconcileBody = z.object({
+  sessionId: z.string().trim().min(1).max(255),
+});
+
+router.post(
+  "/organizations/:orgId/billing/reconcile",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) {
+      apiError(res, 401, "Not authenticated", { code: "UNAUTHENTICATED" });
+      return;
+    }
+    const orgId = req.params.orgId;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      apiError(res, 403, "You don't manage this organization.", {
+        code: "FORBIDDEN",
+      });
+      return;
+    }
+    const parsed = ReconcileBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, "Missing checkout session.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const info = await readCheckoutSession(parsed.data.sessionId);
+    if ("error" in info) {
+      apiError(res, 503, "Couldn't verify checkout. Please try again.", {
+        code: info.error,
+      });
+      return;
+    }
+    // Guard: the session must belong to this org. Fail closed — a session
+    // with no orgId stamped on it cannot be trusted to belong here.
+    if (info.orgId !== orgId) {
+      apiError(res, 403, "This checkout doesn't belong to this organization.", {
+        code: "FORBIDDEN",
+      });
+      return;
+    }
+
+    const set: Partial<typeof orgSubscriptions.$inferInsert> = {
+      status: info.status,
+      updatedAt: new Date(),
+    };
+    if (info.customerId) set.stripeCustomerId = info.customerId;
+    if (info.subscriptionId) set.stripeSubscriptionId = info.subscriptionId;
+
+    const [sub] = await db
+      .update(orgSubscriptions)
+      .set(set)
+      .where(eq(orgSubscriptions.organizationId, orgId))
+      .returning();
+
+    let promo: { code: string; discountType: string; discountValue: number } | null =
+      null;
+    if (sub?.promoCodeId) {
+      const [row] = await db
+        .select()
+        .from(promoCodes)
+        .where(eq(promoCodes.id, sub.promoCodeId))
+        .limit(1);
+      if (row) {
+        promo = {
+          code: row.code,
+          discountType: row.discountType,
+          discountValue: row.discountValue,
+        };
+      }
+    }
     res.json({ subscription: serializeSubscription(sub, promo) });
   }),
 );

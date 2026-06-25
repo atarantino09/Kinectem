@@ -6,6 +6,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import docsRouter from "./routes/docs";
 import foundingAdminPageRouter from "./routes/founding-admin-page";
+import { stripeWebhookHandler } from "./routes/stripe-webhook";
 import { logger } from "./lib/logger";
 import { loadSession } from "./lib/auth";
 import { corsOptions, csrfGuard } from "./middlewares/security";
@@ -41,6 +42,14 @@ app.use(
   }),
 );
 app.use(cors(corsOptions));
+// Stripe webhook needs the raw request body for signature verification, so it
+// MUST be registered before express.json(). Optional: only does work when
+// STRIPE_WEBHOOK_SECRET is set (see routes/stripe-webhook.ts).
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookHandler,
+);
 // S7 — global JSON limit kept tight. Binary asset uploads use a dedicated
 // express.raw() parser (10 MB) on PUT /assets/:assetId/data, so this does not
 // affect uploads; all JSON request bodies are text-only.

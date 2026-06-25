@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,11 @@ import {
 } from "lucide-react";
 
 type SubscriptionResponse = {
-  subscription: { plan: PlanTier; promo: AppliedPromo | null } | null;
+  subscription: {
+    plan: PlanTier;
+    promo: AppliedPromo | null;
+    hasCardOnFile?: boolean;
+  } | null;
   plans: Plan[];
   billingStartsAt: string;
 };
@@ -36,6 +40,7 @@ export default function OrgSubscribePage() {
   const { orgId } = useParams<{ orgId: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<SubscriptionResponse>({
     queryKey: ["org-subscription", orgId],
@@ -55,6 +60,8 @@ export default function OrgSubscribePage() {
   const [checkingPromo, setCheckingPromo] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [startingCheckout, setStartingCheckout] = useState(false);
+  const hasCardOnFile = Boolean(data?.subscription?.hasCardOnFile);
 
   // Seed the selected plan + applied promo from the org's existing
   // subscription (once), so reopening this page doesn't silently reset a
@@ -71,6 +78,52 @@ export default function OrgSubscribePage() {
       }
     }
   }, [data]);
+
+  // Handle the return from Stripe Checkout. Success carries a session_id we
+  // exchange (server-side) to persist the card-on-file; cancel just informs.
+  const reconciledRef = useRef(false);
+  useEffect(() => {
+    if (reconciledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get("billing");
+    if (!billing) return;
+    reconciledRef.current = true;
+    const sessionId = params.get("session_id");
+    const cleanUrl = () =>
+      window.history.replaceState({}, "", window.location.pathname);
+    if (billing === "success" && sessionId) {
+      customFetch(`/api/v1/organizations/${orgId}/billing/reconcile`, {
+        method: "POST",
+        body: JSON.stringify({ sessionId }),
+      })
+        .then(() => {
+          toast({
+            title: "Card saved! 🎉",
+            description: `You're all set — billing begins ${BILLING_DATE_LABEL}. No charge until then.`,
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["org-subscription", orgId],
+          });
+        })
+        .catch(() => {
+          toast({
+            title: "We couldn't confirm your card",
+            description:
+              "Your payment may not have gone through. Please try adding a card again.",
+            variant: "destructive",
+          });
+        })
+        .finally(cleanUrl);
+    } else if (billing === "canceled") {
+      toast({
+        title: "Checkout canceled",
+        description:
+          "No card was added. You can do it any time before billing starts.",
+      });
+      cleanUrl();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyPromoCode = async () => {
     const code = promoInput.trim();
@@ -101,16 +154,43 @@ export default function OrgSubscribePage() {
     setPromoError(null);
   };
 
+  // Persist the chosen plan + promo. Shared by "Continue" and "Add a card".
+  const savePlan = async () => {
+    await customFetch(`/api/v1/organizations/${orgId}/subscription`, {
+      method: "PUT",
+      body: JSON.stringify({
+        plan: selected,
+        promoCode: promo?.code ?? null,
+      }),
+    });
+  };
+
+  // Save the plan, then send the admin to Stripe Checkout to add a card on
+  // file. The card is saved now; the first charge runs automatically on
+  // BILLING_DATE_LABEL. Nothing is charged today.
+  const addCardOnFile = async () => {
+    setStartingCheckout(true);
+    try {
+      await savePlan();
+      const res = await customFetch<{ url: string }>(
+        `/api/v1/organizations/${orgId}/billing/checkout-session`,
+        { method: "POST" },
+      );
+      window.location.href = res.url;
+    } catch {
+      toast({
+        title: "Couldn't start checkout",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
+      setStartingCheckout(false);
+    }
+  };
+
   const continueToOrg = async () => {
     setSaving(true);
     try {
-      await customFetch(`/api/v1/organizations/${orgId}/subscription`, {
-        method: "PUT",
-        body: JSON.stringify({
-          plan: selected,
-          promoCode: promo?.code ?? null,
-        }),
-      });
+      await savePlan();
       toast({
         title: "You're all set!",
         description: `Your ${selected} plan is saved. Enjoy Kinectem free until ${BILLING_DATE_LABEL}.`,
@@ -288,12 +368,18 @@ export default function OrgSubscribePage() {
       <div className="flex flex-col sm:flex-row items-center justify-end gap-3">
         <Button
           variant="outline"
-          disabled
+          onClick={addCardOnFile}
+          disabled={startingCheckout || saving}
           className="w-full sm:w-auto"
           data-testid="btn-pay-card"
-          title="Card payments are coming soon"
+          title="Save a card now — no charge until billing starts"
         >
-          <CreditCard className="w-4 h-4 mr-2" /> Pay with card (coming soon)
+          {startingCheckout ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <CreditCard className="w-4 h-4 mr-2" />
+          )}
+          {hasCardOnFile ? "Update card on file" : "Add a card on file"}
         </Button>
         <Button
           onClick={continueToOrg}
@@ -307,9 +393,16 @@ export default function OrgSubscribePage() {
           Continue to your organization
         </Button>
       </div>
-      <p className="text-center text-xs text-muted-foreground">
-        No charge today. Annual billing begins {BILLING_DATE_LABEL}.
-      </p>
+      {hasCardOnFile ? (
+        <p className="text-center text-xs font-medium text-emerald-600 flex items-center justify-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Card on file — billing begins{" "}
+          {BILLING_DATE_LABEL}. No charge until then.
+        </p>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">
+          No charge today. Annual billing begins {BILLING_DATE_LABEL}.
+        </p>
+      )}
     </div>
   );
 }

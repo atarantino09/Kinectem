@@ -11,4 +11,5 @@
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.
 - [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769 noise; rateLimit needs `name`.
 - [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.
+- [Stripe org billing](stripe-org-billing.md) — card-on-file now, first charge Oct 1 via Checkout trial_end; connector has NO webhook secret so reconcile-on-return is source of truth; Sept-15 reminder is a standalone non-idempotent script.
 - [Per-tier team cap enforcement](team-cap-enforcement.md) — caps live in plan-limits.ts; enforce INSIDE insert tx behind pg_advisory_xact_lock(orgId) + recount, not a pre-check (TOCTOU).
