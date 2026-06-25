@@ -27,13 +27,16 @@ import {
   type UpdateEventInput,
 } from "./scheduleApi";
 
-const EVENT_TYPES: EventType[] = [
-  "practice",
-  "game",
-  "scrimmage",
-  "tournament",
-  "other",
+// Top-level choice shown to coaches. "Game" is a group that reveals a
+// secondary kind selector (scrimmage / game / tournament); "Event" maps to
+// the catch-all "other" type.
+const PRIMARY_TYPES: { value: EventType; label: string }[] = [
+  { value: "practice", label: "Practice" },
+  { value: "game", label: "Game" },
+  { value: "other", label: "Event" },
 ];
+
+const GAME_TYPES: EventType[] = ["scrimmage", "game", "tournament"];
 
 const HOME_AWAY: { value: HomeAway; label: string }[] = [
   { value: "home", label: "Home" },
@@ -157,6 +160,7 @@ export function EventFormDialog({
   }, [open, editEvent]);
 
   const isGameLike = eventType === "game" || eventType === "scrimmage";
+  const isGameGroup = GAME_TYPES.includes(eventType);
   const canRepeat = !isEdit && eventType === "practice";
 
   const toggleDay = (d: number) => {
@@ -309,20 +313,53 @@ export function EventFormDialog({
                 Type
               </Label>
               <div className="flex flex-wrap gap-2 mt-2">
-                {EVENT_TYPES.map((t) => (
-                  <Button
-                    key={t}
-                    type="button"
-                    size="sm"
-                    variant={eventType === t ? "default" : "outline"}
-                    className="font-bold rounded-full"
-                    onClick={() => setEventType(t)}
-                    data-testid={`btn-event-type-${t}`}
-                  >
-                    {EVENT_TYPE_LABEL[t]}
-                  </Button>
-                ))}
+                {PRIMARY_TYPES.map((t) => {
+                  const active =
+                    t.value === "game" ? isGameGroup : eventType === t.value;
+                  return (
+                    <Button
+                      key={t.value}
+                      type="button"
+                      size="sm"
+                      variant={active ? "default" : "outline"}
+                      className="font-bold rounded-full"
+                      onClick={() => {
+                        if (t.value === "game") {
+                          if (!isGameGroup) setEventType("game");
+                        } else {
+                          setEventType(t.value);
+                        }
+                      }}
+                      data-testid={`btn-event-type-${t.value}`}
+                    >
+                      {t.label}
+                    </Button>
+                  );
+                })}
               </div>
+
+              {isGameGroup && (
+                <div className="mt-3">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Game type
+                  </Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {GAME_TYPES.map((t) => (
+                      <Button
+                        key={t}
+                        type="button"
+                        size="sm"
+                        variant={eventType === t ? "default" : "outline"}
+                        className="font-bold rounded-full"
+                        onClick={() => setEventType(t)}
+                        data-testid={`btn-game-type-${t}`}
+                      >
+                        {EVENT_TYPE_LABEL[t]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
