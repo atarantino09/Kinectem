@@ -9,7 +9,7 @@ import {
   users,
   type teams as TeamsT,
 } from "@workspace/db";
-import { and, eq, gte, inArray, or } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, or } from "drizzle-orm";
 
 type Team = typeof TeamsT.$inferSelect;
 
@@ -20,12 +20,30 @@ export function isSoloTeam(team: Team): boolean {
   return team.organizationId == null;
 }
 
-// Task #628 — is at least one tournament this solo team participates in still
-// inside its active window (today <= end_date)? Recap authoring on a solo team
-// is only permitted while this is true; after the last tournament ends the
-// coach must create / get adopted by a real org to keep posting.
+// Task #628 — the free recap window runs for one week starting at a tournament's
+// START date. Exposed so the team page can show a matching note + countdown.
+export const RECAP_FREE_DAYS = 7;
+
+// The (inclusive) last calendar date a solo team may freely author recaps for a
+// tournament that started on `startDate` (YYYY-MM-DD in / out).
+export function recapFreeUntil(startDate: string): string {
+  const d = new Date(`${startDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + RECAP_FREE_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
+// Task #628 — is at least one tournament this solo team participates in inside
+// its free recap window: the tournament has STARTED and it's been <= one week,
+// i.e. `start_date <= today <= start_date + RECAP_FREE_DAYS`. Recap authoring on
+// a solo team is only permitted while this is true; before the tournament starts
+// there are no results to write up, and after the week closes the coach must
+// create / get adopted by a real org to keep posting. The upper bound rewrites
+// to `start >= today - 7` so both bounds stay simple indexed date comparisons.
 export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> {
   const today = new Date().toISOString().slice(0, 10);
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - RECAP_FREE_DAYS);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
   const [row] = await db
     .select({ id: tournaments.id })
     .from(tournamentParticipants)
@@ -36,7 +54,8 @@ export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> 
     .where(
       and(
         eq(tournamentParticipants.teamId, teamId),
-        gte(tournaments.endDate, today),
+        lte(tournaments.startDate, today),
+        gte(tournaments.startDate, cutoffStr),
       ),
     )
     .limit(1);

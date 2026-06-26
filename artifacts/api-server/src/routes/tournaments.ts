@@ -26,7 +26,7 @@ import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { apiError } from "../lib/spec-helpers";
-import { canManageOrganization } from "../lib/permissions";
+import { canManageOrganization, recapFreeUntil } from "../lib/permissions";
 
 const router: IRouter = Router();
 
@@ -844,6 +844,7 @@ router.get(
         tournamentName: string;
         startDate: string;
         endDate: string;
+        recapFreeUntil: string;
         matches: OutMatch[];
       }
     >();
@@ -862,6 +863,7 @@ router.get(
           tournamentName: t.name,
           startDate: t.startDate,
           endDate: t.endDate,
+          recapFreeUntil: recapFreeUntil(t.startDate),
           matches: [],
         };
         groups.set(m.tournamentId, g);
