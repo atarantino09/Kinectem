@@ -11,6 +11,7 @@ import {
   List,
   Lock,
   MapPin,
+  Upload,
 } from "lucide-react";
 import {
   fetchSchedule,
@@ -26,6 +27,9 @@ import {
 } from "./scheduleApi";
 import { EventFormDialog } from "./EventFormDialog";
 import { EventDetailDialog } from "./EventDetailDialog";
+import { CalendarSubscribe } from "./CalendarSubscribe";
+import { CsvImportDialog } from "./CsvImportDialog";
+import { SeasonResults } from "./SeasonResults";
 
 interface TeamSchedulePanelProps {
   teamId: string;
@@ -208,6 +212,7 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
   const [detail, setDetail] = useState<ScheduleEvent | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: scheduleQueryKey(teamId),
@@ -273,6 +278,18 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
           {canManage && (
             <Button
               size="sm"
+              variant="outline"
+              className="font-bold rounded-full"
+              onClick={() => setImportOpen(true)}
+              data-testid="btn-import-csv"
+            >
+              <Upload className="w-3.5 h-3.5 mr-1.5" />
+              Import CSV
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              size="sm"
               variant="brand"
               onClick={openCreate}
               data-testid="btn-add-event"
@@ -294,6 +311,8 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
           this schedule. It's never shown to other team followers or the public.
         </span>
       </div>
+
+      <CalendarSubscribe teamId={teamId} />
 
       {isLoading ? (
         <Card className="rounded-xl border border-border">
@@ -385,12 +404,21 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
         </div>
       )}
 
+      <SeasonResults events={events} />
+
       <EventFormDialog
         teamId={teamId}
         open={formOpen}
         onOpenChange={setFormOpen}
         editEvent={editEvent}
       />
+      {canManage && (
+        <CsvImportDialog
+          teamId={teamId}
+          open={importOpen}
+          onOpenChange={setImportOpen}
+        />
+      )}
       <EventDetailDialog
         teamId={teamId}
         event={detail}

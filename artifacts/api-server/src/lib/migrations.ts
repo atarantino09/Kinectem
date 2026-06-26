@@ -748,6 +748,32 @@ ALTER TABLE schedule_events
   ADD COLUMN IF NOT EXISTS recap_reminder_sent_at timestamptz;
 `;
 
+// Phase 2 — stamp for the durable ~24h-before reminder email sweep so it
+// never double-sends. Idempotent.
+const SCHEDULE_REMINDER_24H = `
+ALTER TABLE schedule_events
+  ADD COLUMN IF NOT EXISTS reminder_24h_sent_at timestamptz;
+`;
+
+// Phase 2 — unguessable per-team capability token for the read-only iCal
+// (.ics) subscription feed. Unique so a token resolves to exactly one team.
+// Idempotent.
+const SCHEDULE_FEED_TOKEN = `
+ALTER TABLE teams
+  ADD COLUMN IF NOT EXISTS schedule_feed_token text;
+CREATE UNIQUE INDEX IF NOT EXISTS teams_schedule_feed_token_key
+  ON teams (schedule_feed_token);
+`;
+
+// Phase 2 — final-score capture for completed game/scrimmage events, surfaced
+// in the members-only Season Results list. Nullable: a game can be completed
+// (recap linked) without a recorded score. Idempotent.
+const SCHEDULE_EVENT_SCORE = `
+ALTER TABLE schedule_events
+  ADD COLUMN IF NOT EXISTS score_team integer,
+  ADD COLUMN IF NOT EXISTS score_opponent integer;
+`;
+
 // Combined season/tournament recaps (woven from many game recaps) carry
 // this marker so the post card can render a distinct pill. NULL = normal
 // single-game recap; "combined" = multi-game recap. Idempotent.
@@ -1002,6 +1028,18 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-26-announcements",
     sql: ANNOUNCEMENTS,
+  },
+  {
+    name: "2026-06-26-team-schedule-reminder-24h",
+    sql: SCHEDULE_REMINDER_24H,
+  },
+  {
+    name: "2026-06-26-team-schedule-feed-token",
+    sql: SCHEDULE_FEED_TOKEN,
+  },
+  {
+    name: "2026-06-26-team-schedule-event-score",
+    sql: SCHEDULE_EVENT_SCORE,
   },
 ];
 

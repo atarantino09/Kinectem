@@ -4,6 +4,7 @@ import { seedIfEmpty } from "./lib/seed";
 import { runStartupMigrations } from "./lib/migrations";
 import { startConsentScheduler } from "./lib/consent-scheduler";
 import { startGameRecapReminderScheduler } from "./lib/game-recap-reminder-scheduler";
+import { startScheduleReminderScheduler } from "./lib/schedule-reminder-scheduler";
 import { auditSecretStrength } from "./lib/secret-audit";
 
 const rawPort = process.env["PORT"];
@@ -55,6 +56,16 @@ async function start() {
     logger.error(
       { err },
       "Failed to start game-recap reminder scheduler (non-fatal)",
+    );
+  }
+
+  // Phase 2 — durable "event starts in ~24h" reminder sweep.
+  try {
+    startScheduleReminderScheduler();
+  } catch (err) {
+    logger.error(
+      { err },
+      "Failed to start schedule reminder scheduler (non-fatal)",
     );
   }
 

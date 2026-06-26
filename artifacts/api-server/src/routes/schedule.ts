@@ -9,12 +9,16 @@ import {
   scheduleRecurrences,
   scheduleEventRsvps,
 } from "@workspace/db";
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError, notFound, paginate } from "../lib/spec-helpers";
 import { canManageTeam, canViewTeamSchedule } from "../lib/permissions";
+import { notifyTeamOfScheduleChange } from "../lib/schedule-notifications";
+import { buildIcsCalendar, type IcsEvent } from "../lib/ics";
+import { appBaseUrl } from "../lib/email";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
@@ -63,6 +67,8 @@ function toScheduleEvent(
     statusReason: e.statusReason,
     recurrenceId: e.recurrenceId,
     gameRecapId: e.gameRecapId,
+    scoreTeam: e.scoreTeam,
+    scoreOpponent: e.scoreOpponent,
     createdById: e.createdById,
     createdAt: iso(e.createdAt),
     updatedAt: iso(e.updatedAt),
@@ -523,6 +529,24 @@ router.post(
       )
       .returning();
     if (!updated) return notFound(res);
+
+    // Phase 2 — fire an immediate change notice to the team (COPPA-routed).
+    // Fan-out is best-effort and must not fail the request or block the
+    // response, so it runs detached with its own error logging.
+    void notifyTeamOfScheduleChange({
+      teamId: team.id,
+      teamName: team.name,
+      eventType: updated.eventType,
+      opponent: updated.opponent,
+      locationName: updated.locationName,
+      startAt: new Date(updated.startAt),
+      allDay: updated.allDay,
+      status: parsed.data.status,
+      reason: parsed.data.reason ?? null,
+    }).catch((err) =>
+      req.log.error({ err, eventId: updated.id }, "schedule change notice failed"),
+    );
+
     res.json(toScheduleEvent(updated, { canManage: true }));
   }),
 );
@@ -886,6 +910,496 @@ router.put(
       note: row.note,
       respondedAt: row.respondedAt.toISOString(),
     });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// PUT /teams/:teamId/schedule/:eventId/score — record (or clear) the final
+// score on a game-type event. Recording a score on a past, non-canceled event
+// also flips it to "completed" so it surfaces in Season Results. Coach/admin.
+// ---------------------------------------------------------------------------
+const scoreZ = z
+  .object({
+    scoreTeam: z.number().int().min(0).max(999).nullable(),
+    scoreOpponent: z.number().int().min(0).max(999).nullable(),
+  })
+  .refine(
+    (v) =>
+      (v.scoreTeam === null) === (v.scoreOpponent === null),
+    { message: "Provide both scores or clear both" },
+  );
+
+router.put(
+  "/teams/:teamId/schedule/:eventId/score",
+  scheduleWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const team = await loadTeam(req.params.teamId);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Team coaches or org admins only");
+    }
+    const parsed = scoreZ.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
+    }
+    const [event] = await db
+      .select()
+      .from(scheduleEvents)
+      .where(
+        and(
+          eq(scheduleEvents.id, req.params.eventId),
+          eq(scheduleEvents.teamId, team.id),
+        ),
+      )
+      .limit(1);
+    if (!event) return notFound(res);
+    if (
+      event.eventType !== "game" &&
+      event.eventType !== "scrimmage" &&
+      event.eventType !== "tournament"
+    ) {
+      return apiError(res, 400, "Scores apply to games, scrimmages, and tournaments only");
+    }
+
+    // Final scores belong to games that have actually happened: already marked
+    // completed, or still "scheduled" but past their start time. Future,
+    // canceled, and postponed events are not scoreable.
+    const eligible =
+      event.status === "completed" ||
+      (event.status === "scheduled" && new Date(event.startAt) < new Date());
+    if (!eligible) {
+      return apiError(
+        res,
+        400,
+        "Scores can only be recorded once a game has started",
+        { code: "EVENT_NOT_SCOREABLE" },
+      );
+    }
+
+    const hasScore = parsed.data.scoreTeam !== null;
+    const patch: Partial<typeof scheduleEvents.$inferInsert> = {
+      scoreTeam: parsed.data.scoreTeam,
+      scoreOpponent: parsed.data.scoreOpponent,
+      updatedAt: new Date(),
+    };
+    // Recording a score on a finished, still-"scheduled" game marks it done so
+    // it drops into Season Results; never override a canceled/postponed status.
+    if (hasScore && event.status === "scheduled") {
+      patch.status = "completed";
+    }
+    // Guard the write on the status we just read so a concurrent cancel/postpone
+    // can't be clobbered (TOCTOU): if the status moved underneath us, 0 rows
+    // update and we surface a conflict instead of overwriting.
+    const [updated] = await db
+      .update(scheduleEvents)
+      .set(patch)
+      .where(
+        and(
+          eq(scheduleEvents.id, event.id),
+          eq(scheduleEvents.status, event.status),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      return apiError(res, 409, "Event was just changed; reload and try again", {
+        code: "EVENT_CONFLICT",
+      });
+    }
+    res.json(toScheduleEvent(updated, { canManage: true }));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Bulk CSV season import (Phase 2). Coaches/admins paste a CSV; the server is
+// the single source of truth for parsing + validation. `commit: false` returns
+// a per-row preview (with errors) and writes nothing; `commit: true` creates
+// every row only when ALL rows are valid (all-or-nothing). Same perms as a
+// manual create.
+//
+// Columns (header required, order-independent):
+//   event_type,date,start_time,end_time,opponent,home_away,
+//   location_name,location_address,notes
+// ---------------------------------------------------------------------------
+
+// Minimal RFC4180-ish parser: handles quoted fields, escaped "" quotes, commas
+// and newlines inside quotes, and CRLF. Returns rows of raw string cells.
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else if (ch === "\r") {
+      // swallow — handled by the following \n (or EOF below)
+    } else {
+      cell += ch;
+    }
+  }
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows;
+}
+
+const IMPORT_COLUMNS = [
+  "event_type",
+  "date",
+  "start_time",
+  "end_time",
+  "opponent",
+  "home_away",
+  "location_name",
+  "location_address",
+  "notes",
+] as const;
+
+const MAX_IMPORT_ROWS = 200;
+
+const importZ = z.object({
+  csv: z.string().min(1).max(100_000),
+  tzOffsetMinutes: z.number().int().min(-840).max(840),
+  commit: z.boolean().optional(),
+});
+
+interface ParsedImportRow {
+  line: number; // 1-based source line (data rows only)
+  raw: Record<string, string>;
+  error: string | null;
+  startAt: Date | null;
+  endAt: Date | null;
+  values: typeof scheduleEvents.$inferInsert | null;
+}
+
+function validateImportRow(
+  rec: Record<string, string>,
+  line: number,
+  team: { id: string; organizationId: string },
+  createdById: string,
+  offset: number,
+): ParsedImportRow {
+  const base: ParsedImportRow = {
+    line,
+    raw: rec,
+    error: null,
+    startAt: null,
+    endAt: null,
+    values: null,
+  };
+  const fail = (msg: string): ParsedImportRow => ({ ...base, error: msg });
+
+  const eventType = (rec.event_type ?? "").trim().toLowerCase();
+  if (!eventTypeZ.safeParse(eventType).success) {
+    return fail(`Invalid event_type "${rec.event_type ?? ""}"`);
+  }
+  if (eventType === "other") {
+    return fail('"other" events need a title — add them manually');
+  }
+  const date = (rec.date ?? "").trim();
+  if (!dateZ.safeParse(date).success) {
+    return fail(`Invalid date "${rec.date ?? ""}" (expected YYYY-MM-DD)`);
+  }
+  const startTime = (rec.start_time ?? "").trim();
+  if (!timeZ.safeParse(startTime).success) {
+    return fail(`Invalid start_time "${rec.start_time ?? ""}" (expected HH:MM)`);
+  }
+  const endTimeRaw = (rec.end_time ?? "").trim();
+  let endAt: Date | null = null;
+  const startAt = combineLocal(date, startTime, offset);
+  if (endTimeRaw) {
+    if (!timeZ.safeParse(endTimeRaw).success) {
+      return fail(`Invalid end_time "${rec.end_time}" (expected HH:MM)`);
+    }
+    endAt = combineLocal(date, endTimeRaw, offset);
+    if (endAt <= startAt) {
+      return fail("end_time must be after start_time");
+    }
+  }
+  const homeAwayRaw = (rec.home_away ?? "").trim().toLowerCase();
+  let homeAway: "home" | "away" | "neutral" | null = null;
+  if (homeAwayRaw) {
+    if (!homeAwayZ.safeParse(homeAwayRaw).success) {
+      return fail(`Invalid home_away "${rec.home_away}" (home/away/neutral)`);
+    }
+    homeAway = homeAwayRaw as "home" | "away" | "neutral";
+  }
+  const trimOrNull = (v: string | undefined, max: number) => {
+    const t = (v ?? "").trim();
+    return t ? t.slice(0, max) : null;
+  };
+
+  return {
+    ...base,
+    startAt,
+    endAt,
+    values: {
+      teamId: team.id,
+      organizationId: team.organizationId,
+      eventType: eventType as "practice" | "game" | "scrimmage" | "tournament",
+      title: null,
+      opponent: trimOrNull(rec.opponent, 200),
+      homeAway,
+      locationName: trimOrNull(rec.location_name, 300),
+      locationAddress: trimOrNull(rec.location_address, 500),
+      locationField: null,
+      startAt,
+      endAt,
+      allDay: false,
+      notes: trimOrNull(rec.notes, 2000),
+      createdById,
+    },
+  };
+}
+
+router.post(
+  "/teams/:teamId/schedule/import",
+  scheduleWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const team = await loadTeam(req.params.teamId);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Team coaches or org admins only");
+    }
+    const parsed = importZ.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
+    }
+    const { csv, tzOffsetMinutes, commit } = parsed.data;
+
+    const grid = parseCsv(csv).filter((r) => r.some((c) => c.trim() !== ""));
+    if (grid.length === 0) {
+      return apiError(res, 400, "CSV is empty");
+    }
+    const header = grid[0].map((h) => h.trim().toLowerCase());
+    const missing = IMPORT_COLUMNS.filter((c) => !header.includes(c));
+    if (missing.length > 0) {
+      return apiError(res, 400, `CSV is missing columns: ${missing.join(", ")}`);
+    }
+    const dataRows = grid.slice(1);
+    if (dataRows.length > MAX_IMPORT_ROWS) {
+      return apiError(res, 400, `Too many rows (max ${MAX_IMPORT_ROWS})`);
+    }
+
+    const rows: ParsedImportRow[] = dataRows.map((cells, i) => {
+      const rec: Record<string, string> = {};
+      header.forEach((col, idx) => {
+        rec[col] = cells[idx] ?? "";
+      });
+      return validateImportRow(rec, i + 2, team, me.id, tzOffsetMinutes);
+    });
+
+    const errorCount = rows.filter((r) => r.error).length;
+    const preview = rows.map((r) => ({
+      line: r.line,
+      eventType: r.raw.event_type ?? "",
+      date: r.raw.date ?? "",
+      startTime: r.raw.start_time ?? "",
+      endTime: r.raw.end_time ?? "",
+      opponent: r.raw.opponent ?? "",
+      homeAway: r.raw.home_away ?? "",
+      locationName: r.raw.location_name ?? "",
+      startAt: r.startAt ? r.startAt.toISOString() : null,
+      error: r.error,
+    }));
+
+    if (!commit) {
+      return res.json({
+        validCount: rows.length - errorCount,
+        errorCount,
+        rows: preview,
+      });
+    }
+    if (errorCount > 0) {
+      return apiError(res, 400, "Fix all row errors before importing", {
+        code: "IMPORT_HAS_ERRORS",
+        extras: { errorCount, rows: preview },
+      });
+    }
+
+    const toInsert = rows
+      .map((r) => r.values)
+      .filter((v): v is typeof scheduleEvents.$inferInsert => v !== null);
+    const created = await db
+      .insert(scheduleEvents)
+      .values(toInsert)
+      .returning();
+    res.status(201).json({
+      createdCount: created.length,
+      ...paginate(created.map((e) => toScheduleEvent(e, { canManage: true }))),
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// iCal (.ics) subscription feed (Phase 2).
+//
+// Calendar clients (Google/Apple) fetch the feed on a schedule with no cookies,
+// so the per-team `schedule_feed_token` IS the capability: the token alone
+// identifies the team and is only ever revealed to members through the
+// authenticated info endpoint below. Rotating the token revokes every existing
+// subscription. The feed lists non-canceled events with location NAME only.
+// ---------------------------------------------------------------------------
+
+function feedUrlFor(token: string): string {
+  return `${appBaseUrl()}/api/v1/schedule/feed/${token}/calendar.ics`;
+}
+
+// Lazily mint a feed token the first time anyone needs it, race-safely.
+async function ensureFeedToken(team: {
+  id: string;
+  scheduleFeedToken: string | null;
+}): Promise<string> {
+  if (team.scheduleFeedToken) return team.scheduleFeedToken;
+  const token = randomBytes(24).toString("base64url");
+  const [updated] = await db
+    .update(teams)
+    .set({ scheduleFeedToken: token })
+    .where(and(eq(teams.id, team.id), isNull(teams.scheduleFeedToken)))
+    .returning({ token: teams.scheduleFeedToken });
+  if (updated?.token) return updated.token;
+  const [fresh] = await db
+    .select({ token: teams.scheduleFeedToken })
+    .from(teams)
+    .where(eq(teams.id, team.id))
+    .limit(1);
+  return fresh?.token ?? token;
+}
+
+const EVENT_TYPE_SUMMARY: Record<string, string> = {
+  practice: "Practice",
+  game: "Game",
+  scrimmage: "Scrimmage",
+  tournament: "Tournament",
+  other: "Event",
+};
+
+function eventSummary(e: ScheduleEventRow): string {
+  if (e.title?.trim()) return e.title.trim();
+  const base = EVENT_TYPE_SUMMARY[e.eventType] ?? "Event";
+  if (
+    (e.eventType === "game" || e.eventType === "scrimmage") &&
+    e.opponent?.trim()
+  ) {
+    return `${base} vs ${e.opponent.trim()}`;
+  }
+  return base;
+}
+
+function toIcsEvent(e: ScheduleEventRow): IcsEvent {
+  return {
+    uid: `${e.id}@kinectem`,
+    start: new Date(e.startAt),
+    end: e.endAt ? new Date(e.endAt) : null,
+    allDay: e.allDay,
+    summary: eventSummary(e),
+    location: e.locationName,
+    description: e.notes,
+    stamp: new Date(e.updatedAt),
+    canceled: e.status === "canceled",
+  };
+}
+
+// GET /teams/:teamId/schedule/calendar/info — members get the subscribe URL.
+// The token is minted on first access so families always get a working link.
+router.get(
+  "/teams/:teamId/schedule/calendar/info",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const team = await loadTeam(req.params.teamId);
+    if (!team) return notFound(res);
+    if (!(await canViewTeamSchedule(me.id, team))) {
+      return apiError(res, 403, "Team members only");
+    }
+    const token = await ensureFeedToken(team);
+    const canManage = await canManageTeam(me.id, team);
+    res.json({ feedUrl: feedUrlFor(token), canManage });
+  }),
+);
+
+// POST /teams/:teamId/schedule/calendar/rotate — coach/admin rotates the token,
+// revoking every existing calendar subscription.
+router.post(
+  "/teams/:teamId/schedule/calendar/rotate",
+  scheduleWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const team = await loadTeam(req.params.teamId);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Team coaches or org admins only");
+    }
+    const token = randomBytes(24).toString("base64url");
+    await db
+      .update(teams)
+      .set({ scheduleFeedToken: token })
+      .where(eq(teams.id, team.id));
+    res.json({ feedUrl: feedUrlFor(token), canManage: true });
+  }),
+);
+
+// GET /schedule/feed/:token/calendar.ics — PUBLIC, token-authenticated feed.
+// No session: calendar clients can't send cookies, so the unguessable token is
+// the capability. Returns the team's non-canceled events as text/calendar.
+router.get(
+  "/schedule/feed/:token/calendar.ics",
+  asyncHandler(async (req, res) => {
+    const token = req.params.token;
+    if (!token) return notFound(res);
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.scheduleFeedToken, token))
+      .limit(1);
+    if (!team) return notFound(res);
+    const rows = await db
+      .select()
+      .from(scheduleEvents)
+      .where(
+        and(
+          eq(scheduleEvents.teamId, team.id),
+          sql`${scheduleEvents.status} <> 'canceled'`,
+        ),
+      )
+      .orderBy(asc(scheduleEvents.startAt));
+    const ics = buildIcsCalendar(rows.map(toIcsEvent), {
+      calendarName: `${team.name} Schedule`,
+    });
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'inline; filename="team-schedule.ics"',
+    );
+    res.send(ics);
   }),
 );
 

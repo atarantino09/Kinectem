@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
+  CalendarArrowDown,
   CalendarX,
   Clock,
   FileText,
@@ -35,6 +36,7 @@ import {
 import {
   cancelEvent,
   deleteEvent,
+  downloadEventIcs,
   scheduleQueryKey,
   eventTitle,
   formatDayHeading,
@@ -46,6 +48,7 @@ import {
   type ScheduleEvent,
 } from "./scheduleApi";
 import { RsvpSection } from "./RsvpSection";
+import { ScoreSection } from "./ScoreSection";
 
 interface EventDetailDialogProps {
   teamId: string;
@@ -243,8 +246,25 @@ export function EventDetailDialog({
           )}
         </div>
 
-        {event.status !== "canceled" && (
+        <div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="font-bold rounded-full"
+            onClick={() => downloadEventIcs(event)}
+            data-testid="btn-download-event-ics"
+          >
+            <CalendarArrowDown className="w-3.5 h-3.5 mr-1.5" />
+            Add to calendar
+          </Button>
+        </div>
+
+        {!isPast(event) && event.status !== "canceled" && (
           <RsvpSection teamId={teamId} eventId={event.id} />
+        )}
+
+        {event.status !== "canceled" && (
+          <ScoreSection teamId={teamId} event={event} />
         )}
 
         {showRecapPrompt && (

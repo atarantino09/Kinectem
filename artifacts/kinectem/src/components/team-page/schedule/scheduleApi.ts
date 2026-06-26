@@ -39,6 +39,8 @@ export interface ScheduleEvent {
   statusReason: string | null;
   recurrenceId: string | null;
   gameRecapId: string | null;
+  scoreTeam: number | null;
+  scoreOpponent: number | null;
   createdById: string | null;
   createdAt: string;
   updatedAt: string;
@@ -312,6 +314,200 @@ export interface DayGroup {
   key: string;
   iso: string;
   events: ScheduleEvent[];
+}
+
+// ---------------------------------------------------------------------------
+// iCal feed + single-event download (Phase 2)
+// ---------------------------------------------------------------------------
+
+export interface CalendarInfo {
+  feedUrl: string;
+  canManage: boolean;
+}
+
+export const calendarInfoQueryKey = (teamId: string) =>
+  ["team-schedule", teamId, "calendar-info"] as const;
+
+export async function fetchCalendarInfo(teamId: string): Promise<CalendarInfo> {
+  return customFetch<CalendarInfo>(
+    `/api/v1/teams/${teamId}/schedule/calendar/info`,
+  );
+}
+
+export async function rotateCalendarToken(
+  teamId: string,
+): Promise<CalendarInfo> {
+  return customFetch<CalendarInfo>(
+    `/api/v1/teams/${teamId}/schedule/calendar/rotate`,
+    { method: "POST" },
+  );
+}
+
+function icsEscape(v: string): string {
+  return v
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r\n|\r|\n/g, "\\n");
+}
+
+function icsPad(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+function icsUtc(d: Date): string {
+  return (
+    `${d.getUTCFullYear()}${icsPad(d.getUTCMonth() + 1)}${icsPad(d.getUTCDate())}` +
+    `T${icsPad(d.getUTCHours())}${icsPad(d.getUTCMinutes())}${icsPad(d.getUTCSeconds())}Z`
+  );
+}
+
+function icsDate(d: Date): string {
+  return `${d.getUTCFullYear()}${icsPad(d.getUTCMonth() + 1)}${icsPad(d.getUTCDate())}`;
+}
+
+// Build + download a single event's .ics client-side (the viewer already has
+// the event, so no server round-trip). Mirrors the server's privacy rule:
+// location NAME only, never the street address.
+export function downloadEventIcs(e: ScheduleEvent): void {
+  const start = new Date(e.startAt);
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Kinectem//Team Schedule//EN",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${e.id}@kinectem`,
+    `DTSTAMP:${icsUtc(new Date())}`,
+  ];
+  if (e.allDay) {
+    lines.push(`DTSTART;VALUE=DATE:${icsDate(start)}`);
+    const end = e.endAt
+      ? new Date(e.endAt)
+      : new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    lines.push(`DTEND;VALUE=DATE:${icsDate(end)}`);
+  } else {
+    lines.push(`DTSTART:${icsUtc(start)}`);
+    if (e.endAt) lines.push(`DTEND:${icsUtc(new Date(e.endAt))}`);
+  }
+  lines.push(`SUMMARY:${icsEscape(eventTitle(e))}`);
+  if (e.locationName?.trim()) {
+    lines.push(`LOCATION:${icsEscape(e.locationName.trim())}`);
+  }
+  if (e.notes?.trim()) {
+    lines.push(`DESCRIPTION:${icsEscape(e.notes.trim())}`);
+  }
+  if (e.status === "canceled") lines.push("STATUS:CANCELLED");
+  lines.push("END:VEVENT", "END:VCALENDAR");
+
+  const blob = new Blob([lines.join("\r\n") + "\r\n"], {
+    type: "text/calendar;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const slug =
+    eventTitle(e)
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "event";
+  a.download = `${slug}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
+// Score capture (Phase 2)
+// ---------------------------------------------------------------------------
+
+// Set both scores, or pass nulls to clear. Recording a score on a finished
+// game also flips it to "completed" server-side (drops into Season Results).
+export async function setEventScore(
+  teamId: string,
+  eventId: string,
+  input: { scoreTeam: number | null; scoreOpponent: number | null },
+): Promise<ScheduleEvent> {
+  return customFetch<ScheduleEvent>(
+    `/api/v1/teams/${teamId}/schedule/${eventId}/score`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+// A game-type event with a recorded score, for the Season Results list.
+export function hasScore(e: ScheduleEvent): boolean {
+  return e.scoreTeam != null && e.scoreOpponent != null;
+}
+
+// "W 3–1" / "L 0–2" / "T 2–2" from the team's perspective.
+export function scoreResult(
+  e: ScheduleEvent,
+): { outcome: "W" | "L" | "T"; text: string } | null {
+  if (e.scoreTeam == null || e.scoreOpponent == null) return null;
+  const outcome =
+    e.scoreTeam > e.scoreOpponent
+      ? "W"
+      : e.scoreTeam < e.scoreOpponent
+        ? "L"
+        : "T";
+  return { outcome, text: `${e.scoreTeam}–${e.scoreOpponent}` };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk CSV import (Phase 2)
+// ---------------------------------------------------------------------------
+
+export interface ImportPreviewRow {
+  line: number;
+  eventType: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  opponent: string;
+  homeAway: string;
+  locationName: string;
+  startAt: string | null;
+  error: string | null;
+}
+
+export interface ImportPreview {
+  validCount: number;
+  errorCount: number;
+  rows: ImportPreviewRow[];
+}
+
+export interface ImportResult {
+  createdCount: number;
+  data: ScheduleEvent[];
+}
+
+export const IMPORT_CSV_HEADER =
+  "event_type,date,start_time,end_time,opponent,home_away,location_name,location_address,notes";
+
+// commit=false → dry-run preview (writes nothing); commit=true → create all
+// rows (server rejects unless every row is valid).
+export async function importSchedule(
+  teamId: string,
+  csv: string,
+  commit: boolean,
+): Promise<ImportPreview | ImportResult> {
+  return customFetch<ImportPreview | ImportResult>(
+    `/api/v1/teams/${teamId}/schedule/import`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        csv,
+        commit,
+        tzOffsetMinutes: new Date().getTimezoneOffset(),
+      }),
+    },
+  );
 }
 
 // Group a (sorted) event list by local calendar day.

@@ -446,6 +446,11 @@ export const teams = pgTable("teams", {
   website: text("website"),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
+  // Phase 2 — unguessable capability token for the team's read-only iCal
+  // (.ics) subscription feed. NULL until first generated; coach/admin can
+  // rotate it to revoke existing calendar subscriptions. The token alone
+  // identifies the team on the public feed endpoint, so it must stay secret.
+  scheduleFeedToken: text("schedule_feed_token").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   // Task #472 — Soft "archive" state. `archivedAt IS NOT NULL` is the
   // archived flag; `archivedByUserId` records the org owner who took
@@ -1330,10 +1335,17 @@ export const scheduleEvents = pgTable("schedule_events", {
   // Set when a coach publishes a game recap from this event; flips status to
   // completed and links back to the article.
   gameRecapId: uuid("game_recap_id").references((): AnyPgColumn => articles.id, { onDelete: "set null" }),
+  // Phase 2 — final score for completed game/scrimmage events (members-only
+  // Season Results). Nullable: a game can be completed without a recorded score.
+  scoreTeam: integer("score_team"),
+  scoreOpponent: integer("score_opponent"),
   // Stamped once the "write your game recap" reminder notification has been
   // sent (a couple hours after a game's start) so the durable sweep never
   // double-notifies.
   recapReminderSentAt: timestamp("recap_reminder_sent_at", { withTimezone: true }),
+  // Phase 2 — stamped once the durable ~24h-before reminder email has been
+  // fanned out, so the hourly sweep never double-sends. NULL = not yet sent.
+  reminder24hSentAt: timestamp("reminder_24h_sent_at", { withTimezone: true }),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

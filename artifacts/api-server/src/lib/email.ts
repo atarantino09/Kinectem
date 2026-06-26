@@ -122,7 +122,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   }
 }
 
-function appBaseUrl(): string {
+export function appBaseUrl(): string {
   return (
     process.env.APP_BASE_URL ??
     (process.env.REPLIT_DEV_DOMAIN
@@ -369,6 +369,103 @@ You can also manage the account from your Family page after signing in to Kinect
 <p>You can revoke consent at any time, which will immediately disable the account and stop any further data collection. Keep this link handy for that:</p>
 <p><a href="${revokeUrl}">${revokeUrl}</a></p>
 <p>You can also manage the account from your Family page after signing in to Kinectem.</p>`,
+  });
+}
+
+export function buildScheduleUrl(teamId: string): string {
+  return `${appBaseUrl()}/teams/${teamId}`;
+}
+
+// Shared, already-formatted descriptor for the two schedule emails below.
+// `whatLabel` and `whenText` are built by the caller (schedule-notifications)
+// so the email layer stays free of DB / timezone logic.
+export interface ScheduleEmailEvent {
+  teamId: string;
+  teamName: string | null;
+  whatLabel: string;
+  whenText: string;
+  locationName: string | null;
+}
+
+// Phase 2 — the ~24h-before reminder. Reuses the same transactional sender.
+// Body intentionally carries the location NAME only (never the full address).
+export async function sendScheduleReminderEmail(
+  to: string,
+  ev: ScheduleEmailEvent,
+): Promise<void> {
+  const url = buildScheduleUrl(ev.teamId);
+  const team = ev.teamName?.trim() ? ev.teamName.trim() : "your team";
+  const teamHtml = escapeHtml(team);
+  const whatHtml = escapeHtml(ev.whatLabel);
+  const whenHtml = escapeHtml(ev.whenText);
+  const locLine = ev.locationName?.trim()
+    ? `\nWhere: ${ev.locationName.trim()}`
+    : "";
+  const locHtml = ev.locationName?.trim()
+    ? `<p>Where: ${escapeHtml(ev.locationName.trim())}</p>`
+    : "";
+  await sendEmail({
+    to,
+    kind: "schedule_reminder",
+    subject: `Reminder: ${ev.whatLabel} — ${ev.whenText}`,
+    text: `A quick reminder about an upcoming ${team} event.
+
+What: ${ev.whatLabel}
+When: ${ev.whenText}${locLine}
+
+See the full schedule:
+${url}`,
+    html: `<p>A quick reminder about an upcoming <strong>${teamHtml}</strong> event.</p>
+<p>What: ${whatHtml}</p>
+<p>When: ${whenHtml}</p>
+${locHtml}
+<p>See the full schedule:</p>
+<p><a href="${url}">${url}</a></p>`,
+  });
+}
+
+// Phase 2 — immediate change notice when a coach/admin cancels or postpones.
+export async function sendScheduleChangeNoticeEmail(
+  to: string,
+  ev: ScheduleEmailEvent & {
+    status: "canceled" | "postponed";
+    reason: string | null;
+  },
+): Promise<void> {
+  const url = buildScheduleUrl(ev.teamId);
+  const team = ev.teamName?.trim() ? ev.teamName.trim() : "your team";
+  const teamHtml = escapeHtml(team);
+  const whatHtml = escapeHtml(ev.whatLabel);
+  const whenHtml = escapeHtml(ev.whenText);
+  const verb = ev.status === "canceled" ? "canceled" : "postponed";
+  const locLine = ev.locationName?.trim()
+    ? `\nWhere: ${ev.locationName.trim()}`
+    : "";
+  const locHtml = ev.locationName?.trim()
+    ? `<p>Where: ${escapeHtml(ev.locationName.trim())}</p>`
+    : "";
+  const reasonLine = ev.reason?.trim() ? `\n\nReason: ${ev.reason.trim()}` : "";
+  const reasonHtml = ev.reason?.trim()
+    ? `<p><em>Reason: ${escapeHtml(ev.reason.trim())}</em></p>`
+    : "";
+  await sendEmail({
+    to,
+    kind: "schedule_change_notice",
+    subject: `${ev.status === "canceled" ? "Canceled" : "Postponed"}: ${ev.whatLabel} — ${ev.whenText}`,
+    text: `An upcoming ${team} event has been ${verb}.
+
+What: ${ev.whatLabel}
+When: ${ev.whenText}${locLine}${reasonLine}
+
+See the full schedule:
+${url}`,
+    html: `<p>An upcoming <strong>${teamHtml}</strong> event has been <strong>${verb}</strong>.</p>
+<p>What: ${whatHtml}</p>
+<p>When: ${whenHtml}</p>
+${locHtml}
+${reasonHtml}
+<p>See the full schedule:</p>
+<p><a href="${url}">${url}</a></p>`,
   });
 }
 
