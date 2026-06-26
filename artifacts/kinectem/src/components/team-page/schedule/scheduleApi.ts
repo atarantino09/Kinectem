@@ -162,6 +162,75 @@ export async function cancelEvent(
 }
 
 // ---------------------------------------------------------------------------
+// RSVP / Availability (Phase 2)
+// ---------------------------------------------------------------------------
+
+export type RsvpStatus = "going" | "maybe" | "out";
+
+// One athlete the current viewer can answer for (self, or a linked child).
+export interface MyAthleteRsvp {
+  athleteId: string;
+  athleteName: string;
+  status: RsvpStatus | null;
+  note: string | null;
+}
+
+// A row in the manager-only roster response list. `status` is "no_response"
+// for athletes who haven't answered yet.
+export interface RsvpResponseRow {
+  athleteId: string;
+  athleteName: string;
+  status: RsvpStatus | "no_response";
+  note: string | null;
+  respondedByName: string | null;
+  respondedAt: string | null;
+}
+
+export interface RsvpSummary {
+  going: number;
+  maybe: number;
+  out: number;
+  noResponse: number;
+}
+
+export interface EventRsvps {
+  canViewAll: boolean;
+  myAthletes: MyAthleteRsvp[];
+  summary: RsvpSummary | null;
+  responses: RsvpResponseRow[] | null;
+}
+
+export const rsvpQueryKey = (teamId: string, eventId: string) =>
+  ["team-schedule", teamId, "rsvps", eventId] as const;
+
+export async function fetchEventRsvps(
+  teamId: string,
+  eventId: string,
+): Promise<EventRsvps> {
+  return customFetch<EventRsvps>(
+    `/api/v1/teams/${teamId}/schedule/${eventId}/rsvps`,
+  );
+}
+
+export async function setRsvp(
+  teamId: string,
+  eventId: string,
+  input: { athleteId: string; status: RsvpStatus; note?: string | null },
+): Promise<unknown> {
+  return customFetch(`/api/v1/teams/${teamId}/schedule/${eventId}/rsvp`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export const RSVP_STATUS_LABEL: Record<RsvpStatus, string> = {
+  going: "Going",
+  maybe: "Maybe",
+  out: "Out",
+};
+
+// ---------------------------------------------------------------------------
 // Display helpers
 // ---------------------------------------------------------------------------
 

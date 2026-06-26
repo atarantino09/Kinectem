@@ -1342,3 +1342,27 @@ export const scheduleEvents = pgTable("schedule_events", {
   organizationIdIdx: index("schedule_events_organization_id_idx").on(t.organizationId),
   recurrenceIdIdx: index("schedule_events_recurrence_id_idx").on(t.recurrenceId),
 }));
+
+export const scheduleRsvpStatusEnum = pgEnum("schedule_rsvp_status", [
+  "going",
+  "maybe",
+  "out",
+]);
+
+// Per-athlete availability for a single schedule event. One row per
+// (event, athlete) — the unique index makes a re-submit a last-write-wins
+// upsert. `athleteId` is the rostered player; `respondedById` records who
+// actually answered (the athlete themselves OR their linked parent).
+export const scheduleEventRsvps = pgTable("schedule_event_rsvps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").references(() => scheduleEvents.id, { onDelete: "cascade" }).notNull(),
+  athleteId: uuid("athlete_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  respondedById: uuid("responded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  status: scheduleRsvpStatusEnum("status").notNull(),
+  note: text("note"),
+  respondedAt: timestamp("responded_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  eventAthleteUq: uniqueIndex("schedule_event_rsvps_event_athlete_uq").on(t.eventId, t.athleteId),
+  eventIdIdx: index("schedule_event_rsvps_event_id_idx").on(t.eventId),
+  athleteIdIdx: index("schedule_event_rsvps_athlete_id_idx").on(t.athleteId),
+}));

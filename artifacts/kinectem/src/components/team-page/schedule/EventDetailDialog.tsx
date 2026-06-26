@@ -45,6 +45,7 @@ import {
   EVENT_TYPE_CHIP,
   type ScheduleEvent,
 } from "./scheduleApi";
+import { RsvpSection } from "./RsvpSection";
 
 interface EventDetailDialogProps {
   teamId: string;
@@ -241,6 +242,10 @@ export function EventDetailDialog({
             </Link>
           )}
         </div>
+
+        {event.status !== "canceled" && (
+          <RsvpSection teamId={teamId} eventId={event.id} />
+        )}
 
         {showRecapPrompt && (
           <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">

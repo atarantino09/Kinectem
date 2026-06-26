@@ -2,11 +2,15 @@ import { Router, type IRouter } from "express";
 import {
   db,
   teams,
+  users,
   articles,
+  rosterEntries,
   scheduleEvents,
   scheduleRecurrences,
+  scheduleEventRsvps,
 } from "@workspace/db";
-import { and, asc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError, notFound, paginate } from "../lib/spec-helpers";
@@ -619,6 +623,269 @@ router.post(
       .where(eq(scheduleEvents.id, event.id))
       .returning();
     res.json(toScheduleEvent(updated, { canManage: true }));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// RSVP / Availability (Phase 2). Athletes — and parents on behalf of a linked
+// child — mark Going/Maybe/Out per event. Coaches and org admins may VIEW the
+// whole roster's responses but the answer belongs to the athlete/parent.
+// ---------------------------------------------------------------------------
+
+type RsvpStatus = "going" | "maybe" | "out";
+
+const setRsvpZ = z.object({
+  athleteId: z.string().uuid(),
+  status: z.enum(["going", "maybe", "out"]),
+  note: z.string().trim().max(300).nullish(),
+});
+
+// Athletes the caller may answer for on this team: themselves if they are an
+// accepted rostered player, plus any accepted-player child linked via
+// `users.parentId`. The server computes this so the client needs no roster
+// knowledge to render the right controls.
+async function myAthletesOnTeam(
+  userId: string,
+  teamId: string,
+): Promise<Array<{ athleteId: string; athleteName: string }>> {
+  const self = await db
+    .select({ athleteId: users.id, athleteName: users.name })
+    .from(rosterEntries)
+    .innerJoin(users, eq(users.id, rosterEntries.userId))
+    .where(
+      and(
+        eq(rosterEntries.teamId, teamId),
+        eq(rosterEntries.userId, userId),
+        eq(rosterEntries.role, "player"),
+        eq(rosterEntries.status, "accepted"),
+      ),
+    );
+  const children = await db
+    .select({ athleteId: users.id, athleteName: users.name })
+    .from(rosterEntries)
+    .innerJoin(users, eq(users.id, rosterEntries.userId))
+    .where(
+      and(
+        eq(rosterEntries.teamId, teamId),
+        eq(rosterEntries.role, "player"),
+        eq(rosterEntries.status, "accepted"),
+        eq(users.parentId, userId),
+      ),
+    );
+  const byId = new Map<string, { athleteId: string; athleteName: string }>();
+  for (const a of [...self, ...children]) byId.set(a.athleteId, a);
+  return [...byId.values()];
+}
+
+// ---------------------------------------------------------------------------
+// GET /teams/:teamId/schedule/:eventId/rsvps — the caller's own athlete(s) +
+// their current response, plus (managers only) the full roster tally + list.
+// ---------------------------------------------------------------------------
+router.get(
+  "/teams/:teamId/schedule/:eventId/rsvps",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const team = await loadTeam(req.params.teamId);
+    if (!team) return notFound(res);
+    if (!(await canViewTeamSchedule(me.id, team))) {
+      return apiError(res, 403, "Team members only");
+    }
+    const [event] = await db
+      .select({ id: scheduleEvents.id })
+      .from(scheduleEvents)
+      .where(
+        and(
+          eq(scheduleEvents.id, req.params.eventId),
+          eq(scheduleEvents.teamId, team.id),
+        ),
+      )
+      .limit(1);
+    if (!event) return notFound(res);
+
+    const canManage = await canManageTeam(me.id, team);
+
+    // The caller's own athletes + whatever they've already answered.
+    const mine = await myAthletesOnTeam(me.id, team.id);
+    let myAthletes: Array<{
+      athleteId: string;
+      athleteName: string;
+      status: RsvpStatus | null;
+      note: string | null;
+    }> = [];
+    if (mine.length) {
+      const ids = mine.map((a) => a.athleteId);
+      const existing = await db
+        .select({
+          athleteId: scheduleEventRsvps.athleteId,
+          status: scheduleEventRsvps.status,
+          note: scheduleEventRsvps.note,
+        })
+        .from(scheduleEventRsvps)
+        .where(
+          and(
+            eq(scheduleEventRsvps.eventId, event.id),
+            inArray(scheduleEventRsvps.athleteId, ids),
+          ),
+        );
+      const byId = new Map(existing.map((e) => [e.athleteId, e]));
+      myAthletes = mine.map((a) => ({
+        athleteId: a.athleteId,
+        athleteName: a.athleteName,
+        status: byId.get(a.athleteId)?.status ?? null,
+        note: byId.get(a.athleteId)?.note ?? null,
+      }));
+    }
+
+    // Managers additionally see every accepted player's response (with the
+    // parent's name when a parent answered) and a tally.
+    let summary:
+      | { going: number; maybe: number; out: number; noResponse: number }
+      | null = null;
+    let responses:
+      | Array<{
+          athleteId: string;
+          athleteName: string;
+          status: RsvpStatus | "no_response";
+          note: string | null;
+          respondedByName: string | null;
+          respondedAt: string | null;
+        }>
+      | null = null;
+    if (canManage) {
+      const responder = alias(users, "rsvp_responder");
+      const rows = await db
+        .select({
+          athleteId: users.id,
+          athleteName: users.name,
+          status: scheduleEventRsvps.status,
+          note: scheduleEventRsvps.note,
+          respondedAt: scheduleEventRsvps.respondedAt,
+          respondedById: scheduleEventRsvps.respondedById,
+          respondedByName: responder.name,
+        })
+        .from(rosterEntries)
+        .innerJoin(users, eq(users.id, rosterEntries.userId))
+        .leftJoin(
+          scheduleEventRsvps,
+          and(
+            eq(scheduleEventRsvps.eventId, event.id),
+            eq(scheduleEventRsvps.athleteId, users.id),
+          ),
+        )
+        .leftJoin(responder, eq(responder.id, scheduleEventRsvps.respondedById))
+        .where(
+          and(
+            eq(rosterEntries.teamId, team.id),
+            eq(rosterEntries.role, "player"),
+            eq(rosterEntries.status, "accepted"),
+          ),
+        )
+        .orderBy(asc(users.name));
+      responses = rows.map((r) => ({
+        athleteId: r.athleteId,
+        athleteName: r.athleteName,
+        status: r.status ?? "no_response",
+        note: r.note ?? null,
+        respondedByName:
+          r.respondedById && r.respondedById !== r.athleteId
+            ? r.respondedByName ?? null
+            : null,
+        respondedAt: r.respondedAt ? r.respondedAt.toISOString() : null,
+      }));
+      summary = {
+        going: responses.filter((x) => x.status === "going").length,
+        maybe: responses.filter((x) => x.status === "maybe").length,
+        out: responses.filter((x) => x.status === "out").length,
+        noResponse: responses.filter((x) => x.status === "no_response").length,
+      };
+    }
+
+    res.json({ canViewAll: canManage, myAthletes, summary, responses });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// PUT /teams/:teamId/schedule/:eventId/rsvp — upsert one athlete's response.
+// Last write wins via the (event_id, athlete_id) unique index.
+// ---------------------------------------------------------------------------
+router.put(
+  "/teams/:teamId/schedule/:eventId/rsvp",
+  scheduleWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const team = await loadTeam(req.params.teamId);
+    if (!team) return notFound(res);
+    if (!(await canViewTeamSchedule(me.id, team))) {
+      return apiError(res, 403, "Team members only");
+    }
+    const parsed = setRsvpZ.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
+    }
+    const { athleteId, status, note } = parsed.data;
+
+    const [event] = await db
+      .select({ id: scheduleEvents.id })
+      .from(scheduleEvents)
+      .where(
+        and(
+          eq(scheduleEvents.id, req.params.eventId),
+          eq(scheduleEvents.teamId, team.id),
+        ),
+      )
+      .limit(1);
+    if (!event) return notFound(res);
+
+    // The athlete must be an accepted rostered player on this team, and the
+    // caller must be that athlete OR their linked parent.
+    const [athlete] = await db
+      .select({ id: users.id, parentId: users.parentId })
+      .from(rosterEntries)
+      .innerJoin(users, eq(users.id, rosterEntries.userId))
+      .where(
+        and(
+          eq(rosterEntries.teamId, team.id),
+          eq(rosterEntries.userId, athleteId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      )
+      .limit(1);
+    if (!athlete) {
+      return apiError(res, 404, "Not a rostered athlete on this team", {
+        code: "ATHLETE_NOT_FOUND",
+      });
+    }
+    if (athlete.id !== me.id && athlete.parentId !== me.id) {
+      return apiError(res, 403, "You can only respond for yourself or your child", {
+        code: "RSVP_FORBIDDEN",
+      });
+    }
+
+    const now = new Date();
+    const [row] = await db
+      .insert(scheduleEventRsvps)
+      .values({
+        eventId: event.id,
+        athleteId,
+        respondedById: me.id,
+        status,
+        note: note ?? null,
+        respondedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [scheduleEventRsvps.eventId, scheduleEventRsvps.athleteId],
+        set: { respondedById: me.id, status, note: note ?? null, respondedAt: now },
+      })
+      .returning();
+    res.json({
+      athleteId: row.athleteId,
+      status: row.status,
+      note: row.note,
+      respondedAt: row.respondedAt.toISOString(),
+    });
   }),
 );
 

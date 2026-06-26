@@ -1,0 +1,53 @@
+Continue building the Kinectem Team Schedule feature. The MVP is already live — the schedule_events and schedule_recurrences tables exist, the Schedule tab works, and the game→recap integration is in. This is Phase 2, additive only. Reuse my existing database, auth, roles, Team/Roster/User/Parent models, and transactional email service. Match the existing in-app design (blue primary actions, card-based). Do NOT rebuild anything from the MVP.
+
+Build the features below IN THIS ORDER, and PAUSE for my review after each numbered feature before starting the next one. Don't build all five at once.
+
+====================
+1. RSVP / AVAILABILITY
+====================
+Let athletes (and parents on behalf of their child) mark availability per event.
+
+New table `schedule_event_rsvps`: id (UUID PK), event_id (FK to schedule_events), athlete_id (FK to my existing roster/athlete model), responded_by_user_id (FK to users — the athlete OR their parent), status (enum: going, maybe, out), note (string, nullable), responded_at (timestamp). Add a UNIQUE constraint on (event_id, athlete_id) — one RSVP per athlete per event, last write wins.
+
+Permissions: an athlete can set their own RSVP; a parent can set the RSVP for their linked child only; coaches and org admins can VIEW all RSVPs for the event but the response belongs to the athlete/parent. Enforce server-side.
+
+UI: on the event detail, show a Going/Maybe/Out control for the current user's athlete(s). For coaches/admins, show a summary count (e.g. "12 going · 2 maybe · 3 out") and an expandable list of who responded what. Default state for athletes who haven't responded is "No response."
+
+====================
+2. EMAIL REMINDERS + CHANGE NOTICES
+====================
+Reuse my existing transactional email service.
+
+Automated reminder: a scheduled job (run hourly) finds events with status "scheduled" starting in roughly the next 24 hours and emails the team's members (rostered athletes + their parents, that team's coaches). To prevent duplicates, add a `reminder_24h_sent_at` timestamp column to schedule_events and only send if it's null; set it when sent.
+
+Change notices: when a coach/admin sets an event to canceled or postponed, immediately email the same team members with the reason.
+
+COPPA ROUTING (important): for athletes under 13, all reminder and change-notice emails must go to the PARENT email on file, NOT the child. Reuse the existing parent linkage. For 13+, send to the athlete (and parent if both exist).
+
+Each email should include event type, date/time, opponent or "Practice," location name (not full address in the email body), and a link into the Schedule tab.
+
+====================
+3. CALENDAR SUBSCRIBE (iCal FEED)
+====================
+Let families subscribe to a team's schedule in Google/Apple Calendar.
+
+Generate a per-team, token-protected, read-only iCal (.ics) feed URL. Store a random unguessable feed token per team (new column on teams, or a small team_feed_tokens table). The feed URL must require that token and must only be usable by authenticated members of that team — do NOT make it publicly guessable, and never put an address in a query parameter. Let a coach/admin view and regenerate (rotate) the team's feed token.
+
+The feed returns VEVENTs for that team's scheduled (non-canceled) events with title, start/end, location name, and notes. Also add a "Download .ics" button on a single event's detail page.
+
+====================
+4. BULK / CSV SEASON IMPORT
+====================
+Let a coach load a whole season at once.
+
+A coach/admin can upload a CSV (or paste rows) with columns: event_type, date, start_time, end_time, opponent, home_away, location_name, location_address, notes. Parse it, VALIDATE each row (valid type, valid date/time, end after start), then show a PREVIEW table of what will be created with any row errors flagged. Only create the schedule_events rows after the coach confirms the preview. Don't import silently. Reuse the same permission rules as manual event creation.
+
+====================
+5. SCORE CAPTURE + SEASON RESULTS
+====================
+The score_team and score_opponent columns already exist on schedule_events. On a completed game, let the coach enter the final score. Show a "Season Results" list on the team page (members only) of completed games: opponent, date, home/away, and score. Link each result to its published game recap if game_recap_id is set.
+
+====================
+OPTIONAL (build only if I confirm — leave OFF by default)
+====================
+Public "Upcoming Games" strip: add a per-team setting `public_schedule_enabled` (boolean, default FALSE). When and only when it's enabled, the PUBLIC team page may show a strip of GAME and SCRIMMAGE events only, displaying opponent + date + home/away (+ score for completed games). It must NEVER show practices, location names, or addresses, and must never expose any of that in the page source or an API response. Leave this disabled until I explicitly turn it on.
