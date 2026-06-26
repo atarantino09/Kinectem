@@ -977,6 +977,56 @@ CREATE UNIQUE INDEX IF NOT EXISTS teams_adopt_token_idx
   WHERE adopt_token IS NOT NULL;
 `;
 
+// Broadcasts (bulk messaging). Idempotent: guarded CREATE TYPE, IF NOT EXISTS
+// tables/indexes. `broadcast_recipients` PK (broadcast_id, user_id) dedupes a
+// user delivered under multiple roles. Distinct from platform `announcements`.
+const BROADCASTS = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'broadcast_scope') THEN
+    CREATE TYPE broadcast_scope AS ENUM ('organization','team');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'broadcast_recipient_role') THEN
+    CREATE TYPE broadcast_recipient_role AS ENUM ('coach','player','parent');
+  END IF;
+END$migration$;
+
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope broadcast_scope NOT NULL,
+  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  team_id uuid REFERENCES teams(id) ON DELETE CASCADE,
+  sender_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  body text NOT NULL,
+  allow_replies boolean NOT NULL DEFAULT false,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS broadcasts_organization_id_idx ON broadcasts (organization_id);
+CREATE INDEX IF NOT EXISTS broadcasts_team_id_idx ON broadcasts (team_id);
+
+CREATE TABLE IF NOT EXISTS broadcast_recipients (
+  broadcast_id uuid NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_role broadcast_recipient_role NOT NULL,
+  child_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  read_at timestamp,
+  created_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (broadcast_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS broadcast_recipients_user_id_idx ON broadcast_recipients (user_id);
+
+CREATE TABLE IF NOT EXISTS broadcast_replies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  broadcast_id uuid NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+  family_parent_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  sender_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  body text NOT NULL,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS broadcast_replies_thread_idx
+  ON broadcast_replies (broadcast_id, family_parent_user_id);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1129,6 +1179,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-26-team-adopt-token",
     sql: TEAM_ADOPT_TOKEN,
+  },
+  {
+    name: "2026-06-26-broadcasts",
+    sql: BROADCASTS,
   },
 ];
 

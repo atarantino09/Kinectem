@@ -7,7 +7,12 @@ import {
 import { UserAvatar } from "@/components/UserAvatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield, Tag, FileText } from "lucide-react";
+import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield, Tag, FileText, Megaphone } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  fetchUnreadCount,
+  unreadCountQueryKey,
+} from "@/components/broadcasts/broadcastsApi";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -94,6 +99,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     active ? "secondary" : "ghost";
 
   const unreadCount = unreadMsgs?.unreadCount ?? 0;
+  const { data: broadcastUnread } = useQuery({
+    queryKey: unreadCountQueryKey(),
+    queryFn: fetchUnreadCount,
+    enabled: !!currentUser,
+  });
+  const announcementsUnread = broadcastUnread ?? 0;
 
   type NavItem = {
     href: string;
@@ -107,6 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Feed", icon: Home },
     { href: "/organizations", label: "Orgs", icon: Building2 },
     { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
+    { href: "/announcements", label: "Announcements", icon: Megaphone, testId: "link-announcements", badge: announcementsUnread },
     ...(whoami?.isGuardian
       ? [{ href: "/family", label: "Family", icon: Users, testId: "link-family" } satisfies NavItem]
       : []),

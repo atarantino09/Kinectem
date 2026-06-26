@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ExternalLink,
   ListPlus,
+  Megaphone,
   Newspaper,
   Pencil,
   Plus,
@@ -58,6 +59,7 @@ import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { NewsletterDialog } from "@/components/NewsletterDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
+import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastComposeDialog";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { getInitials, formatOrgName } from "@/lib/format";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
@@ -83,6 +85,7 @@ export default function OrganizationPage() {
   const [newPostOpen, setNewPostOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
   // Task #443 — celebratory popup shown once right after a successful
   // org create. CreateOrgDialog stashes the org name under
@@ -313,6 +316,17 @@ export default function OrganizationPage() {
           myRole={organization.role!}
         />
       )}
+      {isOrgManager && (
+        <BroadcastComposeDialog
+          open={broadcastOpen}
+          onOpenChange={setBroadcastOpen}
+          target={{
+            kind: "organization",
+            id: orgId,
+            name: organization.name,
+          }}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
         {/* Main column */}
@@ -440,6 +454,16 @@ export default function OrganizationPage() {
                       <ExternalLink className="w-4 h-4 mr-1.5" />
                       Getting started guide
                     </a>
+                  </Button>
+                )}
+                {isOrgManager && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setBroadcastOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-org-broadcast"
+                  >
+                    <Megaphone className="w-4 h-4 mr-1.5" /> Send announcement
                   </Button>
                 )}
                 {isOrgManager && (

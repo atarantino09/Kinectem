@@ -62,6 +62,7 @@ const AdminOrganizations = lazy(
   () => import("@/pages/admin/AdminOrganizations"),
 );
 const OrgSubscribePage = lazy(() => import("@/pages/OrgSubscribePage"));
+const AnnouncementsPage = lazy(() => import("@/pages/AnnouncementsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,6 +106,7 @@ function Router() {
           <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/" component={FeedPage} />
+            <Route path="/announcements" component={AnnouncementsPage} />
             <Route path="/search" component={SearchPage} />
             <Route path="/messages/:conversationId" component={MessagesPage} />
             <Route path="/messages" component={MessagesPage} />

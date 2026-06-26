@@ -1512,3 +1512,62 @@ export const announcements = pgTable("announcements", {
 }, (t) => ({
   activeIdx: index("announcements_active_idx").on(t.active),
 }));
+
+// ---------------------------------------------------------------------------
+// Broadcasts (bulk messaging) — distinct from platform `announcements` above.
+// An org owner/admin broadcasts to every team's coaches + accepted players +
+// their parents (no replies). A team admin/coach/manager broadcasts to that
+// team's accepted players + their parents (parents may reply). Minors receive
+// a read-only copy alongside their parents; only `parent` recipients may reply.
+// ---------------------------------------------------------------------------
+export const broadcastScopeEnum = pgEnum("broadcast_scope", ["organization", "team"]);
+export const broadcastRecipientRoleEnum = pgEnum("broadcast_recipient_role", [
+  "coach",
+  "player",
+  "parent",
+]);
+
+export const broadcasts = pgTable("broadcasts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scope: broadcastScopeEnum("scope").notNull(),
+  // Exactly one of organizationId / teamId is set, matching `scope`.
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }),
+  senderUserId: uuid("sender_user_id").references(() => users.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  allowReplies: boolean("allow_replies").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  organizationIdIdx: index("broadcasts_organization_id_idx").on(t.organizationId),
+  teamIdIdx: index("broadcasts_team_id_idx").on(t.teamId),
+}));
+
+// One row per delivered recipient. `recipientRole` records why they received
+// it (only `parent` rows may reply). `childUserId` links a parent row back to
+// the player it covers (NULL for coach/player rows). PK dedupes a user who
+// would otherwise be delivered twice (role priority resolved at write time).
+export const broadcastRecipients = pgTable("broadcast_recipients", {
+  broadcastId: uuid("broadcast_id").references(() => broadcasts.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  recipientRole: broadcastRecipientRoleEnum("recipient_role").notNull(),
+  childUserId: uuid("child_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.broadcastId, t.userId] }),
+  userIdIdx: index("broadcast_recipients_user_id_idx").on(t.userId),
+}));
+
+// Private per-family reply threads on a team broadcast. `familyParentUserId`
+// is the thread key (the parent's user id); team staff see every thread, a
+// parent sees only their own.
+export const broadcastReplies = pgTable("broadcast_replies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  broadcastId: uuid("broadcast_id").references(() => broadcasts.id, { onDelete: "cascade" }).notNull(),
+  familyParentUserId: uuid("family_parent_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  senderUserId: uuid("sender_user_id").references(() => users.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  threadIdx: index("broadcast_replies_thread_idx").on(t.broadcastId, t.familyParentUserId),
+}));

@@ -31,6 +31,7 @@ import aiRouter from "./ai";
 import subscriptionsRouter from "./subscriptions";
 import announcementsRouter from "./announcements";
 import tournamentsRouter from "./tournaments";
+import broadcastsRouter from "./broadcasts";
 
 const router: Router = Router();
 
@@ -72,5 +73,6 @@ router.use(aiRouter);
 router.use(subscriptionsRouter);
 router.use(announcementsRouter);
 router.use(tournamentsRouter);
+router.use(broadcastsRouter);
 
 export default router;

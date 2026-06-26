@@ -38,6 +38,9 @@ import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
+import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastComposeDialog";
+import { Button } from "@/components/ui/button";
+import { Megaphone } from "lucide-react";
 import { useIsLg } from "@/hooks/use-mobile";
 
 export default function TeamPage() {
@@ -64,6 +67,7 @@ export default function TeamPage() {
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [adoptOpen, setAdoptOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [expanded, setExpanded] = useState<TeamPanel>(
     showRoster ? "roster" : "posts",
   );
@@ -123,6 +127,19 @@ export default function TeamPage() {
           m.userId === me.id &&
           m.status !== "pending" &&
           COACH_LEVEL_POSITIONS.includes((m.position ?? "").toLowerCase()),
+      ));
+
+  // Who can send a team broadcast: same as `canManage` (org admins + coach-
+  // level staff) plus the team's accepted `manager`-position staff. Mirrors
+  // the server's `canSendTeamBroadcast`.
+  const canBroadcast =
+    canManage ||
+    (!!me?.id &&
+      allMembersForGate.some(
+        (m) =>
+          m.userId === me.id &&
+          m.status !== "pending" &&
+          (m.position ?? "").toLowerCase() === "manager",
       ));
 
   // Open the welcome rundown only once the viewer is confirmed a manager, so a
@@ -302,6 +319,18 @@ export default function TeamPage() {
 
         {expanded === "posts" && (
           <>
+            {canBroadcast && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setBroadcastOpen(true)}
+                  className="font-bold rounded-full"
+                  data-testid="btn-team-broadcast"
+                >
+                  <Megaphone className="w-4 h-4 mr-1.5" /> Message team
+                </Button>
+              </div>
+            )}
             <TournamentScheduleCard teamId={teamId} canPostRecap={canPostRecap} />
             {canViewSchedule && (
               <ScheduleUpNext
@@ -359,6 +388,14 @@ export default function TeamPage() {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
       />
+
+      {canBroadcast && (
+        <BroadcastComposeDialog
+          open={broadcastOpen}
+          onOpenChange={setBroadcastOpen}
+          target={{ kind: "team", id: teamId, name: team.name }}
+        />
+      )}
 
       <EditTeamDialog
         team={{
