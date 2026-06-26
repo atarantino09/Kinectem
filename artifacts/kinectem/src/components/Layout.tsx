@@ -249,14 +249,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Button
                     variant={navVariant(active)}
                     size="sm"
-                    className={cn("font-semibold", hasBadge && "relative")}
+                    className="font-semibold"
                     data-active={active ? "true" : undefined}
                     data-testid={item.testId}
                   >
                     <Icon className="w-4 h-4 mr-2" /> {item.label}
                     {hasBadge && (
                       <span
-                        className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                        className="ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
                         data-testid={
                           item.testId ? `badge-${item.testId}` : undefined
                         }
