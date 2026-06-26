@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TeamDescription } from "./TeamDescription";
 import { useToast } from "@/hooks/use-toast";
+import { PersonaPill } from "@/components/PersonaPill";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
@@ -298,6 +299,7 @@ export function TeamHeaderCard({
               <h1 className="text-5xl font-black tracking-tight leading-[1.05]">
                 {team.name}
               </h1>
+              <PersonaPill persona="team" />
               {isAdmin && (
                 <Button
                   size="sm"

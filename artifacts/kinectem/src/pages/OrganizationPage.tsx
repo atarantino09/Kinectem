@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { PersonaPill } from "@/components/PersonaPill";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import {
@@ -342,9 +343,12 @@ export default function OrganizationPage() {
                   </AvatarLightbox>
                 </div>
                 <div className="pb-1 sm:pb-2 min-w-0 flex-1">
-                  <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
-                    {formatOrgName(organization.name)}
-                  </h1>
+                  <div className="flex items-start gap-3 flex-wrap">
+                    <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
+                      {formatOrgName(organization.name)}
+                    </h1>
+                    <PersonaPill persona="organization" />
+                  </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium flex-wrap">
                     <span className="font-bold text-foreground">@{organization.slug}</span>
                     {organization.role && (
