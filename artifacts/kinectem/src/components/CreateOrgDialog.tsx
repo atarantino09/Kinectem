@@ -51,9 +51,14 @@ function slugify(s: string) {
 export function CreateOrgDialog({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  // When provided, the caller takes over what happens after a successful
+  // create (e.g. the adopt flow finalizes immediately) instead of the
+  // default redirect to the org's subscribe page.
+  onCreated?: (org: { id: string; name: string }) => void;
 }) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
@@ -210,6 +215,10 @@ export function CreateOrgDialog({
       ]);
       reset();
       onOpenChange(false);
+      if (onCreated) {
+        onCreated({ id: org.id, name: trimmedName });
+        return;
+      }
       // Task #443 — leave a one-shot signal so the org page can show
       // a celebratory "next step is to create teams" popup once,
       // keyed by the new org id and consumed on first read so a

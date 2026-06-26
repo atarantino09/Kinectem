@@ -33,6 +33,7 @@ import {
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
+import { AdoptLinkCard } from "@/components/team-page/AdoptLinkCard";
 import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
@@ -252,14 +253,17 @@ export default function TeamPage() {
               after it ends, adopt this team into an organization.
             </p>
             {canManage && (
-              <button
-                type="button"
-                onClick={() => setAdoptOpen(true)}
-                className="text-xs font-bold uppercase tracking-wider text-sky-700 hover:underline"
-                data-testid="button-open-adopt-team"
-              >
-                Adopt into your organization →
-              </button>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setAdoptOpen(true)}
+                  className="block text-xs font-bold uppercase tracking-wider text-sky-700 hover:underline"
+                  data-testid="button-open-adopt-team"
+                >
+                  Adopt into your organization →
+                </button>
+                <AdoptLinkCard teamId={teamId} />
+              </div>
             )}
           </div>
         )}

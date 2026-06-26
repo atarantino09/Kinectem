@@ -461,6 +461,14 @@ export const teams = pgTable("teams", {
   // rotate it to revoke existing calendar subscriptions. The token alone
   // identifies the team on the public feed endpoint, so it must stay secret.
   scheduleFeedToken: text("schedule_feed_token").unique(),
+  // Unguessable one-time capability token for the "invite your club to adopt
+  // this team" link. A solo team's coach generates it and shares it with their
+  // org admin, who opens `/adopt-team/<token>` and reparents the team into one
+  // of their organizations. NULL until first generated; cleared on successful
+  // adoption (one-time) and rotatable by the coach to revoke an outstanding
+  // link. The token alone authorizes resolving the team on the public landing
+  // page, so it must stay secret.
+  adoptToken: text("adopt_token"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   // Task #472 — Soft "archive" state. `archivedAt IS NOT NULL` is the
   // archived flag; `archivedByUserId` records the org owner who took
@@ -476,6 +484,9 @@ export const teams = pgTable("teams", {
   // a trigram GIN index for `ilike '%q%'` team-name search.
   organizationIdIdx: index("teams_organization_id_idx").on(t.organizationId),
   nameTrgmIdx: index("teams_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+  adoptTokenIdx: uniqueIndex("teams_adopt_token_idx")
+    .on(t.adoptToken)
+    .where(sql`${t.adoptToken} IS NOT NULL`),
 }));
 
 export const teamFollowers = pgTable("team_followers", {

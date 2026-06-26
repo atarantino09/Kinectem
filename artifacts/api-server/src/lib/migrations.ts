@@ -965,6 +965,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS tournament_matches_unique_number
   ON tournament_matches (tournament_id, match_number);
 `;
 
+// Per-team one-time "adopt this team into your org" capability token. A solo
+// team's coach mints it and shares the `/adopt-team/<token>` link with their
+// org admin, who reparents the team. Plaintext (a shareable link, not a
+// password); nullable; cleared on adoption (one-time); rotatable. Idempotent.
+const TEAM_ADOPT_TOKEN = `
+ALTER TABLE teams
+  ADD COLUMN IF NOT EXISTS adopt_token text;
+CREATE UNIQUE INDEX IF NOT EXISTS teams_adopt_token_idx
+  ON teams (adopt_token)
+  WHERE adopt_token IS NOT NULL;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1113,6 +1125,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-26-task-628-tournaments",
     sql: TASK_628_TOURNAMENTS,
+  },
+  {
+    name: "2026-06-26-team-adopt-token",
+    sql: TEAM_ADOPT_TOKEN,
   },
 ];
 

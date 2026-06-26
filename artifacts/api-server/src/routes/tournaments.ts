@@ -26,7 +26,11 @@ import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { apiError } from "../lib/spec-helpers";
-import { canManageOrganization, recapFreeUntil } from "../lib/permissions";
+import {
+  canManageOrganization,
+  canManageTeam,
+  recapFreeUntil,
+} from "../lib/permissions";
 
 const router: IRouter = Router();
 
@@ -760,6 +764,184 @@ router.post(
     }
 
     res.json({ ok: true, teamId, organizationId });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Adopt-link (coach-generated shareable invite)
+// ---------------------------------------------------------------------------
+//
+// A solo team's coach can't be expected to also be an admin of the adopting
+// organization. So the coach mints a one-time secret link and hands it to
+// their org admin, who opens `/adopt-team/<token>` and confirms which org (or
+// creates one) to reparent the team into. Mirrors the org-claim-link pattern:
+// the token alone authorizes resolving the team on the public landing page,
+// the finalize step still gates on the claimer being an owner/admin of the
+// chosen org, and the same race-safe `WHERE organization_id IS NULL` guard is
+// the source of truth. The token is single-use — cleared on success — and the
+// coach can rotate it to revoke an outstanding link.
+
+// Public, token-keyed; rate-limited by IP to blunt token guessing.
+const teamAdoptLinkLimiter = rateLimit({
+  name: "team-adopt-link",
+  windowMs: ONE_HOUR,
+  max: 120,
+  keys: (req) => [ipKey(req)],
+  message: "Too many requests. Please wait a moment and try again.",
+});
+
+// POST /teams/:teamId/adopt-link — coach/manager mints (or rotates) the link.
+// Returns the current token, creating one lazily; pass `{ rotate: true }` to
+// issue a fresh token and invalidate any previously shared link.
+const AdoptLinkBody = z.object({ rotate: z.boolean().optional() });
+
+router.post(
+  "/teams/:teamId/adopt-link",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = String(req.params.teamId);
+
+    const parsed = AdoptLinkBody.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return apiError(res, 400, "Invalid request.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    const rotate = parsed.data.rotate === true;
+
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return apiError(res, 404, "Team not found");
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(
+        res,
+        403,
+        "Only a coach or manager of this team can create an adopt link.",
+        { code: "TEAM_FORBIDDEN" },
+      );
+    }
+    if (team.organizationId) {
+      return apiError(res, 409, "This team already belongs to an organization.", {
+        code: "ALREADY_ADOPTED",
+      });
+    }
+
+    let token = team.adoptToken;
+    if (!token || rotate) {
+      token = randomBytes(24).toString("base64url");
+      await db
+        .update(teams)
+        .set({ adoptToken: token })
+        .where(eq(teams.id, teamId));
+    }
+    res.json({ ok: true, token });
+  }),
+);
+
+// Public — resolve a token to its (still org-less) team for the landing page.
+// Never leaks the token or other secret fields.
+router.get(
+  "/team-adopt-links/:token",
+  teamAdoptLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const token = String(req.params.token ?? "");
+    if (!token) return apiError(res, 404, "Adopt link not found");
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.adoptToken, token))
+      .limit(1);
+    if (!team) return apiError(res, 404, "Adopt link not found");
+    res.json({
+      team: {
+        id: team.id,
+        name: team.name,
+        sport: team.sport,
+        logoUrl: team.logoUrl,
+      },
+      alreadyAdopted: !!team.organizationId,
+    });
+  }),
+);
+
+// Auth — finalize: reparent the team into an org the signed-in user manages.
+// Race-safe conditional UPDATE (only while org-less) is the authoritative
+// guard; the token is cleared in the same statement so it can't be reused.
+const AdoptLinkClaimBody = z.object({
+  organizationId: z.string().uuid(),
+});
+
+router.post(
+  "/team-adopt-links/:token/claim",
+  requireAuth,
+  teamAdoptLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const token = String(req.params.token ?? "");
+    if (!token) return apiError(res, 404, "Adopt link not found");
+
+    const parsed = AdoptLinkClaimBody.safeParse(req.body);
+    if (!parsed.success) {
+      const first = parsed.error.errors[0];
+      return apiError(res, 400, first?.message ?? "Invalid request.", {
+        code: "VALIDATION_FAILED",
+        extras: { fields: parsed.error.flatten().fieldErrors },
+      });
+    }
+    const { organizationId } = parsed.data;
+
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.adoptToken, token))
+      .limit(1);
+    if (!team) return apiError(res, 404, "Adopt link not found");
+    if (team.organizationId) {
+      return apiError(res, 409, "This team already belongs to an organization.", {
+        code: "ALREADY_ADOPTED",
+      });
+    }
+
+    // Only an owner/admin of the target org may pull a team into it.
+    if (!(await canManageOrganization(me.id, organizationId))) {
+      return apiError(
+        res,
+        403,
+        "You must be an owner or admin of the organization to adopt a team.",
+        { code: "ORG_FORBIDDEN" },
+      );
+    }
+
+    // Race-safe reparent + single-use token consume in one statement: only
+    // succeeds while the team is still org-less and the token is unchanged.
+    const adopted = await db
+      .update(teams)
+      .set({ organizationId, adoptToken: null })
+      .where(
+        and(
+          eq(teams.id, team.id),
+          eq(teams.adoptToken, token),
+          isNull(teams.organizationId),
+        ),
+      )
+      .returning();
+    if (adopted.length === 0) {
+      return apiError(
+        res,
+        409,
+        "This team was just adopted by another organization.",
+        { code: "ALREADY_ADOPTED" },
+      );
+    }
+
+    res.json({ ok: true, teamId: team.id, organizationId });
   }),
 );
 
