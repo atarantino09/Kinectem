@@ -1366,3 +1366,27 @@ export const scheduleEventRsvps = pgTable("schedule_event_rsvps", {
   eventIdIdx: index("schedule_event_rsvps_event_id_idx").on(t.eventId),
   athleteIdIdx: index("schedule_event_rsvps_athlete_id_idx").on(t.athleteId),
 }));
+
+export const announcementLevelEnum = pgEnum("announcement_level", [
+  "info",
+  "warning",
+  "success",
+]);
+
+// Platform-wide announcements shown as an in-app banner to every logged-in
+// user. Authored by platform admins. `active` plus the optional startsAt/endsAt
+// window control visibility; per-user dismissal is client-side (localStorage).
+export const announcements = pgTable("announcements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  level: announcementLevelEnum("level").notNull().default("info"),
+  active: boolean("active").notNull().default(true),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  activeIdx: index("announcements_active_idx").on(t.active),
+}));

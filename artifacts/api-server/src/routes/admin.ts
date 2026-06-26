@@ -20,6 +20,9 @@ import {
   notifications,
   organizationAdmins,
   organizationClaimRequests,
+  scheduleEvents,
+  scheduleEventRsvps,
+  announcements,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1787,6 +1790,196 @@ router.patch(
         messagedAt: org.messagedAt ? org.messagedAt.toISOString() : null,
       },
     });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Cross-team schedule oversight — upcoming events across EVERY team with a
+// per-event RSVP tally. Read-only platform-admin view (no edits here).
+// ---------------------------------------------------------------------------
+router.get(
+  "/schedule/upcoming",
+  asyncHandler(async (req, res) => {
+    const limitParam = req.query["limit"];
+    const limitRaw = typeof limitParam === "string" ? parseInt(limitParam, 10) : NaN;
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 200);
+    const now = new Date();
+
+    const events = await db
+      .select({
+        id: scheduleEvents.id,
+        teamId: scheduleEvents.teamId,
+        teamName: teams.name,
+        organizationId: scheduleEvents.organizationId,
+        organizationName: organizations.name,
+        eventType: scheduleEvents.eventType,
+        title: scheduleEvents.title,
+        opponent: scheduleEvents.opponent,
+        status: scheduleEvents.status,
+        startAt: scheduleEvents.startAt,
+        endAt: scheduleEvents.endAt,
+        locationName: scheduleEvents.locationName,
+      })
+      .from(scheduleEvents)
+      .innerJoin(teams, eq(teams.id, scheduleEvents.teamId))
+      .leftJoin(organizations, eq(organizations.id, scheduleEvents.organizationId))
+      .where(gte(scheduleEvents.startAt, now))
+      .orderBy(asc(scheduleEvents.startAt))
+      .limit(limit);
+
+    const eventIds = events.map((e) => e.id);
+    const counts = eventIds.length
+      ? await db
+          .select({
+            eventId: scheduleEventRsvps.eventId,
+            status: scheduleEventRsvps.status,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(scheduleEventRsvps)
+          .where(inArray(scheduleEventRsvps.eventId, eventIds))
+          .groupBy(scheduleEventRsvps.eventId, scheduleEventRsvps.status)
+      : [];
+    const byEvent = new Map<string, { going: number; maybe: number; out: number }>();
+    for (const c of counts) {
+      const cur = byEvent.get(c.eventId) ?? { going: 0, maybe: 0, out: 0 };
+      cur[c.status as "going" | "maybe" | "out"] = c.count;
+      byEvent.set(c.eventId, cur);
+    }
+
+    const data = events.map((e) => {
+      const r = byEvent.get(e.id) ?? { going: 0, maybe: 0, out: 0 };
+      return {
+        id: e.id,
+        teamId: e.teamId,
+        teamName: e.teamName,
+        organizationId: e.organizationId,
+        organizationName: e.organizationName ?? null,
+        eventType: e.eventType,
+        title: e.title ?? null,
+        opponent: e.opponent ?? null,
+        status: e.status,
+        startAt: e.startAt.toISOString(),
+        endAt: e.endAt ? e.endAt.toISOString() : null,
+        locationName: e.locationName ?? null,
+        rsvps: r,
+      };
+    });
+    res.json({ data });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// System announcements — platform-wide in-app banner managed by admins.
+// ---------------------------------------------------------------------------
+function toAnnouncement(a: typeof announcements.$inferSelect) {
+  return {
+    id: a.id,
+    title: a.title,
+    body: a.body,
+    level: a.level,
+    active: a.active,
+    startsAt: a.startsAt ? a.startsAt.toISOString() : null,
+    endsAt: a.endsAt ? a.endsAt.toISOString() : null,
+    createdAt: a.createdAt.toISOString(),
+    updatedAt: a.updatedAt.toISOString(),
+  };
+}
+
+const windowValid = (data: {
+  startsAt?: string | null;
+  endsAt?: string | null;
+}) =>
+  !data.startsAt ||
+  !data.endsAt ||
+  new Date(data.endsAt).getTime() >= new Date(data.startsAt).getTime();
+const windowError = {
+  message: "endsAt must be on or after startsAt",
+  path: ["endsAt"],
+};
+
+const createAnnouncementZ = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(2000),
+    level: z.enum(["info", "warning", "success"]).default("info"),
+    startsAt: z.string().datetime().nullish(),
+    endsAt: z.string().datetime().nullish(),
+  })
+  .refine(windowValid, windowError);
+
+const patchAnnouncementZ = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    body: z.string().trim().min(1).max(2000).optional(),
+    level: z.enum(["info", "warning", "success"]).optional(),
+    active: z.boolean().optional(),
+    startsAt: z.string().datetime().nullish(),
+    endsAt: z.string().datetime().nullish(),
+  })
+  .refine(windowValid, windowError);
+
+router.get(
+  "/announcements",
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(announcements)
+      .orderBy(desc(announcements.createdAt))
+      .limit(100);
+    res.json({ data: rows.map(toAnnouncement) });
+  }),
+);
+
+router.post(
+  "/announcements",
+  asyncHandler(async (req, res) => {
+    const parsed = createAnnouncementZ.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: parsed.error.issues[0]?.message ?? "Invalid body" });
+    }
+    const { title, body, level, startsAt, endsAt } = parsed.data;
+    const [row] = await db
+      .insert(announcements)
+      .values({
+        title,
+        body,
+        level,
+        startsAt: startsAt ? new Date(startsAt) : null,
+        endsAt: endsAt ? new Date(endsAt) : null,
+        createdById: req.realUser?.id ?? null,
+      })
+      .returning();
+    return res.status(201).json(toAnnouncement(row));
+  }),
+);
+
+router.patch(
+  "/announcements/:id",
+  asyncHandler(async (req, res) => {
+    const id = p(req.params["id"]);
+    const parsed = patchAnnouncementZ.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: parsed.error.issues[0]?.message ?? "Invalid body" });
+    }
+    const { title, body, level, active, startsAt, endsAt } = parsed.data;
+    const patch: Partial<typeof announcements.$inferInsert> = { updatedAt: new Date() };
+    if (title !== undefined) patch.title = title;
+    if (body !== undefined) patch.body = body;
+    if (level !== undefined) patch.level = level;
+    if (active !== undefined) patch.active = active;
+    if (startsAt !== undefined) patch.startsAt = startsAt ? new Date(startsAt) : null;
+    if (endsAt !== undefined) patch.endsAt = endsAt ? new Date(endsAt) : null;
+    const [row] = await db
+      .update(announcements)
+      .set(patch)
+      .where(eq(announcements.id, id))
+      .returning();
+    if (!row) return notFound(res, "Announcement not found");
+    return res.json(toAnnouncement(row));
   }),
 );
 

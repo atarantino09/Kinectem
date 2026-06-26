@@ -27,6 +27,7 @@ import {
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { MasqueradeBanner } from "@/components/MasqueradeBanner";
+import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { CreateMenuItems } from "@/components/CreateMenuItems";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { MobileTopBar } from "@/components/MobileTopBar";
@@ -121,6 +122,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen text-foreground">
       <MasqueradeBanner />
+      <AnnouncementBanner />
 
       {/* Drawer is rendered at top-level (outside the desktop-only header) so
           the mobile top bar can open it without depending on the desktop tree. */}

@@ -29,6 +29,7 @@ import foundingSignupsRouter from "./founding-signups";
 import foundingAdminRouter from "./founding-admin";
 import aiRouter from "./ai";
 import subscriptionsRouter from "./subscriptions";
+import announcementsRouter from "./announcements";
 
 const router: Router = Router();
 
@@ -68,5 +69,6 @@ router.use(foundingSignupsRouter);
 router.use(foundingAdminRouter);
 router.use(aiRouter);
 router.use(subscriptionsRouter);
+router.use(announcementsRouter);
 
 export default router;

@@ -9,6 +9,8 @@ import {
   Link2,
   Tag,
   Building2,
+  CalendarDays,
+  Megaphone,
   ArrowLeft,
   Lock,
 } from "lucide-react";
@@ -27,6 +29,8 @@ const NAV = [
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },
   { href: "/admin/promo-codes", label: "Promo codes", icon: Tag },
   { href: "/admin/organizations", label: "Organizations", icon: Building2 },
+  { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
