@@ -53,6 +53,7 @@ const AdminOrgClaimLinks = lazy(
 const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
 const AdminPromoCodes = lazy(() => import("@/pages/admin/AdminPromoCodes"));
 const AdminSchedule = lazy(() => import("@/pages/admin/AdminSchedule"));
+const AdminTournaments = lazy(() => import("@/pages/admin/AdminTournaments"));
 const AdminAnnouncements = lazy(
   () => import("@/pages/admin/AdminAnnouncements"),
 );
@@ -139,6 +140,7 @@ function Router() {
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
             <Route path="/admin/promo-codes" component={AdminPromoCodes} />
             <Route path="/admin/schedule" component={AdminSchedule} />
+            <Route path="/admin/tournaments" component={AdminTournaments} />
             <Route path="/admin/announcements" component={AdminAnnouncements} />
             <Route path="/admin/organizations" component={AdminOrganizations} />
             <Route component={NotFound} />

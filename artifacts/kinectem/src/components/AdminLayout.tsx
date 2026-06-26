@@ -11,6 +11,7 @@ import {
   Building2,
   CalendarDays,
   Megaphone,
+  Trophy,
   ArrowLeft,
   Lock,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/admin/promo-codes", label: "Promo codes", icon: Tag },
   { href: "/admin/organizations", label: "Organizations", icon: Building2 },
   { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/admin/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
 ];
 
