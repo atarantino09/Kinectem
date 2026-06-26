@@ -318,7 +318,12 @@ export default function OrganizationPage() {
         {/* Main column */}
         <div className="space-y-6 min-w-0">
           {/* Hero */}
-          <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
+          <div className="relative rounded-xl border border-border shadow-sm overflow-hidden bg-card">
+            <PersonaPill
+              persona="organization"
+              size="sm"
+              className="!absolute top-3 right-3 z-20 shadow-sm"
+            />
             <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
             <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-16 sm:-mt-20 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 sm:flex-wrap relative z-10">
               <div className="flex items-end gap-3 sm:gap-4 min-w-0">
@@ -343,12 +348,9 @@ export default function OrganizationPage() {
                   </AvatarLightbox>
                 </div>
                 <div className="pb-1 sm:pb-2 min-w-0 flex-1">
-                  <div className="flex items-start gap-3 flex-wrap">
-                    <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
-                      {formatOrgName(organization.name)}
-                    </h1>
-                    <PersonaPill persona="organization" />
-                  </div>
+                  <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
+                    {formatOrgName(organization.name)}
+                  </h1>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium flex-wrap">
                     <span className="font-bold text-foreground">@{organization.slug}</span>
                     {organization.role && (

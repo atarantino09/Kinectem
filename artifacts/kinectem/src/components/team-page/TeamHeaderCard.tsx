@@ -180,6 +180,11 @@ export function TeamHeaderCard({
             {team.currentSeason.name}
           </Badge>
         )}
+        <PersonaPill
+          persona="team"
+          size="sm"
+          className="!absolute top-3 right-3 shadow-sm"
+        />
         {isAdmin && (
           <div
             className={`absolute left-3 ${team.currentSeason ? "top-12" : "top-3"} flex items-center gap-2`}
@@ -299,7 +304,6 @@ export function TeamHeaderCard({
               <h1 className="text-5xl font-black tracking-tight leading-[1.05]">
                 {team.name}
               </h1>
-              <PersonaPill persona="team" />
               {isAdmin && (
                 <Button
                   size="sm"
