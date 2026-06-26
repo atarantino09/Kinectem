@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearch } from "wouter";
+import { useParams, useSearch, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetTeamById,
@@ -33,6 +33,7 @@ import {
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
+import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
@@ -44,19 +45,22 @@ export default function TeamPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const search = useSearch();
+  const [, navigate] = useLocation();
   // The notifications bell appends `?roster=1[&entryId=…]` to team-invite
   // links so a click on the bell lands on the Roster panel (instead of
   // Posts) with the invitee's pending row scrolled into view. A bare
   // `/teams/:id` URL keeps the historical "open Posts" default.
-  const { showRoster, highlightEntryId } = useMemo(() => {
+  const { showRoster, highlightEntryId, wantsWelcome } = useMemo(() => {
     const sp = new URLSearchParams(search ?? "");
     const entryId = sp.get("entryId");
     return {
       showRoster: sp.get("roster") === "1" || !!entryId,
       highlightEntryId: entryId,
+      wantsWelcome: sp.get("welcome") === "1",
     };
   }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [adoptOpen, setAdoptOpen] = useState(false);
   const [expanded, setExpanded] = useState<TeamPanel>(
@@ -71,6 +75,19 @@ export default function TeamPage() {
   useEffect(() => {
     if (showRoster) setExpanded("roster");
   }, [showRoster, teamId]);
+
+  // Right after a coach claims their team, `submit()` lands them here with
+  // `?welcome=1`. Pop the first-run rundown once their manage role resolves so
+  // only the owner/coach sees it. Closing strips the flag so a refresh or
+  // shared link doesn't re-open it.
+  function closeWelcome() {
+    setWelcomeOpen(false);
+    if (!wantsWelcome) return;
+    const sp = new URLSearchParams(search ?? "");
+    sp.delete("welcome");
+    const qs = sp.toString();
+    navigate(`/teams/${teamId}${qs ? `?${qs}` : ""}`, { replace: true });
+  }
 
   const { data: team, isLoading } = useGetTeamById(teamId);
   const followTeam = useFollowTeam();
@@ -106,6 +123,13 @@ export default function TeamPage() {
           m.status !== "pending" &&
           COACH_LEVEL_POSITIONS.includes((m.position ?? "").toLowerCase()),
       ));
+
+  // Open the welcome rundown only once the viewer is confirmed a manager, so a
+  // shared `?welcome=1` link never shows the coach-facing onboarding to a
+  // visitor who can't act on it.
+  useEffect(() => {
+    if (wantsWelcome && canManage) setWelcomeOpen(true);
+  }, [wantsWelcome, canManage]);
   // Broader gate than `canManage`: any accepted roster entry on this
   // team (player, coach, staff, author, etc.) — used to expose the
   // "Post Highlight" CTA to ordinary team members. Mirrors the
@@ -355,6 +379,22 @@ export default function TeamPage() {
           onAdopted={() => {
             qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
             qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+          }}
+        />
+      )}
+
+      {canManage && (
+        <TeamWelcomeDialog
+          teamName={team.name}
+          open={welcomeOpen}
+          onOpenChange={(open) => {
+            if (!open) closeWelcome();
+            else setWelcomeOpen(true);
+          }}
+          onAddPlayers={() => {
+            closeWelcome();
+            setExpanded("roster");
+            setInviteOpen(true);
           }}
         />
       )}

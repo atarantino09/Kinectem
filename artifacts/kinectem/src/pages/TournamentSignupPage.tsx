@@ -107,7 +107,7 @@ export default function TournamentSignupPage() {
         },
       );
       toast({ title: "Your team is in! Welcome to the tournament." });
-      navigate(`/teams/${res.teamId}`);
+      navigate(`/teams/${res.teamId}?welcome=1`);
     } catch (err) {
       toast({
         title: (err as Error)?.message ?? "Couldn't claim that slot",
