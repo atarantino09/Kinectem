@@ -75,7 +75,10 @@ export default function TeamAdoptPage() {
 
   const team = resolve.data?.team;
 
-  async function finalize(targetOrgId: string) {
+  async function finalize(
+    targetOrgId: string,
+    opts?: { newlyCreated?: boolean },
+  ) {
     if (!targetOrgId) return;
     setSubmitting(true);
     try {
@@ -90,7 +93,14 @@ export default function TeamAdoptPage() {
         title: "Team adopted",
         description: `${team?.name ?? "This team"} is now part of your organization with full features.`,
       });
-      navigate(`/teams/${res.teamId}`);
+      // When the org was just created inline, send the new owner to the
+      // subscribe/payment page first — same as the normal org-creation flow —
+      // instead of dropping them straight on the team page.
+      if (opts?.newlyCreated) {
+        navigate(`/organizations/${targetOrgId}/subscribe`);
+      } else {
+        navigate(`/teams/${res.teamId}`);
+      }
     } catch (err) {
       toast({
         variant: "destructive",
@@ -264,7 +274,7 @@ export default function TeamAdoptPage() {
       <CreateOrgDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={(org) => finalize(org.id)}
+        onCreated={(org) => finalize(org.id, { newlyCreated: true })}
       />
     </div>
   );
