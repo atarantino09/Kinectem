@@ -40,6 +40,7 @@ import {
 import { ReportDialog, type ReportContentType } from "@/components/ReportDialog";
 import { TakedownDialog } from "@/components/TakedownDialog";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { cn } from "@/lib/utils";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
@@ -304,7 +305,13 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   const sharedBy = "sharedBy" in post ? post.sharedBy : null;
 
   return (
-    <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+    <Card
+      className={cn(
+        "rounded-xl border border-border shadow-sm overflow-hidden",
+        isCombinedRecap &&
+          "bg-gradient-to-br from-purple-50 to-violet-100/60 dark:from-purple-950/30 dark:to-violet-900/20",
+      )}
+    >
       <CardContent className="p-0">
         {sharedBy && (
           <Link
