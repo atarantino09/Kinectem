@@ -1188,6 +1188,16 @@ router.post(
     if (!(await canManageTeam(me.id, team))) {
       return apiError(res, 403, "Team coaches or org admins only");
     }
+    // Task #628 — schedule import is an org-team feature (schedule_events
+    // requires a non-null organization_id); solo teams have no org.
+    if (!team.organizationId) {
+      return apiError(
+        res,
+        400,
+        "Schedule import is not available for teams without an organization",
+      );
+    }
+    const organizationId = team.organizationId;
     const parsed = importZ.safeParse(req.body);
     if (!parsed.success) {
       return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
@@ -1213,7 +1223,7 @@ router.post(
       header.forEach((col, idx) => {
         rec[col] = cells[idx] ?? "";
       });
-      return validateImportRow(rec, i + 2, team, me.id, tzOffsetMinutes);
+      return validateImportRow(rec, i + 2, { id: team.id, organizationId }, me.id, tzOffsetMinutes);
     });
 
     const errorCount = rows.filter((r) => r.error).length;

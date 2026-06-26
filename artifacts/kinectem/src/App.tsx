@@ -30,6 +30,8 @@ const ChildConversationPage = lazy(() => import("@/pages/ChildConversationPage")
 const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
 const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
 const ClaimOrgPage = lazy(() => import("@/pages/ClaimOrgPage"));
+const TournamentPage = lazy(() => import("@/pages/TournamentPage"));
+const TournamentSignupPage = lazy(() => import("@/pages/TournamentSignupPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 const GuardianConfirmPage = lazy(() => import("@/pages/GuardianConfirmPage"));
@@ -90,6 +92,8 @@ function Router() {
       <Route path="/invites/:token" component={InviteAcceptPage} />
       <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
       <Route path="/claim/:token" component={ClaimOrgPage} />
+      <Route path="/t/:slug/signup" component={TournamentSignupPage} />
+      <Route path="/t/:slug" component={TournamentPage} />
       <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}

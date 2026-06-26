@@ -1300,7 +1300,9 @@ router.get(
         .select({ r: rosterEntries, t: teams, org: organizations })
         .from(rosterEntries)
         .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
-        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        // Task #628 — leftJoin so solo teams (no org) still surface in the
+        // composer's authorable picker; org is serialized null for them.
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
         .where(
           and(
             eq(rosterEntries.userId, me.id),
@@ -1346,12 +1348,14 @@ router.get(
           teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
           teamAvatarUrl: r.t.logoUrl ?? null,
           teamBannerUrl: r.t.bannerUrl ?? null,
-          organization: {
-            id: r.org.id,
-            name: r.org.name,
-            slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
-            logoUrl: r.org.logoUrl ?? null,
-          },
+          organization: r.org
+            ? {
+                id: r.org.id,
+                name: r.org.name,
+                slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+                logoUrl: r.org.logoUrl ?? null,
+              }
+            : null,
           role: r.r.role === "coach" ? "admin" : ("member" as const),
           position: r.r.role === "player" ? "player" : "coach",
           status: "active",
@@ -1434,7 +1438,8 @@ router.get(
       .select({ r: rosterEntries, t: teams, org: organizations })
       .from(rosterEntries)
       .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #628 — leftJoin so solo teams (no org) still show on profiles.
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(rosterFilter);
     const data: Array<Record<string, unknown>> = [];
     const seenTeamIds = new Set<string>();
@@ -1447,12 +1452,14 @@ router.get(
         teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
         teamAvatarUrl: r.t.logoUrl ?? null,
         teamBannerUrl: r.t.bannerUrl ?? null,
-        organization: {
-          id: r.org.id,
-          name: r.org.name,
-          slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
-          logoUrl: r.org.logoUrl ?? null,
-        },
+        organization: r.org
+          ? {
+              id: r.org.id,
+              name: r.org.name,
+              slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+              logoUrl: r.org.logoUrl ?? null,
+            }
+          : null,
         role: r.r.role === "coach" ? "admin" : ("member" as const),
         position: r.r.role === "player" ? "player" : "coach",
         status: r.r.status === "accepted" ? "active" : "pending",
@@ -1478,7 +1485,8 @@ router.get(
       })
       .from(teamFollowers)
       .innerJoin(teams, eq(teamFollowers.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #628 — leftJoin so a parent following a child's solo team isn't dropped.
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
       .innerJoin(child, eq(rosterEntries.userId, child.id))
       .where(
@@ -1507,12 +1515,14 @@ router.get(
         teamSlug: r.t.name.toLowerCase().replace(/\s+/g, "-"),
         teamAvatarUrl: r.t.logoUrl ?? null,
         teamBannerUrl: r.t.bannerUrl ?? null,
-        organization: {
-          id: r.org.id,
-          name: r.org.name,
-          slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
-          logoUrl: r.org.logoUrl ?? null,
-        },
+        organization: r.org
+          ? {
+              id: r.org.id,
+              name: r.org.name,
+              slug: r.org.name.toLowerCase().replace(/\s+/g, "-"),
+              logoUrl: r.org.logoUrl ?? null,
+            }
+          : null,
         role: "member" as const,
         position: "parent",
         status: "active",

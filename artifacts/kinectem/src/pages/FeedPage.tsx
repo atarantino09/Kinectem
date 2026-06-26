@@ -23,7 +23,7 @@ type SidebarTeam = {
   id: string;
   name: string;
   logoUrl: string | null;
-  orgName: string;
+  orgName: string | null;
 };
 
 type SidebarOrg = {
@@ -44,7 +44,19 @@ export default function FeedPage() {
 
   const { orgGroups, orphanTeams } = useMemo(() => {
     const teamsByOrg = new Map<string, SidebarTeam[]>();
+    // Task #628 — solo teams (tournament funnel) have no org; collect them
+    // separately so they render in the org-less "orphan teams" group.
+    const soloTeams: SidebarTeam[] = [];
     for (const t of myTeams?.data ?? []) {
+      if (!t.organization) {
+        soloTeams.push({
+          id: t.teamId,
+          name: t.teamName,
+          logoUrl: t.teamAvatarUrl ?? null,
+          orgName: null,
+        });
+        continue;
+      }
       const arr = teamsByOrg.get(t.organization.id) ?? [];
       arr.push({
         id: t.teamId,
@@ -68,7 +80,7 @@ export default function FeedPage() {
     for (const [orgId, teams] of teamsByOrg) {
       if (!orgIds.has(orgId)) orphanTeams.push(...teams);
     }
-    return { orgGroups, orphanTeams };
+    return { orgGroups, orphanTeams: [...orphanTeams, ...soloTeams] };
   }, [myOrgs, myTeams]);
 
   const hasSidebarItems = orgGroups.length > 0 || orphanTeams.length > 0;
@@ -248,7 +260,9 @@ export default function FeedPage() {
                         teamId={t.id}
                         teamName={t.name}
                         teamLogoUrl={t.logoUrl}
-                        subtitle={formatOrgName(t.orgName)}
+                        subtitle={
+                          t.orgName ? formatOrgName(t.orgName) : "Independent team"
+                        }
                       />
                     ))}
                   </div>

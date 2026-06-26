@@ -40,6 +40,9 @@ import {
   canCreateRecap,
   canApproveTeamHighlight,
   canManageOrganization,
+  canManageTeam,
+  isSoloTeam,
+  soloTeamRecapWindowOpen,
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
   loadAdminOrgIds,
@@ -1766,10 +1769,12 @@ router.post(
       if (!teamId) return notFound(res);
       const isDraft = body.status === "draft";
       const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
-      const [org] = team
+      if (!team) return notFound(res);
+      // Task #628 — solo teams have no parent org (org stays null).
+      const [org] = team.organizationId
         ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
         : [null];
-      if (!team || !org) return notFound(res);
+      if (team.organizationId && !org) return notFound(res);
       // Task #472 — block new recaps on archived teams. Authors can
       // still see existing posts (the team-feed read paths intentionally
       // do not filter by team archived state, only the team-detail
@@ -1777,13 +1782,32 @@ router.post(
       if (team.archivedAt)
         return apiError(res, 409, "Team is archived", { code: "team_archived" });
       const allowed = await canCreateRecap(me.id, team);
-      if (!allowed)
+      if (!allowed) {
+        // Task #628 — distinguish "tournament window closed" from a plain
+        // permission failure so the solo-team coach gets actionable copy.
+        if (
+          isSoloTeam(team) &&
+          (await canManageTeam(me.id, team)) &&
+          !(await soloTeamRecapWindowOpen(team.id))
+        ) {
+          return apiError(
+            res,
+            403,
+            "This tournament has ended. Create or join an organization to keep posting game recaps.",
+            { code: "tournament_window_closed" },
+          );
+        }
         return apiError(
           res,
           403,
           "Only admins, coaches, team managers, and authors can create game recaps",
         );
-      const isAdmin = await canManageOrganization(me.id, team.organizationId);
+      }
+      // Task #628 — solo-team owners/coaches publish directly (no org admin
+      // approval layer exists for a team with no organization).
+      const isAdmin = isSoloTeam(team)
+        ? await canManageTeam(me.id, team)
+        : await canManageOrganization(me.id, team.organizationId);
       const status: "draft" | "pending_approval" | "published" = isDraft
         ? "draft"
         : isAdmin
@@ -1870,7 +1894,7 @@ router.post(
       // into pending_approval (drafts skip; admin-authored recaps
       // publish straight through and skip too). Mirrors the highlight
       // fan-out's mask-at-write rule for minor actors.
-      if (status === "pending_approval") {
+      if (status === "pending_approval" && org) {
         await notifyAdminsOfPendingPostApproval({
           organizationId: org.id,
           teamName: team.name,
@@ -1886,7 +1910,7 @@ router.post(
       // Compute the role label so the response carries the same
       // header data the client will need when it opens the recap.
       const authorRoleMap = await computeArticleAuthorRoleMap([
-        { articleId: a.id, authorId: a.authorId, teamId: team.id, orgId: org.id },
+        { articleId: a.id, authorId: a.authorId, teamId: team.id, orgId: org?.id ?? null },
       ]);
       // Task #414 — write-time POST echo: article author = me. Bypass.
       res.status(201).json({

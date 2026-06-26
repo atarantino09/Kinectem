@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent"]);
@@ -433,7 +433,17 @@ export const userSports = pgTable("user_sports", {
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
-  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  // Task #628 — nullable to support "solo teams" created by visiting coaches
+  // through the tournament signup funnel. A solo team has NO organization
+  // (`organization_id IS NULL`) and is managed by its `createdById` owner +
+  // their coach roster entry. A real org can later adopt the team, which
+  // sets `organization_id` (reparenting) and unlocks full features. Audit
+  // any path that assumes a team always has an org (permissions, queries,
+  // serializers, feed joins) and handle the null case.
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  // Task #628 — the user who created the team. For solo teams this is the
+  // owner/manager (the visiting coach). Org-created teams may also stamp it.
+  createdById: uuid("created_by_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   season: text("season"),
   sport: text("sport"),
@@ -1261,6 +1271,95 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Task #628 — Tournament signup funnel. An operator uploads a pre-made
+// tournament schedule (CSV of match slots) which becomes a public funnel:
+// visiting coaches create a SOLO team (no organization), claim an unclaimed
+// team-name participant slot, and get a temporary team page so they can write
+// game recaps WHILE the tournament is active. After `end_date` recap creation
+// is locked until they create / get adopted by a real organization.
+// ---------------------------------------------------------------------------
+export const tournaments = pgTable("tournaments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Unguessable-ish public slug used in the funnel URL (`/t/<slug>`).
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  // Active window for recap authoring. Stored as plain calendar dates
+  // (YYYY-MM-DD); the recap gate compares against today's date inclusive.
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  location: text("location"),
+  description: text("description"),
+  // Operator who created/uploaded the tournament (platform admin).
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// One row per unique team-name in a tournament, scoped by division + bracket
+// (derived from the Home Team / Away Team CSV columns). Unclaimed until a
+// visiting coach claims it, at which point `teamId` links their solo team and
+// `claimedByUserId` / `claimedAt` are stamped. Owner-exclusive: a partial
+// unique constraint on (tournament, division, bracket, nameKey) dedupes the
+// slot, and claim is a conditional UPDATE ... WHERE team_id IS NULL.
+export const tournamentParticipants = pgTable("tournament_participants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  // Display name (original CSV casing) + a lowercased key used for dedupe
+  // and case-insensitive matching across CSV re-uploads.
+  name: text("name").notNull(),
+  nameKey: text("name_key").notNull(),
+  // Normalized to "" (never null) so the unique slot index treats missing
+  // division/bracket as a single distinct value rather than SQL NULLs.
+  division: text("division").notNull().default(""),
+  bracket: text("bracket").notNull().default(""),
+  age: text("age"),
+  gender: text("gender"),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "set null" }),
+  claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  claimedAt: timestamp("claimed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  byTournament: index("tournament_participants_tournament_id_idx").on(t.tournamentId),
+  byTeam: index("tournament_participants_team_id_idx").on(t.teamId),
+  uniqueSlot: uniqueIndex("tournament_participants_unique_slot").on(
+    t.tournamentId,
+    t.division,
+    t.bracket,
+    t.nameKey,
+  ),
+}));
+
+// One row per CSV match-slot row. Idempotent on re-upload via the unique
+// (tournament, matchNumber) index. Home/away participants are resolved to
+// `tournament_participants` rows; imported scores are stored as-is.
+export const tournamentMatches = pgTable("tournament_matches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  matchNumber: text("match_number").notNull(),
+  matchDate: date("match_date"),
+  startTime: text("start_time"),
+  age: text("age"),
+  gender: text("gender"),
+  division: text("division").notNull().default(""),
+  bracket: text("bracket").notNull().default(""),
+  venue: text("venue"),
+  venueState: text("venue_state"),
+  field: text("field"),
+  homeParticipantId: uuid("home_participant_id").references((): AnyPgColumn => tournamentParticipants.id, { onDelete: "set null" }),
+  awayParticipantId: uuid("away_participant_id").references((): AnyPgColumn => tournamentParticipants.id, { onDelete: "set null" }),
+  homeScore: integer("home_score"),
+  awayScore: integer("away_score"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  byTournament: index("tournament_matches_tournament_id_idx").on(t.tournamentId),
+  uniqueNumber: uniqueIndex("tournament_matches_unique_number").on(
+    t.tournamentId,
+    t.matchNumber,
+  ),
+}));
 
 // ---------------------------------------------------------------------------
 // Team Schedule. Coaches and org admins post practices/games to a team;

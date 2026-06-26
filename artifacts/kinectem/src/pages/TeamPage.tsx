@@ -32,6 +32,7 @@ import {
   type RosterInvite,
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
+import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
 import { useIsLg } from "@/hooks/use-mobile";
@@ -56,6 +57,7 @@ export default function TeamPage() {
   }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [adoptOpen, setAdoptOpen] = useState(false);
   const [expanded, setExpanded] = useState<TeamPanel>(
     showRoster ? "roster" : "posts",
   );
@@ -73,8 +75,15 @@ export default function TeamPage() {
   const followTeam = useFollowTeam();
   const unfollowTeam = useUnfollowTeam();
   const { data: membersResp } = useListTeamMembers(teamId);
-  const { data: org } = useGetOrganizationById(team?.organization.id ?? "", {
-    query: queryOpts({ enabled: !!team?.organization.id }),
+  // Task #628 — solo teams (created via the tournament signup funnel) have no
+  // parent organization. The generated TeamResponse type still types
+  // `organization` as non-null (openapi.yaml is locked), but the server
+  // returns null at runtime for solo teams, so read it through a narrow cast.
+  const orgRef = (team as { organization?: { id?: string } | null } | undefined)
+    ?.organization;
+  const isSoloTeam = !!team && !orgRef?.id;
+  const { data: org } = useGetOrganizationById(orgRef?.id ?? "", {
+    query: queryOpts({ enabled: !!orgRef?.id }),
   });
   const { data: me } = useGetLoggedInUser();
 
@@ -206,6 +215,29 @@ export default function TeamPage() {
             new posts, follows, and roster changes are blocked.
           </div>
         )}
+        {isSoloTeam && (
+          <div
+            className="rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900 space-y-2"
+            data-testid="banner-team-temporary"
+          >
+            <p>
+              <span className="font-bold">Temporary tournament team.</span> This
+              team was created for a tournament and has no organization yet. Game
+              recaps can be posted while the tournament is active. To keep posting
+              after it ends, adopt this team into an organization.
+            </p>
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => setAdoptOpen(true)}
+                className="text-xs font-bold uppercase tracking-wider text-sky-700 hover:underline"
+                data-testid="button-open-adopt-team"
+              >
+                Adopt into your organization →
+              </button>
+            )}
+          </div>
+        )}
         <TeamHeaderCard
           team={team}
           isAdmin={isAdmin}
@@ -280,7 +312,7 @@ export default function TeamPage() {
             teamId={teamId}
             isOwner={isOwner}
             isArchived={!!team.archivedAt}
-            organizationId={team.organization.id}
+            organizationId={orgRef?.id ?? ""}
           />
         )}
       </div>
@@ -312,6 +344,18 @@ export default function TeamPage() {
         open={editOpen}
         onOpenChange={setEditOpen}
       />
+
+      {isSoloTeam && (
+        <AdoptTeamDialog
+          teamId={teamId}
+          open={adoptOpen}
+          onOpenChange={setAdoptOpen}
+          onAdopted={() => {
+            qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
+            qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -580,7 +580,8 @@ export function toMember(u: UserRow, role: "owner" | "admin" | "member", joinedA
 
 export function toTeam(
   t: TeamRow,
-  org: OrgRow,
+  // Task #628 — solo teams have no parent org; serialize `organization: null`.
+  org: OrgRow | null,
   opts: {
     followerCount?: number;
     isFollowing?: boolean;
@@ -590,7 +591,7 @@ export function toTeam(
 ) {
   return {
     id: t.id,
-    organization: toOrganizationEmbed(org),
+    organization: org ? toOrganizationEmbed(org) : null,
     name: t.name,
     slug: slugify(t.name),
     description: t.description ?? null,
@@ -909,20 +910,22 @@ function basePost(p: {
     : { id: "system", displayName: "System", avatarUrl: null, authorRole: null };
   const team = p.extras.team;
   const org = p.extras.org;
-  const context = team && org
+  const context = team
     ? {
         type: "team" as const,
         id: team.id,
         name: team.name,
         slug: slugify(team.name),
-        orgSlug: slugify(org.name),
-        orgId: org.id,
-        orgName: org.name,
+        // Task #628 — solo teams have no parent org, so the org chip
+        // fields are null. Org-backed teams carry the full org context.
+        orgSlug: org ? slugify(org.name) : null,
+        orgId: org?.id ?? null,
+        orgName: org?.name ?? null,
         avatarUrl: team.logoUrl ?? null,
         // Team posts carry the parent org's logo so PostCard can show
         // the org logo as the team's avatar. Null when the parent org
-        // also has no logo set.
-        orgAvatarUrl: org.logoUrl ?? null,
+        // also has no logo set (or there is no parent org).
+        orgAvatarUrl: org?.logoUrl ?? null,
       }
     : org
       ? {

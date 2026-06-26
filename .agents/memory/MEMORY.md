@@ -9,7 +9,8 @@
 - [Modal text blur](modal-text-blur.md) — center shadcn Dialog/AlertDialog with flexbox, not `-translate-1/2`; the transform half-pixels odd-sized modals and blurs their text.
 - [Team banner blur-fill display](team-banner-blur-fill.md) — team hero photos use BlurFillImage (contain over blurred cover), NOT object-cover crop; team upload flows have no crop step.
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.
-- [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769 noise; rateLimit needs `name`.
+- [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769/`string|string[]`/AuthorRoleLabel noise; rateLimit needs `name`.
+- [Startup migration registration](startup-migration-registration.md) — schema changes need a registered entry in migrations.ts MIGRATIONS array; dev push/raw SQL alone never reaches production.
 - [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.
 - [Stripe org billing](stripe-org-billing.md) — card-on-file now, first charge Oct 1 via Checkout trial_end; connector has NO webhook secret so reconcile-on-return is source of truth; Sept-15 reminder is a standalone non-idempotent script.
 - [Per-tier team cap enforcement](team-cap-enforcement.md) — caps live in plan-limits.ts; enforce INSIDE insert tx behind pg_advisory_xact_lock(orgId) + recount, not a pre-check (TOCTOU).

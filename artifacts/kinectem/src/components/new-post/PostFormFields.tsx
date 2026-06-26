@@ -370,7 +370,9 @@ export function PostFormFields({
                   <div className="flex flex-col items-start">
                     <span className="font-semibold">{m.teamName}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {formatOrgName(m.organization.name)}
+                      {m.organization
+                        ? formatOrgName(m.organization.name)
+                        : "Independent team"}
                     </span>
                   </div>
                 </SelectItem>

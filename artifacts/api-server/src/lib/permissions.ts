@@ -4,30 +4,68 @@ import {
   organizationAdmins,
   rosterEntries,
   teams,
+  tournaments,
+  tournamentParticipants,
   users,
   type teams as TeamsT,
 } from "@workspace/db";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, gte, inArray, or } from "drizzle-orm";
 
 type Team = typeof TeamsT.$inferSelect;
+
+// Task #628 — a "solo team" has no parent organization. It was created by a
+// visiting coach through the tournament signup funnel and is managed by its
+// `createdById` owner (plus their coach roster entry), not by org admins.
+export function isSoloTeam(team: Team): boolean {
+  return team.organizationId == null;
+}
+
+// Task #628 — is at least one tournament this solo team participates in still
+// inside its active window (today <= end_date)? Recap authoring on a solo team
+// is only permitted while this is true; after the last tournament ends the
+// coach must create / get adopted by a real org to keep posting.
+export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> {
+  const today = new Date().toISOString().slice(0, 10);
+  const [row] = await db
+    .select({ id: tournaments.id })
+    .from(tournamentParticipants)
+    .innerJoin(
+      tournaments,
+      eq(tournaments.id, tournamentParticipants.tournamentId),
+    )
+    .where(
+      and(
+        eq(tournamentParticipants.teamId, teamId),
+        gte(tournaments.endDate, today),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
 
 // Roles that can act on behalf of the organization (edit, manage members,
 // approve content, etc.). Plain "member" is intentionally excluded.
 const MANAGE_ROLES = ["owner", "admin"] as const;
 
 export async function canManageTeam(userId: string, team: Team): Promise<boolean> {
-  const [orgAdmin] = await db
-    .select()
-    .from(organizationAdmins)
-    .where(
-      and(
-        eq(organizationAdmins.organizationId, team.organizationId),
-        eq(organizationAdmins.userId, userId),
-        inArray(organizationAdmins.role, [...MANAGE_ROLES]),
-      ),
-    )
-    .limit(1);
-  if (orgAdmin) return true;
+  // Org-backed teams: owners/admins of the parent org manage every team.
+  if (team.organizationId) {
+    const [orgAdmin] = await db
+      .select()
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, team.organizationId),
+          eq(organizationAdmins.userId, userId),
+          inArray(organizationAdmins.role, [...MANAGE_ROLES]),
+        ),
+      )
+      .limit(1);
+    if (orgAdmin) return true;
+  }
+
+  // Task #628 — solo teams have no org; their creator owns them.
+  if (team.createdById && team.createdById === userId) return true;
 
   const [coachEntry] = await db
     .select()
@@ -44,7 +82,12 @@ export async function canManageTeam(userId: string, team: Team): Promise<boolean
   return Boolean(coachEntry);
 }
 
-export async function canManageOrganization(userId: string, organizationId: string): Promise<boolean> {
+export async function canManageOrganization(
+  userId: string,
+  organizationId: string | null,
+): Promise<boolean> {
+  // Task #628 — solo teams pass a null org here; nobody "manages" a null org.
+  if (!organizationId) return false;
   const [row] = await db
     .select()
     .from(organizationAdmins)
@@ -65,8 +108,10 @@ export async function canManageOrganization(userId: string, organizationId: stri
 // they are specifically the owner (e.g. transfer-ownership) use this.
 export async function getOrgRole(
   userId: string,
-  organizationId: string,
+  organizationId: string | null,
 ): Promise<"owner" | "admin" | "member" | null> {
+  // Task #628 — solo teams have no org, so there is no org role to read.
+  if (!organizationId) return null;
   const [row] = await db
     .select({ role: organizationAdmins.role })
     .from(organizationAdmins)
@@ -126,6 +171,14 @@ export async function canCreateRecap(
   userId: string,
   team: Team,
 ): Promise<boolean> {
+  // Task #628 — solo teams (no org) may only author recaps while one of their
+  // tournaments is still active. The owner/coach authors; after the last
+  // tournament's end date, authoring locks until they create / get adopted by
+  // a real organization.
+  if (isSoloTeam(team)) {
+    if (!(await canManageTeam(userId, team))) return false;
+    return soloTeamRecapWindowOpen(team.id);
+  }
   // Org admins and team coaches can always author recaps.
   if (await canManageTeam(userId, team)) return true;
   // Parents/members granted the explicit "author" or "manager"
@@ -296,7 +349,9 @@ export async function computeArticleAuthorRoleMap(
     articleId: string;
     authorId: string | null;
     teamId: string;
-    orgId: string;
+    // Task #628 — solo teams have no parent org; the org-role branch is
+    // skipped for them and only the team roster role is considered.
+    orgId: string | null;
   }>,
 ): Promise<Map<string, AuthorRoleLabel | null>> {
   const result = new Map<string, AuthorRoleLabel | null>();
@@ -308,7 +363,7 @@ export async function computeArticleAuthorRoleMap(
       articleId: string;
       authorId: string;
       teamId: string;
-      orgId: string;
+      orgId: string | null;
     } => r.authorId != null,
   );
   if (candidates.length === 0) return result;
@@ -323,10 +378,13 @@ export async function computeArticleAuthorRoleMap(
       teamId: r.teamId,
       userId: r.authorId,
     });
-    orgUserPairs.set(`${r.orgId}|${r.authorId}`, {
-      orgId: r.orgId,
-      userId: r.authorId,
-    });
+    // Solo-team recaps (orgId null) contribute no org-role candidate.
+    if (r.orgId) {
+      orgUserPairs.set(`${r.orgId}|${r.authorId}`, {
+        orgId: r.orgId,
+        userId: r.authorId,
+      });
+    }
   }
 
   const teamConds = Array.from(teamUserPairs.values()).map((p) =>
@@ -349,14 +407,23 @@ export async function computeArticleAuthorRoleMap(
       })
       .from(rosterEntries)
       .where(and(eq(rosterEntries.status, "accepted"), or(...teamConds))),
-    db
-      .select({
-        orgId: organizationAdmins.organizationId,
-        userId: organizationAdmins.userId,
-        role: organizationAdmins.role,
-      })
-      .from(organizationAdmins)
-      .where(or(...orgConds)),
+    // Task #628 — when every candidate recap is on a solo team, there are
+    // no org conditions; skip the org-admin query rather than running an
+    // unfiltered `where(or())` that would match every admin row.
+    orgConds.length === 0
+      ? Promise.resolve([] as Array<{
+          orgId: string;
+          userId: string;
+          role: "owner" | "admin" | "member";
+        }>)
+      : db
+          .select({
+            orgId: organizationAdmins.organizationId,
+            userId: organizationAdmins.userId,
+            role: organizationAdmins.role,
+          })
+          .from(organizationAdmins)
+          .where(or(...orgConds)),
   ]);
 
   // A single roster entry can carry both a coach role and the explicit

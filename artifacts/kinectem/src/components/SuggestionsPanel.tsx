@@ -206,7 +206,11 @@ export function SuggestionsPanel({
                   />
                 }
                 title={t.name}
-                subtitle={formatOrgName(t.organization.name)}
+                subtitle={
+                  t.organization
+                    ? formatOrgName(t.organization.name)
+                    : "Independent team"
+                }
                 onFollow={() => handleFollowTeam(t.id)}
                 disabled={followTeam.isPending}
                 testId={`button-follow-suggested-team-${t.id}`}
@@ -276,7 +280,11 @@ export function SuggestionsPanel({
                   />
                 }
                 title={team.name}
-                subtitle={formatOrgName(team.organization.name)}
+                subtitle={
+                  team.organization
+                    ? formatOrgName(team.organization.name)
+                    : "Independent team"
+                }
                 onFollow={() => handleFollowTeam(team.id)}
                 disabled={followTeam.isPending}
                 testId={`button-follow-suggested-team-${team.id}`}

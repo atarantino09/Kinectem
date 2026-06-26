@@ -88,7 +88,13 @@ export function TeamHeaderCard({
   // The foreground square ALWAYS shows the org's logo so every team in
   // the same organization carries identical top-of-page branding. The
   // team's own `bannerUrl` is shown as the hero background instead.
-  const orgLogoUrl = team.organization.avatarUrl ?? "";
+  // Task #628 — solo teams (tournament funnel) have no org; the generated
+  // type still types `organization` non-null (openapi.yaml locked), so read
+  // it through a narrow cast and fall back to the team's own name/initials.
+  const org = (team as { organization?: { id?: string; name?: string; avatarUrl?: string | null } | null }).organization;
+  const hasOrg = !!org?.id;
+  const logoLabel = org?.name ?? team.name;
+  const orgLogoUrl = org?.avatarUrl ?? "";
   const bannerUrl = team.bannerUrl ?? "";
 
   // Inline photo controls (Task #391). Admins can swap or remove the
@@ -248,8 +254,8 @@ export function TeamHeaderCard({
           <div className="shrink-0 flex flex-col items-center sm:items-start">
             <AvatarLightbox
               avatarUrl={orgLogoUrl || null}
-              displayName={team.organization.name}
-              ariaLabel={`View ${team.organization.name}'s logo`}
+              displayName={logoLabel}
+              ariaLabel={`View ${logoLabel}'s logo`}
               triggerClassName="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               triggerTestId="btn-open-team-logo-lightbox"
               dialogTestId="dialog-team-logo-lightbox"
@@ -259,24 +265,33 @@ export function TeamHeaderCard({
                 {orgLogoUrl ? (
                   <img
                     src={orgLogoUrl}
-                    alt={team.organization.name}
+                    alt={logoLabel}
                     className="w-full h-full object-cover"
                     data-testid="img-team-photo"
                   />
                 ) : (
                   <span className="text-4xl font-black text-primary">
-                    {team.organization.name.slice(0, 2).toUpperCase()}
+                    {logoLabel.slice(0, 2).toUpperCase()}
                   </span>
                 )}
               </div>
             </AvatarLightbox>
-            <Link
-              href={`/organizations/${team.organization.id}`}
-              className="mt-2 font-bold text-sm text-muted-foreground hover:text-primary uppercase tracking-wider text-center sm:text-left max-w-[8rem] block leading-tight cursor-pointer"
-              data-testid="link-team-org"
-            >
-              {formatOrgName(team.organization.name)}
-            </Link>
+            {hasOrg ? (
+              <Link
+                href={`/organizations/${org!.id}`}
+                className="mt-2 font-bold text-sm text-muted-foreground hover:text-primary uppercase tracking-wider text-center sm:text-left max-w-[8rem] block leading-tight cursor-pointer"
+                data-testid="link-team-org"
+              >
+                {formatOrgName(org!.name ?? "")}
+              </Link>
+            ) : (
+              <span
+                className="mt-2 font-bold text-sm text-muted-foreground uppercase tracking-wider text-center sm:text-left max-w-[8rem] block leading-tight"
+                data-testid="text-team-solo"
+              >
+                Independent team
+              </span>
+            )}
           </div>
           <div className="flex-1 min-w-0 sm:pb-2">
             <div className="flex items-start gap-3 flex-wrap">

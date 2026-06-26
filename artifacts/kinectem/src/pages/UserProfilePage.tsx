@@ -246,7 +246,9 @@ export default function UserProfilePage() {
                   variant="outline"
                   className="text-[10px] uppercase tracking-wider font-bold"
                 >
-                  {formatOrgName(t.organization.name)}
+                  {t.organization
+                    ? formatOrgName(t.organization.name)
+                    : "Independent team"}
                 </Badge>
                 {t.position === "parent" && (
                   <Badge

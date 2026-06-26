@@ -78,13 +78,15 @@ export default function MyTeamsPage() {
                           className="text-[10px] uppercase tracking-wider font-bold inline-flex items-center gap-1"
                         >
                           <OrgLogo
-                            logoUrl={t.organization.logoUrl}
-                            name={t.organization.name}
+                            logoUrl={t.organization?.logoUrl ?? null}
+                            name={t.organization?.name ?? "Independent"}
                             alt=""
                             className="w-3 h-3 rounded-sm shrink-0"
                             imgClassName="w-3 h-3 rounded-sm object-cover bg-muted shrink-0"
                           />
-                          {formatOrgName(t.organization.name)}
+                          {t.organization
+                            ? formatOrgName(t.organization.name)
+                            : "Independent"}
                         </Badge>
                         {t.position === "parent" && (
                           <Badge

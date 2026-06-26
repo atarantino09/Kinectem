@@ -195,22 +195,29 @@ router.get(
   asyncHandler(async (req, res) => {
     const [t] = await db.select().from(teams).where(eq(teams.id, req.params.teamId)).limit(1);
     if (!t) return notFound(res);
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, t.organizationId))
-      .limit(1);
-    if (!org) return notFound(res);
+    // Task #628 — solo teams have no parent org (org is null).
+    let org: typeof organizations.$inferSelect | null = null;
+    if (t.organizationId) {
+      [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, t.organizationId))
+        .limit(1);
+      if (!org) return notFound(res);
+    }
     // Task #472 — archived teams are invisible to non-managers. Owners
     // and admins of the parent org still get the row back so they can
     // open the page to unarchive it; everyone else (anonymous, plain
     // members, followers) gets a 404 indistinguishable from a deleted
     // team. We do this check after the org lookup so we can use the
-    // existing `canManageOrganization` helper.
+    // existing `canManageOrganization` helper. Solo teams fall back to
+    // `canManageTeam` (owner/coach) for the same purpose.
     if (t.archivedAt) {
       const me = req.sessionUser;
       const canSeeArchived = me
-        ? await canManageOrganization(me.id, org.id)
+        ? org
+          ? await canManageOrganization(me.id, org.id)
+          : await canManageTeam(me.id, t)
         : false;
       if (!canSeeArchived) return notFound(res);
     }
@@ -262,18 +269,11 @@ router.patch(
       .where(eq(teams.id, req.params.teamId))
       .limit(1);
     if (!existing) return notFound(res);
-    const [adminRow] = await db
-      .select()
-      .from(organizationAdmins)
-      .where(
-        and(
-          eq(organizationAdmins.organizationId, existing.organizationId),
-          eq(organizationAdmins.userId, me.id),
-          inArray(organizationAdmins.role, ["owner", "admin"]),
-        ),
-      )
-      .limit(1);
-    if (!adminRow) return apiError(res, 403, "forbidden");
+    // Task #628 — solo teams (no org) are edited by their owner/coach via
+    // canManageTeam; org-backed teams require an owner/admin of the parent org.
+    if (!(await canManageTeam(me.id, existing))) {
+      return apiError(res, 403, "forbidden");
+    }
     const body = req.body ?? {};
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name.trim();
@@ -314,12 +314,16 @@ router.patch(
       .where(eq(teams.id, req.params.teamId))
       .returning();
     if (!t) return notFound(res);
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, t.organizationId))
-      .limit(1);
-    if (!org) return notFound(res);
+    // Task #628 — solo teams have no parent org.
+    let org: typeof organizations.$inferSelect | null = null;
+    if (t.organizationId) {
+      [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, t.organizationId))
+        .limit(1);
+      if (!org) return notFound(res);
+    }
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(rosterEntries)
@@ -1191,18 +1195,24 @@ router.post(
           teamName: team.name,
         }),
       });
-      await notifyTeamArchived({
-        teamId: updated.id,
-        organizationId: updated.organizationId,
-        teamName: updated.name,
-        actorUserId: ownerId,
+      if (updated.organizationId)
+        await notifyTeamArchived({
+          teamId: updated.id,
+          organizationId: updated.organizationId,
+          teamName: updated.name,
+          actorUserId: ownerId,
       });
     }
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, updated.organizationId))
-      .limit(1);
+    // Task #628 — solo teams (no org) 403 in loadTeamForArchiveAction, so by
+    // here a team always has an org; guard keeps the nullable type honest.
+    let org: typeof organizations.$inferSelect | null = null;
+    if (updated.organizationId) {
+      [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, updated.organizationId))
+        .limit(1);
+    }
     if (!org) return notFound(res);
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -1236,18 +1246,23 @@ router.post(
           teamName: team.name,
         }),
       });
-      await notifyTeamUnarchived({
-        teamId: updated.id,
-        organizationId: updated.organizationId,
-        teamName: updated.name,
-        actorUserId: ownerId,
+      if (updated.organizationId)
+        await notifyTeamUnarchived({
+          teamId: updated.id,
+          organizationId: updated.organizationId,
+          teamName: updated.name,
+          actorUserId: ownerId,
       });
     }
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, updated.organizationId))
-      .limit(1);
+    // Task #628 — solo teams 403 earlier; guard keeps the nullable type honest.
+    let org: typeof organizations.$inferSelect | null = null;
+    if (updated.organizationId) {
+      [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, updated.organizationId))
+        .limit(1);
+    }
     if (!org) return notFound(res);
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })

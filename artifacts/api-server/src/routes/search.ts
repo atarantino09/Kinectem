@@ -77,7 +77,13 @@ router.get(
     // Task #592 — batch the team→organization name lookup. Previously
     // each team result fired its own `SELECT ... FROM organizations`
     // (an N+1); now we fetch every referenced org in one query.
-    const teamOrgIds = Array.from(new Set(teamRows.map((t) => t.organizationId)));
+    const teamOrgIds = Array.from(
+      new Set(
+        teamRows
+          .map((t) => t.organizationId)
+          .filter((id): id is string => id != null),
+      ),
+    );
     const orgRowsForTeams = teamOrgIds.length
       ? await db.select().from(organizations).where(inArray(organizations.id, teamOrgIds))
       : [];
@@ -106,7 +112,9 @@ router.get(
         // Task #592 — batch the team→org name lookup into a single
         // query keyed by org id instead of one query per team row.
         data: teamRows.map((t) => {
-          const org = orgById.get(t.organizationId) ?? null;
+          const org = t.organizationId
+            ? orgById.get(t.organizationId) ?? null
+            : null;
           return {
             entityType: "team" as const,
             id: t.id,
