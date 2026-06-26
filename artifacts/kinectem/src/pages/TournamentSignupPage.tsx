@@ -76,11 +76,12 @@ export default function TournamentSignupPage() {
     [q.data],
   );
 
-  // Default the team name to the slot name once a slot is picked (coach can
-  // still override it).
+  // The picked slot name IS the team name from the uploaded schedule — sync it
+  // on every pick (unless the coach has manually typed a different name).
+  const [nameEdited, setNameEdited] = useState(false);
   function pick(p: Participant) {
     setSelectedId(p.id);
-    if (!teamName.trim()) setTeamName(p.name);
+    if (!nameEdited) setTeamName(p.name);
   }
 
   async function submit() {
@@ -209,7 +210,10 @@ export default function TournamentSignupPage() {
             <Input
               id="teamName"
               value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
+              onChange={(e) => {
+                setNameEdited(true);
+                setTeamName(e.target.value);
+              }}
               placeholder="e.g. Riverside United 14U"
               maxLength={120}
               data-testid="input-team-name"

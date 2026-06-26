@@ -19,7 +19,7 @@ import {
   teams,
   rosterEntries,
 } from "@workspace/db";
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
@@ -760,6 +760,146 @@ router.post(
     }
 
     res.json({ ok: true, teamId, organizationId });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// GET /teams/:teamId/tournament-schedule — PUBLIC. The tournament match
+// schedule for a team that claimed a participant slot, oriented to THAT team
+// (opponent name + this-team/opponent scores), grouped by tournament. The
+// imported tournament schedule stays the source of truth, so score / slot
+// corrections on re-import flow through here automatically. Returns an empty
+// `data` array when the team isn't linked to any tournament.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/teams/:teamId/tournament-schedule",
+  asyncHandler(async (req, res) => {
+    const teamId = String(req.params.teamId);
+
+    const myParts = await db
+      .select()
+      .from(tournamentParticipants)
+      .where(eq(tournamentParticipants.teamId, teamId));
+    if (myParts.length === 0) return res.json({ data: [] });
+
+    const myPartIds = myParts.map((p) => p.id);
+    const myPartIdSet = new Set(myPartIds);
+    const tournamentIds = Array.from(new Set(myParts.map((p) => p.tournamentId)));
+
+    const tourneyRows = await db
+      .select()
+      .from(tournaments)
+      .where(inArray(tournaments.id, tournamentIds));
+    const tourneyById = new Map(tourneyRows.map((t) => [t.id, t]));
+
+    const matchRows = await db
+      .select()
+      .from(tournamentMatches)
+      .where(
+        and(
+          inArray(tournamentMatches.tournamentId, tournamentIds),
+          or(
+            inArray(tournamentMatches.homeParticipantId, myPartIds),
+            inArray(tournamentMatches.awayParticipantId, myPartIds),
+          ),
+        ),
+      );
+
+    // Resolve opponent display names for every participant referenced.
+    const refIds = new Set<string>();
+    for (const m of matchRows) {
+      if (m.homeParticipantId) refIds.add(m.homeParticipantId);
+      if (m.awayParticipantId) refIds.add(m.awayParticipantId);
+    }
+    const refRows =
+      refIds.size > 0
+        ? await db
+            .select()
+            .from(tournamentParticipants)
+            .where(inArray(tournamentParticipants.id, Array.from(refIds)))
+        : [];
+    const nameById = new Map(refRows.map((p) => [p.id, p.name]));
+
+    interface OutMatch {
+      id: string;
+      matchNumber: string;
+      matchDate: string | null;
+      startTime: string | null;
+      division: string;
+      bracket: string;
+      venue: string | null;
+      venueState: string | null;
+      field: string | null;
+      isHome: boolean;
+      opponentName: string | null;
+      teamScore: number | null;
+      opponentScore: number | null;
+    }
+    const groups = new Map<
+      string,
+      {
+        tournamentId: string;
+        tournamentSlug: string;
+        tournamentName: string;
+        startDate: string;
+        endDate: string;
+        matches: OutMatch[];
+      }
+    >();
+
+    for (const m of matchRows) {
+      const t = tourneyById.get(m.tournamentId);
+      if (!t) continue;
+      const isHome =
+        m.homeParticipantId != null && myPartIdSet.has(m.homeParticipantId);
+      const oppId = isHome ? m.awayParticipantId : m.homeParticipantId;
+      let g = groups.get(m.tournamentId);
+      if (!g) {
+        g = {
+          tournamentId: t.id,
+          tournamentSlug: t.slug,
+          tournamentName: t.name,
+          startDate: t.startDate,
+          endDate: t.endDate,
+          matches: [],
+        };
+        groups.set(m.tournamentId, g);
+      }
+      g.matches.push({
+        id: m.id,
+        matchNumber: m.matchNumber,
+        matchDate: m.matchDate,
+        startTime: m.startTime,
+        division: m.division,
+        bracket: m.bracket,
+        venue: m.venue,
+        venueState: m.venueState,
+        field: m.field,
+        isHome,
+        opponentName: oppId ? nameById.get(oppId) ?? null : null,
+        teamScore: isHome ? m.homeScore : m.awayScore,
+        opponentScore: isHome ? m.awayScore : m.homeScore,
+      });
+    }
+
+    const sortMatches = (a: OutMatch, b: OutMatch) => {
+      const da = a.matchDate ?? "";
+      const dbb = b.matchDate ?? "";
+      if (da !== dbb) return da < dbb ? -1 : 1;
+      const ta = a.startTime ?? "";
+      const tb = b.startTime ?? "";
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      return a.matchNumber.localeCompare(b.matchNumber, undefined, {
+        numeric: true,
+      });
+    };
+
+    const data = Array.from(groups.values())
+      .map((g) => ({ ...g, matches: g.matches.sort(sortMatches) }))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+    res.json({ data });
   }),
 );
 

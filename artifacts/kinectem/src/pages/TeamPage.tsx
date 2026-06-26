@@ -33,6 +33,7 @@ import {
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
+import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
 import { useIsLg } from "@/hooks/use-mobile";
@@ -273,6 +274,7 @@ export default function TeamPage() {
 
         {expanded === "posts" && (
           <>
+            <TournamentScheduleCard teamId={teamId} />
             {canViewSchedule && (
               <ScheduleUpNext
                 teamId={teamId}
