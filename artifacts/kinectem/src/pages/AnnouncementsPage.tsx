@@ -7,7 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Megaphone, Building2, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Megaphone,
+  Building2,
+  Users,
+  Paperclip,
+  FileText,
+} from "lucide-react";
 import {
   fetchInbox,
   fetchBroadcast,
@@ -20,6 +27,7 @@ import {
   type BroadcastInboxItem,
   type BroadcastDetail,
   type BroadcastThread,
+  type BroadcastAttachment,
 } from "@/components/broadcasts/broadcastsApi";
 
 // ---------------------------------------------------------------------------
@@ -135,6 +143,16 @@ function InboxRow({
                   Reply allowed
                 </Badge>
               )}
+              {item.attachmentCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full text-[10px] font-bold gap-1"
+                  data-testid={`broadcast-attach-badge-${item.id}`}
+                >
+                  <Paperclip className="w-3 h-3" />
+                  {item.attachmentCount}
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-foreground/90 line-clamp-2 mt-1 whitespace-pre-wrap">
               {item.body}
@@ -216,6 +234,9 @@ function BroadcastDetailView({
               <p className="whitespace-pre-wrap text-foreground/90 leading-relaxed">
                 {data.body}
               </p>
+              {data.attachments.length > 0 && (
+                <AttachmentList attachments={data.attachments} />
+              )}
             </CardContent>
           </Card>
 
@@ -228,6 +249,56 @@ function BroadcastDetailView({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Renders a broadcast's attachments: images inline as thumbnails, other files
+// (PDF) as a download link. `url` is an inline data URL with the bytes.
+function AttachmentList({
+  attachments,
+}: {
+  attachments: BroadcastAttachment[];
+}) {
+  return (
+    <div className="space-y-2 pt-1" data-testid="broadcast-attachments">
+      {attachments.map((a) => {
+        const isImage = a.fileType.startsWith("image/");
+        if (isImage && a.url) {
+          return (
+            <a
+              key={a.id}
+              href={a.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block overflow-hidden rounded-lg border"
+              data-testid={`attachment-${a.id}`}
+            >
+              <img
+                src={a.url}
+                alt={a.fileName ?? "Attachment"}
+                className="max-h-80 w-full object-contain bg-muted/30"
+              />
+            </a>
+          );
+        }
+        return (
+          <a
+            key={a.id}
+            href={a.url ?? "#"}
+            target="_blank"
+            rel="noreferrer"
+            download={a.fileName ?? undefined}
+            className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm hover:bg-muted/50"
+            data-testid={`attachment-${a.id}`}
+          >
+            <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {a.fileName ?? "Attachment"}
+            </span>
+          </a>
+        );
+      })}
     </div>
   );
 }

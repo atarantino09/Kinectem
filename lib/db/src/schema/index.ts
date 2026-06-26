@@ -1571,3 +1571,15 @@ export const broadcastReplies = pgTable("broadcast_replies", {
 }, (t) => ({
   threadIdx: index("broadcast_replies_thread_idx").on(t.broadcastId, t.familyParentUserId),
 }));
+
+// File attachments (e.g. camp/tryout flyers) on a broadcast. Mirrors
+// `message_assets`: each row points at a confirmed `assets` row (the bytes
+// live inline as a data URL on `assets.url`). `displayOrder` keeps the
+// sender's ordering. Cascades when either the broadcast or asset is deleted.
+export const broadcastAssets = pgTable("broadcast_assets", {
+  broadcastId: uuid("broadcast_id").references(() => broadcasts.id, { onDelete: "cascade" }).notNull(),
+  assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }).notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.broadcastId, t.assetId] }),
+}));

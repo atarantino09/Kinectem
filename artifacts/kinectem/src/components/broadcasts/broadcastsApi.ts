@@ -1,4 +1,8 @@
-import { customFetch } from "@workspace/api-client-react";
+import {
+  customFetch,
+  requestUpload,
+  confirmUpload,
+} from "@workspace/api-client-react";
 
 // ---------------------------------------------------------------------------
 // Broadcasts (bulk messaging) — client types + fetch helpers.
@@ -18,6 +22,16 @@ export interface BroadcastSender {
   avatarUrl: string | null;
 }
 
+// A file attached to a broadcast (e.g. a camp/tryout flyer). `url` is an
+// inline data URL with the bytes; only returned on the detail endpoint.
+export interface BroadcastAttachment {
+  id: string;
+  fileName: string | null;
+  fileType: string;
+  fileSize: number | null;
+  url: string | null;
+}
+
 // A row in the viewer's inbox (GET /me/broadcasts).
 export interface BroadcastInboxItem {
   id: string;
@@ -32,6 +46,7 @@ export interface BroadcastInboxItem {
   recipientRole: BroadcastRecipientRole;
   read: boolean;
   canReply: boolean;
+  attachmentCount: number;
 }
 
 export interface BroadcastReply {
@@ -64,6 +79,7 @@ export interface BroadcastDetail {
   isStaff: boolean;
   canReply: boolean;
   threads: BroadcastThread[];
+  attachments: BroadcastAttachment[];
 }
 
 export interface SendBroadcastResult {
@@ -99,15 +115,39 @@ export async function fetchBroadcast(id: string): Promise<BroadcastDetail> {
 export async function sendOrgBroadcast(
   orgId: string,
   body: string,
+  assetIds?: string[],
 ): Promise<SendBroadcastResult> {
   return customFetch<SendBroadcastResult>(
     `/api/v1/organizations/${orgId}/broadcasts`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify(
+        assetIds && assetIds.length ? { body, assetIds } : { body },
+      ),
     },
   );
+}
+
+// Upload a single flyer/file for an org announcement via the standard 3-step
+// asset pipeline (request → PUT bytes → confirm). Returns the confirmed asset id.
+export async function uploadBroadcastAttachment(file: File): Promise<string> {
+  const upload = await requestUpload({
+    fileName: file.name,
+    fileType: file.type || "application/octet-stream",
+    fileSize: file.size,
+  });
+  const putResp = await fetch(upload.uploadUrl, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!putResp.ok) {
+    throw new Error(`Upload failed (${putResp.status})`);
+  }
+  await confirmUpload(upload.assetId);
+  return upload.assetId;
 }
 
 export async function sendTeamBroadcast(

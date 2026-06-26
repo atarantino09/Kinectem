@@ -4,6 +4,8 @@ import {
   broadcasts,
   broadcastRecipients,
   broadcastReplies,
+  broadcastAssets,
+  assets,
   notifications,
   organizations,
   teams,
@@ -37,6 +39,96 @@ const MAX_BODY_LEN = 4000;
 const bodyZ = z.object({
   body: z.string().trim().min(1, "Message body is required").max(MAX_BODY_LEN),
 });
+
+// Org announcements may carry file attachments (e.g. camp/tryout flyers).
+// Allowlist: images (jpeg/png/webp) + PDF. Enforced server-side too — the
+// asset pipeline accepts a broader set, so an admin could otherwise confirm a
+// disallowed asset and attach it by id, bypassing the client picker.
+const MAX_ATTACHMENTS = 5;
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
+const orgBroadcastZ = bodyZ.extend({
+  assetIds: z.array(z.string().uuid()).max(MAX_ATTACHMENTS).optional(),
+});
+
+// Validate that every requested asset is owned by the sender, confirmed, and of
+// an allowed type, preserving the caller's order. Surfaces a 400-style message
+// via the returned `error` so the route can relay it. De-dupes ids defensively.
+async function validateOwnedAssets(
+  assetIds: string[] | undefined,
+  ownerId: string,
+): Promise<{ ids: string[]; error: string | null }> {
+  if (!assetIds || assetIds.length === 0) return { ids: [], error: null };
+  const unique = Array.from(new Set(assetIds));
+  const rows = await db
+    .select({ id: assets.id, fileType: assets.fileType })
+    .from(assets)
+    .where(
+      and(
+        inArray(assets.id, unique),
+        eq(assets.ownerId, ownerId),
+        eq(assets.status, "confirmed"),
+      ),
+    );
+  const byId = new Map(rows.map((r) => [r.id, r.fileType]));
+  const missing = unique.filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    return { ids: [], error: "One or more attachments are invalid or not yet uploaded" };
+  }
+  const badType = unique.some((id) => !ALLOWED_ATTACHMENT_TYPES.has(byId.get(id) ?? ""));
+  if (badType) {
+    return { ids: [], error: "Attachments must be a JPEG, PNG, WebP, or PDF" };
+  }
+  // Preserve the caller's ordering (deduped).
+  return { ids: unique, error: null };
+}
+
+// Load attachments for a set of broadcast ids, grouped by broadcast id and
+// ordered by `displayOrder`. Includes the inline data URL (the bytes), so use
+// this only for a single opened broadcast — never the full inbox list.
+type BroadcastAttachment = {
+  id: string;
+  fileName: string | null;
+  fileType: string;
+  fileSize: number | null;
+  url: string | null;
+};
+async function loadAttachments(
+  broadcastIds: string[],
+): Promise<Map<string, BroadcastAttachment[]>> {
+  const out = new Map<string, BroadcastAttachment[]>();
+  if (broadcastIds.length === 0) return out;
+  const rows = await db
+    .select({
+      broadcastId: broadcastAssets.broadcastId,
+      displayOrder: broadcastAssets.displayOrder,
+      id: assets.id,
+      fileName: assets.fileName,
+      fileType: assets.fileType,
+      fileSize: assets.fileSize,
+      url: assets.url,
+    })
+    .from(broadcastAssets)
+    .innerJoin(assets, eq(assets.id, broadcastAssets.assetId))
+    .where(inArray(broadcastAssets.broadcastId, broadcastIds))
+    .orderBy(broadcastAssets.displayOrder);
+  for (const r of rows) {
+    const list = out.get(r.broadcastId) ?? [];
+    list.push({
+      id: r.id,
+      fileName: r.fileName,
+      fileType: r.fileType,
+      fileSize: r.fileSize,
+      url: r.url,
+    });
+    out.set(r.broadcastId, list);
+  }
+  return out;
+}
 
 async function loadTeam(teamId: string) {
   const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -87,6 +179,7 @@ async function persistBroadcast(opts: {
   allowReplies: boolean;
   recipients: Recipient[];
   notifMessage: string;
+  assetIds?: string[];
 }): Promise<string> {
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -101,6 +194,16 @@ async function persistBroadcast(opts: {
       })
       .returning({ id: broadcasts.id });
     const broadcastId = row.id;
+
+    if (opts.assetIds && opts.assetIds.length > 0) {
+      await tx.insert(broadcastAssets).values(
+        opts.assetIds.map((assetId, i) => ({
+          broadcastId,
+          assetId,
+          displayOrder: i,
+        })),
+      );
+    }
 
     if (opts.recipients.length > 0) {
       await tx.insert(broadcastRecipients).values(
@@ -144,10 +247,15 @@ router.post(
     if (!(await canManageOrganization(me.id, org.id))) {
       return apiError(res, 403, "Organization owners or admins only");
     }
-    const parsed = bodyZ.safeParse(req.body);
+    const parsed = orgBroadcastZ.safeParse(req.body);
     if (!parsed.success) {
       return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
     }
+    const { ids: assetIds, error: assetError } = await validateOwnedAssets(
+      parsed.data.assetIds,
+      me.id,
+    );
+    if (assetError) return apiError(res, 400, assetError);
     const recipients = await enumerateOrgAudience(org.id);
     const broadcastId = await persistBroadcast({
       scope: "organization",
@@ -158,9 +266,10 @@ router.post(
       allowReplies: false,
       recipients,
       notifMessage: `New announcement from ${org.name}`,
+      assetIds,
     });
     req.log.info(
-      { broadcastId, orgId: org.id, recipients: recipients.length },
+      { broadcastId, orgId: org.id, recipients: recipients.length, attachments: assetIds.length },
       "broadcast: org announcement sent",
     );
     res.status(201).json({ id: broadcastId, recipientCount: recipients.length });
@@ -236,6 +345,11 @@ router.get(
         senderAvatar: users.avatarUrl,
         recipientRole: broadcastRecipients.recipientRole,
         readAt: broadcastRecipients.readAt,
+        // Cheap count only — the inbox never embeds the (data-URL) bytes.
+        attachmentCount: sql<number>`(
+          SELECT count(*)::int FROM ${broadcastAssets}
+          WHERE ${broadcastAssets.broadcastId} = ${broadcasts.id}
+        )`,
       })
       .from(broadcastRecipients)
       .innerJoin(broadcasts, eq(broadcasts.id, broadcastRecipients.broadcastId))
@@ -261,6 +375,7 @@ router.get(
       recipientRole: r.recipientRole,
       read: r.readAt != null,
       canReply: r.scope === "team" && r.allowReplies && r.recipientRole === "parent",
+      attachmentCount: r.attachmentCount ?? 0,
     }));
     res.json(paginate(data));
   }),
@@ -366,6 +481,8 @@ router.get(
     const canReply =
       b.scope === "team" && b.allowReplies && recipient?.recipientRole === "parent";
 
+    const attachments = (await loadAttachments([b.id])).get(b.id) ?? [];
+
     // Reply thread(s). Staff see all; a parent sees only their own family thread.
     type ThreadReply = {
       id: string;
@@ -452,6 +569,7 @@ router.get(
       isStaff,
       canReply,
       threads,
+      attachments,
     });
   }),
 );

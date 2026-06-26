@@ -1025,6 +1025,13 @@ CREATE TABLE IF NOT EXISTS broadcast_replies (
 );
 CREATE INDEX IF NOT EXISTS broadcast_replies_thread_idx
   ON broadcast_replies (broadcast_id, family_parent_user_id);
+
+CREATE TABLE IF NOT EXISTS broadcast_assets (
+  broadcast_id uuid NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+  asset_id uuid NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  display_order integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (broadcast_id, asset_id)
+);
 `;
 
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
