@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Info, Play, Save, X } from "lucide-react";
+import { FileText, Info, Play, Save, Sparkles, X } from "lucide-react";
 import { Link } from "wouter";
 import { TeamAvatar, UserAvatar } from "@/components/UserAvatar";
 import { MediaSection } from "./MediaSection";
@@ -321,6 +321,18 @@ export function PostFormFields({
           className={`mt-2 ${isShort ? "min-h-[120px]" : "min-h-[260px]"}`}
           data-testid="input-body"
         />
+        {!isShort && !isOrgPost && (
+          // Point coaches at AI Assist (the button above) so they know
+          // writing a recap doesn't have to start from a blank page.
+          <p
+            className="mt-1.5 text-[11px] text-blue-700 font-semibold flex items-center gap-1"
+            data-testid="ai-assist-nudge"
+          >
+            <Sparkles className="w-3 h-3 shrink-0" />
+            Stuck on words? Tap AI Assist above to draft a recap from your
+            title and game details — then edit it to taste.
+          </p>
+        )}
       </div>
 
 

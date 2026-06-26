@@ -298,7 +298,7 @@ export default function TeamPage() {
 
         {expanded === "posts" && (
           <>
-            <TournamentScheduleCard teamId={teamId} />
+            <TournamentScheduleCard teamId={teamId} canPostRecap={canPostRecap} />
             {canViewSchedule && (
               <ScheduleUpNext
                 teamId={teamId}

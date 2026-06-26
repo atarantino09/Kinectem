@@ -4,7 +4,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, MapPin, ExternalLink, Sparkles, Clock } from "lucide-react";
+import { Trophy, MapPin, ExternalLink, Sparkles, Clock, FileText } from "lucide-react";
 
 // Surfaces the imported tournament schedule for a team that claimed a
 // participant slot. Source of truth is the tournament import, so re-imported
@@ -60,6 +60,39 @@ function fmtTime(t: string | null): string {
 
 function venueLine(m: TournamentMatch): string {
   return [m.venue, m.field, m.venueState].filter(Boolean).join(" · ");
+}
+
+// Today's local calendar date as YYYY-MM-DD so we can compare against a
+// match's `matchDate` (also YYYY-MM-DD) — ISO date strings sort
+// lexicographically, so a plain string compare is correct.
+function todayKey(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// A match is worth recapping once it's actually been played: either it has a
+// recorded score, or its date is in the past. Same-day (no score yet), future,
+// and TBD matches don't get the "Write recap" affordance.
+function isRecappable(m: TournamentMatch): boolean {
+  if (!m.opponentName) return false;
+  if (m.teamScore != null && m.opponentScore != null) return true;
+  return !!m.matchDate && m.matchDate < todayKey();
+}
+
+// Prefilled recap composer deep-link for a tournament match. These aren't
+// schedule events, so we skip `scheduleEventId` — only the opponent + date
+// carry over. Mirrors the Team Schedule "Write game recap" param shape.
+function recapHrefFor(teamId: string, m: TournamentMatch): string {
+  const opponent = m.opponentName
+    ? `&opponent=${encodeURIComponent(m.opponentName)}`
+    : "";
+  const date = m.matchDate ? `&gameDate=${m.matchDate}` : "";
+  return `/posts/new?type=long&teamId=${teamId}${date}${opponent}&from=${encodeURIComponent(
+    `/teams/${teamId}`,
+  )}`;
 }
 
 // The free recap window for a tournament is, in UTC, [startDate 00:00,
@@ -180,7 +213,15 @@ function ScoreBadge({ m }: { m: TournamentMatch }) {
   );
 }
 
-export function TournamentScheduleCard({ teamId }: { teamId: string }) {
+export function TournamentScheduleCard({
+  teamId,
+  canPostRecap = false,
+}: {
+  teamId: string;
+  // When true (the viewer can author recaps for this team), played matches
+  // expose a "Write recap" link into the prefilled composer.
+  canPostRecap?: boolean;
+}) {
   const { data } = useQuery<{ data: TournamentGroup[] }>({
     queryKey: ["team", teamId, "tournament-schedule"],
     queryFn: () =>
@@ -245,6 +286,17 @@ export function TournamentScheduleCard({ teamId }: { teamId: string }) {
                       <Badge variant="outline" className="text-[10px]">
                         {[m.division, m.bracket].filter(Boolean).join(" · ")}
                       </Badge>
+                    )}
+                    {canPostRecap && isRecappable(m) && (
+                      <Link href={recapHrefFor(teamId, m)}>
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                          data-testid={`btn-write-recap-${m.id}`}
+                        >
+                          <FileText className="w-3 h-3" />
+                          Write recap
+                        </span>
+                      </Link>
                     )}
                   </div>
                 </li>
