@@ -126,7 +126,9 @@ router.get(
       topFollowedOrgs,
       topFollowedUsers,
       topPostersThisWeek,
-      newOrgsByMonth,
+      writtenInOrgsByMonth,
+      organicOrgsByMonth,
+      orgsClaimedByMonth,
       newTeamsByMonth,
       gameRecapsByMonth,
     ] = await Promise.all([
@@ -270,15 +272,42 @@ router.get(
             count: Number(row.count),
           })),
         ),
+      // Operator-seeded ("written in") orgs: bulk-imported pages carry a claim
+      // token; organic orgs (created by a real user) never get one.
       db
         .select({
           month: sql<string>`to_char(date_trunc('month', ${organizations.createdAt}), 'YYYY-MM-DD')`,
           count: sql<number>`count(*)::int`,
         })
         .from(organizations)
-        .where(gte(organizations.createdAt, since12Months))
+        .where(and(isNotNull(organizations.claimToken), gte(organizations.createdAt, since12Months)))
         .groupBy(sql`date_trunc('month', ${organizations.createdAt})`)
         .orderBy(sql`date_trunc('month', ${organizations.createdAt})`),
+      db
+        .select({
+          month: sql<string>`to_char(date_trunc('month', ${organizations.createdAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(organizations)
+        .where(and(isNull(organizations.claimToken), gte(organizations.createdAt, since12Months)))
+        .groupBy(sql`date_trunc('month', ${organizations.createdAt})`)
+        .orderBy(sql`date_trunc('month', ${organizations.createdAt})`),
+      // Claimed orgs, dated by when the claim was approved (not when created).
+      db
+        .select({
+          month: sql<string>`to_char(date_trunc('month', ${organizationClaimRequests.decidedAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(organizationClaimRequests)
+        .where(
+          and(
+            eq(organizationClaimRequests.status, "approved"),
+            isNotNull(organizationClaimRequests.decidedAt),
+            gte(organizationClaimRequests.decidedAt, since12Months),
+          ),
+        )
+        .groupBy(sql`date_trunc('month', ${organizationClaimRequests.decidedAt})`)
+        .orderBy(sql`date_trunc('month', ${organizationClaimRequests.decidedAt})`),
       db
         .select({
           month: sql<string>`to_char(date_trunc('month', ${teams.createdAt}), 'YYYY-MM-DD')`,
@@ -336,7 +365,9 @@ router.get(
         newPostsByDay,
         commentsByDay: newCommentsByDay,
         activeSessionsByDay,
-        newOrgsByMonth,
+        writtenInOrgsByMonth,
+        organicOrgsByMonth,
+        orgsClaimedByMonth,
         newTeamsByMonth,
         gameRecapsByMonth,
       },

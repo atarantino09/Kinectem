@@ -42,7 +42,9 @@ type Analytics = {
     newPostsByDay: Array<{ day: string; count: number }>;
     commentsByDay: Array<{ day: string; count: number }>;
     activeSessionsByDay: Array<{ day: string; count: number }>;
-    newOrgsByMonth: Array<{ month: string; count: number }>;
+    writtenInOrgsByMonth: Array<{ month: string; count: number }>;
+    organicOrgsByMonth: Array<{ month: string; count: number }>;
+    orgsClaimedByMonth: Array<{ month: string; count: number }>;
     newTeamsByMonth: Array<{ month: string; count: number }>;
     gameRecapsByMonth: Array<{ month: string; count: number }>;
   };
@@ -93,15 +95,18 @@ function GrowthStat({
   label,
   value,
   delta,
+  hint,
 }: {
   label: string;
   value: number;
   delta: number | null;
+  hint?: string;
 }) {
   return (
     <Card>
       <CardContent className="p-4">
         <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground mt-0.5">{hint}</div>}
         <div className="text-3xl font-black mt-1">{value}</div>
         {delta !== null && (
           <div
@@ -126,7 +131,9 @@ export default function AdminDashboard() {
   const months = useMemo(() => {
     if (!data) return [] as string[];
     const set = new Set<string>([
-      ...data.series.newOrgsByMonth.map((d) => d.month),
+      ...data.series.writtenInOrgsByMonth.map((d) => d.month),
+      ...data.series.organicOrgsByMonth.map((d) => d.month),
+      ...data.series.orgsClaimedByMonth.map((d) => d.month),
       ...data.series.newTeamsByMonth.map((d) => d.month),
       ...data.series.gameRecapsByMonth.map((d) => d.month),
     ]);
@@ -259,9 +266,22 @@ export default function AdminDashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <GrowthStat
-                label="New organizations"
-                value={countFor(data.series.newOrgsByMonth, activeMonth)}
-                delta={deltaFor(data.series.newOrgsByMonth)}
+                label="Orgs written in"
+                hint="Operator-seeded pages"
+                value={countFor(data.series.writtenInOrgsByMonth, activeMonth)}
+                delta={deltaFor(data.series.writtenInOrgsByMonth)}
+              />
+              <GrowthStat
+                label="Orgs claimed"
+                hint="By claim-approval date"
+                value={countFor(data.series.orgsClaimedByMonth, activeMonth)}
+                delta={deltaFor(data.series.orgsClaimedByMonth)}
+              />
+              <GrowthStat
+                label="Orgs created organically"
+                hint="Self-signup orgs"
+                value={countFor(data.series.organicOrgsByMonth, activeMonth)}
+                delta={deltaFor(data.series.organicOrgsByMonth)}
               />
               <GrowthStat
                 label="New teams"
