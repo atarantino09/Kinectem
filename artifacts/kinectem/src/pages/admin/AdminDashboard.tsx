@@ -76,30 +76,60 @@ function Sparkline({ data }: { data: Array<{ day: string; count: number }> }) {
   );
 }
 
-function WeeklyBars({ data }: { data: Array<{ week: string; count: number }> }) {
-  if (data.length === 0) {
+type WeekSeries = {
+  label: string;
+  colorClass: string;
+  data: Array<{ week: string; count: number }>;
+};
+
+function formatWeek(week: string) {
+  const d = new Date(`${week}T00:00:00`);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function WeeklyChart({ series }: { series: WeekSeries[] }) {
+  const weeks = Array.from(
+    new Set(series.flatMap((s) => s.data.map((d) => d.week))),
+  ).sort();
+  if (weeks.length === 0) {
     return <div className="text-sm text-muted-foreground">No activity yet.</div>;
   }
-  const max = Math.max(...data.map((d) => d.count), 1);
-  const fmt = (week: string) => {
-    const d = new Date(`${week}T00:00:00`);
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  };
+  const max = Math.max(1, ...series.flatMap((s) => s.data.map((d) => d.count)));
+  const lookup = series.map((s) => {
+    const m = new Map(s.data.map((d) => [d.week, d.count] as const));
+    return { label: s.label, colorClass: s.colorClass, at: (w: string) => m.get(w) ?? 0 };
+  });
   return (
-    <div className="overflow-x-auto">
-      <div className="flex items-end gap-2 h-32 min-w-full">
-        {data.map((d) => (
-          <div
-            key={d.week}
-            className="flex-1 min-w-[2.25rem] flex flex-col items-center gap-1 h-full justify-end"
-          >
-            <div className="text-xs font-bold text-foreground">{d.count}</div>
-            <div
-              className="w-full bg-primary/70 rounded-t min-h-[2px]"
-              style={{ height: `${(d.count / max) * 100}%` }}
-              title={`Week of ${d.week}: ${d.count}`}
-            />
-            <div className="text-[10px] text-muted-foreground whitespace-nowrap">{fmt(d.week)}</div>
+    <div>
+      {series.length > 1 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+          {series.map((s) => (
+            <div key={s.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className={`inline-block w-3 h-3 rounded-sm ${s.colorClass}`} />
+              {s.label}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-end gap-2 h-40">
+        {weeks.map((w) => (
+          <div key={w} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+            <div className="flex-1 w-full flex items-end justify-center gap-1">
+              {lookup.map((s) => {
+                const count = s.at(w);
+                return (
+                  <div
+                    key={s.label}
+                    className={`flex-1 max-w-[2rem] rounded-t min-h-[2px] ${s.colorClass}`}
+                    style={{ height: `${(count / max) * 100}%` }}
+                    title={`${s.label} — week of ${w}: ${count}`}
+                  />
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {formatWeek(w)}
+            </div>
           </div>
         ))}
       </div>
@@ -204,21 +234,26 @@ export default function AdminDashboard() {
           <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
             Growth (last 12 weeks)
           </h2>
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className="grid gap-3">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">New organizations per week</CardTitle>
+                <CardTitle className="text-sm">New organizations &amp; teams per week</CardTitle>
               </CardHeader>
               <CardContent>
-                <WeeklyBars data={data.series.newOrgsByWeek} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">New teams per week</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WeeklyBars data={data.series.newTeamsByWeek} />
+                <WeeklyChart
+                  series={[
+                    {
+                      label: "Organizations",
+                      colorClass: "bg-chart-1",
+                      data: data.series.newOrgsByWeek,
+                    },
+                    {
+                      label: "Teams",
+                      colorClass: "bg-chart-2",
+                      data: data.series.newTeamsByWeek,
+                    },
+                  ]}
+                />
               </CardContent>
             </Card>
             <Card>
@@ -226,7 +261,15 @@ export default function AdminDashboard() {
                 <CardTitle className="text-sm">Game recaps per week</CardTitle>
               </CardHeader>
               <CardContent>
-                <WeeklyBars data={data.series.gameRecapsByWeek} />
+                <WeeklyChart
+                  series={[
+                    {
+                      label: "Game recaps",
+                      colorClass: "bg-chart-1",
+                      data: data.series.gameRecapsByWeek,
+                    },
+                  ]}
+                />
               </CardContent>
             </Card>
           </div>
