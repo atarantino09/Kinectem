@@ -86,18 +86,23 @@ function WeeklyBars({ data }: { data: Array<{ week: string; count: number }> }) 
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
   return (
-    <div className="flex items-end gap-2 h-32">
-      {data.map((d) => (
-        <div key={d.week} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-          <div className="text-xs font-bold text-foreground">{d.count}</div>
+    <div className="overflow-x-auto">
+      <div className="flex items-end gap-2 h-32 min-w-full">
+        {data.map((d) => (
           <div
-            className="w-full bg-primary/70 rounded-t min-h-[2px]"
-            style={{ height: `${(d.count / max) * 100}%` }}
-            title={`Week of ${d.week}: ${d.count}`}
-          />
-          <div className="text-[10px] text-muted-foreground whitespace-nowrap">{fmt(d.week)}</div>
-        </div>
-      ))}
+            key={d.week}
+            className="flex-1 min-w-[2.25rem] flex flex-col items-center gap-1 h-full justify-end"
+          >
+            <div className="text-xs font-bold text-foreground">{d.count}</div>
+            <div
+              className="w-full bg-primary/70 rounded-t min-h-[2px]"
+              style={{ height: `${(d.count / max) * 100}%` }}
+              title={`Week of ${d.week}: ${d.count}`}
+            />
+            <div className="text-[10px] text-muted-foreground whitespace-nowrap">{fmt(d.week)}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
