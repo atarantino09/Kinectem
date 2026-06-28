@@ -1,9 +1,17 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatOrgName } from "@/lib/format";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Analytics = {
   totals: {
@@ -34,9 +42,9 @@ type Analytics = {
     newPostsByDay: Array<{ day: string; count: number }>;
     commentsByDay: Array<{ day: string; count: number }>;
     activeSessionsByDay: Array<{ day: string; count: number }>;
-    newOrgsByWeek: Array<{ week: string; count: number }>;
-    newTeamsByWeek: Array<{ week: string; count: number }>;
-    gameRecapsByWeek: Array<{ week: string; count: number }>;
+    newOrgsByMonth: Array<{ month: string; count: number }>;
+    newTeamsByMonth: Array<{ month: string; count: number }>;
+    gameRecapsByMonth: Array<{ month: string; count: number }>;
   };
   top: {
     followedOrganizations: Array<{ orgId: string; name: string; count: number }>;
@@ -76,64 +84,36 @@ function Sparkline({ data }: { data: Array<{ day: string; count: number }> }) {
   );
 }
 
-type WeekSeries = {
-  label: string;
-  colorClass: string;
-  data: Array<{ week: string; count: number }>;
-};
-
-function formatWeek(week: string) {
-  const d = new Date(`${week}T00:00:00`);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function formatMonth(month: string) {
+  const d = new Date(`${month}T00:00:00`);
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-function WeeklyChart({ series }: { series: WeekSeries[] }) {
-  const weeks = Array.from(
-    new Set(series.flatMap((s) => s.data.map((d) => d.week))),
-  ).sort();
-  if (weeks.length === 0) {
-    return <div className="text-sm text-muted-foreground">No activity yet.</div>;
-  }
-  const max = Math.max(1, ...series.flatMap((s) => s.data.map((d) => d.count)));
-  const lookup = series.map((s) => {
-    const m = new Map(s.data.map((d) => [d.week, d.count] as const));
-    return { label: s.label, colorClass: s.colorClass, at: (w: string) => m.get(w) ?? 0 };
-  });
+function GrowthStat({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: number;
+  delta: number | null;
+}) {
   return (
-    <div>
-      {series.length > 1 && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-          {series.map((s) => (
-            <div key={s.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className={`inline-block w-3 h-3 rounded-sm ${s.colorClass}`} />
-              {s.label}
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex items-end gap-2 h-40">
-        {weeks.map((w) => (
-          <div key={w} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-            <div className="flex-1 w-full flex items-end justify-center gap-1">
-              {lookup.map((s) => {
-                const count = s.at(w);
-                return (
-                  <div
-                    key={s.label}
-                    className={`flex-1 max-w-[2rem] rounded-t min-h-[2px] ${s.colorClass}`}
-                    style={{ height: `${(count / max) * 100}%` }}
-                    title={`${s.label} — week of ${w}: ${count}`}
-                  />
-                );
-              })}
-            </div>
-            <div className="text-[10px] text-muted-foreground whitespace-nowrap">
-              {formatWeek(w)}
-            </div>
+    <Card>
+      <CardContent className="p-4">
+        <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
+        <div className="text-3xl font-black mt-1">{value}</div>
+        {delta !== null && (
+          <div
+            className={`text-xs mt-1 ${
+              delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-600" : "text-muted-foreground"
+            }`}
+          >
+            {delta > 0 ? "▲" : delta < 0 ? "▼" : "—"} {Math.abs(delta)} vs previous month
           </div>
-        ))}
-      </div>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -142,6 +122,30 @@ export default function AdminDashboard() {
     queryKey: ["admin", "analytics"],
     queryFn: () => customFetch<Analytics>("/api/v1/admin/analytics", { method: "GET" }),
   });
+
+  const months = useMemo(() => {
+    if (!data) return [] as string[];
+    const set = new Set<string>([
+      ...data.series.newOrgsByMonth.map((d) => d.month),
+      ...data.series.newTeamsByMonth.map((d) => d.month),
+      ...data.series.gameRecapsByMonth.map((d) => d.month),
+    ]);
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [data]);
+
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const activeMonth =
+    selectedMonth && months.includes(selectedMonth) ? selectedMonth : (months[0] ?? null);
+  const prevMonth = (() => {
+    if (!activeMonth) return null;
+    const idx = months.indexOf(activeMonth);
+    return idx >= 0 && idx + 1 < months.length ? months[idx + 1] : null;
+  })();
+
+  const countFor = (series: Array<{ month: string; count: number }>, month: string | null) =>
+    month ? (series.find((d) => d.month === month)?.count ?? 0) : 0;
+  const deltaFor = (series: Array<{ month: string; count: number }>) =>
+    prevMonth ? countFor(series, activeMonth) - countFor(series, prevMonth) : null;
 
   return (
     <AdminLayout>
@@ -231,48 +235,46 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
-            Growth (last 12 weeks)
-          </h2>
-          <div className="grid gap-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">New organizations &amp; teams per week</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WeeklyChart
-                  series={[
-                    {
-                      label: "Organizations",
-                      colorClass: "bg-chart-1",
-                      data: data.series.newOrgsByWeek,
-                    },
-                    {
-                      label: "Teams",
-                      colorClass: "bg-chart-2",
-                      data: data.series.newTeamsByWeek,
-                    },
-                  ]}
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Game recaps per week</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WeeklyChart
-                  series={[
-                    {
-                      label: "Game recaps",
-                      colorClass: "bg-chart-1",
-                      data: data.series.gameRecapsByWeek,
-                    },
-                  ]}
-                />
-              </CardContent>
-            </Card>
+          <div className="flex items-center justify-between gap-3 mt-6 mb-2 flex-wrap">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              Growth by month
+            </h2>
+            {months.length > 0 && activeMonth && (
+              <Select value={activeMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[200px]" data-testid="select-growth-month">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {formatMonth(m)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
+          {months.length === 0 || !activeMonth ? (
+            <div className="text-sm text-muted-foreground">No activity yet.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <GrowthStat
+                label="New organizations"
+                value={countFor(data.series.newOrgsByMonth, activeMonth)}
+                delta={deltaFor(data.series.newOrgsByMonth)}
+              />
+              <GrowthStat
+                label="New teams"
+                value={countFor(data.series.newTeamsByMonth, activeMonth)}
+                delta={deltaFor(data.series.newTeamsByMonth)}
+              />
+              <GrowthStat
+                label="Game recaps"
+                value={countFor(data.series.gameRecapsByMonth, activeMonth)}
+                delta={deltaFor(data.series.gameRecapsByMonth)}
+              />
+            </div>
+          )}
 
           <div className="grid md:grid-cols-3 gap-3 mt-3">
             <Card>
