@@ -34,6 +34,9 @@ type Analytics = {
     newPostsByDay: Array<{ day: string; count: number }>;
     commentsByDay: Array<{ day: string; count: number }>;
     activeSessionsByDay: Array<{ day: string; count: number }>;
+    newOrgsByWeek: Array<{ week: string; count: number }>;
+    newTeamsByWeek: Array<{ week: string; count: number }>;
+    gameRecapsByWeek: Array<{ week: string; count: number }>;
   };
   top: {
     followedOrganizations: Array<{ orgId: string; name: string; count: number }>;
@@ -68,6 +71,32 @@ function Sparkline({ data }: { data: Array<{ day: string; count: number }> }) {
           style={{ height: `${(d.count / max) * 100}%` }}
           title={`${d.day}: ${d.count}`}
         />
+      ))}
+    </div>
+  );
+}
+
+function WeeklyBars({ data }: { data: Array<{ week: string; count: number }> }) {
+  if (data.length === 0) {
+    return <div className="text-sm text-muted-foreground">No activity yet.</div>;
+  }
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const fmt = (week: string) => {
+    const d = new Date(`${week}T00:00:00`);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+  return (
+    <div className="flex items-end gap-2 h-32">
+      {data.map((d) => (
+        <div key={d.week} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+          <div className="text-xs font-bold text-foreground">{d.count}</div>
+          <div
+            className="w-full bg-primary/70 rounded-t min-h-[2px]"
+            style={{ height: `${(d.count / max) * 100}%` }}
+            title={`Week of ${d.week}: ${d.count}`}
+          />
+          <div className="text-[10px] text-muted-foreground whitespace-nowrap">{fmt(d.week)}</div>
+        </div>
       ))}
     </div>
   );
@@ -163,6 +192,36 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <Sparkline data={data.series.activeSessionsByDay} />
+              </CardContent>
+            </Card>
+          </div>
+
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
+            Growth (last 12 weeks)
+          </h2>
+          <div className="grid md:grid-cols-3 gap-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">New organizations per week</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <WeeklyBars data={data.series.newOrgsByWeek} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">New teams per week</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <WeeklyBars data={data.series.newTeamsByWeek} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Game recaps per week</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <WeeklyBars data={data.series.gameRecapsByWeek} />
               </CardContent>
             </Card>
           </div>

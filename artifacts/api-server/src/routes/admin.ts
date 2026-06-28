@@ -99,6 +99,7 @@ router.get(
     const now = new Date();
     const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sinceWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const since12Weeks = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
 
     const [
       [{ totalUsers }],
@@ -125,6 +126,9 @@ router.get(
       topFollowedOrgs,
       topFollowedUsers,
       topPostersThisWeek,
+      newOrgsByWeek,
+      newTeamsByWeek,
+      gameRecapsByWeek,
     ] = await Promise.all([
       db.select({ totalUsers: sql<number>`count(*)::int` }).from(users).where(isNull(users.deletedAt)),
       db
@@ -266,6 +270,33 @@ router.get(
             count: Number(row.count),
           })),
         ),
+      db
+        .select({
+          week: sql<string>`to_char(date_trunc('week', ${organizations.createdAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(organizations)
+        .where(gte(organizations.createdAt, since12Weeks))
+        .groupBy(sql`date_trunc('week', ${organizations.createdAt})`)
+        .orderBy(sql`date_trunc('week', ${organizations.createdAt})`),
+      db
+        .select({
+          week: sql<string>`to_char(date_trunc('week', ${teams.createdAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(teams)
+        .where(gte(teams.createdAt, since12Weeks))
+        .groupBy(sql`date_trunc('week', ${teams.createdAt})`)
+        .orderBy(sql`date_trunc('week', ${teams.createdAt})`),
+      db
+        .select({
+          week: sql<string>`to_char(date_trunc('week', ${articles.createdAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(articles)
+        .where(gte(articles.createdAt, since12Weeks))
+        .groupBy(sql`date_trunc('week', ${articles.createdAt})`)
+        .orderBy(sql`date_trunc('week', ${articles.createdAt})`),
     ]);
 
     const roleCounts: Record<string, number> = {
@@ -305,6 +336,9 @@ router.get(
         newPostsByDay,
         commentsByDay: newCommentsByDay,
         activeSessionsByDay,
+        newOrgsByWeek,
+        newTeamsByWeek,
+        gameRecapsByWeek,
       },
       top: {
         followedOrganizations: topFollowedOrgs,
