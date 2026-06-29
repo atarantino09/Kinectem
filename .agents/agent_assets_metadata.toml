@@ -222,3 +222,9 @@ id = "wTUVLs9qGz8y7QwrOiVnc"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_5.mp3"
 type = "audio"
 title = "vo_5"
+
+[[outputs]]
+id = "aOvDNMd7_0FKk44icoPtH"
+uri = "file://organizations.csv"
+type = "table"
+title = "837 written-in org names (production seed list)"
