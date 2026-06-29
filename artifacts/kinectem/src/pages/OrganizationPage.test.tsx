@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 
 import { renderWithProviders } from "@/test";
 import { setMockSearch, wouterMock } from "@/test/mocks/wouter";
@@ -187,7 +187,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
-  it("shows the hero admin CTA, the Members 'Manage' button, and the empty-admins nudge for a sole owner", async () => {
+  it("shows the hero 'Manage members' control for a sole owner", async () => {
     installHandlers({ role: "owner", extraAdmin: false });
 
     renderWithProviders(<OrganizationPage />);
@@ -195,15 +195,9 @@ describe("OrganizationPage — admin control gating", () => {
     expect(
       await screen.findByTestId("btn-manage-admins-hero"),
     ).toBeInTheDocument();
-    expect(
-      await screen.findByTestId("btn-manage-members"),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByTestId("card-empty-admins-nudge"),
-    ).toBeInTheDocument();
   });
 
-  it("shows the admin controls for an admin viewer and hides the nudge when another admin exists", async () => {
+  it("shows the hero 'Manage members' control for an admin viewer", async () => {
     installHandlers({ role: "admin", extraAdmin: true });
 
     renderWithProviders(<OrganizationPage />);
@@ -211,19 +205,6 @@ describe("OrganizationPage — admin control gating", () => {
     expect(
       await screen.findByTestId("btn-manage-admins-hero"),
     ).toBeInTheDocument();
-    expect(
-      await screen.findByTestId("btn-manage-members"),
-    ).toBeInTheDocument();
-
-    // Members render before the empty-admins nudge would, so by the time the
-    // Manage button is mounted any nudge derived from the same members list
-    // has had a chance to render too. Asserting it's not present here proves
-    // the gating condition (`adminCount > 1`) suppresses it.
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("card-empty-admins-nudge"),
-      ).not.toBeInTheDocument();
-    });
   });
 
   it("hides every admin control from a non-member viewer", async () => {
@@ -237,9 +218,6 @@ describe("OrganizationPage — admin control gating", () => {
     expect(
       screen.queryByTestId("btn-manage-admins-hero"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("btn-manage-members")).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("card-empty-admins-nudge"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-org-more-menu")).not.toBeInTheDocument();
   });
 });

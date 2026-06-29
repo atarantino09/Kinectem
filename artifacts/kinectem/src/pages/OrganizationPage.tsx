@@ -24,6 +24,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -63,7 +69,7 @@ import { NewsletterDialog } from "@/components/NewsletterDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastComposeDialog";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
-import { getInitials, formatOrgName } from "@/lib/format";
+import { formatOrgName } from "@/lib/format";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 
 type TeamRailItem = {
@@ -459,7 +465,7 @@ export default function OrganizationPage() {
                 {isOrgManager && planUsage && (
                   <Button
                     asChild
-                    variant="outline"
+                    variant={atTeamLimit ? "brand" : "outline"}
                     className="font-bold rounded-full"
                     data-testid="pill-plan-name"
                   >
@@ -469,6 +475,14 @@ export default function OrganizationPage() {
                         planUsage.plan.charAt(0).toUpperCase() +
                           planUsage.plan.slice(1)}{" "}
                       plan
+                      <span
+                        className="ml-1.5 font-medium opacity-80"
+                        data-testid="text-plan-usage"
+                      >
+                        {planUsage.teamsLimit == null
+                          ? `· ${planUsage.teamsUsed} teams`
+                          : `· ${planUsage.teamsUsed}/${planUsage.teamsLimit} teams`}
+                      </span>
                     </Link>
                   </Button>
                 )}
@@ -496,50 +510,54 @@ export default function OrganizationPage() {
                   ))}
                 {isOrgManager && (
                   <Button
-                    asChild
-                    variant="ghost"
-                    className="font-bold rounded-full"
-                    data-testid="link-org-getting-started"
-                  >
-                    <a
-                      href="/getting-started.html"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ExternalLink className="w-4 h-4 mr-1.5" />
-                      Getting started guide
-                    </a>
-                  </Button>
-                )}
-                {isOrgManager && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setBroadcastOpen(true)}
-                    className="font-bold rounded-full"
-                    data-testid="btn-org-broadcast"
-                  >
-                    <Megaphone className="w-4 h-4 mr-1.5" /> Send announcement
-                  </Button>
-                )}
-                {isOrgManager && (
-                  <Button
                     variant="outline"
                     onClick={() => setManageMembersOpen(true)}
                     className="font-bold rounded-full"
                     data-testid="btn-manage-admins-hero"
                   >
-                    <Shield className="w-4 h-4 mr-1.5" /> Manage admins & members
+                    <Shield className="w-4 h-4 mr-1.5" /> Manage members
                   </Button>
                 )}
                 {isOrgManager && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setEditOpen(true)}
-                    className="font-bold rounded-full"
-                    data-testid="btn-edit-org"
-                  >
-                    <Pencil className="w-4 h-4 mr-1.5" /> Edit
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="font-bold rounded-full"
+                        data-testid="btn-org-more-menu"
+                      >
+                        <Settings className="w-4 h-4 mr-1.5" /> More
+                        <ChevronDown className="w-4 h-4 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => setEditOpen(true)}
+                        data-testid="btn-edit-org"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" /> Edit organization
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setBroadcastOpen(true)}
+                        data-testid="btn-org-broadcast"
+                      >
+                        <Megaphone className="w-4 h-4 mr-2" /> Send announcement
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        asChild
+                        data-testid="link-org-getting-started"
+                      >
+                        <a
+                          href="/getting-started.html"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Getting started guide
+                        </a>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
                 <Button
                   variant="brand"
@@ -604,10 +622,6 @@ export default function OrganizationPage() {
             )}
           </div>
 
-          {isOrgManager && planUsage && (
-            <OrgPlanUsageCard usage={planUsage} orgId={orgId} />
-          )}
-
           {isOrgManager && (
             <OrgSetupChecklist
               orgId={orgId}
@@ -627,42 +641,6 @@ export default function OrganizationPage() {
             />
           )}
 
-          {isOrgManager && (() => {
-            const adminCount = members.filter(
-              (m) => m.role === "admin" || m.role === "owner",
-            ).length;
-            if (adminCount > 1) return null;
-            return (
-              <Card
-                className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30"
-                data-testid="card-empty-admins-nudge"
-              >
-                <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <Shield className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm">
-                        You're the only admin
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Promote a member to help you run {formatOrgName(organization.name)}.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="brand"
-                    className="font-bold rounded-full shrink-0"
-                    onClick={() => setManageMembersOpen(true)}
-                    data-testid="btn-empty-admins-promote"
-                  >
-                    Promote a member
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })()}
-
           {/* Teams + archived: inline on mobile, in rail on lg+. The
               hook ensures only one instance mounts at a time so testids
               stay unique. */}
@@ -679,49 +657,6 @@ export default function OrganizationPage() {
                 <ArchivedTeamsCard teams={archivedTeams} />
               )}
             </div>
-          )}
-
-          {/* Members preview */}
-          {members.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-black tracking-tight">Members</h2>
-                {isOrgManager && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="font-bold rounded-full"
-                    onClick={() => setManageMembersOpen(true)}
-                    data-testid="btn-manage-members"
-                  >
-                    <Settings className="w-4 h-4 mr-1" /> Manage admins & members
-                  </Button>
-                )}
-              </div>
-              <Card className="rounded-xl border border-border">
-                <CardContent className="p-4">
-                  <div className="flex flex-wrap gap-3">
-                    {members.slice(0, 12).map((m) => (
-                      <Link key={m.userId} href={`/users/${m.userId}`}>
-                        <div className="flex items-center gap-2 bg-muted/50 hover:bg-muted px-3 py-2 rounded-lg cursor-pointer">
-                          <div className="w-7 h-7 rounded-full bg-slate-900 text-primary-foreground flex items-center justify-center text-[10px] font-bold">
-                            {getInitials(m.displayName)}
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold leading-tight">
-                              {m.displayName}
-                            </p>
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-                              {m.role}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
           )}
 
           {/* Task #548 — Roles & permissions reference, visible to any
@@ -797,89 +732,6 @@ export default function OrganizationPage() {
         )}
       </div>
     </>
-  );
-}
-
-function OrgPlanUsageCard({
-  usage,
-  orgId,
-}: {
-  usage: OrgPlanUsage;
-  orgId: string;
-}) {
-  const planName =
-    PLANS.find((p) => p.id === usage.plan)?.name ??
-    usage.plan.charAt(0).toUpperCase() + usage.plan.slice(1);
-  const unlimited = usage.teamsLimit == null;
-  const atLimit = !unlimited && usage.teamsUsed >= (usage.teamsLimit as number);
-  const pct = unlimited
-    ? 0
-    : Math.min(
-        100,
-        Math.round(
-          (usage.teamsUsed / Math.max(1, usage.teamsLimit as number)) * 100,
-        ),
-      );
-  return (
-    <Card
-      className="rounded-xl border border-border shadow-sm"
-      data-testid="card-plan-usage"
-    >
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Shield className="w-5 h-5 text-primary shrink-0" />
-            <div className="min-w-0">
-              <p
-                className="text-sm font-black tracking-tight"
-                data-testid="text-plan-name"
-              >
-                {planName} plan
-              </p>
-              <p
-                className="text-xs text-muted-foreground"
-                data-testid="text-plan-usage"
-              >
-                {unlimited
-                  ? `${usage.teamsUsed} teams · unlimited`
-                  : `${usage.teamsUsed} of ${usage.teamsLimit} teams used · ${usage.teamsRemaining} remaining`}
-              </p>
-            </div>
-          </div>
-          <Button
-            asChild
-            size="sm"
-            variant={atLimit ? "brand" : "outline"}
-            className="font-bold rounded-full shrink-0"
-          >
-            <Link
-              href={`/organizations/${orgId}/subscribe`}
-              data-testid="btn-plan-usage-upgrade"
-            >
-              {atLimit ? "Upgrade" : "Change plan"}
-            </Link>
-          </Button>
-        </div>
-        {!unlimited && (
-          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              className={`h-full rounded-full ${
-                atLimit ? "bg-destructive" : "bg-primary"
-              }`}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        )}
-        {atLimit && (
-          <p
-            className="text-xs font-medium text-destructive"
-            data-testid="text-plan-limit-reached"
-          >
-            You've reached your team limit. Upgrade your plan to add more teams.
-          </p>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
