@@ -17,6 +17,7 @@
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
     "export-org-claim-links": "tsx ./src/export-org-claim-links.ts",
+    "export-org-names": "tsx ./src/export-org-names.ts",
     "record-walkthrough": "tsx ./src/record-walkthrough.ts",
     "seed-ai-assist-demo": "tsx ./src/seed-ai-assist-demo.ts",
     "seed-production-orgs": "tsx ./src/seed-production-orgs.ts",

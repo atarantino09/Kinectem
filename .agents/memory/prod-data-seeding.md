@@ -21,6 +21,10 @@ production environment.
 - Secret tokens (e.g. org `claim_token`) are **minted fresh per environment** —
   dev tokens are NOT valid in prod. Always export claim/invite links *from the
   prod run*, never reuse dev links.
+- The seed list travels dev -> prod as a committed CSV (the prod job can't read
+  the dev DB). That snapshot goes **stale** as new rows are added in dev, so
+  **regenerate it from the dev DB right before publishing**, or the seed job
+  pushes an outdated list.
 - Prefer dry-run-by-default for any prod-writing job (mirror the repo's
   `--dry-run` / `--apply` convention), and print the masked DB host + mode before
   writing as an operator safeguard.
