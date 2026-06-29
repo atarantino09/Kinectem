@@ -31,7 +31,13 @@ import {
 import { Check, X, Shield } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 
-export function OrgAdminPanel({ orgId }: { orgId: string }) {
+export function OrgAdminPanel({
+  orgId,
+  hideHeader = false,
+}: {
+  orgId: string;
+  hideHeader?: boolean;
+}) {
   const qc = useQueryClient();
   const [approvedDialogOpen, setApprovedDialogOpen] = useState(false);
   const [declinedDialogOpen, setDeclinedDialogOpen] = useState(false);
@@ -134,10 +140,12 @@ export function OrgAdminPanel({ orgId }: { orgId: string }) {
       </DialogContent>
     </Dialog>
     <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Shield className="w-4 h-4 text-primary" />
-        <h2 className="text-xl font-black tracking-tight">Admin Queue</h2>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center gap-2">
+          <Shield className="w-4 h-4 text-primary" />
+          <h2 className="text-xl font-black tracking-tight">Admin Queue</h2>
+        </div>
+      )}
 
       <Card className="rounded-xl border border-border">
         <CardContent className="p-4 space-y-3">

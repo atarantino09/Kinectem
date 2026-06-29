@@ -43,8 +43,14 @@ vi.mock("@/components/EditOrgDialog", () => ({
 vi.mock("@/components/CreateTeamDialog", () => ({
   CreateTeamDialog: () => null,
 }));
+vi.mock("@/components/BulkAddTeamsDialog", () => ({
+  BulkAddTeamsDialog: () => null,
+}));
 vi.mock("@/components/NewOrgPostDialog", () => ({
   NewOrgPostDialog: () => null,
+}));
+vi.mock("@/components/NewsletterDialog", () => ({
+  NewsletterDialog: () => null,
 }));
 vi.mock("@/components/FollowListDialog", () => ({
   FollowListDialog: () => null,
@@ -91,6 +97,8 @@ vi.mock("@workspace/api-client-react", () => ({
     useListArchivedOrgTeamsMock(...args),
   useListOrgPosts: (...args: unknown[]) => useListOrgPostsMock(...args),
   useListMembers: (...args: unknown[]) => useListMembersMock(...args),
+  useListOrgJoinRequests: () => ({ data: { data: [] } }),
+  useListOrgPostApprovals: () => ({ data: { data: [] } }),
   useFollowOrg: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUnfollowOrg: () => ({ mutateAsync: vi.fn(), isPending: false }),
   queryOpts: <T,>(opts: T) => opts,

@@ -8,6 +8,8 @@ import {
   queryOpts,
   useListOrgPosts,
   useListMembers,
+  useListOrgJoinRequests,
+  useListOrgPostApprovals,
   useFollowOrg,
   useUnfollowOrg,
   useGetLoggedInUser,
@@ -85,6 +87,7 @@ export default function OrganizationPage() {
   const [newPostOpen, setNewPostOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const [adminQueueOpen, setAdminQueueOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [claiming, setClaiming] = useState(false);
   // Task #443 — celebratory popup shown once right after a successful
@@ -146,6 +149,20 @@ export default function OrganizationPage() {
         { method: "GET" },
       ),
   });
+  const isManagerRole =
+    organization?.role === "owner" || organization?.role === "admin";
+  const { data: joinReqResp } = useListOrgJoinRequests(orgId, undefined, {
+    query: queryOpts({ enabled: !!orgId && isManagerRole }),
+  });
+  const { data: postApprovalsResp } = useListOrgPostApprovals(
+    orgId,
+    undefined,
+    {
+      query: queryOpts({ enabled: !!orgId && isManagerRole }),
+    },
+  );
+  const pendingAdminCount =
+    (joinReqResp?.data?.length ?? 0) + (postApprovalsResp?.data?.length ?? 0);
   const followOrg = useFollowOrg();
   const unfollowOrg = useUnfollowOrg();
   const onToggleFollow = async () => {
@@ -296,9 +313,31 @@ export default function OrganizationPage() {
       <FollowListDialog
         open={followersOpen}
         onOpenChange={setFollowersOpen}
-        title={`${formatOrgName(organization.name)} followers`}
+        title={formatOrgName(organization.name)}
         variant={{ kind: "org-followers", orgId }}
+        members={members.map((m) => ({
+          userId: m.userId,
+          displayName: m.displayName,
+          avatarUrl: m.avatarUrl ?? null,
+          role: m.role,
+        }))}
       />
+      {isOrgManager && (
+        <Dialog open={adminQueueOpen} onOpenChange={setAdminQueueOpen}>
+          <DialogContent
+            className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
+            data-testid="dialog-admin-queue"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 font-black tracking-tight">
+                <Shield className="w-4 h-4 text-primary" />
+                Admin Queue
+              </DialogTitle>
+            </DialogHeader>
+            <OrgAdminPanel orgId={orgId} hideHeader />
+          </DialogContent>
+        </Dialog>
+      )}
       {isOrgManager && (
         <EditOrgDialog
           organization={organization}
@@ -417,6 +456,22 @@ export default function OrganizationPage() {
                     Unclaimed
                   </Badge>
                 )}
+                {isOrgManager && planUsage && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    data-testid="pill-plan-name"
+                  >
+                    <Link href={`/organizations/${orgId}/subscribe`}>
+                      <Shield className="w-4 h-4 mr-1.5" />
+                      {PLANS.find((p) => p.id === planUsage.plan)?.name ??
+                        planUsage.plan.charAt(0).toUpperCase() +
+                          planUsage.plan.slice(1)}{" "}
+                      plan
+                    </Link>
+                  </Button>
+                )}
                 {canClaim &&
                   (hasPendingClaim ? (
                     <Button
@@ -494,6 +549,26 @@ export default function OrganizationPage() {
                 >
                   {organization.isFollowing ? "Following" : "Follow"}
                 </Button>
+                {isOrgManager && (
+                  <Button
+                    variant="outline"
+                    className="font-bold rounded-full relative"
+                    onClick={() => setAdminQueueOpen(true)}
+                    data-testid="btn-org-admin-queue"
+                  >
+                    <Shield className="w-4 h-4 mr-1.5" />
+                    <span className="hidden sm:inline">Admin queue</span>
+                    <span className="sm:hidden">Queue</span>
+                    {pendingAdminCount > 0 && (
+                      <Badge
+                        className="ml-1.5 px-1.5 min-w-5 justify-center rounded-full font-bold"
+                        data-testid="badge-admin-queue-count"
+                      >
+                        {pendingAdminCount}
+                      </Badge>
+                    )}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="font-bold rounded-full"
@@ -587,8 +662,6 @@ export default function OrganizationPage() {
               </Card>
             );
           })()}
-
-          {isOrgManager && <OrgAdminPanel orgId={orgId} />}
 
           {/* Teams + archived: inline on mobile, in rail on lg+. The
               hook ensures only one instance mounts at a time so testids
