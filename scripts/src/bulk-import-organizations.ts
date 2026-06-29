@@ -28,10 +28,12 @@ function generateClaimToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-function parseArgs(argv: string[]): { in: string | null } {
+function parseArgs(argv: string[]): { in: string | null; dryRun: boolean } {
   let inPath: string | null = null;
+  let dryRun = false;
   for (const arg of argv) {
     if (arg.startsWith("--in=")) inPath = arg.slice("--in=".length);
+    else if (arg === "--dry-run") dryRun = true;
   }
   // Support "--in path" pair form too.
   for (let i = 0; i < argv.length; i++) {
@@ -39,7 +41,7 @@ function parseArgs(argv: string[]): { in: string | null } {
       inPath = argv[i + 1] ?? null;
     }
   }
-  return { in: inPath };
+  return { in: inPath, dryRun };
 }
 
 // Minimal CSV-aware first-column parse: handles quoted cells (with
@@ -115,7 +117,7 @@ const HEADER_NAMES = new Set([
 ]);
 
 async function main() {
-  const { in: inArg } = parseArgs(process.argv.slice(2));
+  const { in: inArg, dryRun } = parseArgs(process.argv.slice(2));
   const path = inArg ?? "organizations.csv";
 
   let raw: string;
@@ -159,12 +161,16 @@ async function main() {
       skipped += 1;
       continue;
     }
-    await db.insert(organizations).values({ name, claimToken: generateClaimToken() });
+    if (!dryRun) {
+      await db.insert(organizations).values({ name, claimToken: generateClaimToken() });
+    }
     created += 1;
   }
 
   console.log(
-    `Bulk import complete: ${names.length} unique name(s) considered, ${created} created, ${skipped} skipped (already existed).`,
+    dryRun
+      ? `Bulk import DRY RUN: ${names.length} unique name(s) considered, ${created} would be created, ${skipped} already exist (no writes performed).`
+      : `Bulk import complete: ${names.length} unique name(s) considered, ${created} created, ${skipped} skipped (already existed).`,
   );
 }
 

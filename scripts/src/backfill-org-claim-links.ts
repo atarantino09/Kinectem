@@ -16,6 +16,8 @@ import { randomBytes } from "node:crypto";
 import { db, organizations, organizationAdmins } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
+const DRY_RUN = process.argv.includes("--dry-run");
+
 function generateClaimToken(): string {
   return randomBytes(32).toString("base64url");
 }
@@ -34,15 +36,19 @@ async function main() {
 
   let updated = 0;
   for (const r of rows) {
-    await db
-      .update(organizations)
-      .set({ claimToken: generateClaimToken() })
-      .where(eq(organizations.id, r.id));
+    if (!DRY_RUN) {
+      await db
+        .update(organizations)
+        .set({ claimToken: generateClaimToken() })
+        .where(eq(organizations.id, r.id));
+    }
     updated += 1;
   }
 
   console.log(
-    `Backfill complete: ${updated} ownerless org(s) given a claim token.`,
+    DRY_RUN
+      ? `Backfill DRY RUN: ${updated} ownerless org(s) would be given a claim token (no writes performed).`
+      : `Backfill complete: ${updated} ownerless org(s) given a claim token.`,
   );
 }
 
