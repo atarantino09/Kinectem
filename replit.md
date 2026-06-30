@@ -32,6 +32,18 @@ The whole monorepo publishes as a **single Autoscale Deployment** using the appl
 - **API server**: `https://kinectem.replit.app/api` (health: `/api/healthz`)
 - **Custom domains already attached**: `kinectem.com`, `www.kinectem.com` (both resolve to the single deployment and currently serve the marketing root `/`).
 
+### SendGrid Event Webhook (delivery tracking)
+
+Invite delivery flags (delivered / bounced / dropped / deferred / spam) only light up in production once the SendGrid Event Webhook is wired to the deployment. The code ships fully — this is a one-time operational step per environment:
+
+1. In the SendGrid dashboard, go to **Settings → Mail Settings → Event Webhook**.
+2. Set the **HTTP POST URL** to the deployed endpoint: `https://kinectem.replit.app/api/sendgrid/webhook` (use the matching base URL for the target environment).
+3. Select the events to POST: `processed`, `delivered`, `deferred`, `bounce`, `dropped`, `spamreport` (others are ignored by the handler).
+4. Enable **Signed Event Webhook**, then copy the generated public **Verification Key** into the `SENDGRID_WEBHOOK_VERIFICATION_KEY` secret for that environment.
+5. Toggle the webhook **on** and save.
+
+**Safe degrade**: with `SENDGRID_WEBHOOK_VERIFICATION_KEY` unset, `/api/sendgrid/webhook` returns `503` and per-invite `deliveryStatus` simply stays at its pre-send/`sent` value — invites still send and the copy-link fallback still works. Nothing breaks; delivery flags just never advance. The key is required only to keep delivery status fresh.
+
 Both the marketing signup form and the main app call the API via **same-origin `/api/v1/...`** paths, so they must stay co-deployed with the api-server in the same deployment. Splitting marketing and the main app into separate `.replit.app` deployments would break those same-origin calls unless each deployment bundles the api-server. Note for the downstream `app.kinectem.com → main app` task: because all custom domains hit the same application-router deployment and routing is path-based (not host-based), pointing `app.kinectem.com` at this deployment serves the marketing root `/`, not `/app/` — that routing needs a host-based rewrite/redirect decision.
 
 ## Stack
@@ -108,6 +120,7 @@ Both the marketing signup form and the main app call the API via **same-origin `
 ### Email & infra
 
 - **SendGrid via Replit connector**: Credentials (`api_key` + `from_email`) are pulled from the `sendgrid` connector on every send (no caching — proxy tokens rotate), falling back to `SENDGRID_API_KEY` + `EMAIL_FROM` env for local/CI. The connector is the source of truth for the verified sender — do NOT also set `EMAIL_FROM` in Secrets, it silently overrides the connector. `APP_BASE_URL` is env-only; unset → falls back to `https://${REPLIT_DEV_DOMAIN}` then `http://localhost:5173`.
+- **SendGrid Event Webhook is a per-env operational step**: invite delivery flags (bounced/dropped/spam/etc.) only advance once the Signed Event Webhook is pointed at `/api/sendgrid/webhook` and the public Verification Key is in `SENDGRID_WEBHOOK_VERIFICATION_KEY`. Unset → the handler returns `503` and delivery status stays put (safe degrade; invites still send, copy-link fallback still works). Full setup steps are in the **Deployment → SendGrid Event Webhook** runbook above.
 
 ### Org management
 
