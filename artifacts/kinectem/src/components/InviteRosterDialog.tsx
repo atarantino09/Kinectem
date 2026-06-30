@@ -666,7 +666,7 @@ export function InviteRosterDialog({
           </div>
         )}
 
-        <Tabs defaultValue="search" className="mt-2">
+        <Tabs defaultValue="search" className="mt-2 min-w-0">
           <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="search" className="font-bold">
               <UserCheck className="w-4 h-4 mr-2" /> Existing user
