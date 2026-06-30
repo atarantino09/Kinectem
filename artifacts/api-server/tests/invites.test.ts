@@ -425,6 +425,121 @@ describe("invites", () => {
     expect(await inviteNoteCount()).toBe(notesBefore + 2);
   });
 
+  // Task #661 — declining an invite must NOT block a future re-invite. The
+  // placement branch reuses any non-`accepted` leftover roster_entry, so a
+  // `declined` row must be flipped back to `pending` on re-invite, with a
+  // fresh notification + team/org auto-follow firing. Guards against a future
+  // refactor short-circuiting on declined entries and silently dropping the
+  // re-invite to someone who previously said no.
+  it("re-invites an existing account after they declined (entry flips back to pending)", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+
+    const [morgan] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "morgan@kinectem.demo"))
+      .limit(1);
+    expect(morgan).toBeTruthy();
+
+    function rosterEntry() {
+      return db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, morgan.id),
+          ),
+        )
+        .limit(1);
+    }
+    function inviteNoteCount(): Promise<number> {
+      return db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, morgan.id),
+            eq(notifications.kind, "roster_invite"),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function teamFollowCount(): Promise<number> {
+      return db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(
+            eq(teamFollowers.teamId, teamId),
+            eq(teamFollowers.userId, morgan.id),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function orgFollowCount(): Promise<number> {
+      return db
+        .select()
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, morgan.id))
+        .then((rows) => rows.length);
+    }
+
+    // Clean slate, then plant a DECLINED roster entry for Morgan — as if a
+    // prior invite was sent and the recipient said no. Wipe follow rows too
+    // so we can prove the re-invite re-creates them.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, morgan.id),
+        ),
+      );
+    await db
+      .delete(organizationFollowers)
+      .where(eq(organizationFollowers.userId, morgan.id));
+    const [declined] = await db
+      .insert(rosterEntries)
+      .values({
+        teamId,
+        userId: morgan.id,
+        role: "coach",
+        status: "declined",
+        invitedById: coach.user.id,
+      })
+      .returning();
+    expect(declined.status).toBe("declined");
+    expect(await teamFollowCount()).toBe(0);
+    expect(await orgFollowCount()).toBe(0);
+
+    const notesBefore = await inviteNoteCount();
+
+    // Re-invite the declined email → the leftover declined row is reused and
+    // flipped back to pending, with a fresh notification + auto-follows.
+    const reinvite = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
+    expect(reinvite.status).toBe(201);
+
+    const [afterReinvite] = await rosterEntry();
+    // Same row, now pending again — not a brand-new entry, not still declined.
+    expect(afterReinvite?.id).toBe(declined.id);
+    expect(afterReinvite?.status).toBe("pending");
+    expect(await inviteNoteCount()).toBe(notesBefore + 1);
+    expect(await teamFollowCount()).toBe(1);
+    expect(await orgFollowCount()).toBeGreaterThan(0);
+  });
+
   // Task #658 — revoking an invite must only ever remove the *pending* paired
   // roster_entry. An already-accepted membership for the same email must be
   // left fully intact, so withdrawing a stray duplicate invite can never evict
