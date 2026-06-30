@@ -46,6 +46,13 @@ nested scrollbar.
 
 **Seen on:** the roster-invite "Message to copy & share" `<pre>` (a long
 multi-line invite message). It was the only `overflow-y-auto` element in the
-`InviteRosterDialog`, hence the only blurry one; removing the cap+scroll fixed
-it. NOTE: the zoom-in/out entrance animation was investigated and ruled out —
-that scale is transient and does NOT explain persistent (post-refresh) blur.
+`InviteRosterDialog`, hence the only blurry one. NOTE: the zoom-in/out entrance
+animation was investigated and ruled out — that scale is transient and does NOT
+explain persistent (post-refresh) blur.
+
+**User override (keep):** for THIS invite message the user explicitly wants the
+compact bounded+scrollable preview (`max-h-40 overflow-y-auto`) so the whole
+dialog fits on screen and the coach scrolls just the message. Do NOT un-cap it
+again to "fix blur" — the compact layout is the stated preference and the blur
+was never reproduced at native resolution (likely Canvas-iframe scaling, not a
+real CSS bug). Cause-2 stays as a general caution for *new* dialogs.
