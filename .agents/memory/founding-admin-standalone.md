@@ -29,3 +29,14 @@ extra services to deploy.
 **Drizzle gotcha:** `eq(table.id, req.params.id)` can trip a "No overload matches"
 type error in this repo; wrap the param as `eq(table.id, String(req.params.id))`
 (the defensive convention already used in `guardians-coppa.ts`).
+
+**Operator-only prod mutations belong on this page.** Because publishing is
+schema-only and the agent has read-only prod access, any one-off live-DB write the
+operator needs (seed org pages, set the platform admin) is exposed as an authed
+endpoint behind this same password gate, not a script. **Platform admin is
+`users.role === "admin"`** (the `user_role` enum is athlete/coach/admin/parent —
+there is NO separate `is_platform_admin` column). A "sole admin" action promotes
+the target then demotes all other `role='admin'` users to `athlete` inside a tx +
+advisory lock; the target must already exist (operator signs up on the live site
+first — dev accounts never carry to prod). Self-lockout is recoverable because the
+page's own auth is the password gate, independent of any app admin role.

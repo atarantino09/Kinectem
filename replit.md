@@ -46,6 +46,8 @@ The org-name seed list is **embedded in the api-server** at `artifacts/api-serve
 
 The legacy `seed-production-orgs` script chain still exists for environments that DO have a separate Scheduled Deployment, but this single-deployment project uses the button.
 
+**Setting the platform admin (post-publish).** Schema-only publishing means the dev admin account does NOT carry over — a fresh prod DB only has organic signups, and **platform admin is just `users.role === "admin"`** (no separate flag). The founding-admin page also has a **"Set the platform admin"** action (`POST /api/v1/founding-admin/set-sole-admin`, `{ email }`): it promotes an **existing** live account to admin and demotes every other admin, leaving exactly one. To make `someone@kinectem.com` the sole admin: (1) sign up on the live site (`/app`) with that email, (2) open the founding-admin page, enter the email, click **Set as sole admin**. Idempotent, tx + advisory lock; self-lockout is recoverable since the page's own password gate is independent of any app admin role.
+
 ### SendGrid Event Webhook (delivery tracking)
 
 Invite delivery flags (delivered / bounced / dropped / deferred / spam) only light up in production once the SendGrid Event Webhook is wired to the deployment. The code ships fully — this is a one-time operational step per environment:

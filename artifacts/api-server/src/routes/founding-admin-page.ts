@@ -117,6 +117,20 @@ const PAGE = String.raw`<!doctype html>
       <div id="seedStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
     </div>
 
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700;">Set the platform admin</div>
+          <div class="sub">Make one account the <strong>sole</strong> admin in this environment. The account must already exist (sign up on the live site first). Every other admin is demoted.</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <input id="adminEmail" type="email" placeholder="admin@example.com" style="min-width:240px;" />
+          <button id="adminBtn" class="primary">Set as sole admin</button>
+        </div>
+      </div>
+      <div id="adminStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
+    </div>
+
     <div class="card">
       <table>
         <thead>
@@ -317,10 +331,30 @@ const PAGE = String.raw`<!doctype html>
     } finally { btn.disabled = false; }
   }
 
+  async function onSetAdmin() {
+    var email = ($("adminEmail").value || "").trim();
+    var s = $("adminStatus");
+    if (!email) { s.style.color = "var(--danger)"; s.textContent = "Enter an email address."; return; }
+    if (!confirm("Make " + email + " the ONLY platform admin? Every other admin will be demoted.")) return;
+    var btn = $("adminBtn"); btn.disabled = true;
+    s.style.color = "var(--muted)"; s.textContent = "Updating…";
+    try {
+      var data = await api("/set-sole-admin", { method: "POST", body: JSON.stringify({ email: email }) });
+      var msg = data.adminEmail + " is now the sole admin.";
+      if (data.demotedCount > 0) msg += " Demoted " + data.demotedCount + " other admin(s).";
+      s.style.color = "var(--muted)"; s.textContent = msg;
+      toast("Admin updated");
+    } catch (e) {
+      s.style.color = "var(--danger)"; s.textContent = e.message;
+    } finally { btn.disabled = false; }
+  }
+
   $("logoutBtn").addEventListener("click", function () { setToken(null); renderAuth(); });
   $("refreshBtn").addEventListener("click", load);
   $("exportBtn").addEventListener("click", exportCsv);
   $("seedBtn").addEventListener("click", onSeed);
+  $("adminBtn").addEventListener("click", onSetAdmin);
+  $("adminEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") onSetAdmin(); });
   $("search").addEventListener("input", renderRows);
 
   $("rows").addEventListener("click", function (e) {

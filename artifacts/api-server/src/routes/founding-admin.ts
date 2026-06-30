@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, foundingSignups, organizations, organizationAdmins } from "@workspace/db";
+import { db, foundingSignups, organizations, organizationAdmins, users } from "@workspace/db";
 import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -334,6 +334,93 @@ router.post(
       totalLinks: result.linkRows.length,
       base,
       csv,
+    });
+  }),
+);
+
+// One-time, idempotent "make this email the sole platform admin" action from
+// inside the deployment. Publishing syncs schema only (no rows), so a freshly
+// published environment does not carry over the operator's dev admin account —
+// the live DB only has organic signups. This authed action promotes an existing
+// live account to admin (role = "admin", the platform-admin marker) and demotes
+// every OTHER admin to "athlete", so exactly one admin remains. The target must
+// already exist (sign up on the live site first); we never create accounts here.
+const setAdminLimiter = rateLimit({
+  name: "founding-admin-set-sole-admin",
+  windowMs: ONE_HOUR,
+  max: 12,
+  keys: (req) => [ipKey(req)],
+  message: "Too many attempts. Please wait a while before trying again.",
+});
+
+const SoleAdminBody = z.object({
+  email: z.string().trim().email("Please enter a valid email address").max(320),
+});
+
+router.post(
+  "/founding-admin/set-sole-admin",
+  requireFoundingAdmin,
+  setAdminLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = SoleAdminBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.errors[0]?.message ?? "A valid email is required.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const email = parsed.data.email.toLowerCase();
+
+    const result = await db.transaction(async (tx) => {
+      // Serialize concurrent runs so two overlapping calls can't leave the
+      // admin set in an inconsistent state (same advisory-lock pattern as the
+      // seed-orgs route and the team-cap enforcement in teams.ts).
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:set-sole-admin'))`);
+
+      const [target] = await tx
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(sql`lower(${users.email}) = ${email}`)
+        .limit(1);
+
+      if (!target) {
+        return { notFound: true as const };
+      }
+
+      // Promote the target first, then demote every other admin. Excluding the
+      // target by id keeps the operation correct whether or not it was already
+      // an admin.
+      await tx.update(users).set({ role: "admin" }).where(eq(users.id, target.id));
+      const demoted = await tx
+        .update(users)
+        .set({ role: "athlete" })
+        .where(and(eq(users.role, "admin"), sql`${users.id} <> ${target.id}`))
+        .returning({ email: users.email });
+
+      return {
+        notFound: false as const,
+        adminEmail: target.email,
+        demoted: demoted.map((d) => d.email),
+      };
+    });
+
+    if (result.notFound) {
+      apiError(res, 404, "No live account with that email yet. Sign up on the live site with it first, then try again.", {
+        code: "USER_NOT_FOUND",
+      });
+      return;
+    }
+
+    req.log.info(
+      { adminEmail: result.adminEmail, demotedCount: result.demoted.length },
+      "founding-admin set sole admin",
+    );
+
+    res.json({
+      ok: true,
+      adminEmail: result.adminEmail,
+      demoted: result.demoted,
+      demotedCount: result.demoted.length,
     });
   }),
 );
