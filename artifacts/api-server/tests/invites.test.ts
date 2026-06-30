@@ -7,6 +7,7 @@ import {
   rosterEntries,
   rosterInvites,
   teamFollowers,
+  teams,
   users,
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
@@ -145,6 +146,155 @@ describe("invites", () => {
       .post(`/api/v1/invites/${token}/children`)
       .send({ firstName: "Solo" });
     expect(res.status).toBe(400);
+  });
+
+  // Task #650 — completing the invite chooser must roster the CHOSEN CHILD,
+  // never the parent account itself. A regression here would either strand
+  // the real player off the roster or place the parent on it as a player.
+  it("rosters the chosen child (not the parent) with guardian follow side-effects", async () => {
+    const token = await createPlayerInvite();
+    const { agent, user: parent } = await loginAs((u) => u.role === "parent");
+    const teamId = await getFootballTeamId();
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    expect(team).toBeTruthy();
+    const orgId = team.organizationId;
+
+    function rosterCount(userId: string): Promise<number> {
+      return db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, userId),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function teamFollowCount(userId: string): Promise<number> {
+      return db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(
+            eq(teamFollowers.teamId, teamId),
+            eq(teamFollowers.userId, userId),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function orgFollowCount(userId: string): Promise<number> {
+      return db
+        .select()
+        .from(organizationFollowers)
+        .where(
+          and(
+            eq(organizationFollowers.organizationId, orgId),
+            eq(organizationFollowers.userId, userId),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+
+    // Start the guardian's roster/follow state for this team+org from zero so
+    // the deltas below are deterministic across re-runs.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, parent.id),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, parent.id),
+        ),
+      );
+    await db
+      .delete(organizationFollowers)
+      .where(
+        and(
+          eq(organizationFollowers.organizationId, orgId),
+          eq(organizationFollowers.userId, parent.id),
+        ),
+      );
+
+    const res = await agent
+      .post(`/api/v1/invites/${token}/children`)
+      .send({ firstName: "Avery", lastName: "Lane" });
+    expect(res.status).toBe(201);
+
+    const childId = res.body.member.userId as string;
+    // The rostered member is the new child, NOT the parent account.
+    expect(childId).toBeTruthy();
+    expect(childId).not.toBe(parent.id);
+    expect(res.body.child.id).toBe(childId);
+    expect(res.body.member.position).toBe("player");
+    expect(res.body.member.status).toBe("active");
+
+    // Exactly one roster entry exists for the child; none for the parent.
+    expect(await rosterCount(childId)).toBe(1);
+    expect(await rosterCount(parent.id)).toBe(0);
+
+    // The created child is linked to the accepting guardian.
+    const [childRow] = await db
+      .select({ parentId: users.parentId, role: users.role })
+      .from(users)
+      .where(eq(users.id, childId))
+      .limit(1);
+    expect(childRow?.parentId).toBe(parent.id);
+    expect(childRow?.role).toBe("athlete");
+
+    // Guardian auto-follow side-effects fire: team follow + org follow for the
+    // parent (so the team surfaces on their profile/feed), never for nobody.
+    expect(await teamFollowCount(parent.id)).toBe(1);
+    expect(await orgFollowCount(parent.id)).toBe(1);
+  });
+
+  // Task #650 — replaying the same token for a child already on the roster
+  // must not double-create a second roster entry for that child.
+  it("does not double-roster the same child when the token is replayed", async () => {
+    const token = await createPlayerInvite();
+    const { agent } = await loginAs((u) => u.role === "parent");
+    const teamId = await getFootballTeamId();
+
+    const first = await agent
+      .post(`/api/v1/invites/${token}/children`)
+      .send({ firstName: "Quinn", lastName: "Rivers" });
+    expect(first.status).toBe(201);
+    const childId = first.body.member.userId as string;
+    expect(childId).toBeTruthy();
+
+    function rosterCount(): Promise<number> {
+      return db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, childId),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    expect(await rosterCount()).toBe(1);
+
+    // Replay the same token, now selecting the existing child by id. The
+    // server must refuse the duplicate roster row rather than create a second.
+    const replay = await agent
+      .post(`/api/v1/invites/${token}/children`)
+      .send({ childId });
+    expect(replay.status).toBe(409);
+    expect(replay.body.code).toBe("ALREADY_ON_ROSTER");
+    expect(await rosterCount()).toBe(1);
   });
 
   it("lets a manager withdraw a pending invite", async () => {
