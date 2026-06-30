@@ -545,7 +545,7 @@ export function InviteRosterDialog({
                   </p>
                   {inviteMessage ? (
                     <pre
-                      className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                      className="whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
                       data-testid="text-invite-message"
                     >
                       {inviteMessage}
