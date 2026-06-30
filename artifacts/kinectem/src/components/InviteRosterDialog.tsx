@@ -232,7 +232,12 @@ export function InviteRosterDialog({
   const pendingEmails = useMemo(() => {
     const set = new Set<string>();
     for (const i of invitesResp?.data ?? []) {
-      if (i.email) set.add(String(i.email).trim().toLowerCase());
+      // Only a still-`pending` invite blocks re-inviting. Terminal states
+      // (withdrawn/declined/expired/resolved/accepted) must NOT mark an email
+      // as "already invited", otherwise a revoked email can never be re-sent.
+      if (i.email && i.status === "pending") {
+        set.add(String(i.email).trim().toLowerCase());
+      }
     }
     return set;
   }, [invitesResp]);
