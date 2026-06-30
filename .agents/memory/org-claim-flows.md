@@ -9,9 +9,16 @@ Bulk-imported org pages are ownerless (no owner row, null creator). There are
 **two** independent ways to claim one; keep them straight — they have different
 trust models:
 
-1. **Public claim *request* (review-gated)** — an eligible admin-role user
-   submits a request that a platform admin approves/declines. The conservative
-   path for users who found the page organically.
+1. **Public claim *request* (review-gated) — RETIRED.** Originally an
+   admin-role user could submit a request that a platform admin approved. This
+   open path is now disabled: `POST /organizations/:orgId/claims` returns
+   `403 CLAIM_INVITE_ONLY` and the in-app "Claim this organization" button is
+   removed, so random users can't claim arbitrary org pages. The route + admin
+   review queue are kept so any pre-existing pending rows stay reviewable.
+   Claiming is now **invite-only via the secret link** (#2 below).
+   **Why:** owner wants to hand-deliver claim links to specific admins, not let
+   anyone who finds an unclaimed page request it. Unclaimed orgs intentionally
+   stay publicly visible (search + detail) so the directory looks populated.
 
 2. **Secret claim *link* (token = authorization, instant)** — operator copies a
    unique per-org link to each org; opening it and signing up makes the

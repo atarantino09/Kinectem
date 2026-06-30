@@ -98,7 +98,7 @@ Invite delivery flags only advance once the Signed Event Webhook is wired. In Se
 
 ### Org management & billing
 
-- **Two org-claim paths** — review-gated claim *request* (`POST /organizations/:orgId/claims`, platform-admin approved) AND secret-token instant claim *link* (`/app/claim/<token>`). Don't conflate; both owner-exclusive via the one-owner index.
+- **Org claiming is invite-only** — the only way to claim an ownerless page is the secret-token link (`/app/claim/<token>`) the owner sends directly. The old open claim-*request* flow is retired: `POST /organizations/:orgId/claims` returns `403 CLAIM_INVITE_ONLY` and the in-app "Claim this organization" button is gone. Unclaimed orgs stay publicly visible (search + detail) on purpose. Both claim paths stay owner-exclusive via the one-owner index.
 - **Route prefix**: claim/billing/AI routes mount at `/api/v1`, NOT `/api` (that's docs + founding-admin page only).
 - **Billing**: card-free signup; orgs pick a plan, add a card later via Stripe Checkout (`trial_end` = Oct 1 2026, nothing charged today). Reconcile-on-return is source of truth; the connector has NO webhook secret. `hasCardOnFile` = `stripeSubscriptionId != null`.
 - **Roles vocabulary** (owner/admin/member/coach/player/parent/platform admin) is centralized in `RolesReference` and mirrored on marketing `getting-started.html` — update in one place.
