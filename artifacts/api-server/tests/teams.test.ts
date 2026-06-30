@@ -478,17 +478,18 @@ describe("teams", () => {
     // be removed — this proves the rule unblocks itself once the
     // invariant is satisfied. The invited Admin must accept their spot
     // first because pending entries don't count toward the Admin total.
-    const others = await request(app).get("/api/v1/users?q=Daniela");
-    const otherId = others.body.data?.[0]?.id;
-    expect(otherId).toBeDefined();
-    const add = await samAgent
-      .post(`/api/v1/teams/${teamId}/members`)
-      .send({ userId: otherId, position: "admin" });
-    expect(add.status).toBe(201);
-    const newAdminId = add.body.id as string;
-    const { agent: otherAgent } = await loginAs(
+    // Resolve the invitee by email via loginAs so the roster entry is
+    // owned by the exact user who accepts it — looking the id up by a
+    // name search is non-deterministic (no ORDER BY) and would attach
+    // the entry to whichever user the DB returns first.
+    const { agent: otherAgent, user: other } = await loginAs(
       (u) => u.email === "daniela@kinectem.demo",
     );
+    const add = await samAgent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: other.id, position: "admin" });
+    expect(add.status).toBe(201);
+    const newAdminId = add.body.id as string;
     const acceptByInvitee = await otherAgent.post(
       `/api/v1/teams/${teamId}/members/${newAdminId}/accept`,
     );

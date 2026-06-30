@@ -19,3 +19,7 @@ description: How api-server vitest builds its DB, which tests fail pre-existing,
 - **vitest 4 removed `--reporter=basic`** — passing it throws a "Failed to load custom Reporter" startup error. Use `default`, `dot`, `tap`, `json`, `junit`, `verbose`.
 - The suite has `fileParallelism: false` (serial) + 39 files, so a full run exceeds the 120s bash limit. Run synchronously per-file or use `--shard=N/3`.
 - **Background `nohup`/`setsid` vitest gets reaped** when the bash tool call's process group ends — output never flushes. Prefer synchronous `timeout 115 ... 2>&1 | grep ...` runs, sharded.
+
+## Test gotcha: looking up a seed user by name search is non-deterministic
+- The `/api/v1/users` route reads `req.query["search"]`, NOT `q`. Tests that hit `/users?q=Name` pass an IGNORED param → the filter becomes `ilike '%%'` and returns ALL users, in heap order (no ORDER BY). `data[0]` is whichever row Postgres returns first (usually first-seeded = Marcus), so picking `data[0]?.id` silently grabs the wrong user.
+- This made `teams.test.ts > blocks demoting or removing the last accepted Admin` flaky: it added the wrong user as the 2nd admin, then logged in as Daniela to accept → 403 (accept requires entry.userId === me.id). Fix: resolve the invitee id via `loginAs(email)` (returns the real user) instead of a name search. Several other tests still use `?q=Marcus` and only pass because Marcus happens to be first-seeded — fragile.
