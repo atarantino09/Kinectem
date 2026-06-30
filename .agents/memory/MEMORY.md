@@ -8,6 +8,7 @@
 - [Standalone admin page when artifact cap is hit](founding-admin-standalone.md) — at 7-artifact cap, serve a self-contained password-gated HTML page from api-server under /api instead of a new artifact; fail closed if SESSION_SECRET missing.
 - [api-server test infra & baseline failures](api-server-test-infra.md) — test DB is pg_dumped from live DB (not schema file); posts.test.ts(17) + tag-emails fail pre-existing; vitest4 dropped --reporter=basic; bg runs get reaped.
 - [Modal text blur](modal-text-blur.md) — center shadcn Dialog/AlertDialog with flexbox, not `-translate-1/2`; the transform half-pixels odd-sized modals and blurs their text.
+- [Runtime-error overlay "(unknown runtime error)"](runtime-error-overlay-resizeobserver.md) — empty/dismissable dev overlay = benign ResizeObserver loop (null evt.error); suppressed via inline head guard in index.html.
 - [Tailwind v4 bare CSS-var](tailwind-v4-bare-var.md) — `max-h-[--foo]` silently breaks in v4 (no var()) → no max-height → dropdowns don't scroll; use `[var(--foo)]`.
 - [Team banner blur-fill display](team-banner-blur-fill.md) — team hero photos use BlurFillImage (contain over blurred cover), NOT object-cover crop; team upload flows have no crop step.
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.

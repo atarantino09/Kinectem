@@ -2,6 +2,35 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Swallow the benign "ResizeObserver loop completed with undelivered
+      // notifications" / "ResizeObserver loop limit exceeded" browser signal.
+      // It fires a window `error` event whose `error` object is null (message
+      // only), which @replit/vite-plugin-runtime-error-modal relabels as
+      // "(unknown runtime error)" and pops up transiently (notably on mobile
+      // while layout settles after login). This guard runs before the overlay
+      // plugin's deferred module registers, so it wins listener ordering. It
+      // only matches the message AND requires a null `error` object, so a real
+      // error thrown inside an observer callback (non-null `error`) still
+      // surfaces normally.
+      (function () {
+        window.addEventListener(
+          "error",
+          function (e) {
+            if (
+              e &&
+              e.error == null &&
+              typeof e.message === "string" &&
+              e.message.indexOf("ResizeObserver loop") !== -1
+            ) {
+              e.stopImmediatePropagation();
+              e.preventDefault();
+            }
+          },
+          true,
+        );
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>Kinectem</title>
     <link rel="icon" type="image/png" href="logo-icon.png" />
