@@ -36,7 +36,8 @@ import {
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { logger } from "../lib/logger";
-import { sendGuardianConfirmationEmail, sendPasswordResetEmail } from "../lib/email";
+import { sendGuardianConfirmationEmail, sendPasswordResetEmail, buildWelcomeEmail } from "../lib/email";
+import { dispatchNotificationEmail } from "../lib/notification-email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
   createSession,
@@ -484,6 +485,15 @@ router.post(
     const sess = await createSession(created.id);
     setSessionCookie(res, sess.id, sess.expiresAt);
     res.status(201).json(toPrivateUser(created));
+    // Task #633 — welcome email (motivational category). Only adults reach
+    // this branch (`guardianRequired` accounts returned above), so the gate
+    // never has to route a minor's welcome to a guardian. Fired after the
+    // response; the gate swallows send errors so signup never fails on email.
+    await dispatchNotificationEmail({
+      userId: created.id,
+      category: "motivational",
+      build: (ctx) => buildWelcomeEmail(ctx),
+    });
   }),
 );
 

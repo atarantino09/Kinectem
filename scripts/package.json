@@ -22,6 +22,8 @@
     "seed-ai-assist-demo": "tsx ./src/seed-ai-assist-demo.ts",
     "seed-production-orgs": "tsx ./src/seed-production-orgs.ts",
     "send-billing-reminders": "tsx ./src/send-billing-reminders.ts",
+    "send-weekly-digest": "tsx ./src/send-weekly-digest.ts",
+    "send-inactivity-nudge": "tsx ./src/send-inactivity-nudge.ts",
     "seed-game-recap-demo": "tsx ./src/seed-game-recap-demo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import type { DispatchBuildContext } from "./notification-email.js";
 
 // S5 — escape user-controlled values before interpolating them into HTML email
 // bodies. Plain-text parts don't need escaping.
@@ -387,12 +388,14 @@ export interface ScheduleEmailEvent {
   locationName: string | null;
 }
 
-// Phase 2 — the ~24h-before reminder. Reuses the same transactional sender.
+// Shared body for schedule reminders. Returns the subject + text/html parts so
+// both the transactional sender and the gate-friendly builder stay identical.
 // Body intentionally carries the location NAME only (never the full address).
-export async function sendScheduleReminderEmail(
-  to: string,
-  ev: ScheduleEmailEvent,
-): Promise<void> {
+function buildScheduleReminderBody(ev: ScheduleEmailEvent): {
+  subject: string;
+  text: string;
+  html: string;
+} {
   const url = buildScheduleUrl(ev.teamId);
   const team = ev.teamName?.trim() ? ev.teamName.trim() : "your team";
   const teamHtml = escapeHtml(team);
@@ -404,9 +407,7 @@ export async function sendScheduleReminderEmail(
   const locHtml = ev.locationName?.trim()
     ? `<p>Where: ${escapeHtml(ev.locationName.trim())}</p>`
     : "";
-  await sendEmail({
-    to,
-    kind: "schedule_reminder",
+  return {
     subject: `Reminder: ${ev.whatLabel} — ${ev.whenText}`,
     text: `A quick reminder about an upcoming ${team} event.
 
@@ -421,17 +422,16 @@ ${url}`,
 ${locHtml}
 <p>See the full schedule:</p>
 <p><a href="${url}">${url}</a></p>`,
-  });
+  };
 }
 
-// Phase 2 — immediate change notice when a coach/admin cancels or postpones.
-export async function sendScheduleChangeNoticeEmail(
-  to: string,
+// Shared body for schedule change notices (cancel / postpone).
+function buildScheduleChangeBody(
   ev: ScheduleEmailEvent & {
     status: "canceled" | "postponed";
     reason: string | null;
   },
-): Promise<void> {
+): { subject: string; text: string; html: string } {
   const url = buildScheduleUrl(ev.teamId);
   const team = ev.teamName?.trim() ? ev.teamName.trim() : "your team";
   const teamHtml = escapeHtml(team);
@@ -448,9 +448,7 @@ export async function sendScheduleChangeNoticeEmail(
   const reasonHtml = ev.reason?.trim()
     ? `<p><em>Reason: ${escapeHtml(ev.reason.trim())}</em></p>`
     : "";
-  await sendEmail({
-    to,
-    kind: "schedule_change_notice",
+  return {
     subject: `${ev.status === "canceled" ? "Canceled" : "Postponed"}: ${ev.whatLabel} — ${ev.whenText}`,
     text: `An upcoming ${team} event has been ${verb}.
 
@@ -466,7 +464,384 @@ ${locHtml}
 ${reasonHtml}
 <p>See the full schedule:</p>
 <p><a href="${url}">${url}</a></p>`,
+  };
+}
+
+// Phase 2 — the ~24h-before reminder. Reuses the same transactional sender.
+export async function sendScheduleReminderEmail(
+  to: string,
+  ev: ScheduleEmailEvent,
+): Promise<void> {
+  const base = buildScheduleReminderBody(ev);
+  await sendEmail({
+    to,
+    kind: "schedule_reminder",
+    subject: base.subject,
+    text: base.text,
+    html: base.html,
   });
+}
+
+// Phase 2 — immediate change notice when a coach/admin cancels or postpones.
+export async function sendScheduleChangeNoticeEmail(
+  to: string,
+  ev: ScheduleEmailEvent & {
+    status: "canceled" | "postponed";
+    reason: string | null;
+  },
+): Promise<void> {
+  const base = buildScheduleChangeBody(ev);
+  await sendEmail({
+    to,
+    kind: "schedule_change_notice",
+    subject: base.subject,
+    text: base.text,
+    html: base.html,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Task #633 — Gated notification email builders.
+//
+// These return an `EmailMessage` (rather than sending) so the central
+// COPPA-aware dispatch gate (`notification-email.ts`) can resolve the
+// recipient (minor -> guardian), check preferences, and then send. Every
+// builder appends a one-click unsubscribe + "manage preferences" footer using
+// the gate-provided `ctx.unsubscribeUrl`. User-controlled values are escaped.
+// ---------------------------------------------------------------------------
+
+function settingsUrl(): string {
+  return `${appBaseUrl()}/settings`;
+}
+
+function firstNameOf(name: string): string {
+  return name.trim().split(/\s+/)[0] || "there";
+}
+
+// "your" for an adult recipient, "<child>'s" when routed to a guardian.
+function subjectPossessive(ctx: DispatchBuildContext): string {
+  return ctx.isGuardianCopy ? `${ctx.subjectName}'s` : "your";
+}
+function subjectPossessiveHtml(ctx: DispatchBuildContext): string {
+  return ctx.isGuardianCopy ? `${escapeHtml(ctx.subjectName)}'s` : "your";
+}
+
+function manageFooter(ctx: DispatchBuildContext): {
+  text: string;
+  html: string;
+} {
+  const settings = settingsUrl();
+  return {
+    text: `\n\n—\nManage your email preferences: ${settings}\nUnsubscribe from these emails: ${ctx.unsubscribeUrl}`,
+    html: `<hr style="margin-top:24px;border:none;border-top:1px solid #eee"/><p style="font-size:12px;color:#888;">Manage your email preferences in <a href="${settings}">Settings</a> &middot; <a href="${ctx.unsubscribeUrl}">Unsubscribe</a></p>`,
+  };
+}
+
+// Welcome email on signup (motivational; adults only — minors are covered by
+// the guardian consent flow, so the signup hook does not call the gate for a
+// minor account).
+export function buildWelcomeEmail(ctx: DispatchBuildContext): EmailMessage {
+  const url = appBaseUrl();
+  const foot = manageFooter(ctx);
+  const hi = escapeHtml(firstNameOf(ctx.recipientName));
+  return {
+    to: ctx.to,
+    kind: "welcome",
+    subject: "Welcome to Kinectem!",
+    text: `Hi ${firstNameOf(ctx.recipientName)},
+
+Welcome to Kinectem — the home for your team's recaps, highlights, schedules, and updates.
+
+A few things to try first:
+- Follow your team to see new recaps and highlights in your feed
+- Complete your profile so teammates can find you
+- Check your team's schedule so you never miss a game
+
+Jump in here:
+${url}
+
+We're glad you're here.
+— The Kinectem Team${foot.text}`,
+    html: `<p>Hi ${hi},</p>
+<p>Welcome to <strong>Kinectem</strong> — the home for your team's recaps, highlights, schedules, and updates.</p>
+<p>A few things to try first:</p>
+<ul>
+<li>Follow your team to see new recaps and highlights in your feed</li>
+<li>Complete your profile so teammates can find you</li>
+<li>Check your team's schedule so you never miss a game</li>
+</ul>
+<p><a href="${url}">Jump in →</a></p>
+<p>We're glad you're here.<br/>— The Kinectem Team</p>${foot.html}`,
+  };
+}
+
+// Milestone — the author's first published recap (motivational).
+export function buildFirstRecapMilestoneEmail(
+  ctx: DispatchBuildContext,
+  args: { recapTitle: string; recapUrl: string },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const titleHtml = escapeHtml(args.recapTitle);
+  // Sentence-leading possessive ("Your" / "<Child>'s") for the subject line.
+  const whoseCap = ctx.isGuardianCopy ? `${ctx.subjectName}'s` : "Your";
+  // Mid-sentence possessive ("your" / "<Child>'s").
+  const whose = subjectPossessive(ctx);
+  const whoseHtml = subjectPossessiveHtml(ctx);
+  return {
+    to: ctx.to,
+    kind: "milestone_first_recap",
+    subject: `${whoseCap} first recap is live`,
+    text: `Congratulations — ${whose} first recap is published on Kinectem!
+
+"${args.recapTitle}"
+
+See it here:
+${args.recapUrl}
+
+Keep them coming — every recap helps families relive the season.
+— The Kinectem Team${foot.text}`,
+    html: `<p>Congratulations — ${whoseHtml} first recap is published on Kinectem!</p>
+<p><strong>${titleHtml}</strong></p>
+<p><a href="${args.recapUrl}">See it →</a></p>
+<p>Keep them coming — every recap helps families relive the season.<br/>— The Kinectem Team</p>${foot.html}`,
+  };
+}
+
+// Social — someone followed the user (or requested to).
+export function buildFollowEmail(
+  ctx: DispatchBuildContext,
+  args: { actorName: string; profileUrl: string; requested: boolean },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const actorHtml = escapeHtml(args.actorName);
+  const whose = subjectPossessive(ctx);
+  const whoseHtml = subjectPossessiveHtml(ctx);
+  const verb = args.requested ? "requested to follow" : "started following";
+  return {
+    to: ctx.to,
+    kind: "social_follow",
+    subject: args.requested
+      ? `${args.actorName} requested to follow ${whose} profile`
+      : `${args.actorName} started following ${whose} profile`,
+    text: `${args.actorName} ${verb} ${whose} Kinectem profile.
+
+${args.requested ? "Review the request:" : "See their profile:"}
+${args.profileUrl}${foot.text}`,
+    html: `<p><strong>${actorHtml}</strong> ${verb} ${whoseHtml} Kinectem profile.</p>
+<p><a href="${args.profileUrl}">${args.requested ? "Review the request" : "See their profile"} →</a></p>${foot.html}`,
+  };
+}
+
+// Social — comment or reply on a post.
+export function buildCommentEmail(
+  ctx: DispatchBuildContext,
+  args: { actorName: string; postUrl: string; isReply: boolean },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const actorHtml = escapeHtml(args.actorName);
+  const what = args.isReply
+    ? `replied to ${subjectPossessive(ctx)} comment`
+    : `commented on ${subjectPossessive(ctx)} post`;
+  const whatHtml = args.isReply
+    ? `replied to ${subjectPossessiveHtml(ctx)} comment`
+    : `commented on ${subjectPossessiveHtml(ctx)} post`;
+  return {
+    to: ctx.to,
+    kind: "social_comment",
+    subject: `${args.actorName} ${args.isReply ? "replied to" : "commented on"} ${subjectPossessive(ctx)} ${args.isReply ? "comment" : "post"}`,
+    text: `${args.actorName} ${what} on Kinectem.
+
+See it:
+${args.postUrl}${foot.text}`,
+    html: `<p><strong>${actorHtml}</strong> ${whatHtml} on Kinectem.</p>
+<p><a href="${args.postUrl}">See it →</a></p>${foot.html}`,
+  };
+}
+
+// Social — someone liked a post.
+export function buildReactionEmail(
+  ctx: DispatchBuildContext,
+  args: { actorName: string; postUrl: string },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const actorHtml = escapeHtml(args.actorName);
+  return {
+    to: ctx.to,
+    kind: "social_reaction",
+    subject: `${args.actorName} liked ${subjectPossessive(ctx)} post`,
+    text: `${args.actorName} liked ${subjectPossessive(ctx)} post on Kinectem.
+
+See it:
+${args.postUrl}${foot.text}`,
+    html: `<p><strong>${actorHtml}</strong> liked ${subjectPossessiveHtml(ctx)} post on Kinectem.</p>
+<p><a href="${args.postUrl}">See it →</a></p>${foot.html}`,
+  };
+}
+
+// Social — the user was tagged in a published recap/highlight.
+export function buildTagEmail(
+  ctx: DispatchBuildContext,
+  args: { postTitle: string; postUrl: string },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const titleHtml = escapeHtml(args.postTitle);
+  const who = ctx.isGuardianCopy ? ctx.subjectName : "You";
+  const whoHtml = ctx.isGuardianCopy ? escapeHtml(ctx.subjectName) : "You";
+  const wasWere = ctx.isGuardianCopy ? "was" : "were";
+  return {
+    to: ctx.to,
+    kind: "social_tag",
+    subject: `${who} ${wasWere} tagged in "${args.postTitle}"`,
+    text: `${who} ${wasWere} tagged in "${args.postTitle}" on Kinectem.
+
+Open the post:
+${args.postUrl}${foot.text}`,
+    html: `<p>${whoHtml} ${wasWere} tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
+<p><a href="${args.postUrl}">Open the post →</a></p>${foot.html}`,
+  };
+}
+
+// Team update — new published team content (recap / highlight / org post).
+export function buildTeamContentEmail(
+  ctx: DispatchBuildContext,
+  args: {
+    teamName: string | null;
+    actorName: string;
+    title: string;
+    postUrl: string;
+    contentLabel: string; // "recap" | "highlight" | "post"
+  },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const team = args.teamName?.trim() ? args.teamName.trim() : "your team";
+  const teamHtml = escapeHtml(team);
+  const titleHtml = escapeHtml(args.title);
+  const actorHtml = escapeHtml(args.actorName);
+  return {
+    to: ctx.to,
+    kind: "team_recap",
+    subject: `New ${args.contentLabel} for ${team}: "${args.title}"`,
+    text: `${args.actorName} posted a new ${args.contentLabel} for ${team} on Kinectem.
+
+"${args.title}"
+
+See it:
+${args.postUrl}${foot.text}`,
+    html: `<p><strong>${actorHtml}</strong> posted a new ${escapeHtml(args.contentLabel)} for <strong>${teamHtml}</strong> on Kinectem.</p>
+<p><strong>${titleHtml}</strong></p>
+<p><a href="${args.postUrl}">See it →</a></p>${foot.html}`,
+  };
+}
+
+// Team update — roster change (invite, join request, role change). The caller
+// supplies the already-composed message line so this stays generic.
+export function buildRosterEmail(
+  ctx: DispatchBuildContext,
+  args: { message: string; link: string; subject: string },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  return {
+    to: ctx.to,
+    kind: "team_roster",
+    subject: args.subject,
+    text: `${args.message}
+
+Open Kinectem:
+${args.link}${foot.text}`,
+    html: `<p>${escapeHtml(args.message)}</p>
+<p><a href="${args.link}">Open Kinectem →</a></p>${foot.html}`,
+  };
+}
+
+// Team update — a broadcast/announcement to the team or organization.
+export function buildBroadcastEmail(
+  ctx: DispatchBuildContext,
+  args: {
+    senderName: string;
+    scopeName: string | null;
+    preview: string;
+    link: string;
+  },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const scope = args.scopeName?.trim() ? args.scopeName.trim() : "your team";
+  const scopeHtml = escapeHtml(scope);
+  const senderHtml = escapeHtml(args.senderName);
+  const previewHtml = escapeHtml(args.preview);
+  return {
+    to: ctx.to,
+    kind: "team_broadcast",
+    subject: `New announcement for ${scope}`,
+    text: `${args.senderName} posted an announcement for ${scope} on Kinectem:
+
+"${args.preview}"
+
+Read it:
+${args.link}${foot.text}`,
+    html: `<p><strong>${senderHtml}</strong> posted an announcement for <strong>${scopeHtml}</strong> on Kinectem:</p>
+<blockquote>${previewHtml}</blockquote>
+<p><a href="${args.link}">Read it →</a></p>${foot.html}`,
+  };
+}
+
+// Reminder — game finished, recap not yet written (game_recap_reminder).
+export function buildGameRecapReminderEmail(
+  ctx: DispatchBuildContext,
+  args: { teamName: string | null; opponent: string | null; teamUrl: string },
+): EmailMessage {
+  const foot = manageFooter(ctx);
+  const team = args.teamName?.trim() ? args.teamName.trim() : "your team";
+  const teamHtml = escapeHtml(team);
+  const opp = args.opponent?.trim() ? ` vs ${args.opponent.trim()}` : "";
+  const oppHtml = args.opponent?.trim()
+    ? ` vs ${escapeHtml(args.opponent.trim())}`
+    : "";
+  return {
+    to: ctx.to,
+    kind: "reminder_game_recap",
+    subject: `Don't forget to write the recap for ${team}`,
+    text: `${team}'s game${opp} has wrapped up — don't forget to write the game recap while it's fresh.
+
+Write it here:
+${args.teamUrl}${foot.text}`,
+    html: `<p><strong>${teamHtml}</strong>'s game${oppHtml} has wrapped up — don't forget to write the game recap while it's fresh.</p>
+<p><a href="${args.teamUrl}">Write it →</a></p>${foot.html}`,
+  };
+}
+
+// Reminder — schedule reminder, gate-friendly variant (carries unsubscribe).
+export function buildScheduleReminderMessage(
+  ctx: DispatchBuildContext,
+  ev: ScheduleEmailEvent,
+): EmailMessage {
+  const base = buildScheduleReminderBody(ev);
+  const foot = manageFooter(ctx);
+  return {
+    to: ctx.to,
+    kind: "schedule_reminder",
+    subject: base.subject,
+    text: base.text + foot.text,
+    html: base.html + foot.html,
+  };
+}
+
+// Reminder — schedule change notice, gate-friendly variant.
+export function buildScheduleChangeMessage(
+  ctx: DispatchBuildContext,
+  ev: ScheduleEmailEvent & {
+    status: "canceled" | "postponed";
+    reason: string | null;
+  },
+): EmailMessage {
+  const base = buildScheduleChangeBody(ev);
+  const foot = manageFooter(ctx);
+  return {
+    to: ctx.to,
+    kind: "schedule_change_notice",
+    subject: base.subject,
+    text: base.text + foot.text,
+    html: base.html + foot.html,
+  };
 }
 
 export async function sendGuardianExpiredEmail(

@@ -24,7 +24,14 @@ import {
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
-import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
+import {
+  sendGuardianConfirmationEmail,
+  sendGuardianExpiredEmail,
+  sendPasswordResetEmail,
+  appBaseUrl,
+  buildRosterEmail,
+} from "../lib/email";
+import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
   canManageOrganization,
   isTeamMember,
@@ -487,6 +494,19 @@ router.post(
         link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
         actorUserId: me.id,
       });
+      // Task #633 — `team_roster` email mirror. The dispatch gate routes a
+      // minor invitee's copy to their guardian, so we do NOT also email the
+      // parent bell below (that would double-send to the guardian inbox).
+      await dispatchNotificationEmail({
+        userId,
+        category: "team_roster",
+        build: (ctx) =>
+          buildRosterEmail(ctx, {
+            subject: `You've been added to ${t.name}`,
+            message: `${actorName} added you to ${t.name}. Tap to accept or decline.`,
+            link: `${appBaseUrl()}/teams/${teamId}?roster=1&entryId=${entry.id}`,
+          }),
+      });
       // Fan out to the linked guardian, if any. A parent managing an
       // under-13 athlete needs to see the invite in their own bell and
       // be able to accept on the child's behalf from /family.
@@ -698,6 +718,18 @@ router.patch(
         message: `${actorName} changed your role on ${t.name} to ${roleLabel}.`,
         link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
         actorUserId: me.id,
+      });
+      // Task #633 — `team_roster` email mirror. Gate routes a minor's copy to
+      // the guardian, so the parent bell below is in-app only (no double-send).
+      await dispatchNotificationEmail({
+        userId: u.id,
+        category: "team_roster",
+        build: (ctx) =>
+          buildRosterEmail(ctx, {
+            subject: `Your role on ${t.name} changed`,
+            message: `${actorName} changed your role on ${t.name} to ${roleLabel}.`,
+            link: `${appBaseUrl()}/teams/${teamId}?roster=1&entryId=${entry.id}`,
+          }),
       });
       if (u.parentId) {
         const childFirstName =

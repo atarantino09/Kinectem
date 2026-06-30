@@ -1034,6 +1034,31 @@ CREATE TABLE IF NOT EXISTS broadcast_assets (
 );
 `;
 
+// Task #633 — Per-user email notification preferences. One row per user,
+// lazily created in app code (which mints the unsubscribe_token). Idempotent.
+const TASK_633_NOTIFICATION_PREFERENCES = `
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  social_follow boolean NOT NULL DEFAULT true,
+  social_comment boolean NOT NULL DEFAULT true,
+  social_reaction boolean NOT NULL DEFAULT true,
+  social_tag boolean NOT NULL DEFAULT true,
+  team_recap boolean NOT NULL DEFAULT true,
+  team_roster boolean NOT NULL DEFAULT true,
+  team_broadcast boolean NOT NULL DEFAULT true,
+  reminder_schedule boolean NOT NULL DEFAULT true,
+  reminder_game_recap boolean NOT NULL DEFAULT true,
+  digest_weekly boolean NOT NULL DEFAULT true,
+  motivational boolean NOT NULL DEFAULT true,
+  pause_all boolean NOT NULL DEFAULT false,
+  unsubscribe_token text NOT NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS notification_preferences_unsubscribe_token_key
+  ON notification_preferences (unsubscribe_token);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1190,6 +1215,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-26-broadcasts",
     sql: BROADCASTS,
+  },
+  {
+    name: "2026-06-30-task-633-notification-preferences",
+    sql: TASK_633_NOTIFICATION_PREFERENCES,
   },
 ];
 

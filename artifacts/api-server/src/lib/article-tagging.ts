@@ -1,12 +1,8 @@
 import { db, articleTags, articles, notifications, rosterEntries, users } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { articlePostId, highlightPostId } from "./spec-helpers";
-import {
-  buildPostUrl,
-  isEmailConfigured,
-  sendTagNotificationEmail,
-} from "./email";
-import { logger } from "./logger";
+import { buildPostUrl, buildTagEmail, isEmailConfigured } from "./email";
+import { dispatchNotificationEmailToMany } from "./notification-email";
 import { notifyGuardianOfPendingItem } from "./coppa";
 
 // Task #363 Phase 2 — fire a `child_pending_tag` bell on the linked
@@ -132,55 +128,32 @@ export const TAG_NOTIF_THROTTLE_MS = 10 * 60 * 1000;
 // just got a fresh bell row inserted, so re-tagging within the throttle
 // window doesn't spam.
 //
-// `statusByUser` lets us pick the right email copy:
-//   * "approved"  → "you were tagged in …"
-//   * "pending"   → "please review and approve a tag on you in …"
-// Self-tags are filtered defensively here as well as upstream so a
-// missed filter at a single call site can't leak a self-ping email.
+// Routed through the central dispatch gate (task #633) so each recipient's
+// `social_tag` preference is honored, a no-login unsubscribe link is attached,
+// and — critically for COPPA — a minor's tag email goes to their linked
+// guardian, never the child's own inbox. Self-tags are filtered defensively
+// here as well as upstream so a missed filter at a single call site can't
+// leak a self-ping email.
 async function sendTagEmails(args: {
   userIds: string[];
-  statusByUser: Map<string, "pending" | "approved">;
   postTitle: string;
   postLink: string;
   actorUserId: string | null;
 }): Promise<void> {
   if (args.userIds.length === 0) return;
   // Skip the entire DB roundtrip when SendGrid isn't wired up — keeps
-  // tests quiet (no warn-per-recipient log) and avoids a wasted query
-  // in environments that intentionally disable email.
+  // tests quiet and avoids wasted queries in environments that disable email.
   if (!isEmailConfigured()) return;
   const candidates = args.actorUserId
     ? args.userIds.filter((u) => u !== args.actorUserId)
     : args.userIds;
   if (candidates.length === 0) return;
-  const rows = await db
-    .select({ id: users.id, email: users.email })
-    .from(users)
-    .where(inArray(users.id, candidates));
   const postUrl = buildPostUrl(args.postLink);
-  await Promise.all(
-    rows
-      .filter((r): r is { id: string; email: string } => !!r.email)
-      .map(async (r) => {
-        const pending =
-          (args.statusByUser.get(r.id) ?? "approved") === "pending";
-        try {
-          await sendTagNotificationEmail(r.email, {
-            postTitle: args.postTitle,
-            postUrl,
-            pending,
-          });
-        } catch (err) {
-          // Email failures must never bubble up and break the request.
-          // The bell row is already written; the email is a best-effort
-          // additional channel. Log and move on.
-          logger.error(
-            { err, userId: r.id },
-            "Failed to send tag notification email",
-          );
-        }
-      }),
-  );
+  await dispatchNotificationEmailToMany({
+    userIds: candidates,
+    category: "social_tag",
+    build: (ctx) => buildTagEmail(ctx, { postTitle: args.postTitle, postUrl }),
+  });
 }
 
 export async function notifyNewlyTaggedInRecap(args: {
@@ -239,7 +212,6 @@ export async function notifyNewlyTaggedInRecap(args: {
   );
   await sendTagEmails({
     userIds: target,
-    statusByUser,
     postTitle: title,
     postLink: link,
     actorUserId: args.actorUserId,
@@ -320,17 +292,11 @@ export async function notifyNewlyTaggedInHighlight(args: {
   }
 
   // Mirror the player bell channel into email so out-of-app players still
-  // find out (task #324). statusByUser carries the pending/approved decision
-  // straight from the caller — for highlights we already have it on the
-  // inserted tag row, no extra lookup needed. Done before the guardian
-  // fan-out below so the early-returns in the parent path don't short-
-  // circuit the email channel for tag batches that have no pending rows.
-  const statusByUser = new Map<string, "pending" | "approved">(
-    target.map((t) => [t.userId, t.status]),
-  );
+  // find out (task #324). Done before the guardian fan-out below so the
+  // early-returns in the parent path don't short-circuit the email channel
+  // for tag batches that have no pending rows.
   await sendTagEmails({
     userIds: target.map((t) => t.userId),
-    statusByUser,
     postTitle: title,
     postLink: link,
     actorUserId: args.actorUserId,

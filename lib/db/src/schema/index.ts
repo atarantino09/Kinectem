@@ -958,6 +958,36 @@ export const notifications = pgTable("notifications", {
   userCreatedIdx: index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt.desc()),
 }));
 
+// Task #633 — Per-user email notification preferences. One row per user,
+// lazily created on first read. Every category defaults to ON (true);
+// `pauseAll` is a master "pause all non-essential email" switch. The
+// `unsubscribeToken` is a high-entropy per-user secret embedded in the
+// unsubscribe link of every marketing/motivational email so a recipient
+// can opt out of a category (or pause everything) without logging in.
+// Transactional/essential emails (password reset, guardian/parental
+// consent, guardian-confirm) bypass these preferences entirely. The two
+// legacy opt-out flags on `users` (guardian_expired_email_opt_out,
+// share_notifications_opt_out) keep their existing behavior unchanged and
+// are surfaced in the Settings UI via their own existing endpoints.
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).primaryKey(),
+  socialFollow: boolean("social_follow").notNull().default(true),
+  socialComment: boolean("social_comment").notNull().default(true),
+  socialReaction: boolean("social_reaction").notNull().default(true),
+  socialTag: boolean("social_tag").notNull().default(true),
+  teamRecap: boolean("team_recap").notNull().default(true),
+  teamRoster: boolean("team_roster").notNull().default(true),
+  teamBroadcast: boolean("team_broadcast").notNull().default(true),
+  reminderSchedule: boolean("reminder_schedule").notNull().default(true),
+  reminderGameRecap: boolean("reminder_game_recap").notNull().default(true),
+  digestWeekly: boolean("digest_weekly").notNull().default(true),
+  motivational: boolean("motivational").notNull().default(true),
+  pauseAll: boolean("pause_all").notNull().default(false),
+  unsubscribeToken: text("unsubscribe_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Per-child soft-hide for an individual message. Used when a parent
 // removes a `message:<id>` from the family dashboard: the message stays
 // in the database (and visible to the sender), but disappears from the

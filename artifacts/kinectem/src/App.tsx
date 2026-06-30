@@ -63,6 +63,7 @@ const AdminOrganizations = lazy(
 );
 const OrgSubscribePage = lazy(() => import("@/pages/OrgSubscribePage"));
 const AnnouncementsPage = lazy(() => import("@/pages/AnnouncementsPage"));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +115,7 @@ function Router() {
             <Route path="/drafts" component={DraftsPage} />
             <Route path="/me/tags" component={MyTagsPage} />
             <Route path="/follow-requests" component={FollowRequestsPage} />
+            <Route path="/settings" component={SettingsPage} />
             <Route
               path="/family/:childId/messages/:conversationId"
               component={ChildConversationPage}

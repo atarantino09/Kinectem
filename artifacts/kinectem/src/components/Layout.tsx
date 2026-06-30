@@ -7,7 +7,7 @@ import {
 import { UserAvatar } from "@/components/UserAvatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield, Tag, FileText, Megaphone } from "lucide-react";
+import { Search, Plus, Home, Building2, Mail, LogOut, UserCircle, Repeat, Users, Shield, Tag, FileText, Megaphone, Settings } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchUnreadCount,
@@ -334,6 +334,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   data-testid="menu-drafts"
                 >
                   <FileText className="w-4 h-4 mr-2" /> My Drafts
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/settings")}
+                  data-testid="menu-settings"
+                >
+                  <Settings className="w-4 h-4 mr-2" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setLocation("/login")}>

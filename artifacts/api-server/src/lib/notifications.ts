@@ -6,7 +6,13 @@ import {
   teamFollowers,
 } from "@workspace/db";
 import { and, eq, inArray, ne, or } from "drizzle-orm";
-import { highlightPostId } from "./spec-helpers";
+import { articlePostId, highlightPostId } from "./spec-helpers";
+import { dispatchNotificationEmailToMany } from "./notification-email";
+import {
+  appBaseUrl,
+  buildGameRecapReminderEmail,
+  buildTeamContentEmail,
+} from "./email";
 
 // Roles in `organization_admins` that count as a "team admin" for the
 // purpose of moderation-style fan-out notifications. Plain "member" is
@@ -269,6 +275,18 @@ export async function notifyStaffOfGameRecapReminder(args: {
       link,
     })),
   );
+  // Task #633 — also nudge by email (gated by prefs; minors -> guardian).
+  const teamUrl = `${appBaseUrl()}/teams/${args.teamId}`;
+  await dispatchNotificationEmailToMany({
+    userIds: recipients,
+    category: "reminder_game_recap",
+    build: (ctx) =>
+      buildGameRecapReminderEmail(ctx, {
+        teamName: args.teamName,
+        opponent: args.opponent,
+        teamUrl,
+      }),
+  });
   return recipients.length;
 }
 
@@ -366,5 +384,42 @@ export async function notifyTeamUnarchived(args: {
   await fanOutTeamArchiveNotification({
     ...args,
     kind: TEAM_UNARCHIVED_NOTIF_KIND,
+  });
+}
+
+// Task #633 — Email-only fan-out to a team's followers when a new game recap
+// is published. There is no in-app bell for this (followers already see new
+// recaps in their feed); the email is the opt-in `team_recap` channel. The
+// dispatch gate handles per-recipient preferences, the no-login unsubscribe
+// link, and COPPA minor->guardian routing, so minors never receive it
+// directly. The author is always excluded.
+export async function notifyTeamFollowersOfNewRecap(args: {
+  teamId: string;
+  teamName: string | null;
+  articleId: string;
+  articleTitle: string;
+  actorName: string;
+  actorUserId: string;
+}): Promise<void> {
+  const rows = await db
+    .select({ userId: teamFollowers.userId })
+    .from(teamFollowers)
+    .where(eq(teamFollowers.teamId, args.teamId));
+  const recipientIds = rows
+    .map((r) => r.userId)
+    .filter((id) => id !== args.actorUserId);
+  if (recipientIds.length === 0) return;
+  const postUrl = `${appBaseUrl()}/posts/${articlePostId(args.articleId)}`;
+  await dispatchNotificationEmailToMany({
+    userIds: recipientIds,
+    category: "team_recap",
+    build: (ctx) =>
+      buildTeamContentEmail(ctx, {
+        teamName: args.teamName,
+        actorName: args.actorName,
+        title: args.articleTitle,
+        postUrl,
+        contentLabel: "recap",
+      }),
   });
 }

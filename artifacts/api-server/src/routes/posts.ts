@@ -27,6 +27,7 @@ import {
   desc,
   eq,
   inArray,
+  isNotNull,
   isNull,
   ne,
   or,
@@ -35,7 +36,15 @@ import {
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
-import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
+import {
+  sendGuardianConfirmationEmail,
+  sendGuardianExpiredEmail,
+  sendPasswordResetEmail,
+  buildPostUrl,
+  buildReactionEmail,
+  buildFirstRecapMilestoneEmail,
+} from "../lib/email";
+import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
   canCreateRecap,
   canApproveTeamHighlight,
@@ -83,6 +92,7 @@ import {
   notifyAdminsOfTeamHighlight,
   notifyAdminsOfPendingPostApproval,
   notifyStaffOfPendingHighlight,
+  notifyTeamFollowersOfNewRecap,
 } from "../lib/notifications";
 import {
   blockMinorAction,
@@ -1561,6 +1571,18 @@ const addPostReactionHandler = asyncHandler(async (req, res) => {
         link: `/posts/${req.params.postId}`,
         actorUserId: me.id,
       });
+      // Task #633 — mirror the like bell into the gated `social_reaction`
+      // email (per-recipient preference, no-login unsubscribe, minor->guardian
+      // routing all handled by the dispatch gate).
+      await dispatchNotificationEmail({
+        userId: ownerId,
+        category: "social_reaction",
+        build: (ctx) =>
+          buildReactionEmail(ctx, {
+            actorName: displayName(me),
+            postUrl: buildPostUrl(`/posts/${req.params.postId}`),
+          }),
+      });
     }
   }
   res.status(204).end();
@@ -1884,6 +1906,44 @@ router.post(
           userIds: newlyTagged,
           articleId: a.id,
           articleTitle: a.title,
+          actorUserId: me.id,
+        });
+      }
+
+      // Task #633 — recap-only engagement emails, fired once the recap is
+      // actually live (`gameDate` distinguishes a game recap from a non-recap
+      // long-form article). Two channels, both routed through the COPPA gate:
+      //   * `motivational` — a one-time "your first recap is live" milestone to
+      //     the author, sent only when this is their first published recap.
+      //   * `team_recap` — an opt-in fan-out to the team's followers.
+      if (status === "published" && gameDate) {
+        const [{ count: publishedRecapCount }] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.authorId, me.id),
+              eq(articles.status, "published"),
+              isNotNull(articles.gameDate),
+            ),
+          );
+        if (publishedRecapCount === 1) {
+          await dispatchNotificationEmail({
+            userId: me.id,
+            category: "motivational",
+            build: (ctx) =>
+              buildFirstRecapMilestoneEmail(ctx, {
+                recapTitle: a.title,
+                recapUrl: buildPostUrl(`/posts/${articlePostId(a.id)}`),
+              }),
+          });
+        }
+        await notifyTeamFollowersOfNewRecap({
+          teamId,
+          teamName: team.name,
+          articleId: a.id,
+          articleTitle: a.title,
+          actorName: me.isMinor ? maskedDisplayName(me) : displayName(me),
           actorUserId: me.id,
         });
       }

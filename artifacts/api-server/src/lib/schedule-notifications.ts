@@ -9,14 +9,13 @@
 // the team's Schedule tab. Date/time is formatted in UTC with an explicit zone
 // label because events are stored as instants and we have no per-team timezone.
 
-import { db, rosterEntries, users } from "@workspace/db";
-import { and, eq, inArray } from "drizzle-orm";
-import { isUnder13 } from "./coppa";
-import { logger } from "./logger";
+import { db, rosterEntries } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import {
-  sendScheduleReminderEmail,
-  sendScheduleChangeNoticeEmail,
+  buildScheduleReminderMessage,
+  buildScheduleChangeMessage,
 } from "./email";
+import { dispatchNotificationEmailToMany } from "./notification-email";
 
 export interface ScheduleEmailEventInfo {
   teamId: string;
@@ -72,86 +71,31 @@ function whenText(info: ScheduleEmailEventInfo): string {
   }).format(info.startAt);
 }
 
-// Resolve the deduped recipient email list for a team, applying COPPA routing.
-// Deduped case-insensitively, preserving the first-seen original casing.
-export async function resolveTeamScheduleRecipientEmails(
+// Resolve the deduped accepted-roster user IDs for a team. The central email
+// dispatch gate (notification-email.ts) handles COPPA routing per recipient —
+// any minor (under-13 OR 13-17) is routed to their linked guardian, never the
+// child — and applies each recipient's `reminder_schedule` preference. This
+// is intentionally more conservative than the old age-split: a minor athlete
+// no longer receives the schedule email directly; the guardian does.
+export async function resolveTeamScheduleRecipientUserIds(
   teamId: string,
 ): Promise<string[]> {
   const roster = await db
-    .select({ userId: rosterEntries.userId, role: rosterEntries.role })
+    .select({ userId: rosterEntries.userId })
     .from(rosterEntries)
     .where(
       and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.status, "accepted")),
     );
-  if (roster.length === 0) return [];
-
-  const userIds = Array.from(new Set(roster.map((r) => r.userId)));
-  const rosterUsers = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      dateOfBirth: users.dateOfBirth,
-      parentId: users.parentId,
-    })
-    .from(users)
-    .where(inArray(users.id, userIds));
-
-  const parentIds = Array.from(
-    new Set(
-      rosterUsers
-        .map((u) => u.parentId)
-        .filter((p): p is string => Boolean(p)),
-    ),
-  );
-  const parents = parentIds.length
-    ? await db
-        .select({ id: users.id, email: users.email })
-        .from(users)
-        .where(inArray(users.id, parentIds))
-    : [];
-  const parentEmailById = new Map(parents.map((p) => [p.id, p.email]));
-  // A user can have multiple roster rows; prefer the coach role if present.
-  const isCoach = new Set(
-    roster.filter((r) => r.role === "coach").map((r) => r.userId),
-  );
-
-  // Case-insensitive dedupe, keep first-seen casing.
-  const out = new Map<string, string>();
-  const add = (email: string | null | undefined) => {
-    const trimmed = email?.trim();
-    if (!trimmed) return;
-    const key = trimmed.toLowerCase();
-    if (!out.has(key)) out.set(key, trimmed);
-  };
-
-  for (const u of rosterUsers) {
-    const parentEmail = u.parentId
-      ? (parentEmailById.get(u.parentId) ?? null)
-      : null;
-    if (isCoach.has(u.id)) {
-      add(u.email);
-      continue;
-    }
-    const dobIso = u.dateOfBirth
-      ? new Date(u.dateOfBirth).toISOString().slice(0, 10)
-      : null;
-    if (isUnder13(dobIso)) {
-      // COPPA — parent only, never the child.
-      add(parentEmail);
-    } else {
-      add(u.email);
-      add(parentEmail);
-    }
-  }
-  return Array.from(out.values());
+  return Array.from(new Set(roster.map((r) => r.userId)));
 }
 
-// Fan out the ~24h reminder. Returns the number of recipients emailed.
+// Fan out the ~24h reminder. Returns the number of target users dispatched
+// (before per-recipient preference/COPPA filtering inside the gate).
 export async function notifyTeamOfScheduleReminder(
   info: ScheduleEmailEventInfo,
 ): Promise<number> {
-  const recipients = await resolveTeamScheduleRecipientEmails(info.teamId);
-  if (recipients.length === 0) return 0;
+  const userIds = await resolveTeamScheduleRecipientUserIds(info.teamId);
+  if (userIds.length === 0) return 0;
   const ev = {
     teamId: info.teamId,
     teamName: info.teamName,
@@ -159,17 +103,12 @@ export async function notifyTeamOfScheduleReminder(
     whenText: whenText(info),
     locationName: info.locationName,
   };
-  const results = await Promise.allSettled(
-    recipients.map((to) => sendScheduleReminderEmail(to, ev)),
-  );
-  const failed = results.filter((r) => r.status === "rejected").length;
-  if (failed > 0) {
-    logger.warn(
-      { teamId: info.teamId, failed, total: recipients.length },
-      "schedule-reminder: some reminder emails failed",
-    );
-  }
-  return recipients.length;
+  await dispatchNotificationEmailToMany({
+    userIds,
+    category: "reminder_schedule",
+    build: (ctx) => buildScheduleReminderMessage(ctx, ev),
+  });
+  return userIds.length;
 }
 
 // Fan out an immediate cancel/postpone change notice.
@@ -179,8 +118,8 @@ export async function notifyTeamOfScheduleChange(
     reason: string | null;
   },
 ): Promise<number> {
-  const recipients = await resolveTeamScheduleRecipientEmails(info.teamId);
-  if (recipients.length === 0) return 0;
+  const userIds = await resolveTeamScheduleRecipientUserIds(info.teamId);
+  if (userIds.length === 0) return 0;
   const ev = {
     teamId: info.teamId,
     teamName: info.teamName,
@@ -190,15 +129,10 @@ export async function notifyTeamOfScheduleChange(
     status: info.status,
     reason: info.reason,
   };
-  const results = await Promise.allSettled(
-    recipients.map((to) => sendScheduleChangeNoticeEmail(to, ev)),
-  );
-  const failed = results.filter((r) => r.status === "rejected").length;
-  if (failed > 0) {
-    logger.warn(
-      { teamId: info.teamId, failed, total: recipients.length },
-      "schedule-change-notice: some change-notice emails failed",
-    );
-  }
-  return recipients.length;
+  await dispatchNotificationEmailToMany({
+    userIds,
+    category: "reminder_schedule",
+    build: (ctx) => buildScheduleChangeMessage(ctx, ev),
+  });
+  return userIds.length;
 }

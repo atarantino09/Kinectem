@@ -16,6 +16,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError, notFound, paginate, safeAvatarUrl, displayName } from "../lib/spec-helpers";
+import { appBaseUrl, buildBroadcastEmail } from "../lib/email";
+import { dispatchNotificationEmailToMany } from "../lib/notification-email";
 import { canManageOrganization, canManageTeam } from "../lib/permissions";
 import {
   enumerateOrgAudience,
@@ -180,8 +182,10 @@ async function persistBroadcast(opts: {
   recipients: Recipient[];
   notifMessage: string;
   assetIds?: string[];
+  emailSenderName?: string;
+  emailScopeName?: string | null;
 }): Promise<string> {
-  return db.transaction(async (tx) => {
+  const broadcastId = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(broadcasts)
       .values({
@@ -230,6 +234,39 @@ async function persistBroadcast(opts: {
     }
     return broadcastId;
   });
+
+  // Task #633 — email fan-out after the broadcast commits. We email only the
+  // "self" recipient rows (childUserId == null) and let the dispatch gate
+  // reroute a minor's copy to their guardian; the explicit guardian recipient
+  // rows (childUserId != null) are in-app only, so the guardian inbox is not
+  // double-emailed. Category `team_broadcast`.
+  if (opts.emailSenderName) {
+    const emailUserIds = opts.recipients
+      .filter((r) => r.userId !== opts.senderUserId && r.childUserId == null)
+      .map((r) => r.userId);
+    if (emailUserIds.length > 0) {
+      const preview =
+        opts.body.length > 140
+          ? `${opts.body.slice(0, 140).trimEnd()}…`
+          : opts.body;
+      const link = `${appBaseUrl()}/announcements?b=${broadcastId}`;
+      const senderName = opts.emailSenderName;
+      const scopeName = opts.emailScopeName ?? null;
+      await dispatchNotificationEmailToMany({
+        userIds: emailUserIds,
+        category: "team_broadcast",
+        build: (ctx) =>
+          buildBroadcastEmail(ctx, {
+            senderName,
+            scopeName,
+            preview,
+            link,
+          }),
+      });
+    }
+  }
+
+  return broadcastId;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +304,8 @@ router.post(
       recipients,
       notifMessage: `New announcement from ${org.name}`,
       assetIds,
+      emailSenderName: displayName(me),
+      emailScopeName: org.name,
     });
     req.log.info(
       { broadcastId, orgId: org.id, recipients: recipients.length, attachments: assetIds.length },
@@ -305,6 +344,8 @@ router.post(
       allowReplies: true,
       recipients,
       notifMessage: `New message from ${team.name}`,
+      emailSenderName: displayName(me),
+      emailScopeName: team.name,
     });
     req.log.info(
       { broadcastId, teamId: team.id, recipients: recipients.length },

@@ -24,7 +24,16 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
-import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
+import {
+  sendGuardianConfirmationEmail,
+  sendGuardianExpiredEmail,
+  sendPasswordResetEmail,
+  appBaseUrl,
+  buildPostUrl,
+  buildFollowEmail,
+  buildFirstRecapMilestoneEmail,
+} from "../lib/email";
+import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
   canManageOrganization,
   canAuthorRecapAnywhere,
@@ -42,6 +51,7 @@ import {
 import {
   notifyAdminsOfTeamHighlight,
   notifyHighlightDecision,
+  notifyTeamFollowersOfNewRecap,
 } from "../lib/notifications";
 import { notifyNewlyTaggedInHighlight } from "../lib/article-tagging";
 import { maskedDisplayName } from "../lib/spec-helpers";
@@ -2060,6 +2070,51 @@ async function transitionApproval(
         actorUserId: taggerUserId,
       });
     }
+    // Task #633 — the same recap engagement emails the direct-publish path
+    // (posts.ts) fires, but deferred to here for recaps that were created as
+    // pending_approval: a one-time first-recap milestone to the author, and an
+    // opt-in `team_recap` fan-out to the team's followers. Both run through the
+    // COPPA-aware dispatch gate.
+    if (a.authorId) {
+      const [author] = await db
+        .select({ name: users.name, isMinor: users.isMinor })
+        .from(users)
+        .where(eq(users.id, a.authorId))
+        .limit(1);
+      if (author) {
+        const [{ count: publishedRecapCount }] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.authorId, a.authorId),
+              eq(articles.status, "published"),
+              isNotNull(articles.gameDate),
+            ),
+          );
+        if (publishedRecapCount === 1) {
+          await dispatchNotificationEmail({
+            userId: a.authorId,
+            category: "motivational",
+            build: (ctx) =>
+              buildFirstRecapMilestoneEmail(ctx, {
+                recapTitle: a.title,
+                recapUrl: buildPostUrl(`/posts/${articlePostId(a.id)}`),
+              }),
+          });
+        }
+        await notifyTeamFollowersOfNewRecap({
+          teamId: a.teamId,
+          teamName: t.name,
+          articleId: a.id,
+          articleTitle: a.title,
+          actorName: author.isMinor
+            ? maskedDisplayName(author)
+            : displayName(author),
+          actorUserId: a.authorId,
+        });
+      }
+    }
   }
   // Task #458 — notify the recap author of the admin's decision so they
   // don't have to refresh the team page to discover their pending recap
@@ -2203,6 +2258,10 @@ router.post(
       .onConflictDoNothing()
       .returning({ followerUserId: userFollowers.followerUserId });
     if (inserted.length > 0) {
+      // Task #633 — mirror each follow bell into the gated `social_follow`
+      // email. The dispatch gate checks the recipient's preferences, adds the
+      // no-login unsubscribe link, and routes a minor's copy to their guardian.
+      const followProfileUrl = buildPostUrl(`/users/${me.id}`);
       if (status === "approved") {
         // Bell-notify the followed user when the follow lands live.
         // Pending follows do NOT bell-notify the minor — they ring
@@ -2213,6 +2272,16 @@ router.post(
           message: `${displayName(me)} started following you`,
           link: `/users/${me.id}`,
           actorUserId: me.id,
+        });
+        await dispatchNotificationEmail({
+          userId: req.params.userId,
+          category: "social_follow",
+          build: (ctx) =>
+            buildFollowEmail(ctx, {
+              actorName: displayName(me),
+              profileUrl: followProfileUrl,
+              requested: false,
+            }),
         });
       } else if (privateAccountGated) {
         // Task #520 — Ring the followed adult directly when their
@@ -2226,12 +2295,34 @@ router.post(
           link: `/follow-requests`,
           actorUserId: me.id,
         });
+        await dispatchNotificationEmail({
+          userId: req.params.userId,
+          category: "social_follow",
+          build: (ctx) =>
+            buildFollowEmail(ctx, {
+              actorName: displayName(me),
+              profileUrl: `${appBaseUrl()}/follow-requests`,
+              requested: true,
+            }),
+        });
       } else if (target.parentId) {
         await notifyGuardianOfPendingItem({
           guardianUserId: target.parentId,
           childUserId: target.id,
           kind: "follow",
           message: `${displayName(me)} wants to follow your child`,
+        });
+        // Minor target: the gate routes this `social_follow` copy to the
+        // linked guardian (the minor never receives engagement email).
+        await dispatchNotificationEmail({
+          userId: target.id,
+          category: "social_follow",
+          build: (ctx) =>
+            buildFollowEmail(ctx, {
+              actorName: displayName(me),
+              profileUrl: followProfileUrl,
+              requested: true,
+            }),
         });
       }
     }

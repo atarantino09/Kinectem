@@ -22,3 +22,4 @@
 - [Combined recap pill](combined-recap-pill.md) — articles.recap_kind="combined" marks multi-game recaps; serialized as extra PostResponse field via shared articleToPost (openapi locked); forgeable, label-only.
 - [Game-recap reminder scheduler](game-recap-reminder.md) — DB-sweep nudge ~2h post-game; atomic claim must re-check game_recap_id/status; release stamp on send failure to retry.
 - [Team Schedule visibility parity](team-schedule-visibility.md) — schedule is members-only incl. parents of active athletes; client gates must mirror server canViewTeamSchedule or parents get locked out.
+- [Notification email dispatch gate](notification-prefs-dispatch.md) — gated email routes minor→guardian & gates on recipient prefs; test pitfall: getOrCreatePreferences before set-flag-false or lazy all-on row re-sends.
