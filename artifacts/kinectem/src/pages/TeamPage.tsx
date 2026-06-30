@@ -223,12 +223,33 @@ export default function TeamPage() {
     );
   }
 
+  // Server returns rosters ordered alphabetically by first name (with
+  // nameless rows last); this keeps that order as a render-time safety net
+  // after the players/staff partition in case the source order changes.
+  const byFirstName = (a?: string | null, b?: string | null) => {
+    const an = (a ?? "").trim();
+    const bn = (b ?? "").trim();
+    if (!an && !bn) return 0;
+    if (!an) return 1;
+    if (!bn) return -1;
+    return an.localeCompare(bn, undefined, { sensitivity: "base" });
+  };
+
   const allMembers = allMembersForGate;
-  const players = allMembers.filter((m) => m.position === "player");
-  const staff = allMembers.filter((m) => m.position !== "player");
-  const invites = ((invitesResp?.data ?? []) as RosterInvite[]).filter(
-    (i) => (i as { status?: string }).status === "pending" && !!i.email,
-  );
+  const players = allMembers
+    .filter((m) => m.position === "player")
+    .sort((a, b) => byFirstName(a.displayName, b.displayName));
+  const staff = allMembers
+    .filter((m) => m.position !== "player")
+    .sort((a, b) => byFirstName(a.displayName, b.displayName));
+  const invites = ((invitesResp?.data ?? []) as RosterInvite[])
+    .filter((i) => (i as { status?: string }).status === "pending" && !!i.email)
+    .sort((a, b) =>
+      byFirstName(
+        (a as { invitedName?: string | null }).invitedName,
+        (b as { invitedName?: string | null }).invitedName,
+      ),
+    );
 
   const seasonId = team.currentSeason?.id ?? team.id;
   const recentPosts = postsResp?.data ?? [];

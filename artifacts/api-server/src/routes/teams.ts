@@ -348,7 +348,8 @@ router.get(
       .select({ r: rosterEntries, u: users })
       .from(rosterEntries)
       .innerJoin(users, eq(rosterEntries.userId, users.id))
-      .where(eq(rosterEntries.teamId, req.params.teamId));
+      .where(eq(rosterEntries.teamId, req.params.teamId))
+      .orderBy(sql`lower(${users.name}) asc nulls last`);
     const parentIds = Array.from(
       new Set(
         rows
@@ -412,7 +413,8 @@ router.get(
       .select({ i: rosterInvites, u: users })
       .from(rosterInvites)
       .leftJoin(users, eq(rosterInvites.invitedById, users.id))
-      .where(eq(rosterInvites.teamId, teamId));
+      .where(eq(rosterInvites.teamId, teamId))
+      .orderBy(sql`lower(${rosterInvites.invitedName}) asc nulls last`);
     const data = rows.map((r) => toInvite(r.i, r.u));
     res.json(paginate(data));
   }),
