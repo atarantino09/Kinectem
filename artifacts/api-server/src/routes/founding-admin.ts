@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, foundingSignups, organizations, organizationAdmins, users } from "@workspace/db";
+import { db, foundingSignups, organizations, organizationAdmins, teams, users } from "@workspace/db";
 import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -421,6 +421,66 @@ router.post(
       adminEmail: result.adminEmail,
       demoted: result.demoted,
       demotedCount: result.demoted.length,
+    });
+  }),
+);
+
+// One-time, destructive "remove every organization and team" action from inside
+// the deployment. Publishing syncs schema only and the agent has read-only prod
+// access, so a clean-slate reset has to run from this authed operator page. Every
+// FK referencing organizations/teams is CASCADE or SET NULL, so deleting the orgs
+// cascades their teams and all dependent content (roster, articles, highlights,
+// schedule, followers, invites, org posts, broadcasts, subscriptions). Requires a
+// typed "DELETE" confirmation; gated + rate-limited + advisory-locked like the
+// other operator actions. Users are intentionally left untouched.
+const resetLimiter = rateLimit({
+  name: "founding-admin-reset-orgs-teams",
+  windowMs: ONE_HOUR,
+  max: 12,
+  keys: (req) => [ipKey(req)],
+  message: "Too many attempts. Please wait a while before trying again.",
+});
+
+const ResetOrgsTeamsBody = z.object({
+  confirm: z.string(),
+});
+
+router.post(
+  "/founding-admin/reset-orgs-teams",
+  requireFoundingAdmin,
+  resetLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = ResetOrgsTeamsBody.safeParse(req.body);
+    if (
+      !parsed.success ||
+      parsed.data.confirm.trim().replace(/\s+/g, " ").toUpperCase() !== "DELETE ALL ORGS AND TEAMS"
+    ) {
+      apiError(res, 400, 'Type "DELETE ALL ORGS AND TEAMS" to confirm.', {
+        code: "CONFIRMATION_REQUIRED",
+      });
+      return;
+    }
+
+    const result = await db.transaction(async (tx) => {
+      // Serialize concurrent runs (same advisory-lock pattern as the other
+      // operator actions). Delete teams first, then orgs; deleting the orgs
+      // would cascade the teams anyway, but doing teams explicitly also clears
+      // any team that isn't attached to an org.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:reset-orgs-teams'))`);
+      const delTeams = await tx.delete(teams).returning({ id: teams.id });
+      const delOrgs = await tx.delete(organizations).returning({ id: organizations.id });
+      return { teams: delTeams.length, orgs: delOrgs.length };
+    });
+
+    req.log.info(
+      { deletedOrganizations: result.orgs, deletedTeams: result.teams },
+      "founding-admin reset orgs/teams",
+    );
+
+    res.json({
+      ok: true,
+      deletedOrganizations: result.orgs,
+      deletedTeams: result.teams,
     });
   }),
 );
