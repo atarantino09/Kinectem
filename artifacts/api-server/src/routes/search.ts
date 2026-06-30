@@ -47,10 +47,19 @@ router.get(
       });
     }
     const [userRowsRaw, orgRows, teamRows] = await Promise.all([
+      // Task #676 — deactivated/frozen and soft-deleted accounts must not
+      // surface in cross-entity search for non-admin viewers. Admins keep
+      // their existing visibility (they don't hit this endpoint for that).
       db
         .select()
         .from(users)
-        .where(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)))
+        .where(
+          and(
+            or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
+            eq(users.accountStatus, "active"),
+            isNull(users.deletedAt),
+          ),
+        )
         .limit(20),
       db.select().from(organizations).where(ilike(organizations.name, `%${q}%`)).limit(10),
       // Task #472 — archived teams must not surface in cross-entity search.

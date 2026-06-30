@@ -895,7 +895,15 @@ router.get(
         userFollowers,
         eq(userFollowers.followingUserId, users.id),
       )
-      .where(ne(users.id, me.id))
+      // Task #676 — never recommend deactivated/frozen or soft-deleted
+      // accounts. Only active, non-deleted users are discoverable.
+      .where(
+        and(
+          ne(users.id, me.id),
+          eq(users.accountStatus, "active"),
+          isNull(users.deletedAt),
+        ),
+      )
       .groupBy(users.id)
       .orderBy(
         desc(sql<number>`count(${userFollowers.followerUserId})`),
