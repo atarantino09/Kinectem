@@ -57,6 +57,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@vitest/ui": "^4.1.5",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/invite-copy": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "^1.1.1",

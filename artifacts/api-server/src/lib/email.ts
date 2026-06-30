@@ -1,3 +1,8 @@
+import {
+  COACH_INVITE_SUBJECT,
+  buildCoachInviteText,
+  buildCoachInviteHtml,
+} from "@workspace/invite-copy";
 import { logger } from "./logger.js";
 import type { DispatchBuildContext } from "./notification-email.js";
 
@@ -187,6 +192,34 @@ ${noteHtml}
 <p>Open this link to accept:</p>
 <p><a href="${url}">${url}</a></p>
 <p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
+  });
+}
+
+// Task #634 — accept-landing URL for a roster invite token. The main web app
+// is served under the `/app/` base path (mirrors the in-app share link
+// `${origin}${import.meta.env.BASE_URL}invites/<token>`), so the link must
+// include that prefix or it would resolve to the marketing root instead.
+export function buildInviteAcceptUrl(token: string): string {
+  return `${appBaseUrl()}/app/invites/${token}`;
+}
+
+// Task #634 — the coach's "join Kinectem" invite email. Sent when a coach
+// invites a player by email and no Kinectem account exists for that address
+// yet. The wording is the finalized copy from `@workspace/invite-copy` (shared
+// verbatim with the in-app copy block); only the coach name and the accept
+// link are substituted. The link lands on the `/invites/:token` flow where the
+// parent sets up and manages the child's account.
+export async function sendCoachInviteEmail(
+  to: string,
+  args: { coachName: string; token: string },
+): Promise<void> {
+  const link = buildInviteAcceptUrl(args.token);
+  await sendEmail({
+    to,
+    kind: "coach_invite",
+    subject: COACH_INVITE_SUBJECT,
+    text: buildCoachInviteText({ coachName: args.coachName, link }),
+    html: buildCoachInviteHtml({ coachName: args.coachName, link }),
   });
 }
 

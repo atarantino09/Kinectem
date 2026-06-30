@@ -6,6 +6,7 @@ import {
   useCreateRosterInvite,
   createRosterInvite,
   useGetOrCreateTeamJoinLink,
+  useGetLoggedInUser,
   useListTeamMembers,
   useListRosterInvites,
   getListTeamMembersQueryKey,
@@ -13,6 +14,7 @@ import {
   queryOpts,
   type AddTeamMemberRequestPosition,
 } from "@workspace/api-client-react";
+import { buildCoachInviteText } from "@workspace/invite-copy";
 import {
   Dialog,
   DialogContent,
@@ -121,9 +123,12 @@ export function InviteRosterDialog({
   const addMember = useAddTeamMember();
   const createInvite = useCreateRosterInvite();
 
+  const { data: me } = useGetLoggedInUser();
+
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkErrored, setLinkErrored] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [messageCopied, setMessageCopied] = useState(false);
   const generateLink = useGetOrCreateTeamJoinLink({
     mutation: {
       onSuccess: (resp) => {
@@ -149,6 +154,7 @@ export function InviteRosterDialog({
       setLinkToken(null);
       setLinkErrored(false);
       setCopied(false);
+      setMessageCopied(false);
       return;
     }
     if (autoFetchedRef.current === teamId) return;
@@ -156,6 +162,7 @@ export function InviteRosterDialog({
     setLinkToken(null);
     setLinkErrored(false);
     setCopied(false);
+    setMessageCopied(false);
     generateMutate({ teamId });
   }, [open, teamId, generateMutate]);
 
@@ -174,6 +181,29 @@ export function InviteRosterDialog({
       })
       .catch(() =>
         toast({ title: "Couldn't copy link", variant: "destructive" }),
+      );
+  };
+
+  // Task #634 — ready-to-paste "join Kinectem" outreach message. Same
+  // wording as the invite email (shared from @workspace/invite-copy), with
+  // the coach's name and the shareable join link substituted in.
+  const coachName = me ? `${me.firstName} ${me.lastName}`.trim() : "";
+  const inviteMessage =
+    fullLink && coachName
+      ? buildCoachInviteText({ coachName, link: fullLink })
+      : null;
+
+  const onCopyMessage = () => {
+    if (!inviteMessage) return;
+    navigator.clipboard
+      .writeText(inviteMessage)
+      .then(() => {
+        setMessageCopied(true);
+        toast({ title: "Message copied" });
+        setTimeout(() => setMessageCopied(false), 2000);
+      })
+      .catch(() =>
+        toast({ title: "Couldn't copy message", variant: "destructive" }),
       );
   };
 
@@ -581,7 +611,52 @@ export function InviteRosterDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="email" className="mt-4">
+          <TabsContent value="email" className="mt-4 space-y-4">
+            <div className="rounded-xl border border-border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-black tracking-tight text-sm">
+                  Message to copy &amp; share
+                </h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={onCopyMessage}
+                  disabled={!inviteMessage}
+                  className="gap-1 font-bold shrink-0"
+                  data-testid="button-copy-invite-message"
+                >
+                  {messageCopied ? (
+                    <>
+                      <CheckCircle2 className="w-3 h-3" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Paste this into your own text or email to invite players'
+                parents. It already has your name and the team's join link.
+              </p>
+              {inviteMessage ? (
+                <pre
+                  className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                  data-testid="text-invite-message"
+                >
+                  {inviteMessage}
+                </pre>
+              ) : (
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Preparing
+                  message…
+                </p>
+              )}
+            </div>
             <form onSubmit={onSendInvite} className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Position</Label>

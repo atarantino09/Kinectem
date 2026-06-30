@@ -30,6 +30,7 @@ import {
   sendPasswordResetEmail,
   appBaseUrl,
   buildRosterEmail,
+  sendCoachInviteEmail,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
@@ -1004,6 +1005,25 @@ router.post(
             actorUserId: me.id,
           });
         }
+      }
+    } else {
+      // Task #634 — no Kinectem account exists for this address, so the
+      // in-app notification fan-out above can't reach anyone. Send the
+      // coach's "join Kinectem" invite email instead, pointing at the
+      // /invites/:token accept flow. Minor-actor masking mirrors the
+      // notification path. Best-effort: a delivery failure must not fail
+      // the invite creation (the pending token is already persisted).
+      const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+      try {
+        await sendCoachInviteEmail(email, {
+          coachName: actorName,
+          token: invite.token,
+        });
+      } catch (err) {
+        req.log.warn(
+          { err, teamId, kind: "coach_invite" },
+          "coach invite email send failed",
+        );
       }
     }
 
