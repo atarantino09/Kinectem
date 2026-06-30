@@ -7,6 +7,7 @@ import router from "./routes";
 import docsRouter from "./routes/docs";
 import foundingAdminPageRouter from "./routes/founding-admin-page";
 import { stripeWebhookHandler } from "./routes/stripe-webhook";
+import { sendgridWebhookHandler } from "./routes/sendgrid-webhook";
 import { logger } from "./lib/logger";
 import { loadSession } from "./lib/auth";
 import { corsOptions, csrfGuard } from "./middlewares/security";
@@ -49,6 +50,15 @@ app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   stripeWebhookHandler,
+);
+// SendGrid Event Webhook (Task #666) also needs the raw body for ECDSA
+// signature verification, so it MUST be registered before express.json().
+// Optional: only does work when SENDGRID_WEBHOOK_VERIFICATION_KEY is set
+// (see routes/sendgrid-webhook.ts).
+app.post(
+  "/api/sendgrid/webhook",
+  express.raw({ type: "application/json" }),
+  sendgridWebhookHandler,
 );
 // S7 — global JSON limit kept tight. Binary asset uploads use a dedicated
 // express.raw() parser (10 MB) on PUT /assets/:assetId/data, so this does not

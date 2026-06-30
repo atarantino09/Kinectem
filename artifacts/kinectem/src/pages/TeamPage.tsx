@@ -383,6 +383,7 @@ export default function TeamPage() {
             staff={staff}
             invites={invites}
             highlightEntryId={highlightEntryId}
+            teamName={team.name}
             onOpenInvite={() => setInviteOpen(true)}
           />
         )}

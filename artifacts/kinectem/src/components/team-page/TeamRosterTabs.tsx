@@ -34,6 +34,9 @@ import {
   ChevronDown,
   ChevronRight,
   X,
+  Copy,
+  Link2,
+  AlertTriangle,
 } from "lucide-react";
 import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
 
@@ -62,6 +65,12 @@ export type RosterInvite = {
   position?: string | null;
   invitedBy?: { displayName: string } | null;
   createdAt?: string | null;
+  // Task #666 — plaintext accept token (roster tokens are NOT hashed at
+  // rest) plus SendGrid delivery state, both appended outside the locked
+  // openapi.yaml and read here via the generated type's index signature.
+  token?: string | null;
+  deliveryStatus?: string | null;
+  deliveryReason?: string | null;
 };
 
 interface TeamRosterTabsProps {
@@ -72,6 +81,7 @@ interface TeamRosterTabsProps {
   staff: RosterMember[];
   invites: RosterInvite[];
   highlightEntryId?: string | null;
+  teamName?: string;
   onOpenInvite: () => void;
 }
 
@@ -83,6 +93,7 @@ export function TeamRosterTabs({
   staff,
   invites,
   highlightEntryId,
+  teamName,
   onOpenInvite,
 }: TeamRosterTabsProps) {
   const qc = useQueryClient();
@@ -224,6 +235,67 @@ export function TeamRosterTabs({
       toast({ title: "Failed to re-send invite", variant: "destructive" });
     } finally {
       setResendingId(null);
+    }
+  };
+
+  // Task #666 — roster invite tokens are stored in plaintext, so the public
+  // accept link can be reconstructed on the client without a round-trip.
+  const inviteLink = (i: RosterInvite) =>
+    i.token
+      ? `${window.location.origin}${import.meta.env.BASE_URL}invites/${i.token}`
+      : null;
+
+  const shortInviteMessage = (link: string) =>
+    teamName
+      ? `You've been invited to join ${teamName} on Kinectem — accept here: ${link}`
+      : `You've been invited to join a team on Kinectem — accept here: ${link}`;
+
+  const copyToClipboard = (text: string, label: string) =>
+    navigator.clipboard
+      .writeText(text)
+      .then(() => toast({ title: `${label} copied` }))
+      .catch(() =>
+        toast({
+          title: `Couldn't copy ${label.toLowerCase()}`,
+          variant: "destructive",
+        }),
+      );
+
+  const onCopyLink = (i: RosterInvite) => {
+    const link = inviteLink(i);
+    if (!link) {
+      toast({ title: "No link available for this invite", variant: "destructive" });
+      return;
+    }
+    copyToClipboard(link, "Link");
+  };
+
+  const onCopyMessage = (i: RosterInvite) => {
+    const link = inviteLink(i);
+    if (!link) {
+      toast({ title: "No link available for this invite", variant: "destructive" });
+      return;
+    }
+    copyToClipboard(shortInviteMessage(link), "Message");
+  };
+
+  // Task #666 — surface a delivery problem flagged by the SendGrid Event
+  // Webhook so an admin knows the email never landed and should share the
+  // copied link directly. `delivered`/`sent`/`unknown` aren't problems.
+  const deliveryProblem = (
+    status?: string | null,
+  ): { label: string; hint: string } | null => {
+    switch (status) {
+      case "bounced":
+        return { label: "Bounced", hint: "The email bounced — share the link directly." };
+      case "dropped":
+        return { label: "Not delivered", hint: "SendGrid dropped the email — share the link directly." };
+      case "deferred":
+        return { label: "Delayed", hint: "Delivery is delayed — you can share the link directly." };
+      case "spam":
+        return { label: "Marked spam", hint: "Recipient marked it spam — share the link directly." };
+      default:
+        return null;
     }
   };
 
@@ -483,6 +555,8 @@ export function TeamRosterTabs({
 
   const renderInviteCard = (i: RosterInvite) => {
     const label = i.email ?? "this person";
+    const problem = deliveryProblem(i.deliveryStatus);
+    const hasLink = !!i.token;
     return (
       <div
         key={i.id}
@@ -493,7 +567,20 @@ export function TeamRosterTabs({
         <div className="flex items-start gap-3">
           <Mail className="w-4 h-4 mt-1 text-muted-foreground shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-semibold truncate">{i.email ?? "—"}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold truncate">{i.email ?? "—"}</span>
+              {problem && (
+                <Badge
+                  variant="destructive"
+                  className="gap-1 text-[10px]"
+                  title={problem.hint}
+                  data-testid={`invite-delivery-${i.id}`}
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  {problem.label}
+                </Badge>
+              )}
+            </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span className="capitalize">
                 {i.position?.replace(/_/g, " ") ?? "—"}
@@ -503,8 +590,31 @@ export function TeamRosterTabs({
               )}
               {i.createdAt && <span>· {formatDate(i.createdAt)}</span>}
             </div>
+            {problem && (
+              <p className="mt-1 text-xs text-destructive">{problem.hint}</p>
+            )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onCopyLink(i)}
+              disabled={!hasLink}
+              data-testid={`btn-copy-link-${i.id}`}
+            >
+              <Link2 className="w-3 h-3 mr-1" /> Copy link
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onCopyMessage(i)}
+              disabled={!hasLink}
+              data-testid={`btn-copy-message-${i.id}`}
+            >
+              <Copy className="w-3 h-3 mr-1" /> Copy message
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -800,6 +910,20 @@ export function TeamRosterTabs({
                             <div className="flex items-center gap-2 font-semibold">
                               <Mail className="w-4 h-4 text-muted-foreground" />
                               {i.email ?? "—"}
+                              {(() => {
+                                const problem = deliveryProblem(i.deliveryStatus);
+                                return problem ? (
+                                  <Badge
+                                    variant="destructive"
+                                    className="gap-1 text-[10px]"
+                                    title={problem.hint}
+                                    data-testid={`invite-delivery-${i.id}`}
+                                  >
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {problem.label}
+                                  </Badge>
+                                ) : null;
+                              })()}
                             </div>
                           </TableCell>
                           <TableCell className="text-sm capitalize">
@@ -812,7 +936,27 @@ export function TeamRosterTabs({
                             {formatDate(i.createdAt ?? "")}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-3 font-bold rounded-full"
+                                onClick={() => onCopyLink(i)}
+                                disabled={!i.token}
+                                data-testid={`btn-copy-link-${i.id}`}
+                              >
+                                <Link2 className="w-3 h-3 mr-1" /> Copy link
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-3 font-bold rounded-full"
+                                onClick={() => onCopyMessage(i)}
+                                disabled={!i.token}
+                                data-testid={`btn-copy-message-${i.id}`}
+                              >
+                                <Copy className="w-3 h-3 mr-1" /> Copy message
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"

@@ -1086,8 +1086,15 @@ router.post(
         await sendCoachInviteEmail(email, {
           coachName: actorName,
           token: invite.token,
+          inviteId: invite.id,
         });
         emailSent = true;
+        // Task #666 — record the successful hand-off to SendGrid. Later Event
+        // Webhook events (delivered/bounced/etc) supersede this.
+        await db
+          .update(rosterInvites)
+          .set({ deliveryStatus: "sent" })
+          .where(eq(rosterInvites.id, invite.id));
       } catch (err) {
         // Task #654 — the pending invite is already persisted, so a delivery
         // failure must NOT fail the request. Instead report it so the coach
@@ -1330,8 +1337,15 @@ router.post(
         await sendCoachInviteEmail(email, {
           coachName: actorName,
           token: invite.token,
+          inviteId: invite.id,
         });
         emailSent = true;
+        // Task #666 — record the successful hand-off to SendGrid. Later Event
+        // Webhook events (delivered/bounced/etc) supersede this.
+        await db
+          .update(rosterInvites)
+          .set({ deliveryStatus: "sent" })
+          .where(eq(rosterInvites.id, invite.id));
       } catch (err) {
         emailSent = false;
         req.log.warn(

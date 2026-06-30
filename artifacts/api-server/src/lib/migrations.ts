@@ -1075,6 +1075,25 @@ CREATE TABLE IF NOT EXISTS email_provider_keys (
 );
 `;
 
+// Task #666 — per-invite email delivery tracking driven by the SendGrid Event
+// Webhook. Idempotent: guard the enum type creation and add each column only
+// when missing so re-runs (and the dev push path) are safe.
+const TASK_666_INVITE_DELIVERY_TRACKING = `
+DO $$ BEGIN
+  CREATE TYPE invite_delivery_status AS ENUM (
+    'unknown', 'sent', 'delivered', 'deferred', 'bounced', 'dropped', 'spam'
+  );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+ALTER TABLE roster_invites
+  ADD COLUMN IF NOT EXISTS delivery_status invite_delivery_status NOT NULL DEFAULT 'unknown';
+ALTER TABLE roster_invites ADD COLUMN IF NOT EXISTS delivery_event_at timestamp;
+ALTER TABLE roster_invites ADD COLUMN IF NOT EXISTS delivery_reason text;
+ALTER TABLE organization_invites
+  ADD COLUMN IF NOT EXISTS delivery_status invite_delivery_status NOT NULL DEFAULT 'unknown';
+ALTER TABLE organization_invites ADD COLUMN IF NOT EXISTS delivery_event_at timestamp;
+ALTER TABLE organization_invites ADD COLUMN IF NOT EXISTS delivery_reason text;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1239,6 +1258,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-30-email-provider-keys",
     sql: EMAIL_PROVIDER_KEYS,
+  },
+  {
+    name: "2026-06-30-task-666-invite-delivery-tracking",
+    sql: TASK_666_INVITE_DELIVERY_TRACKING,
   },
 ];
 

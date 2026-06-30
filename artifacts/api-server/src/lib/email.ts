@@ -29,6 +29,10 @@ export type EmailMessage = {
   // triage. The subject itself can embed minor names / post titles, so it
   // must never be logged; this is logged instead.
   kind?: string;
+  // Task #666 — SendGrid `custom_args` echoed back on every Event Webhook
+  // event for this message. Used to correlate delivery events to the invite
+  // row that triggered the send (keys must be non-PII identifiers only).
+  customArgs?: Record<string, string>;
 };
 
 const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
@@ -151,7 +155,14 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   }
 
   const body = {
-    personalizations: [{ to: [{ email: message.to }] }],
+    personalizations: [
+      {
+        to: [{ email: message.to }],
+        // Task #666 — per-personalization custom_args ride back on each
+        // SendGrid Event Webhook event so we can match it to its invite.
+        ...(message.customArgs ? { custom_args: message.customArgs } : {}),
+      },
+    ],
     from: { email: creds.from },
     subject: message.subject,
     content: [
@@ -221,9 +232,11 @@ export async function sendOrganizationInviteEmail(
     role: "admin" | "member";
     token: string;
     note?: string | null;
+    // Task #666 — invite id for SendGrid delivery-event correlation.
+    inviteId?: string;
   },
 ): Promise<void> {
-  const { organizationName, inviterDisplayName, role, token, note } = args;
+  const { organizationName, inviterDisplayName, role, token, note, inviteId } = args;
   const url = buildOrganizationInviteUrl(token);
   const roleLabel = role === "admin" ? "an admin" : "a member";
   // S5 — escape user-controlled values for the HTML body.
@@ -236,6 +249,9 @@ export async function sendOrganizationInviteEmail(
   await sendEmail({
     to,
     kind: "organization_invite",
+    ...(inviteId
+      ? { customArgs: { kinectem_invite_id: inviteId, kinectem_invite_kind: "org" } }
+      : {}),
     subject: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem`,
     text: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem as ${roleLabel}.
 ${notePlain}
@@ -267,12 +283,15 @@ export function buildInviteAcceptUrl(token: string): string {
 // parent sets up and manages the child's account.
 export async function sendCoachInviteEmail(
   to: string,
-  args: { coachName: string; token: string },
+  args: { coachName: string; token: string; inviteId?: string },
 ): Promise<void> {
   const link = buildInviteAcceptUrl(args.token);
   await sendEmail({
     to,
     kind: "coach_invite",
+    ...(args.inviteId
+      ? { customArgs: { kinectem_invite_id: args.inviteId, kinectem_invite_kind: "roster" } }
+      : {}),
     subject: COACH_INVITE_SUBJECT,
     text: buildCoachInviteText({ coachName: args.coachName, link }),
     html: buildCoachInviteHtml({ coachName: args.coachName, link }),

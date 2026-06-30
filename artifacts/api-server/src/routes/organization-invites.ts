@@ -10,6 +10,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
 import { generateToken, hashToken } from "../lib/passwords";
+import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import {
   sendOrganizationInviteEmail,
   buildOrganizationInviteUrl,
@@ -54,6 +55,11 @@ function toInviteResponse(i: InviteRow, inviter: Pick<UserRow, "id" | "name"> | 
       id: inviter?.id ?? "",
       displayName: inviter ? displayName(inviter) : "Unknown",
     },
+    // Task #666 — SendGrid delivery tracking (extra fields; openapi locked,
+    // read via narrow cast on the client).
+    deliveryStatus: i.deliveryStatus,
+    deliveryEventAt: i.deliveryEventAt ? i.deliveryEventAt.toISOString() : null,
+    deliveryReason: i.deliveryReason ?? null,
     createdAt: i.createdAt.toISOString(),
     expiresAt: i.expiresAt ? i.expiresAt.toISOString() : null,
   };
@@ -277,8 +283,15 @@ router.post(
         role,
         token: rawToken,
         note,
+        inviteId: invite.id,
       });
       emailSent = true;
+      // Task #666 — record the successful hand-off to SendGrid. Later Event
+      // Webhook events (delivered/bounced/etc) supersede this.
+      await db
+        .update(organizationInvites)
+        .set({ deliveryStatus: "sent", updatedAt: new Date() })
+        .where(eq(organizationInvites.id, invite.id));
     } catch (err) {
       req.log.warn(
         { err, orgId, inviteId: invite.id },
@@ -325,6 +338,56 @@ router.delete(
       return res.json({ id: invite.id, status: "withdrawn" as WireInviteStatus });
     }
     res.json({ id: invite.id, status: toWireStatus(invite.status as DbInviteStatus) });
+  }),
+);
+
+// Task #666 — mint/rotate a shareable accept link for a pending org invite.
+// Org invite tokens are hashed at rest (only tokenHash is stored), so the raw
+// link can't be reconstructed from an existing row — we rotate to a fresh
+// token and return its URL. Keyed per inviter so the rotate path can't be
+// hammered. Modest allowance covers honest "copy the link" retries.
+const orgInviteLinkLimiter = rateLimit({
+  name: "org-invite-link",
+  windowMs: 60_000,
+  max: 20,
+  keys: (req) => [req.sessionUser?.id ?? ipKey(req)],
+  message: "You're requesting invite links too quickly. Please wait a moment.",
+});
+
+router.post(
+  "/organizations/:orgId/invites/:inviteId/link",
+  orgInviteLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const { orgId, inviteId } = req.params;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Org admins only");
+    }
+    const [invite] = await db
+      .select()
+      .from(organizationInvites)
+      .where(
+        and(
+          eq(organizationInvites.id, inviteId),
+          eq(organizationInvites.organizationId, orgId),
+        ),
+      )
+      .limit(1);
+    if (!invite) return notFound(res);
+    if (invite.status !== "pending") {
+      return apiError(res, 409, "Invite is no longer pending", {
+        code: "INVITE_NOT_PENDING",
+      });
+    }
+    // Rotate the token so the link is freshly valid; the previous (unknown)
+    // token is invalidated, which is acceptable for a "copy the link" action.
+    const rawToken = generateToken();
+    await db
+      .update(organizationInvites)
+      .set({ tokenHash: hashToken(rawToken), updatedAt: new Date() })
+      .where(eq(organizationInvites.id, invite.id));
+    res.json({ acceptUrl: buildOrganizationInviteUrl(rawToken) });
   }),
 );
 

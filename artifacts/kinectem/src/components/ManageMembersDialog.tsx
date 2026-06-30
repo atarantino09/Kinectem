@@ -11,6 +11,7 @@ import {
   useListOrganizationInvites,
   useCreateOrganizationInvite,
   useWithdrawOrganizationInvite,
+  customFetch,
   getListMembersQueryKey,
   getGetOrganizationByIdQueryKey,
   getListUserOrganizationsQueryKey,
@@ -53,6 +54,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Copy,
+  Link2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials, formatOrgName } from "@/lib/format";
@@ -234,6 +236,75 @@ export function ManageMembersDialog({
     );
   };
 
+  // Task #666 — org invite tokens are hashed at rest, so the accept link
+  // can't be reconstructed client-side. Mint (and rotate) a fresh link via
+  // the dedicated endpoint, caching it per-invite so repeated copies don't
+  // re-rotate the token.
+  const [mintedLinks, setMintedLinks] = useState<Record<string, string>>({});
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+
+  const copyText = (text: string, label: string) =>
+    navigator.clipboard
+      .writeText(text)
+      .then(() => toast({ title: `${label} copied` }))
+      .catch(() =>
+        toast({
+          title: `Couldn't copy ${label.toLowerCase()}`,
+          variant: "destructive",
+        }),
+      );
+
+  const orgInviteMessage = (link: string) =>
+    `You've been invited to join ${formatOrgName(orgName)} on Kinectem — accept here: ${link}`;
+
+  const ensureLink = async (inviteId: string): Promise<string | null> => {
+    if (mintedLinks[inviteId]) return mintedLinks[inviteId];
+    setLinkingId(inviteId);
+    try {
+      const resp = await customFetch<{ acceptUrl?: string }>(
+        `/api/v1/organizations/${orgId}/invites/${inviteId}/link`,
+        { method: "POST" },
+      );
+      const url = resp.acceptUrl ?? null;
+      if (url) setMintedLinks((prev) => ({ ...prev, [inviteId]: url }));
+      return url;
+    } catch {
+      toast({ title: "Couldn't generate a link", variant: "destructive" });
+      return null;
+    } finally {
+      setLinkingId(null);
+    }
+  };
+
+  const onCopyInviteLink = async (inviteId: string) => {
+    const link = await ensureLink(inviteId);
+    if (link) copyText(link, "Link");
+  };
+
+  const onCopyInviteMessage = async (inviteId: string) => {
+    const link = await ensureLink(inviteId);
+    if (link) copyText(orgInviteMessage(link), "Message");
+  };
+
+  // Task #666 — flag a delivery problem reported by the SendGrid Event Webhook
+  // (read via narrow cast; openapi.yaml is locked).
+  const deliveryProblem = (
+    status?: string | null,
+  ): { label: string; hint: string } | null => {
+    switch (status) {
+      case "bounced":
+        return { label: "Bounced", hint: "The email bounced — share the link directly." };
+      case "dropped":
+        return { label: "Not delivered", hint: "SendGrid dropped the email — share the link directly." };
+      case "deferred":
+        return { label: "Delayed", hint: "Delivery is delayed — you can share the link directly." };
+      case "spam":
+        return { label: "Marked spam", hint: "Recipient marked it spam — share the link directly." };
+      default:
+        return null;
+    }
+  };
+
   const onWithdrawInvite = (i: OrganizationInviteResponse) => {
     withdrawInvite.mutate(
       { orgId, inviteId: i.id },
@@ -377,10 +448,14 @@ export function ManageMembersDialog({
                 Pending invites
               </h3>
               <ul className="space-y-2">
-                {pendingInvites.map((i) => (
+                {pendingInvites.map((i) => {
+                  const problem = deliveryProblem(
+                    (i as { deliveryStatus?: string | null }).deliveryStatus,
+                  );
+                  return (
                   <li
                     key={i.id}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-border bg-muted/30"
+                    className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-dashed border-border bg-muted/30"
                     data-testid={`invite-row-${i.id}`}
                   >
                     <Avatar className="w-9 h-9 shrink-0">
@@ -389,28 +464,70 @@ export function ManageMembersDialog({
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate">
-                        {i.invitedEmail}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold truncate">
+                          {i.invitedEmail}
+                        </p>
+                        {problem && (
+                          <Badge
+                            variant="destructive"
+                            className="gap-1 text-[10px] shrink-0"
+                            title={problem.hint}
+                            data-testid={`invite-delivery-${i.id}`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            {problem.label}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="mt-0.5 flex items-center gap-1">
                         {roleBadge(i.role as Role)}
                         <span className="text-[11px] text-muted-foreground">
                           Invited by {i.invitedBy.displayName}
                         </span>
                       </div>
+                      {problem && (
+                        <p className="mt-1 text-[11px] text-destructive">
+                          {problem.hint}
+                        </p>
+                      )}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="font-bold h-8"
-                      onClick={() => onWithdrawInvite(i)}
-                      disabled={withdrawInvite.isPending}
-                      data-testid={`btn-withdraw-invite-${i.id}`}
-                    >
-                      Withdraw
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="font-bold h-8"
+                        onClick={() => onCopyInviteLink(i.id)}
+                        disabled={linkingId === i.id}
+                        data-testid={`btn-copy-link-${i.id}`}
+                      >
+                        <Link2 className="w-3 h-3 mr-1" />
+                        {linkingId === i.id ? "…" : "Copy link"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="font-bold h-8"
+                        onClick={() => onCopyInviteMessage(i.id)}
+                        disabled={linkingId === i.id}
+                        data-testid={`btn-copy-message-${i.id}`}
+                      >
+                        <Copy className="w-3 h-3 mr-1" /> Copy message
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="font-bold h-8"
+                        onClick={() => onWithdrawInvite(i)}
+                        disabled={withdrawInvite.isPending}
+                        data-testid={`btn-withdraw-invite-${i.id}`}
+                      >
+                        Withdraw
+                      </Button>
+                    </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           )}

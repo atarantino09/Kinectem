@@ -701,6 +701,12 @@ export function toInvite(i: InviteRow, invitedBy: UserRow | null) {
       displayName: invitedBy ? displayName(invitedBy) : "System",
     },
     seasonId: i.teamId,
+    // Task #666 — SendGrid delivery tracking. The OpenAPI spec is locked, so
+    // these ride as extra fields read via a narrow cast on the client; they
+    // let the Pending tab flag bounced/dropped/etc invites.
+    deliveryStatus: i.deliveryStatus,
+    deliveryEventAt: i.deliveryEventAt ? i.deliveryEventAt.toISOString() : null,
+    deliveryReason: i.deliveryReason ?? null,
     createdAt: i.createdAt.toISOString(),
     updatedAt: i.createdAt.toISOString(),
   };

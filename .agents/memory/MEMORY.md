@@ -26,3 +26,4 @@
 - [Team Schedule visibility parity](team-schedule-visibility.md) — schedule is members-only incl. parents of active athletes; client gates must mirror server canViewTeamSchedule or parents get locked out.
 - [Notification email dispatch gate](notification-prefs-dispatch.md) — gated email routes minor→guardian & gates on recipient prefs; test pitfall: getOrCreatePreferences before set-flag-false or lazy all-on row re-sends.
 - [Roster invite paired records](roster-invite-paired-records.md) — known-email team invites create roster_invites + pending roster_entries; revoke must drop the paired pending entry & re-invite guard only skips on `accepted`, else re-invites silently no-op.
+- [Invite delivery tracking + copy link](invite-delivery-tracking.md) — pending invites carry SendGrid delivery_status via Event Webhook (custom_args match, out-of-order guard, 503 if key unset); roster token plaintext (build link client-side) vs org token hashed (rotate via /link endpoint).

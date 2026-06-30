@@ -6,6 +6,19 @@ export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
 export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);
 export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
+// Task #666 — last-known email delivery state for an invite, driven by the
+// SendGrid Event Webhook. `unknown` = no email attempted (e.g. the invitee
+// already has a Kinectem account and was reached via an in-app notification);
+// `sent` = handed to SendGrid OK; the rest are real delivery events.
+export const inviteDeliveryStatusEnum = pgEnum("invite_delivery_status", [
+  "unknown",
+  "sent",
+  "delivered",
+  "deferred",
+  "bounced",
+  "dropped",
+  "spam",
+]);
 export const postKindEnum = pgEnum("post_kind", ["article", "highlight", "org_post"]);
 export const orgPostStatusEnum = pgEnum("org_post_status", ["draft", "published"]);
 export const highlightApprovalStatusEnum = pgEnum("highlight_approval_status", ["pending", "approved", "declined"]);
@@ -532,6 +545,10 @@ export const organizationInvites = pgTable("organization_invites", {
   note: text("note"),
   tokenHash: text("token_hash").notNull().unique(),
   status: inviteStatusEnum("status").notNull().default("pending"),
+  // Task #666 — SendGrid delivery tracking (see inviteDeliveryStatusEnum).
+  deliveryStatus: inviteDeliveryStatusEnum("delivery_status").notNull().default("unknown"),
+  deliveryEventAt: timestamp("delivery_event_at"),
+  deliveryReason: text("delivery_reason"),
   resolvedUserId: uuid("resolved_user_id").references(() => users.id, { onDelete: "set null" }),
   withdrawnAt: timestamp("withdrawn_at"),
   acceptedAt: timestamp("accepted_at"),
@@ -556,6 +573,10 @@ export const rosterInvites = pgTable("roster_invites", {
   jerseyNumber: integer("jersey_number"),
   grade: text("grade"),
   status: inviteStatusEnum("status").notNull().default("pending"),
+  // Task #666 — SendGrid delivery tracking (see inviteDeliveryStatusEnum).
+  deliveryStatus: inviteDeliveryStatusEnum("delivery_status").notNull().default("unknown"),
+  deliveryEventAt: timestamp("delivery_event_at"),
+  deliveryReason: text("delivery_reason"),
   invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
