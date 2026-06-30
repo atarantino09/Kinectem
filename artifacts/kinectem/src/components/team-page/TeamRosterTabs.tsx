@@ -21,6 +21,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useToast } from "@/hooks/use-toast";
 import { useIsLg } from "@/hooks/use-mobile";
@@ -37,6 +51,9 @@ import {
   Copy,
   Link2,
   AlertTriangle,
+  MoreHorizontal,
+  Info,
+  Send,
 } from "lucide-react";
 import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
 
@@ -103,6 +120,8 @@ export function TeamRosterTabs({
     () => new Set<string>(),
   );
   const [editingMember, setEditingMember] = useState<RosterMember | null>(null);
+  // The invite whose "Share link" dialog is open (null = closed). Task #673.
+  const [shareInvite, setShareInvite] = useState<RosterInvite | null>(null);
 
   const invalidate = async () => {
     await Promise.all([
@@ -261,15 +280,6 @@ export function TeamRosterTabs({
         }),
       );
 
-  const onCopyLink = (i: RosterInvite) => {
-    const link = inviteLink(i);
-    if (!link) {
-      toast({ title: "No link available for this invite", variant: "destructive" });
-      return;
-    }
-    copyToClipboard(link, "Link");
-  };
-
   const onCopyMessage = (i: RosterInvite) => {
     const link = inviteLink(i);
     if (!link) {
@@ -297,6 +307,80 @@ export function TeamRosterTabs({
       default:
         return null;
     }
+  };
+
+  // Task #673 — one primary "Share link" button plus an overflow menu for the
+  // rest, shared by the desktop table and the mobile card so the two layouts
+  // stay in lockstep. Share link opens a dialog; the destructive Revoke is
+  // separated and marked destructive in the menu.
+  const renderInviteActions = (i: RosterInvite) => {
+    const label = i.email ?? "this person";
+    const hasLink = !!i.token;
+    const isResending = resendingId === i.id;
+    return (
+      <div className="flex items-center justify-end gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-3 font-bold rounded-full"
+          onClick={() => setShareInvite(i)}
+          disabled={!hasLink}
+          title={
+            hasLink
+              ? "Show the join link and a ready-to-paste message so you can send the invite yourself"
+              : "No join link is available for this invite yet"
+          }
+          data-testid={`btn-share-link-${i.id}`}
+        >
+          <Link2 className="w-3 h-3 mr-1" /> Share link
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0 rounded-full"
+              aria-label="More invite actions"
+              title="More actions"
+              data-testid={`btn-invite-more-${i.id}`}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="font-bold w-56">
+            <DropdownMenuItem
+              onSelect={() => onCopyMessage(i)}
+              disabled={!hasLink}
+              data-testid={`btn-copy-message-${i.id}`}
+            >
+              <Copy className="w-3.5 h-3.5 mr-2" /> Copy invite message
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                // Keep the menu's focus from firing the resend twice and let
+                // the async handler run; closing is fine.
+                e.preventDefault();
+                onResend(i.id, label);
+              }}
+              disabled={isResending}
+              data-testid={`btn-resend-${i.id}`}
+            >
+              <Send className="w-3.5 h-3.5 mr-2" />
+              {isResending ? "Sending…" : "Resend invite email"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => onRevoke(i.id, label)}
+              disabled={withdrawInvite.isPending}
+              className="text-destructive focus:text-destructive"
+              data-testid={`btn-revoke-${i.id}`}
+            >
+              <X className="w-3.5 h-3.5 mr-2" /> Revoke invitation
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
   };
 
   const togglePlayerExpand = (id: string) => {
@@ -554,9 +638,7 @@ export function TeamRosterTabs({
   );
 
   const renderInviteCard = (i: RosterInvite) => {
-    const label = i.email ?? "this person";
     const problem = deliveryProblem(i.deliveryStatus);
-    const hasLink = !!i.token;
     return (
       <div
         key={i.id}
@@ -594,49 +676,7 @@ export function TeamRosterTabs({
               <p className="mt-1 text-xs text-destructive">{problem.hint}</p>
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-3 font-bold rounded-full"
-              onClick={() => onCopyLink(i)}
-              disabled={!hasLink}
-              data-testid={`btn-copy-link-${i.id}`}
-            >
-              <Link2 className="w-3 h-3 mr-1" /> Copy link
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-3 font-bold rounded-full"
-              onClick={() => onCopyMessage(i)}
-              disabled={!hasLink}
-              data-testid={`btn-copy-message-${i.id}`}
-            >
-              <Copy className="w-3 h-3 mr-1" /> Copy message
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-3 font-bold rounded-full"
-              onClick={() => onResend(i.id, label)}
-              disabled={resendingId === i.id}
-              data-testid={`btn-resend-${i.id}`}
-            >
-              <Mail className="w-3 h-3 mr-1" />
-              {resendingId === i.id ? "Sending…" : "Resend"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive"
-              onClick={() => onRevoke(i.id, label)}
-              disabled={withdrawInvite.isPending}
-              data-testid={`btn-revoke-${i.id}`}
-            >
-              <X className="w-3 h-3 mr-1" /> Revoke
-            </Button>
-          </div>
+          <div className="shrink-0">{renderInviteActions(i)}</div>
         </div>
       </div>
     );
@@ -876,6 +916,21 @@ export function TeamRosterTabs({
               )}
             </div>
             <CardContent className="p-0">
+              {invites.length > 0 && (
+                <div
+                  className="m-4 flex items-start gap-2.5 rounded-lg border border-border bg-muted/50 px-3.5 py-2.5 text-xs text-muted-foreground"
+                  data-testid="invite-delivery-note"
+                >
+                  <Info className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <p className="leading-relaxed">
+                    Emailed invites occasionally bounce or land in a spam folder.
+                    If an invite stays pending for a while, use{" "}
+                    <span className="font-semibold text-foreground">Share link</span>{" "}
+                    to copy the join link and send it yourself by text, your own
+                    email, or any chat.
+                  </p>
+                </div>
+              )}
               {invites.length === 0 ? (
                 <div
                   className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground"
@@ -899,7 +954,6 @@ export function TeamRosterTabs({
                   </TableHeader>
                   <TableBody>
                     {invites.map((i) => {
-                      const label = i.email ?? "this person";
                       return (
                         <TableRow
                           key={i.id}
@@ -936,48 +990,7 @@ export function TeamRosterTabs({
                             {formatDate(i.createdAt ?? "")}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-3 font-bold rounded-full"
-                                onClick={() => onCopyLink(i)}
-                                disabled={!i.token}
-                                data-testid={`btn-copy-link-${i.id}`}
-                              >
-                                <Link2 className="w-3 h-3 mr-1" /> Copy link
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-3 font-bold rounded-full"
-                                onClick={() => onCopyMessage(i)}
-                                disabled={!i.token}
-                                data-testid={`btn-copy-message-${i.id}`}
-                              >
-                                <Copy className="w-3 h-3 mr-1" /> Copy message
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-3 font-bold rounded-full"
-                                onClick={() => onResend(i.id, label)}
-                                disabled={resendingId === i.id}
-                                data-testid={`btn-resend-${i.id}`}
-                              >
-                                {resendingId === i.id ? "Sending…" : "Resend"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive"
-                                onClick={() => onRevoke(i.id, label)}
-                                disabled={withdrawInvite.isPending}
-                                data-testid={`btn-revoke-${i.id}`}
-                              >
-                                <X className="w-3 h-3 mr-1" /> Revoke
-                              </Button>
-                            </div>
+                            {renderInviteActions(i)}
                           </TableCell>
                         </TableRow>
                       );
@@ -999,6 +1012,89 @@ export function TeamRosterTabs({
           if (!v) setEditingMember(null);
         }}
       />
+
+      {/* Task #673 — "Share link" dialog. Surfaces the join link and a
+          ready-to-paste invite message with one-click copy buttons so a coach
+          can send the invite outside Kinectem when the email never lands. */}
+      <Dialog
+        open={!!shareInvite}
+        onOpenChange={(v) => {
+          if (!v) setShareInvite(null);
+        }}
+      >
+        <DialogContent data-testid="dialog-share-invite">
+          <DialogHeader>
+            <DialogTitle>Share the invite link</DialogTitle>
+            <DialogDescription>
+              {shareInvite?.email
+                ? `Send this to ${shareInvite.email} yourself — by text, your own email, or any chat. They can join Kinectem with the link below.`
+                : "Send this yourself — by text, your own email, or any chat. They can join Kinectem with the link below."}
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const link = shareInvite ? inviteLink(shareInvite) : null;
+            if (!link) {
+              return (
+                <p className="text-sm text-muted-foreground">
+                  No join link is available for this invite yet.
+                </p>
+              );
+            }
+            const message = shortInviteMessage(link);
+            return (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Join link
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={link}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="flex-1 min-w-0 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
+                      data-testid="input-share-link"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 font-bold"
+                      onClick={() => copyToClipboard(link, "Link")}
+                      data-testid="btn-dialog-copy-link"
+                    >
+                      <Link2 className="w-3.5 h-3.5 mr-1.5" /> Copy
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Ready-to-paste message
+                  </p>
+                  <div className="flex items-start gap-2">
+                    <textarea
+                      readOnly
+                      value={message}
+                      onFocus={(e) => e.currentTarget.select()}
+                      rows={3}
+                      className="flex-1 min-w-0 resize-none rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
+                      data-testid="textarea-share-message"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 font-bold"
+                      onClick={() => copyToClipboard(message, "Message")}
+                      data-testid="btn-dialog-copy-message"
+                    >
+                      <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </Tabs>
   );
 }
