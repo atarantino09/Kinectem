@@ -43,7 +43,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Crown, Shield, User, Loader2, UserPlus, Mail } from "lucide-react";
+import {
+  Crown,
+  Shield,
+  User,
+  Loader2,
+  UserPlus,
+  Mail,
+  CheckCircle2,
+  AlertTriangle,
+  Copy,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials, formatOrgName } from "@/lib/format";
 
@@ -414,7 +424,6 @@ export function ManageMembersDialog({
         members={members}
         pendingInvites={pendingInvites}
         addMemberPending={addMember.isPending}
-        createInvitePending={createInvite.isPending}
         onAddExistingUser={(u, role) => {
           addMember.mutate(
             { orgId, data: { userId: u.id, role } },
@@ -432,22 +441,27 @@ export function ManageMembersDialog({
             },
           );
         }}
-        onInviteByEmail={(email, role, note) => {
-          createInvite.mutate(
-            { orgId, data: { email, role, note: note || undefined } },
-            {
-              onSuccess: () => {
-                toast({ title: `Invite sent to ${email}` });
-                setAddOpen(false);
-              },
-              onError: (err: unknown) =>
-                toast({
-                  title:
-                    (err as Error)?.message ?? "Couldn't send invite",
-                  variant: "destructive",
-                }),
-            },
-          );
+        onInviteByEmail={async (email, role, note) => {
+          // Task #656 — return the email-send outcome + accept URL so the
+          // dialog can surface a "couldn't send automatically" fallback with
+          // a copyable link (mirrors the team-invite flow). The server
+          // appends `emailSent`/`acceptUrl` outside the locked openapi.yaml,
+          // read via a narrow cast.
+          const resp = await createInvite.mutateAsync({
+            orgId,
+            data: { email, role, note: note || undefined },
+          });
+          const extra = resp as {
+            emailSent?: boolean | null;
+            acceptUrl?: string;
+            token?: string;
+          };
+          return {
+            emailSent: extra.emailSent ?? null,
+            acceptUrl:
+              extra.acceptUrl ??
+              `${window.location.origin}${import.meta.env.BASE_URL}org-invites/${extra.token ?? ""}`,
+          };
         }}
       />
 
@@ -528,7 +542,6 @@ function AddAdminDialog({
   members,
   pendingInvites,
   addMemberPending,
-  createInvitePending,
   onAddExistingUser,
   onInviteByEmail,
 }: {
@@ -538,19 +551,31 @@ function AddAdminDialog({
   members: MemberResponse[];
   pendingInvites: OrganizationInviteResponse[];
   addMemberPending: boolean;
-  createInvitePending: boolean;
   onAddExistingUser: (u: UserSearchResult, role: "admin" | "member") => void;
   onInviteByEmail: (
     email: string,
     role: "admin" | "member",
     note: string,
-  ) => void;
+  ) => Promise<{ emailSent: boolean | null; acceptUrl: string }>;
 }) {
+  const { toast } = useToast();
   const [tab, setTab] = useState<"find" | "email">("find");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<"admin" | "member">("admin");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
+
+  // Task #656 — once an invite is created we show a result panel instead of
+  // the form, surfacing whether the email actually sent plus a copyable
+  // accept link + message (mirrors InviteRosterDialog).
+  const [inviteResult, setInviteResult] = useState<{
+    email: string;
+    emailSent: boolean | null;
+    acceptUrl: string;
+  } | null>(null);
+  const [resultCopied, setResultCopied] = useState(false);
+  const [resultMsgCopied, setResultMsgCopied] = useState(false);
+  const [sending, setSending] = useState(false);
 
   // Reset state every time the dialog closes so the next open is fresh.
   useEffect(() => {
@@ -560,8 +585,48 @@ function AddAdminDialog({
       setNote("");
       setRole("admin");
       setTab("find");
+      setInviteResult(null);
+      setResultCopied(false);
+      setResultMsgCopied(false);
+      setSending(false);
     }
   }, [open]);
+
+  const shortInviteMessage = (link: string) =>
+    `You've been invited to join an organization on Kinectem — accept here: ${link}`;
+
+  const copyToClipboard = (text: string, label: string) =>
+    navigator.clipboard
+      .writeText(text)
+      .then(() => toast({ title: `${label} copied` }))
+      .catch(() =>
+        toast({
+          title: `Couldn't copy ${label.toLowerCase()}`,
+          variant: "destructive",
+        }),
+      );
+
+  const onSubmitInvite = async () => {
+    const trimmed = email.trim();
+    setSending(true);
+    try {
+      const { emailSent, acceptUrl } = await onInviteByEmail(
+        trimmed,
+        role,
+        note.trim(),
+      );
+      setResultCopied(false);
+      setResultMsgCopied(false);
+      setInviteResult({ email: trimmed, emailSent, acceptUrl });
+    } catch (err: unknown) {
+      toast({
+        title: (err as Error)?.message ?? "Couldn't send invite",
+        variant: "destructive",
+      });
+    } finally {
+      setSending(false);
+    }
+  };
 
   const memberIds = new Set(members.map((m) => m.userId));
   const pendingEmails = new Set(
@@ -687,48 +752,180 @@ function AddAdminDialog({
             </TabsContent>
 
             <TabsContent value="email" className="space-y-2 mt-3">
-              <div>
-                <Label htmlFor="invite-email" className="text-xs font-bold">
-                  Email address
-                </Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  placeholder="coach@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  data-testid="input-invite-email"
-                />
-                {emailAlreadyPending && (
-                  <p className="text-xs text-amber-700 mt-1">
-                    An invite is already pending for this email.
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="invite-note" className="text-xs font-bold">
-                  Personal note (optional)
-                </Label>
-                <Textarea
-                  id="invite-note"
-                  rows={3}
-                  maxLength={500}
-                  placeholder="Hi! Joining our staff?"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  data-testid="input-invite-note"
-                />
-              </div>
-              <Button
-                className="font-bold w-full"
-                disabled={
-                  !emailLooksValid || emailAlreadyPending || createInvitePending
-                }
-                onClick={() => onInviteByEmail(email.trim(), role, note.trim())}
-                data-testid="btn-send-invite"
-              >
-                {createInvitePending ? "Sending…" : "Send invite"}
-              </Button>
+              {inviteResult ? (
+                <div className="space-y-3" data-testid="invite-result-panel">
+                  {inviteResult.emailSent === true && (
+                    <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                      <p>
+                        <span className="font-bold">
+                          Invite emailed to {inviteResult.email}.
+                        </span>{" "}
+                        They'll get a link to accept. You can also share the
+                        link below as a backup.
+                      </p>
+                    </div>
+                  )}
+                  {inviteResult.emailSent === false && (
+                    <div
+                      className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                      data-testid="invite-email-failed"
+                    >
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <p>
+                        <span className="font-bold">
+                          We couldn't send the email automatically.
+                        </span>{" "}
+                        The invite is still active — copy the link below and send
+                        it to {inviteResult.email} yourself.
+                      </p>
+                    </div>
+                  )}
+                  {inviteResult.emailSent === null && (
+                    <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                      <Mail className="w-4 h-4 mt-0.5 shrink-0" />
+                      <p>
+                        <span className="font-bold">
+                          Invite created for {inviteResult.email}.
+                        </span>{" "}
+                        Share the link below so they can accept.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label className="font-bold text-xs">Invite link</Label>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center min-w-0">
+                      <code
+                        className="block sm:flex-1 min-w-0 max-w-full text-xs bg-muted px-3 py-2 rounded-lg truncate"
+                        data-testid="text-invite-accept-link"
+                      >
+                        {inviteResult.acceptUrl}
+                      </code>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          copyToClipboard(inviteResult.acceptUrl, "Link");
+                          setResultCopied(true);
+                          setTimeout(() => setResultCopied(false), 2000);
+                        }}
+                        className="gap-1 font-bold self-start sm:self-auto shrink-0"
+                        data-testid="button-copy-invite-accept-link"
+                      >
+                        {resultCopied ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="font-bold text-xs">Message to send</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          copyToClipboard(
+                            shortInviteMessage(inviteResult.acceptUrl),
+                            "Message",
+                          );
+                          setResultMsgCopied(true);
+                          setTimeout(() => setResultMsgCopied(false), 2000);
+                        }}
+                        className="gap-1 font-bold shrink-0"
+                        data-testid="button-copy-invite-accept-message"
+                      >
+                        {resultMsgCopied ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <pre
+                      className="whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                      data-testid="text-invite-accept-message"
+                    >
+                      {shortInviteMessage(inviteResult.acceptUrl)}
+                    </pre>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="font-bold w-full"
+                    onClick={() => {
+                      setInviteResult(null);
+                      setEmail("");
+                      setNote("");
+                    }}
+                    data-testid="btn-invite-another"
+                  >
+                    Invite someone else
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <Label htmlFor="invite-email" className="text-xs font-bold">
+                      Email address
+                    </Label>
+                    <Input
+                      id="invite-email"
+                      type="email"
+                      placeholder="coach@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      data-testid="input-invite-email"
+                    />
+                    {emailAlreadyPending && (
+                      <p className="text-xs text-amber-700 mt-1">
+                        An invite is already pending for this email.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="invite-note" className="text-xs font-bold">
+                      Personal note (optional)
+                    </Label>
+                    <Textarea
+                      id="invite-note"
+                      rows={3}
+                      maxLength={500}
+                      placeholder="Hi! Joining our staff?"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      data-testid="input-invite-note"
+                    />
+                  </div>
+                  <Button
+                    className="font-bold w-full"
+                    disabled={!emailLooksValid || emailAlreadyPending || sending}
+                    onClick={onSubmitInvite}
+                    data-testid="btn-send-invite"
+                  >
+                    {sending ? "Sending…" : "Send invite"}
+                  </Button>
+                </>
+              )}
             </TabsContent>
           </Tabs>
         </div>

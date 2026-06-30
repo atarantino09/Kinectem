@@ -10,7 +10,10 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
 import { generateToken, hashToken } from "../lib/passwords";
-import { sendOrganizationInviteEmail } from "../lib/email";
+import {
+  sendOrganizationInviteEmail,
+  buildOrganizationInviteUrl,
+} from "../lib/email";
 import { canManageOrganization } from "../lib/permissions";
 import {
   apiError,
@@ -263,6 +266,10 @@ router.post(
 
     // Best-effort email send. A delivery failure shouldn't roll back
     // the invite row — the inviter can resend by withdrawing + re-creating.
+    // Task #656 — report the email-send outcome (mirrors the team-invite
+    // pattern in teams.ts) so the admin can fall back to copying the link
+    // when delivery fails silently.
+    let emailSent = false;
     try {
       await sendOrganizationInviteEmail(emailRaw, {
         organizationName: org.name,
@@ -271,6 +278,7 @@ router.post(
         token: rawToken,
         note,
       });
+      emailSent = true;
     } catch (err) {
       req.log.warn(
         { err, orgId, inviteId: invite.id },
@@ -278,7 +286,14 @@ router.post(
       );
     }
 
-    res.status(201).json(toInviteResponse(invite, me));
+    // Task #656 — append the email-send outcome and the public accept URL
+    // outside the locked openapi.yaml; the client reads them via a narrow cast
+    // (mirrors the team-invite `emailSent`/`acceptUrl` pattern).
+    res.status(201).json({
+      ...toInviteResponse(invite, me),
+      emailSent,
+      acceptUrl: buildOrganizationInviteUrl(rawToken),
+    });
   }),
 );
 
