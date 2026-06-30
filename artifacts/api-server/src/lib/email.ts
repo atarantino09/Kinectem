@@ -3,7 +3,10 @@ import {
   buildCoachInviteText,
   buildCoachInviteHtml,
 } from "@workspace/invite-copy";
+import { db, emailProviderKeys } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { logger } from "./logger.js";
+import { decryptSecret } from "./secret-crypto.js";
 import type { DispatchBuildContext } from "./notification-email.js";
 
 // S5 — escape user-controlled values before interpolating them into HTML email
@@ -30,13 +33,44 @@ export type EmailMessage = {
 
 const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
 
-// Resolve SendGrid credentials, preferring the Replit "sendgrid" connector
-// and falling back to plain env vars (local dev, CI, tests). Per the
-// connector docs the proxy-issued token can rotate, so we DO NOT cache —
-// every send fetches fresh credentials.
+// Admin-entered SendGrid credentials set from the admin Email settings UI.
+// When a complete row exists (encrypted key + verified sender) it is the
+// source of truth and takes precedence over the env vars / Replit connector.
+// The key is stored encrypted at rest; we decrypt it fresh on every send.
+async function resolveAdminCredentials(): Promise<
+  { apiKey: string; from: string } | null
+> {
+  try {
+    const [row] = await db
+      .select()
+      .from(emailProviderKeys)
+      .where(eq(emailProviderKeys.provider, "sendgrid"))
+      .limit(1);
+    if (!row?.keyCiphertext || !row.fromEmail) return null;
+    const apiKey = decryptSecret(row.keyCiphertext);
+    if (!apiKey) return null;
+    return { apiKey, from: row.fromEmail };
+  } catch (err) {
+    // A decrypt failure (e.g. the encryption secret was rotated) or DB error
+    // shouldn't brick email — fall through to the env / connector path.
+    logger.warn({ err }, "Failed to resolve admin-configured SendGrid credentials");
+    return null;
+  }
+}
+
+// Resolve SendGrid credentials. Order of precedence:
+//   1. Admin-entered credentials from the admin Email settings UI (DB), when
+//      a complete row is present.
+//   2. Plain env vars (local dev, CI, tests).
+//   3. The Replit "sendgrid" connector.
+// Per the connector docs the proxy-issued token can rotate, so we DO NOT
+// cache — every send resolves fresh credentials.
 async function resolveCredentials(): Promise<
   { apiKey: string; from: string } | null
 > {
+  const admin = await resolveAdminCredentials();
+  if (admin) return admin;
+
   const envKey = process.env.SENDGRID_API_KEY;
   const envFrom = process.env.EMAIL_FROM;
   if (envKey && envFrom) return { apiKey: envKey, from: envFrom };
@@ -80,6 +114,28 @@ export function isEmailConfigured(): boolean {
     Boolean(process.env.REPLIT_CONNECTORS_HOSTNAME) &&
     Boolean(process.env.REPL_IDENTITY ?? process.env.WEB_REPL_RENEWAL);
   return hasConnector;
+}
+
+// Async, admin-aware variant. True if email can be sent via ANY source:
+// admin-entered DB credentials, env vars, or the Replit connector. Use this in
+// async pre-gates (e.g. article tag emails) so admin-only configuration isn't
+// mistaken for "email disabled". A bare existence check is enough here — if the
+// stored key later fails to decrypt, sendEmail() still falls back to env/connector.
+export async function isEmailConfiguredAsync(): Promise<boolean> {
+  if (isEmailConfigured()) return true;
+  try {
+    const [row] = await db
+      .select({
+        keyCiphertext: emailProviderKeys.keyCiphertext,
+        fromEmail: emailProviderKeys.fromEmail,
+      })
+      .from(emailProviderKeys)
+      .where(eq(emailProviderKeys.provider, "sendgrid"))
+      .limit(1);
+    return !!(row?.keyCiphertext && row.fromEmail);
+  } catch {
+    return false;
+  }
 }
 
 export async function sendEmail(message: EmailMessage): Promise<void> {

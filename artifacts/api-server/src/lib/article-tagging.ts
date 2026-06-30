@@ -1,7 +1,7 @@
 import { db, articleTags, articles, notifications, rosterEntries, users } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { articlePostId, highlightPostId } from "./spec-helpers";
-import { buildPostUrl, buildTagEmail, isEmailConfigured } from "./email";
+import { buildPostUrl, buildTagEmail, isEmailConfiguredAsync } from "./email";
 import { dispatchNotificationEmailToMany } from "./notification-email";
 import { notifyGuardianOfPendingItem } from "./coppa";
 
@@ -143,7 +143,7 @@ async function sendTagEmails(args: {
   if (args.userIds.length === 0) return;
   // Skip the entire DB roundtrip when SendGrid isn't wired up — keeps
   // tests quiet and avoids wasted queries in environments that disable email.
-  if (!isEmailConfigured()) return;
+  if (!(await isEmailConfiguredAsync())) return;
   const candidates = args.actorUserId
     ? args.userIds.filter((u) => u !== args.actorUserId)
     : args.userIds;

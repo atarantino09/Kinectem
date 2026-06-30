@@ -1059,6 +1059,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS notification_preferences_unsubscribe_token_key
   ON notification_preferences (unsubscribe_token);
 `;
 
+// Admin-entered email-provider credentials (SendGrid) configurable from the
+// admin Email settings UI. One row per provider. Mirrors ai_provider_keys.
+// Idempotent.
+const EMAIL_PROVIDER_KEYS = `
+CREATE TABLE IF NOT EXISTS email_provider_keys (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL UNIQUE,
+  from_email text,
+  key_ciphertext text NOT NULL,
+  key_last4 text NOT NULL,
+  created_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1219,6 +1235,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-06-30-task-633-notification-preferences",
     sql: TASK_633_NOTIFICATION_PREFERENCES,
+  },
+  {
+    name: "2026-06-30-email-provider-keys",
+    sql: EMAIL_PROVIDER_KEYS,
   },
 ];
 

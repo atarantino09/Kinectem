@@ -1229,6 +1229,27 @@ export const aiProviderKeys = pgTable("ai_provider_keys", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Admin-entered email-provider credentials (SendGrid) set from the admin
+// Email settings UI. One row per provider (currently "sendgrid"). Mirrors
+// `ai_provider_keys`: the raw API key is never stored in plaintext —
+// `keyCiphertext` holds an AES-256-GCM payload (see src/lib/secret-crypto.ts
+// on the api-server) and `keyLast4` lets the UI show which key is set without
+// exposing it. `fromEmail` is the verified sender. When a complete row is
+// present it takes precedence over the Replit connector / env vars at send time.
+export const emailProviderKeys = pgTable("email_provider_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull().unique(),
+  fromEmail: text("from_email"),
+  keyCiphertext: text("key_ciphertext").notNull(),
+  keyLast4: text("key_last4").notNull(),
+  createdById: uuid("created_by_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Append-only audit log for every consent-relevant event. Used to satisfy
 // the FTC requirement that the operator retain proof of consent and to
 // give parents a transparent history.
