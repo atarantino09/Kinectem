@@ -48,7 +48,14 @@ const DialogContent = React.forwardRef<
           // mobile browser URL bar) bounds the dialog. overflow-y-auto lets
           // tall content scroll inside the dialog so the footer stays
           // reachable; on desktop where content fits, this is a no-op.
-          "pointer-events-auto relative grid w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
+          // NOTE: entrance/exit is fade-only. We deliberately DROP the
+          // `zoom-in-95` scale animation: while the dialog scales up the
+          // browser rasterizes its text as a scaled bitmap, which looks blurry
+          // during the pop-in (most visible on dense small text like the roster
+          // invite share message). Fading keeps text on its final raster the
+          // whole time. Paired with the flexbox centering above (no translate),
+          // this keeps modal text crisp.
+          "pointer-events-auto relative grid w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:rounded-lg",
           className
         )}
         {...props}
