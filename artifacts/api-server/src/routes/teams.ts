@@ -499,6 +499,9 @@ router.post(
       // parent bell below (that would double-send to the guardian inbox).
       await dispatchNotificationEmail({
         userId,
+        // Suppress self-email when a guardian invites their own minor child
+        // (the invitee's copy routes back to the actor guardian).
+        excludeRecipientUserId: me.id,
         category: "team_roster",
         build: (ctx) =>
           buildRosterEmail(ctx, {
@@ -723,6 +726,7 @@ router.patch(
       // the guardian, so the parent bell below is in-app only (no double-send).
       await dispatchNotificationEmail({
         userId: u.id,
+        excludeRecipientUserId: me.id,
         category: "team_roster",
         build: (ctx) =>
           buildRosterEmail(ctx, {

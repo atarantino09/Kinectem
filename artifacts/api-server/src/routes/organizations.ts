@@ -52,6 +52,7 @@ import {
   notifyAdminsOfTeamHighlight,
   notifyHighlightDecision,
   notifyTeamFollowersOfNewRecap,
+  notifyTeamFollowersOfNewHighlight,
 } from "../lib/notifications";
 import { notifyNewlyTaggedInHighlight } from "../lib/article-tagging";
 import { maskedDisplayName } from "../lib/spec-helpers";
@@ -1203,6 +1204,22 @@ async function transitionHighlightApproval(
           : displayName(uploader),
       });
     }
+    // Task #633 — the deferred `team_recap` email fan-out for a player/parent
+    // upload, fired now that staff has approved it (staff uploads already
+    // fanned out at creation time). Routed through the dispatch gate
+    // (preferences, no-login unsubscribe, minor->guardian).
+    await notifyTeamFollowersOfNewHighlight({
+      teamId,
+      teamName: team.name,
+      highlightId: h.id,
+      highlightTitle: h.title,
+      actorName: uploader
+        ? uploader.isMinor
+          ? maskedDisplayName(uploader)
+          : displayName(uploader)
+        : "Someone",
+      actorUserId: h.uploaderId ?? null,
+    });
     const pendingTagRows = await db
       .select({ userId: highlightTags.userId, status: highlightTags.status })
       .from(highlightTags)
@@ -2275,6 +2292,9 @@ router.post(
         });
         await dispatchNotificationEmail({
           userId: req.params.userId,
+          // Suppress self-email if the followed user is a minor whose
+          // guardian is the follower.
+          excludeRecipientUserId: me.id,
           category: "social_follow",
           build: (ctx) =>
             buildFollowEmail(ctx, {
@@ -2297,6 +2317,7 @@ router.post(
         });
         await dispatchNotificationEmail({
           userId: req.params.userId,
+          excludeRecipientUserId: me.id,
           category: "social_follow",
           build: (ctx) =>
             buildFollowEmail(ctx, {
@@ -2316,6 +2337,7 @@ router.post(
         // linked guardian (the minor never receives engagement email).
         await dispatchNotificationEmail({
           userId: target.id,
+          excludeRecipientUserId: me.id,
           category: "social_follow",
           build: (ctx) =>
             buildFollowEmail(ctx, {

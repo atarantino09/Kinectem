@@ -1,10 +1,17 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { db, users, notificationPreferences } from "@workspace/db";
+import {
+  db,
+  users,
+  notificationPreferences,
+  teams,
+  teamFollowers,
+} from "@workspace/db";
 import {
   dispatchNotificationEmail,
   type DispatchBuildContext,
 } from "../src/lib/notification-email";
+import { notifyTeamFollowersOfNewHighlight } from "../src/lib/notifications";
 import {
   getOrCreatePreferences,
   isEmailCategory,
@@ -245,6 +252,188 @@ describe("notification email dispatch gate (task #633)", () => {
       userId: coach.id,
       category: "motivational",
       build: testBuild,
+    });
+    expect(sentEmails).toHaveLength(0);
+  });
+
+  it("excludeRecipientUserId suppresses a self-email when a minor routes back to the actor guardian", async () => {
+    // e.g. a guardian likes/comments on / invites their own minor child: the
+    // child's copy resolves to the guardian, who is also the actor.
+    const lisa = await getUser("lisa@kinectem.demo");
+    await db
+      .update(users)
+      .set({ isMinor: true, parentId: lisa.id })
+      .where(eq(users.email, "samira@kinectem.demo"));
+    const samira = await getUser("samira@kinectem.demo");
+    await resetPrefs(lisa.id);
+
+    await dispatchNotificationEmail({
+      userId: samira.id,
+      excludeRecipientUserId: lisa.id,
+      category: "social_reaction",
+      build: testBuild,
+    });
+    expect(sentEmails).toHaveLength(0);
+  });
+
+  it("excludeRecipientUserId still emails the guardian when the actor is someone else", async () => {
+    const coach = await getUser("coach@kinectem.demo");
+    const lisa = await getUser("lisa@kinectem.demo");
+    await db
+      .update(users)
+      .set({ isMinor: true, parentId: lisa.id })
+      .where(eq(users.email, "samira@kinectem.demo"));
+    const samira = await getUser("samira@kinectem.demo");
+    await resetPrefs(lisa.id);
+
+    await dispatchNotificationEmail({
+      userId: samira.id,
+      excludeRecipientUserId: coach.id,
+      category: "social_reaction",
+      build: testBuild,
+    });
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].to).toBe(lisa.email);
+  });
+});
+
+describe("team highlight email fan-out (task #633)", () => {
+  it("emails team followers about a new highlight and excludes the uploader", async () => {
+    const coach = await getUser("coach@kinectem.demo");
+    const lisa = await getUser("lisa@kinectem.demo");
+    await resetPrefs(coach.id);
+    await resetPrefs(lisa.id);
+    const [team] = await db
+      .insert(teams)
+      .values({ name: "Falcons U12", organizationId: null })
+      .returning();
+    await db.insert(teamFollowers).values([
+      { teamId: team.id, userId: coach.id },
+      { teamId: team.id, userId: lisa.id },
+    ]);
+
+    await notifyTeamFollowersOfNewHighlight({
+      teamId: team.id,
+      teamName: team.name,
+      highlightId: crypto.randomUUID(),
+      highlightTitle: "Game-winning goal",
+      actorName: coach.name,
+      actorUserId: coach.id,
+    });
+
+    // The uploader (coach) is excluded; the following adult (lisa) is emailed.
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].to).toBe(lisa.email);
+    expect(sentEmails[0].subject).toContain("highlight");
+    expect(sentEmails[0].subject).toContain("Game-winning goal");
+  });
+
+  it("routes a minor follower's highlight email to their guardian and respects the team_recap toggle", async () => {
+    const coach = await getUser("coach@kinectem.demo");
+    const lisa = await getUser("lisa@kinectem.demo");
+    await db
+      .update(users)
+      .set({ isMinor: true, parentId: lisa.id })
+      .where(eq(users.email, "samira@kinectem.demo"));
+    const samira = await getUser("samira@kinectem.demo");
+    await resetPrefs(lisa.id);
+    const [team] = await db
+      .insert(teams)
+      .values({ name: "Falcons U12", organizationId: null })
+      .returning();
+    // Only the minor follows; her copy must route to the guardian, not her.
+    await db
+      .insert(teamFollowers)
+      .values({ teamId: team.id, userId: samira.id });
+
+    await notifyTeamFollowersOfNewHighlight({
+      teamId: team.id,
+      teamName: team.name,
+      highlightId: crypto.randomUUID(),
+      highlightTitle: "Buzzer beater",
+      actorName: coach.name,
+      actorUserId: coach.id,
+    });
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].to).toBe(lisa.email);
+    expect(sentEmails[0].to).not.toBe(samira.email);
+
+    // Guardian turns the team_recap channel off -> the next fan-out is silent.
+    sentEmails.length = 0;
+    await getOrCreatePreferences(lisa.id);
+    await db
+      .update(notificationPreferences)
+      .set({ teamRecap: false })
+      .where(eq(notificationPreferences.userId, lisa.id));
+    await notifyTeamFollowersOfNewHighlight({
+      teamId: team.id,
+      teamName: team.name,
+      highlightId: crypto.randomUUID(),
+      highlightTitle: "Another clip",
+      actorName: coach.name,
+      actorUserId: coach.id,
+    });
+    expect(sentEmails).toHaveLength(0);
+  });
+
+  it("sends a single guardian email when both the minor and their guardian follow the team", async () => {
+    // Guardians auto-follow a child's team, so both rows usually exist; the
+    // minor row routes to the guardian and must collapse with the guardian's
+    // own row into ONE email (not a duplicate).
+    const coach = await getUser("coach@kinectem.demo");
+    const lisa = await getUser("lisa@kinectem.demo");
+    await db
+      .update(users)
+      .set({ isMinor: true, parentId: lisa.id })
+      .where(eq(users.email, "samira@kinectem.demo"));
+    const samira = await getUser("samira@kinectem.demo");
+    await resetPrefs(lisa.id);
+    const [team] = await db
+      .insert(teams)
+      .values({ name: "Falcons U12", organizationId: null })
+      .returning();
+    await db.insert(teamFollowers).values([
+      { teamId: team.id, userId: samira.id },
+      { teamId: team.id, userId: lisa.id },
+    ]);
+
+    await notifyTeamFollowersOfNewHighlight({
+      teamId: team.id,
+      teamName: team.name,
+      highlightId: crypto.randomUUID(),
+      highlightTitle: "Hat trick",
+      actorName: coach.name,
+      actorUserId: coach.id,
+    });
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].to).toBe(lisa.email);
+  });
+
+  it("excludes the actor even when reached via minor->guardian routing", async () => {
+    // The uploading guardian's own child follows the team: the child row
+    // resolves back to the actor and must be suppressed.
+    const lisa = await getUser("lisa@kinectem.demo");
+    await db
+      .update(users)
+      .set({ isMinor: true, parentId: lisa.id })
+      .where(eq(users.email, "samira@kinectem.demo"));
+    const samira = await getUser("samira@kinectem.demo");
+    await resetPrefs(lisa.id);
+    const [team] = await db
+      .insert(teams)
+      .values({ name: "Falcons U12", organizationId: null })
+      .returning();
+    await db
+      .insert(teamFollowers)
+      .values({ teamId: team.id, userId: samira.id });
+
+    await notifyTeamFollowersOfNewHighlight({
+      teamId: team.id,
+      teamName: team.name,
+      highlightId: crypto.randomUUID(),
+      highlightTitle: "Solo run",
+      actorName: lisa.name,
+      actorUserId: lisa.id,
     });
     expect(sentEmails).toHaveLength(0);
   });

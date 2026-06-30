@@ -412,6 +412,7 @@ export async function notifyTeamFollowersOfNewRecap(args: {
   const postUrl = `${appBaseUrl()}/posts/${articlePostId(args.articleId)}`;
   await dispatchNotificationEmailToMany({
     userIds: recipientIds,
+    excludeRecipientUserId: args.actorUserId,
     category: "team_recap",
     build: (ctx) =>
       buildTeamContentEmail(ctx, {
@@ -420,6 +421,44 @@ export async function notifyTeamFollowersOfNewRecap(args: {
         title: args.articleTitle,
         postUrl,
         contentLabel: "recap",
+      }),
+  });
+}
+
+// Task #633 — the highlight counterpart of `notifyTeamFollowersOfNewRecap`.
+// Highlights are the other half of a team's post feed alongside recaps, so a
+// newly-published one fans out to the team's followers via the same email-only
+// `team_recap` channel (no in-app bell — followers see it in their feed). The
+// dispatch gate handles per-recipient preferences, the no-login unsubscribe
+// link, and COPPA minor->guardian routing. The uploader is always excluded.
+export async function notifyTeamFollowersOfNewHighlight(args: {
+  teamId: string;
+  teamName: string | null;
+  highlightId: string;
+  highlightTitle: string;
+  actorName: string;
+  actorUserId: string | null;
+}): Promise<void> {
+  const rows = await db
+    .select({ userId: teamFollowers.userId })
+    .from(teamFollowers)
+    .where(eq(teamFollowers.teamId, args.teamId));
+  const recipientIds = rows
+    .map((r) => r.userId)
+    .filter((id) => id !== args.actorUserId);
+  if (recipientIds.length === 0) return;
+  const postUrl = `${appBaseUrl()}/posts/${highlightPostId(args.highlightId)}`;
+  await dispatchNotificationEmailToMany({
+    userIds: recipientIds,
+    excludeRecipientUserId: args.actorUserId ?? undefined,
+    category: "team_recap",
+    build: (ctx) =>
+      buildTeamContentEmail(ctx, {
+        teamName: args.teamName,
+        actorName: args.actorName,
+        title: args.highlightTitle,
+        postUrl,
+        contentLabel: "highlight",
       }),
   });
 }

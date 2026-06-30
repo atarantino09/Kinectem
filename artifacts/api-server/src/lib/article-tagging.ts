@@ -151,6 +151,9 @@ async function sendTagEmails(args: {
   const postUrl = buildPostUrl(args.postLink);
   await dispatchNotificationEmailToMany({
     userIds: candidates,
+    // Drop the actor even when a tagged minor routes back to a guardian who
+    // is also the tagger (e.g. a guardian tagging their own child).
+    excludeRecipientUserId: args.actorUserId ?? undefined,
     category: "social_tag",
     build: (ctx) => buildTagEmail(ctx, { postTitle: args.postTitle, postUrl }),
   });

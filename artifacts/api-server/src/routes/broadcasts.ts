@@ -254,6 +254,9 @@ async function persistBroadcast(opts: {
       const scopeName = opts.emailScopeName ?? null;
       await dispatchNotificationEmailToMany({
         userIds: emailUserIds,
+        // Drop the sender even if a recipient minor routes back to them as
+        // guardian (a guardian broadcasting where their own child is a member).
+        excludeRecipientUserId: opts.senderUserId,
         category: "team_broadcast",
         build: (ctx) =>
           buildBroadcastEmail(ctx, {

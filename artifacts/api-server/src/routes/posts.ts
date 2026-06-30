@@ -42,6 +42,7 @@ import {
   sendPasswordResetEmail,
   buildPostUrl,
   buildReactionEmail,
+  buildCommentEmail,
   buildFirstRecapMilestoneEmail,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
@@ -93,6 +94,7 @@ import {
   notifyAdminsOfPendingPostApproval,
   notifyStaffOfPendingHighlight,
   notifyTeamFollowersOfNewRecap,
+  notifyTeamFollowersOfNewHighlight,
 } from "../lib/notifications";
 import {
   blockMinorAction,
@@ -1363,6 +1365,34 @@ router.post(
         message: `New comment is awaiting your approval`,
       });
     }
+    // Task #633 — mirror an approved comment into the post owner's in-app
+    // bell + the gated `social_comment` email. Pending comments on a minor's
+    // post already route to the guardian above and are intentionally not
+    // echoed here; self-comments are skipped. The dispatch gate handles the
+    // per-recipient preference, no-login unsubscribe, and minor->guardian
+    // routing (minors can't author comments, so the actor is never masked).
+    if (status === "approved" && ownerId && ownerId !== me.id) {
+      await db.insert(notifications).values({
+        userId: ownerId,
+        kind: "comment",
+        message: `${displayName(me)} commented on your post`,
+        link: `/posts/${req.params.postId}`,
+        actorUserId: me.id,
+      });
+      await dispatchNotificationEmail({
+        userId: ownerId,
+        // Suppress when the post owner is a minor whose guardian is the
+        // commenter — the email would otherwise route back to the actor.
+        excludeRecipientUserId: me.id,
+        category: "social_comment",
+        build: (ctx) =>
+          buildCommentEmail(ctx, {
+            actorName: displayName(me),
+            postUrl: buildPostUrl(`/posts/${req.params.postId}`),
+            isReply: false,
+          }),
+      });
+    }
     // Task #414 — `me` is the comment author looking at their own
     // echo, so default (no-mask) ctx is correct here.
     // Task #414 — write-time POST echo: comment author = me = viewer.
@@ -1576,6 +1606,9 @@ const addPostReactionHandler = asyncHandler(async (req, res) => {
       // routing all handled by the dispatch gate).
       await dispatchNotificationEmail({
         userId: ownerId,
+        // Suppress when the owner is a minor whose guardian is the liker —
+        // the email would otherwise route back to the actor.
+        excludeRecipientUserId: me.id,
         category: "social_reaction",
         build: (ctx) =>
           buildReactionEmail(ctx, {
@@ -2059,6 +2092,18 @@ router.post(
             : displayName(me),
         });
       }
+      // Task #633 — staff uploads publish immediately, so fan the new
+      // highlight out to the team's followers via the gated `team_recap`
+      // email channel (same as recaps). Player/parent uploads are pending
+      // here and fan out later, on staff approval (organizations.ts).
+      await notifyTeamFollowersOfNewHighlight({
+        teamId,
+        teamName: team.name,
+        highlightId: h.id,
+        highlightTitle: h.title,
+        actorName: me.isMinor ? maskedDisplayName(me) : displayName(me),
+        actorUserId: me.id,
+      });
     } else {
       // Task #559 — Player/parent uploads go into the staff review
       // queue. Fan out a bell notification to every staff approver

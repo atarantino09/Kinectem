@@ -19,6 +19,18 @@ gate: `dispatchNotificationEmail({ userId, category, build })`. Transactional/es
 - **Every gated email carries a no-login unsubscribe link** backed by a 256-bit `unsubscribe_token`;
   the public unsubscribe route is rate-limited and must not disclose account existence (friendly 200
   even on nonmatching token).
+- **Self-send via routing is the recurring trap.** A raw `ownerId !== me.id` (or actor-filter on raw
+  ids) is NOT enough: a minor target resolves to its guardian, so when the actor IS that guardian
+  (guardian likes/comments/follows/invites/tags/broadcasts to their own child) the email routes back
+  to the actor. **Every actor-driven dispatch must pass `excludeRecipientUserId = actor` so
+  suppression happens on the RESOLVED recipient.** Self-directed sends (welcome, "your first recap"
+  milestone) and actorless system sends (schedule reminder, game-recap reminder) intentionally pass
+  nothing.
+  **Why:** raw-id checks run before COPPA routing; the collapse onto the actor happens after.
+- **Fan-out must dedupe by RESOLVED recipient, not raw target.** Guardians auto-follow a child's
+  team, so a child-follower row and the guardian's own follower row both resolve to the guardian —
+  resolve first, key a map by resolved recipient id, then send once. Deduping raw user ids before
+  routing still double-sends to the guardian.
 
 ## Test pitfall (cost >2 attempts) — lazy-create defeats "set flag false" suppression tests
 `getOrCreatePreferences()` lazily mints an **all-on** row on first read. In suppression tests you
