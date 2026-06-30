@@ -41,5 +41,9 @@ advisory lock; the target must already exist (operator signs up on the live site
 first — dev accounts never carry to prod). Self-lockout is recoverable because the
 page's own auth is the password gate, independent of any app admin role.
 
-## Destructive operator actions (orgs/teams reset)
-The founding-admin page also hosts a typed-"DELETE"-confirmed "Delete all organizations & teams" action (`POST /api/v1/founding-admin/reset-orgs-teams`). Same gate/rate-limit/advisory-lock pattern as seed-orgs/set-sole-admin. Deletes all teams then all organizations; every FK referencing organizations/teams is CASCADE or SET NULL (verified via information_schema.referential_constraints), so org delete cascades teams + all dependent content. **User accounts are intentionally NOT touched** (soft-delete via `users.deleted_at`; no `status` column). Use this pattern for any one-off prod write since the agent only has read-only prod access.
+## Destructive operator actions (delete one org by id)
+The founding-admin page hosts a "Delete a specific organization" action (`POST /api/v1/founding-admin/delete-organization`, body `{organizationId, confirm}`). Same gate/rate-limit/advisory-lock pattern as seed-orgs/set-sole-admin. Confirmation requires typing the org's EXACT name (case-insensitive). Deletes the org's teams then the org; every FK referencing organizations/teams is CASCADE or SET NULL (verified via information_schema.referential_constraints), so it cascades all dependent content. **Scoped to ONE org by id on purpose** — a delete-ALL would wipe the bulk-seeded claim pages (878+ orgs), so never reintroduce one. User accounts are intentionally NOT touched. Use this pattern for any one-off prod write since the agent only has read-only prod access.
+
+## Hiding existing entities (no app feature needed for most)
+- Deactivated **users** (soft-deleted via `users.deleted_at`) are already invisible to normal users: blocked from login, profiles 404 for non-admins, filtered from search. Only platform admins still see them in admin tools (by design). No action needed to "hide" them.
+- **Teams** have a reversible archive (`teams.archived_at`); archived teams drop out of search/discovery. **Organizations have NO archive/hide/deleted flag and org search returns all orgs** — the only way to make an org itself invisible is to delete it (which cascades its teams).

@@ -425,62 +425,86 @@ router.post(
   }),
 );
 
-// One-time, destructive "remove every organization and team" action from inside
-// the deployment. Publishing syncs schema only and the agent has read-only prod
-// access, so a clean-slate reset has to run from this authed operator page. Every
-// FK referencing organizations/teams is CASCADE or SET NULL, so deleting the orgs
-// cascades their teams and all dependent content (roster, articles, highlights,
-// schedule, followers, invites, org posts, broadcasts, subscriptions). Requires a
-// typed "DELETE" confirmation; gated + rate-limited + advisory-locked like the
-// other operator actions. Users are intentionally left untouched.
-const resetLimiter = rateLimit({
-  name: "founding-admin-reset-orgs-teams",
+// Targeted, destructive "delete one organization (and its teams)" action from
+// inside the deployment. Publishing syncs schema only and the agent has
+// read-only prod access, so a prod cleanup has to run from this authed operator
+// page. Every FK referencing organizations/teams is CASCADE or SET NULL, so
+// deleting the org cascades its teams and all dependent content (roster,
+// articles, highlights, schedule, followers, invites, org posts, broadcasts,
+// subscriptions). Deliberately scoped to ONE org by id (NOT a delete-all) so it
+// can't wipe the bulk-seeded claim pages. Confirmation requires typing the org's
+// exact name. Gated + rate-limited + advisory-locked. Users are left untouched.
+const deleteOrgLimiter = rateLimit({
+  name: "founding-admin-delete-organization",
   windowMs: ONE_HOUR,
-  max: 12,
+  max: 30,
   keys: (req) => [ipKey(req)],
   message: "Too many attempts. Please wait a while before trying again.",
 });
 
-const ResetOrgsTeamsBody = z.object({
+const DeleteOrganizationBody = z.object({
+  organizationId: z.string().uuid(),
   confirm: z.string(),
 });
 
+const normalizeName = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+
 router.post(
-  "/founding-admin/reset-orgs-teams",
+  "/founding-admin/delete-organization",
   requireFoundingAdmin,
-  resetLimiter,
+  deleteOrgLimiter,
   asyncHandler(async (req, res) => {
-    const parsed = ResetOrgsTeamsBody.safeParse(req.body);
-    if (
-      !parsed.success ||
-      parsed.data.confirm.trim().replace(/\s+/g, " ").toUpperCase() !== "DELETE ALL ORGS AND TEAMS"
-    ) {
-      apiError(res, 400, 'Type "DELETE ALL ORGS AND TEAMS" to confirm.', {
+    const parsed = DeleteOrganizationBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, "A valid organization ID is required.", { code: "INVALID_REQUEST" });
+      return;
+    }
+    const { organizationId, confirm } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      // Serialize concurrent runs (same advisory-lock pattern as the other
+      // operator actions). Delete the org's teams first, then the org itself;
+      // deleting the org would cascade the teams anyway, but doing them
+      // explicitly lets us report a team count.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:delete-organization'))`);
+      const [org] = await tx
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .limit(1);
+      if (!org) return { notFound: true as const };
+      if (normalizeName(confirm) !== normalizeName(org.name)) {
+        return { mismatch: true as const, name: org.name };
+      }
+      const delTeams = await tx
+        .delete(teams)
+        .where(eq(teams.organizationId, organizationId))
+        .returning({ id: teams.id });
+      await tx.delete(organizations).where(eq(organizations.id, organizationId));
+      return { ok: true as const, name: org.name, deletedTeams: delTeams.length };
+    });
+
+    if ("notFound" in result) {
+      apiError(res, 404, "No organization found with that ID.", { code: "ORG_NOT_FOUND" });
+      return;
+    }
+    if ("mismatch" in result) {
+      apiError(res, 400, `Type the organization's exact name ("${result.name}") to confirm.`, {
         code: "CONFIRMATION_REQUIRED",
       });
       return;
     }
 
-    const result = await db.transaction(async (tx) => {
-      // Serialize concurrent runs (same advisory-lock pattern as the other
-      // operator actions). Delete teams first, then orgs; deleting the orgs
-      // would cascade the teams anyway, but doing teams explicitly also clears
-      // any team that isn't attached to an org.
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:reset-orgs-teams'))`);
-      const delTeams = await tx.delete(teams).returning({ id: teams.id });
-      const delOrgs = await tx.delete(organizations).returning({ id: organizations.id });
-      return { teams: delTeams.length, orgs: delOrgs.length };
-    });
-
     req.log.info(
-      { deletedOrganizations: result.orgs, deletedTeams: result.teams },
-      "founding-admin reset orgs/teams",
+      { organizationId, deletedTeams: result.deletedTeams },
+      "founding-admin delete organization",
     );
 
     res.json({
       ok: true,
-      deletedOrganizations: result.orgs,
-      deletedTeams: result.teams,
+      organizationId,
+      name: result.name,
+      deletedTeams: result.deletedTeams,
     });
   }),
 );

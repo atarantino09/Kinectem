@@ -132,14 +132,14 @@ const PAGE = String.raw`<!doctype html>
     </div>
 
     <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:700; color:var(--danger);">Delete all organizations &amp; teams</div>
-          <div class="sub">Permanently removes <strong>every</strong> organization and team in this environment, plus all their content (rosters, recaps, highlights, schedule, followers, invites). User accounts are left untouched. This cannot be undone.</div>
-        </div>
-        <button id="resetBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete all orgs &amp; teams</button>
+      <div style="font-weight:700; color:var(--danger);">Delete a specific organization</div>
+      <div class="sub">Permanently deletes <strong>one</strong> organization by ID, plus its teams and all their content (rosters, recaps, highlights, schedule, followers, invites). User accounts are left untouched. This cannot be undone. Type the organization's exact name to confirm.</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+        <input id="delOrgId" type="text" placeholder="Organization ID (UUID)" style="min-width:320px;" />
+        <input id="delOrgName" type="text" placeholder="Type exact org name to confirm" style="min-width:260px;" />
+        <button id="delOrgBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete organization</button>
       </div>
-      <div id="resetStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
+      <div id="delOrgStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
     </div>
 
     <div class="card">
@@ -360,20 +360,21 @@ const PAGE = String.raw`<!doctype html>
     } finally { btn.disabled = false; }
   }
 
-  async function onResetOrgsTeams() {
-    var s = $("resetStatus");
-    var typed = prompt('This permanently deletes ALL organizations and teams (and their content) in this environment. User accounts are kept.\\n\\nType DELETE ALL ORGS AND TEAMS to confirm:');
-    if (typed === null) return;
-    if ((typed || "").trim().replace(/\\s+/g, " ").toUpperCase() !== "DELETE ALL ORGS AND TEAMS") {
-      s.style.color = "var(--danger)"; s.textContent = 'Cancelled — you must type "DELETE ALL ORGS AND TEAMS" to confirm.'; return;
-    }
-    var btn = $("resetBtn"); btn.disabled = true;
+  async function onDeleteOrg() {
+    var s = $("delOrgStatus");
+    var id = ($("delOrgId").value || "").trim();
+    var name = ($("delOrgName").value || "").trim();
+    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Enter the organization ID."; return; }
+    if (!name) { s.style.color = "var(--danger)"; s.textContent = "Type the organization's exact name to confirm."; return; }
+    if (!confirm('Permanently delete this organization and all its teams + content? This cannot be undone.')) return;
+    var btn = $("delOrgBtn"); btn.disabled = true;
     s.style.color = "var(--muted)"; s.textContent = "Deleting…";
     try {
-      var data = await api("/reset-orgs-teams", { method: "POST", body: JSON.stringify({ confirm: typed }) });
+      var data = await api("/delete-organization", { method: "POST", body: JSON.stringify({ organizationId: id, confirm: name }) });
       s.style.color = "var(--muted)";
-      s.textContent = "Deleted " + data.deletedOrganizations + " organization(s) and " + data.deletedTeams + " team(s).";
-      toast("Orgs & teams deleted");
+      s.textContent = 'Deleted "' + data.name + '" and ' + data.deletedTeams + ' team(s).';
+      toast("Organization deleted");
+      $("delOrgId").value = ""; $("delOrgName").value = "";
     } catch (e) {
       s.style.color = "var(--danger)"; s.textContent = e.message;
     } finally { btn.disabled = false; }
@@ -385,7 +386,7 @@ const PAGE = String.raw`<!doctype html>
   $("seedBtn").addEventListener("click", onSeed);
   $("adminBtn").addEventListener("click", onSetAdmin);
   $("adminEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") onSetAdmin(); });
-  $("resetBtn").addEventListener("click", onResetOrgsTeams);
+  $("delOrgBtn").addEventListener("click", onDeleteOrg);
   $("search").addEventListener("input", renderRows);
 
   $("rows").addEventListener("click", function (e) {
