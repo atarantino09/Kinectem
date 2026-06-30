@@ -1,11 +1,12 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, foundingSignups } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { db, foundingSignups, organizations, organizationAdmins } from "@workspace/db";
+import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { apiError } from "../lib/spec-helpers";
+import { WRITTEN_IN_ORG_NAMES } from "../data/written-in-orgs";
 
 const router: IRouter = Router();
 
@@ -210,6 +211,130 @@ router.delete(
       return;
     }
     res.json({ ok: true, id: row.id });
+  }),
+);
+
+// One-time, idempotent seeding of the operator "written-in" org pages from
+// inside the deployment. Publishing syncs schema only (no rows), so a freshly
+// published environment has no org pages and no per-environment claim tokens
+// (tokens are minted per env — a dev CSV will not work live). This authed
+// action recreates the org pages (name + a fresh secret claim token), backfills
+// a token for any ownerless org still missing one, and returns the claim-links
+// CSV for off-site distribution. It mirrors the
+// bulk-import-organizations -> backfill-org-claim-links -> export-org-claim-links
+// script chain, but runs against the live DB the deployed server is bound to.
+const seedLimiter = rateLimit({
+  name: "founding-admin-seed-orgs",
+  windowMs: ONE_HOUR,
+  max: 12,
+  keys: (req) => [ipKey(req)],
+  message: "Too many seed attempts. Please wait a while before trying again.",
+});
+
+function generateClaimToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function csvCell(v: string | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+router.post(
+  "/founding-admin/seed-orgs",
+  requireFoundingAdmin,
+  seedLimiter,
+  asyncHandler(async (_req, res) => {
+    const ownerExists = sql`EXISTS (
+      SELECT 1 FROM ${organizationAdmins}
+      WHERE ${organizationAdmins.organizationId} = ${organizations.id}
+        AND ${organizationAdmins.role} = 'owner'
+    )`;
+
+    const result = await db.transaction(async (tx) => {
+      // Serialize concurrent seed runs. There is no DB-level unique index on
+      // org name, so the read-then-insert below would race two overlapping
+      // calls into duplicate pages. A transaction-scoped advisory lock makes
+      // it race-safe (same pattern as the team-cap enforcement in teams.ts).
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:seed-orgs'))`);
+
+      // 1. Create any written-in org pages that don't already exist
+      //    (case-insensitive name match), each with a fresh claim token.
+      const existing = await tx.select({ name: organizations.name }).from(organizations);
+      const have = new Set(existing.map((r) => r.name.trim().toLowerCase()));
+      const seen = new Set<string>();
+      const toCreate: { name: string; claimToken: string }[] = [];
+      let considered = 0;
+      for (const raw of WRITTEN_IN_ORG_NAMES) {
+        const name = raw.trim();
+        if (!name) continue;
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        considered++;
+        if (have.has(key)) continue;
+        toCreate.push({ name, claimToken: generateClaimToken() });
+      }
+      if (toCreate.length > 0) {
+        await tx.insert(organizations).values(toCreate);
+      }
+
+      // 2. Backfill a claim token for any ownerless org still missing one.
+      const ownerlessNoToken = await tx
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(and(isNull(organizations.claimToken), sql`NOT ${ownerExists}`));
+      for (const o of ownerlessNoToken) {
+        await tx
+          .update(organizations)
+          .set({ claimToken: generateClaimToken() })
+          .where(eq(organizations.id, o.id));
+      }
+
+      // 3. List every ownerless org that now has a token -> claim-links CSV.
+      const linkRows = await tx
+        .select({
+          id: organizations.id,
+          name: organizations.name,
+          city: organizations.city,
+          state: organizations.state,
+          claimToken: organizations.claimToken,
+        })
+        .from(organizations)
+        .where(and(isNotNull(organizations.claimToken), sql`NOT ${ownerExists}`))
+        .orderBy(asc(organizations.name));
+
+      return {
+        created: toCreate.length,
+        skipped: considered - toCreate.length,
+        tokensBackfilled: ownerlessNoToken.length,
+        linkRows,
+      };
+    });
+
+    const base = (process.env.APP_BASE_URL ?? "https://kinectem.com").replace(/\/+$/, "");
+    const claimUrl = (token: string) => `${base}/app/claim/${token}`;
+    const header = ["org_name", "city", "state", "claim_link", "org_id"];
+    const lines = [header.join(",")];
+    for (const r of result.linkRows) {
+      lines.push(
+        [r.name, r.city ?? "", r.state ?? "", claimUrl(r.claimToken!), r.id]
+          .map(csvCell)
+          .join(","),
+      );
+    }
+    const csv = lines.join("\n") + "\n";
+
+    res.json({
+      ok: true,
+      created: result.created,
+      skipped: result.skipped,
+      tokensBackfilled: result.tokensBackfilled,
+      totalLinks: result.linkRows.length,
+      base,
+      csv,
+    });
   }),
 );
 

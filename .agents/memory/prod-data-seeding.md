@@ -30,3 +30,19 @@ production environment.
   writing as an operator safeguard.
 - Exporting secrets/tokens to deployment logs (stdout) is a leak vector; prefer
   `--out=<secured-path>` when log readers may be broader than intended.
+
+**Single-deployment ("Publishing") projects have no scheduled-job UI.** When the
+whole monorepo ships as one Autoscale deployment, there is no separate
+Scheduled/one-off Deployment to "Run now", so script-based reseeding has nowhere
+to run. Instead, expose the reseed as an **authed, idempotent endpoint inside the
+already-deployed server** (reuse the existing operator password gate, e.g. the
+founding-admin HMAC-bearer flow) that the operator triggers once from the browser
+and that returns the claim-links CSV directly.
+- Bundle the seed list **into the server** (a generated TS module), don't read a
+  CSV at runtime — the prod bundle's CWD/filesystem layout is not guaranteed, and
+  an embedded module is guaranteed present so the seed works on the first click.
+- The endpoint creates rows with read-then-insert; there's **no unique index on
+  org name**, so wrap it in a tx + `pg_advisory_xact_lock(hashtext(...))` to make
+  concurrent/double-click runs race-safe (same pattern as team-cap enforcement).
+- A user's **dev login won't work in prod** (publish copies no user rows); that's
+  why the password-gated operator page — not an app account — is the right vehicle.

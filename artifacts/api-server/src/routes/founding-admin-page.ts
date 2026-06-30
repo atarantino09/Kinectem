@@ -106,6 +106,17 @@ const PAGE = String.raw`<!doctype html>
       <button id="refreshBtn" class="ghost">Refresh</button>
     </div>
 
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700;">Seed organization pages</div>
+          <div class="sub">Create the written-in org pages in this environment and download their claim links. Safe to run more than once.</div>
+        </div>
+        <button id="seedBtn" class="primary">Seed org pages &amp; download CSV</button>
+      </div>
+      <div id="seedStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
+    </div>
+
     <div class="card">
       <table>
         <thead>
@@ -284,9 +295,32 @@ const PAGE = String.raw`<!doctype html>
     } catch (e2) { $("loginErr").textContent = e2.message; }
   });
 
+  function downloadSeedCsv(csv) {
+    if (!csv) return;
+    var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "kinectem-org-claim-links-" + new Date().toISOString().slice(0,10) + ".csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+  async function onSeed() {
+    var btn = $("seedBtn"); btn.disabled = true;
+    var s = $("seedStatus"); s.style.color = "var(--muted)"; s.textContent = "Seeding… this can take a moment.";
+    try {
+      var data = await api("/seed-orgs", { method: "POST", body: "{}" });
+      s.textContent = "Created " + data.created + " new · " + data.skipped + " already existed · "
+        + data.tokensBackfilled + " token(s) backfilled · " + data.totalLinks + " claim link(s) ready.";
+      downloadSeedCsv(data.csv);
+      toast("Seed complete — CSV downloaded");
+    } catch (e) {
+      s.style.color = "var(--danger)"; s.textContent = e.message;
+    } finally { btn.disabled = false; }
+  }
+
   $("logoutBtn").addEventListener("click", function () { setToken(null); renderAuth(); });
   $("refreshBtn").addEventListener("click", load);
   $("exportBtn").addEventListener("click", exportCsv);
+  $("seedBtn").addEventListener("click", onSeed);
   $("search").addEventListener("input", renderRows);
 
   $("rows").addEventListener("click", function (e) {

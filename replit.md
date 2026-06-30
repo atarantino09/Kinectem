@@ -34,14 +34,17 @@ The whole monorepo publishes as a **single Autoscale Deployment** using the appl
 
 ### Seeding org pages + grabbing the claim-links CSV (post-publish)
 
-Publishing syncs **schema only, not rows**, so a freshly-published prod DB has **no org pages and no claim tokens**. Claim tokens are **minted per-environment** — a CSV exported from dev will NOT work live. The live claim-links CSV must be produced by running the seed job **inside the production deployment**. This is a **two-step** operation (the main-app republish does NOT run the seed job — they are separate deployments):
+Publishing syncs **schema only, not rows**, so a freshly-published prod DB has **no org pages and no claim tokens**. Claim tokens are **minted per-environment** — a CSV exported from dev will NOT work live. Because the whole monorepo ships as **one Autoscale deployment**, there is **no separate Scheduled Deployment to "Run now"** — the seed runs from an authed button **inside the live app** instead.
 
-1. **In dev, before publishing**: `pnpm --filter @workspace/scripts run export-org-names` to refresh `organizations.csv` (the seed list the job reads). Commit it.
-2. **Republish the main app** so the deployed code carries the current `organizations.csv`.
-3. **Run the seed job in prod**: open Deployments → the `seed-production-orgs` Scheduled Deployment → **Run now**. Its command MUST end in `-- --apply` (without it the run is a no-write dry run). Full command: `pnpm --filter @workspace/scripts run seed-production-orgs -- --apply`.
-4. The job creates the org pages, mints fresh prod tokens, and **prints the claim-links CSV to the run logs** (stdout; `org_name,city,state,claim_link,org_id`, links are `https://kinectem.com/app/claim/<token>`). Copy the CSV from the run logs — that file is the one for the admin page. (Don't use `--out=<file>`: a scheduled deploy's filesystem is ephemeral, so a written file isn't retrievable; stdout/logs is the way.)
+**Seed button (recommended).** The password-gated founding-admin page (`https://kinectem.com/api/founding-admin`, gated by `FOUNDING_ADMIN_PASSWORD` + `SESSION_SECRET`) has a **"Seed org pages & download CSV"** button. It calls `POST /api/v1/founding-admin/seed-orgs`, which creates the written-in org pages, mints fresh prod tokens, backfills tokens for any ownerless org missing one, and returns the claim-links CSV (`org_name,city,state,claim_link,org_id`; links `https://kinectem.com/app/claim/<token>`) which the browser downloads. Idempotent (tx + advisory lock) — safe to click more than once.
 
-Idempotent — safe to re-run; it won't duplicate orgs. Re-running after adding new orgs just creates the new ones.
+The org-name seed list is **embedded in the api-server** at `artifacts/api-server/src/data/written-in-orgs.ts` (a generated snapshot, NOT read from a CSV at runtime). To refresh it before publishing when new orgs were added in dev:
+
+1. `pnpm --filter @workspace/scripts run export-org-names` — regenerate `organizations.csv` from the dev DB.
+2. Regenerate the embedded module from that CSV (single-column parse, case-insensitive dedupe) into `artifacts/api-server/src/data/written-in-orgs.ts`, then commit both.
+3. **Republish the main app**, then open the founding-admin page and click **Seed org pages**. (`FOUNDING_ADMIN_PASSWORD` + `SESSION_SECRET` must be set in the deployment, or the page shows "not configured".)
+
+The legacy `seed-production-orgs` script chain still exists for environments that DO have a separate Scheduled Deployment, but this single-deployment project uses the button.
 
 ### SendGrid Event Webhook (delivery tracking)
 
