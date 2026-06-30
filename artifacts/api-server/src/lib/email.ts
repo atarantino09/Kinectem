@@ -138,20 +138,20 @@ export function appBaseUrl(): string {
 }
 
 export function buildPasswordResetUrl(token: string): string {
-  return `${appBaseUrl()}/reset-password/${token}`;
+  return `${appBaseUrl()}/app/reset-password/${token}`;
 }
 
 export function buildGuardianConfirmUrl(token: string): string {
-  return `${appBaseUrl()}/guardian-confirm/${token}`;
+  return `${appBaseUrl()}/app/guardian-confirm/${token}`;
 }
 
 export function buildFamilyUrl(): string {
-  return `${appBaseUrl()}/family`;
+  return `${appBaseUrl()}/app/family`;
 }
 
 // Task #541 — accept-landing URL for the organization invite token.
 export function buildOrganizationInviteUrl(token: string): string {
-  return `${appBaseUrl()}/org-invites/${token}`;
+  return `${appBaseUrl()}/app/org-invites/${token}`;
 }
 
 // Task #541 — Sent when an org owner/admin invites someone (by email) to

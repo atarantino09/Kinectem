@@ -17,7 +17,7 @@ to `${appBaseUrl()}/invites/<token>` (no `/app`) resolves to the marketing
 site, not the app, so the accept flow never loads.
 
 **How to apply:** when adding a new transactional email that deep-links into the
-app, use `buildInviteAcceptUrl`-style helpers that prepend `/app/`. NOTE: some
-older builders (`buildGuardianConfirmUrl`, `buildOrganizationInviteUrl`,
-`buildPasswordResetUrl`, `buildFamilyUrl`) omit `/app/` — that is a latent bug,
-not the pattern to copy.
+app, use `buildInviteAcceptUrl`-style helpers that prepend `/app/`. All current
+builders (`buildGuardianConfirmUrl`, `buildOrganizationInviteUrl`,
+`buildPasswordResetUrl`, `buildFamilyUrl`, `buildInviteAcceptUrl`) now correctly
+include `/app/` — copy that pattern for any new builder.
