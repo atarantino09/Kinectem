@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { db, notifications, rosterEntries, rosterInvites, users } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
 async function getFootballTeamId(): Promise<string> {
@@ -177,5 +179,148 @@ describe("invites", () => {
       `/api/v1/teams/${teamId}/invites/${inviteId}`,
     );
     expect(res.status).toBe(403);
+  });
+
+  // Task #646 — re-inviting an email after revoking the first invite must
+  // reach the recipient again. For an existing account this means a fresh
+  // pending roster entry + in-app notification; revoking must not leave a
+  // dangling pending entry that silently blocks the re-invite.
+  it("re-invites an existing account after revoking (notification fires again)", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+
+    // Morgan is a seeded athlete who is NOT on Varsity Football. Clear any
+    // prior roster entry so the first invite creates a clean pending row.
+    const [morgan] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "morgan@kinectem.demo"))
+      .limit(1);
+    expect(morgan).toBeTruthy();
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      );
+
+    function pendingEntry() {
+      return db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, morgan.id),
+          ),
+        )
+        .limit(1);
+    }
+    function inviteNoteCount(): Promise<number> {
+      return db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, morgan.id),
+            eq(notifications.kind, "roster_invite"),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+
+    const notesBefore = await inviteNoteCount();
+
+    // First invite → pending entry + notification.
+    const first = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "player" });
+    expect(first.status).toBe(201);
+    const [afterFirst] = await pendingEntry();
+    expect(afterFirst?.status).toBe("pending");
+    expect(await inviteNoteCount()).toBe(notesBefore + 1);
+
+    // Revoke → the dangling pending entry is cleaned up in the same tx.
+    const revoke = await coach.agent.delete(
+      `/api/v1/teams/${teamId}/invites/${first.body.id}`,
+    );
+    expect(revoke.status).toBe(200);
+    expect(revoke.body.status).toBe("withdrawn");
+    const afterRevoke = await pendingEntry();
+    expect(afterRevoke.length).toBe(0);
+
+    // Re-invite → a fresh pending entry AND a new notification fire.
+    const second = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "player" });
+    expect(second.status).toBe(201);
+    const [afterSecond] = await pendingEntry();
+    expect(afterSecond?.status).toBe("pending");
+    expect(await inviteNoteCount()).toBe(notesBefore + 2);
+  });
+
+  describe("re-invite for an email with no account", () => {
+    let originalKey: string | undefined;
+    let originalFrom: string | undefined;
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      originalKey = process.env.SENDGRID_API_KEY;
+      originalFrom = process.env.EMAIL_FROM;
+      process.env.SENDGRID_API_KEY = "test-key";
+      process.env.EMAIL_FROM = "noreply@kinectem.test";
+      fetchMock = vi.fn(async () => new Response("", { status: 202 }));
+      vi.stubGlobal("fetch", fetchMock);
+    });
+
+    afterEach(() => {
+      if (originalKey === undefined) delete process.env.SENDGRID_API_KEY;
+      else process.env.SENDGRID_API_KEY = originalKey;
+      if (originalFrom === undefined) delete process.env.EMAIL_FROM;
+      else process.env.EMAIL_FROM = originalFrom;
+      vi.unstubAllGlobals();
+    });
+
+    it("re-sends the coach invite email after revoking", async () => {
+      const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const teamId = await getFootballTeamId();
+      const email = `reinvite-${Date.now()}@example.com`;
+
+      // First invite → one coach invite email.
+      fetchMock.mockClear();
+      const first = await coach.agent
+        .post(`/api/v1/teams/${teamId}/invites`)
+        .send({ email, position: "player" });
+      expect(first.status).toBe(201);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Revoke (no roster entry exists for an account-less email).
+      const revoke = await coach.agent.delete(
+        `/api/v1/teams/${teamId}/invites/${first.body.id}`,
+      );
+      expect(revoke.status).toBe(200);
+      expect(revoke.body.status).toBe("withdrawn");
+
+      // Re-invite → the email goes out again.
+      fetchMock.mockClear();
+      const second = await coach.agent
+        .post(`/api/v1/teams/${teamId}/invites`)
+        .send({ email, position: "player" });
+      expect(second.status).toBe(201);
+      expect(second.body.token).toBeTruthy();
+      expect(second.body.token).not.toBe(first.body.token);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Two distinct invite rows exist: the first revoked, the second pending.
+      const rows = await db
+        .select()
+        .from(rosterInvites)
+        .where(eq(rosterInvites.invitedEmail, email));
+      expect(rows.length).toBe(2);
+      expect(rows.some((r) => r.status === "revoked")).toBe(true);
+      expect(rows.some((r) => r.status === "pending")).toBe(true);
+    });
   });
 });

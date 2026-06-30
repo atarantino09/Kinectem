@@ -954,18 +954,37 @@ router.post(
           ),
         )
         .limit(1);
-      if (!existingEntry) {
-        const [entry] = await db
-          .insert(rosterEntries)
-          .values({
-            teamId,
-            userId: existingUser.id,
-            role: dbRole,
-            status: "pending",
-            position: positionRaw === "coach" ? null : positionRaw,
-            invitedById: me.id,
-          })
-          .returning();
+      // Task #646 — only a genuinely active/accepted membership should
+      // short-circuit placement. A leftover `pending` (or `declined`)
+      // entry — e.g. from a previously revoked invite — must NOT block a
+      // fresh invite: reuse that row and re-fire the notification +
+      // auto-follow so the recipient actually hears about the re-invite.
+      if (!existingEntry || existingEntry.status !== "accepted") {
+        let entry = existingEntry;
+        if (entry) {
+          [entry] = await db
+            .update(rosterEntries)
+            .set({
+              role: dbRole,
+              status: "pending",
+              position: positionRaw === "coach" ? null : positionRaw,
+              invitedById: me.id,
+            })
+            .where(eq(rosterEntries.id, entry.id))
+            .returning();
+        } else {
+          [entry] = await db
+            .insert(rosterEntries)
+            .values({
+              teamId,
+              userId: existingUser.id,
+              role: dbRole,
+              status: "pending",
+              position: positionRaw === "coach" ? null : positionRaw,
+              invitedById: me.id,
+            })
+            .returning();
+        }
         await ensureOrgFollowedForTeam(existingUser.id, teamId);
         // Task #434 — auto-follow on the invited user's own behalf in
         // addition to the existing parent-side follow. Best-effort.
@@ -1064,10 +1083,38 @@ router.delete(
     // "withdrawn" — translate at the boundary so spec consumers see a
     // single, consistent vocabulary.
     if (invite.status === "pending") {
-      await db
-        .update(rosterInvites)
-        .set({ status: "revoked" })
-        .where(eq(rosterInvites.id, invite.id));
+      // Task #646 — when the invited email belongs to an existing
+      // account, the send-invite path also created a `pending`
+      // roster_entries row. Revoking only the invite would leave that
+      // entry behind, which then silently blocks any future re-invite
+      // (the send path skips placement when an entry already exists).
+      // Clean up the matching still-pending entry in the same
+      // transaction so the two records stay consistent. An
+      // already-accepted membership is never touched.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(rosterInvites)
+          .set({ status: "revoked" })
+          .where(eq(rosterInvites.id, invite.id));
+        if (invite.invitedEmail) {
+          const [invitedUser] = await tx
+            .select()
+            .from(users)
+            .where(eq(users.email, invite.invitedEmail.toLowerCase()))
+            .limit(1);
+          if (invitedUser) {
+            await tx
+              .delete(rosterEntries)
+              .where(
+                and(
+                  eq(rosterEntries.teamId, teamId),
+                  eq(rosterEntries.userId, invitedUser.id),
+                  eq(rosterEntries.status, "pending"),
+                ),
+              );
+          }
+        }
+      });
       return res.json({ id: invite.id, status: "withdrawn" });
     }
     res.json({
