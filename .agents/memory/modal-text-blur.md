@@ -50,9 +50,14 @@ multi-line invite message). It was the only `overflow-y-auto` element in the
 animation was investigated and ruled out — that scale is transient and does NOT
 explain persistent (post-refresh) blur.
 
-**User override (keep):** for THIS invite message the user explicitly wants the
-compact bounded+scrollable preview (`max-h-40 overflow-y-auto`) so the whole
-dialog fits on screen and the coach scrolls just the message. Do NOT un-cap it
-again to "fix blur" — the compact layout is the stated preference and the blur
-was never reproduced at native resolution (likely Canvas-iframe scaling, not a
-real CSS bug). Cause-2 stays as a general caution for *new* dialogs.
+**Resolution for the invite message (keep):** the user wants BOTH a compact
+preview (whole dialog visible) AND crisp text. Those conflict for a nested
+`overflow-y-auto` box — the inner scroll layer composites at a fractional offset
+and blurs (confirmed: blur appears only when the `<pre>` has its own scroll,
+disappears when it doesn't). The settled design is **clip + expand toggle**, NOT
+an inner scrollbar: collapsed = `max-h-40 overflow-hidden` with a bottom gradient
+fade (clip → no composited scroll layer → crisp); a "Show full message" button
+expands to full height in normal flow, letting the *dialog's own* scroll handle
+overflow (that scroll layer pins to an integer top → also crisp). Do NOT
+reintroduce `overflow-y-auto`/`overflow-auto` on the message `<pre>` to "let them
+scroll the message" — that is exactly what brings the blur back.

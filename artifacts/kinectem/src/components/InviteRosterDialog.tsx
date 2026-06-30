@@ -129,6 +129,7 @@ export function InviteRosterDialog({
   const [linkErrored, setLinkErrored] = useState(false);
   const [copied, setCopied] = useState(false);
   const [messageCopied, setMessageCopied] = useState(false);
+  const [showFullMessage, setShowFullMessage] = useState(false);
   const generateLink = useGetOrCreateTeamJoinLink({
     mutation: {
       onSuccess: (resp) => {
@@ -252,6 +253,7 @@ export function InviteRosterDialog({
       setBulkSending(false);
       setBulkProgress({ done: 0, total: 0 });
       setBulkResults(null);
+      setShowFullMessage(false);
       bulkAbortRef.current = false;
     }
   }, [open]);
@@ -549,12 +551,30 @@ export function InviteRosterDialog({
                     and the join link.
                   </p>
                   {inviteMessage ? (
-                    <pre
-                      className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
-                      data-testid="text-invite-message"
-                    >
-                      {inviteMessage}
-                    </pre>
+                    <div>
+                      <div className="relative">
+                        <pre
+                          className={
+                            "whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
+                            (showFullMessage ? "" : " max-h-40 overflow-hidden")
+                          }
+                          data-testid="text-invite-message"
+                        >
+                          {inviteMessage}
+                        </pre>
+                        {!showFullMessage && (
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-lg bg-gradient-to-t from-muted to-transparent" />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowFullMessage((v) => !v)}
+                        className="mt-1 text-xs font-medium text-primary hover:underline"
+                        data-testid="button-toggle-invite-message"
+                      >
+                        {showFullMessage ? "Show less" : "Show full message"}
+                      </button>
+                    </div>
                   ) : (
                     <p className="text-xs text-muted-foreground flex items-center gap-2">
                       <Loader2 className="w-3 h-3 animate-spin" /> Preparing
