@@ -32,6 +32,17 @@ The whole monorepo publishes as a **single Autoscale Deployment** using the appl
 - **API server**: `https://kinectem.replit.app/api` (health: `/api/healthz`)
 - **Custom domains already attached**: `kinectem.com`, `www.kinectem.com` (both resolve to the single deployment and currently serve the marketing root `/`).
 
+### Seeding org pages + grabbing the claim-links CSV (post-publish)
+
+Publishing syncs **schema only, not rows**, so a freshly-published prod DB has **no org pages and no claim tokens**. Claim tokens are **minted per-environment** — a CSV exported from dev will NOT work live. The live claim-links CSV must be produced by running the seed job **inside the production deployment**. This is a **two-step** operation (the main-app republish does NOT run the seed job — they are separate deployments):
+
+1. **In dev, before publishing**: `pnpm --filter @workspace/scripts run export-org-names` to refresh `organizations.csv` (the seed list the job reads). Commit it.
+2. **Republish the main app** so the deployed code carries the current `organizations.csv`.
+3. **Run the seed job in prod**: open Deployments → the `seed-production-orgs` Scheduled Deployment → **Run now**. Its command MUST end in `-- --apply` (without it the run is a no-write dry run). Full command: `pnpm --filter @workspace/scripts run seed-production-orgs -- --apply`.
+4. The job creates the org pages, mints fresh prod tokens, and **prints the claim-links CSV to the run logs** (stdout; `org_name,city,state,claim_link,org_id`, links are `https://kinectem.com/app/claim/<token>`). Copy the CSV from the run logs — that file is the one for the admin page. (Don't use `--out=<file>`: a scheduled deploy's filesystem is ephemeral, so a written file isn't retrievable; stdout/logs is the way.)
+
+Idempotent — safe to re-run; it won't duplicate orgs. Re-running after adding new orgs just creates the new ones.
+
 ### SendGrid Event Webhook (delivery tracking)
 
 Invite delivery flags (delivered / bounced / dropped / deferred / spam) only light up in production once the SendGrid Event Webhook is wired to the deployment. The code ships fully — this is a one-time operational step per environment:
