@@ -511,6 +511,52 @@ export function InviteRosterDialog({
                 <p className="text-[11px] text-muted-foreground">
                   Anyone with this link can request to join the team.
                 </p>
+                <div className="mt-3 border-t border-border pt-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-black tracking-tight text-sm">
+                      Message to copy &amp; share
+                    </h3>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={onCopyMessage}
+                      disabled={!inviteMessage}
+                      className="gap-1 font-bold shrink-0"
+                      data-testid="button-copy-invite-message"
+                    >
+                      {messageCopied ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Sharing the link somewhere else (a group text, GroupMe,
+                    TeamSnap)? Paste this message too — it already has your name
+                    and the join link.
+                  </p>
+                  {inviteMessage ? (
+                    <pre
+                      className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                      data-testid="text-invite-message"
+                    >
+                      {inviteMessage}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Preparing
+                      message…
+                    </p>
+                  )}
+                </div>
               </>
             ) : linkErrored ? (
               <p className="text-xs text-muted-foreground">
@@ -612,51 +658,6 @@ export function InviteRosterDialog({
           </TabsContent>
 
           <TabsContent value="email" className="mt-4 space-y-4">
-            <div className="rounded-xl border border-border p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-black tracking-tight text-sm">
-                  Message to copy &amp; share
-                </h3>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={onCopyMessage}
-                  disabled={!inviteMessage}
-                  className="gap-1 font-bold shrink-0"
-                  data-testid="button-copy-invite-message"
-                >
-                  {messageCopied ? (
-                    <>
-                      <CheckCircle2 className="w-3 h-3" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      Copy
-                    </>
-                  )}
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Paste this into your own text or email to invite players'
-                parents. It already has your name and the team's join link.
-              </p>
-              {inviteMessage ? (
-                <pre
-                  className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
-                  data-testid="text-invite-message"
-                >
-                  {inviteMessage}
-                </pre>
-              ) : (
-                <p className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Preparing
-                  message…
-                </p>
-              )}
-            </div>
             <form onSubmit={onSendInvite} className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Position</Label>
@@ -838,6 +839,11 @@ export function InviteRosterDialog({
                   />
                   <p className="text-[11px] text-muted-foreground">
                     Paste one per line, or separated by commas, semicolons, or spaces.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Kinectem emails each address the same invite message shown
+                    with the shareable link above — with your name and the
+                    team's join link.
                   </p>
                 </div>
                 {parsedRows.length > 0 && (
