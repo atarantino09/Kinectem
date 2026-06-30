@@ -349,7 +349,12 @@ router.get(
       .from(rosterEntries)
       .innerJoin(users, eq(rosterEntries.userId, users.id))
       .where(eq(rosterEntries.teamId, req.params.teamId))
-      .orderBy(sql`lower(${users.name}) asc nulls last`);
+      // Task #667/#668 — sort by display name case-insensitively so the
+      // roster never leaks the raw insertion order. `name` is NOT NULL but
+      // can be empty/whitespace, which `nulls last` alone wouldn't push to
+      // the end; collapse those to NULL first so nameless members always
+      // sort last, matching the client render-time safety net.
+      .orderBy(sql`nullif(btrim(lower(${users.name})), '') asc nulls last`);
     const parentIds = Array.from(
       new Set(
         rows
@@ -414,7 +419,11 @@ router.get(
       .from(rosterInvites)
       .leftJoin(users, eq(rosterInvites.invitedById, users.id))
       .where(eq(rosterInvites.teamId, teamId))
-      .orderBy(sql`lower(${rosterInvites.invitedName}) asc nulls last`);
+      // Task #667/#668 — mirror the members ordering: case-insensitive by
+      // invited name with nameless invites (NULL or empty) sorted last.
+      .orderBy(
+        sql`nullif(btrim(lower(${rosterInvites.invitedName})), '') asc nulls last`,
+      );
     const data = rows.map((r) => toInvite(r.i, r.u));
     res.json(paginate(data));
   }),
