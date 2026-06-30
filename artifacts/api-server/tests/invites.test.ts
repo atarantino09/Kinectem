@@ -275,6 +275,178 @@ describe("invites", () => {
     expect(await inviteNoteCount()).toBe(notesBefore + 2);
   });
 
+  // Task #658 — revoking an invite must only ever remove the *pending* paired
+  // roster_entry. An already-accepted membership for the same email must be
+  // left fully intact, so withdrawing a stray duplicate invite can never evict
+  // an active player/coach from the roster.
+  it("revoking an invite never deletes an accepted membership", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+
+    const [morgan] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "morgan@kinectem.demo"))
+      .limit(1);
+    expect(morgan).toBeTruthy();
+
+    // Start clean, then plant an ACCEPTED membership for Morgan directly.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      );
+    const [accepted] = await db
+      .insert(rosterEntries)
+      .values({
+        teamId,
+        userId: morgan.id,
+        role: "coach",
+        status: "accepted",
+        invitedById: coach.user.id,
+      })
+      .returning();
+    expect(accepted.status).toBe("accepted");
+
+    // Minting a fresh invite for the same email persists the invite row but
+    // short-circuits placement (an accepted entry already exists), so the
+    // accepted membership is the only roster row.
+    const created = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
+    expect(created.status).toBe(201);
+
+    // Revoke the invite — the accepted membership must survive untouched.
+    const revoke = await coach.agent.delete(
+      `/api/v1/teams/${teamId}/invites/${created.body.id}`,
+    );
+    expect(revoke.status).toBe(200);
+    expect(revoke.body.status).toBe("withdrawn");
+
+    const rows = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      );
+    expect(rows.length).toBe(1);
+    expect(rows[0].id).toBe(accepted.id);
+    expect(rows[0].status).toBe("accepted");
+  });
+
+  // Task #658 — a re-invite of a previously-revoked address must re-fire the
+  // full placement fan-out, not silently no-op. The #646 test above covers the
+  // pending entry + notification; this asserts the team/org auto-follow is
+  // re-established too, even when the prior follow rows were cleared.
+  it("re-invite re-fires the team/org auto-follow after revoking", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+
+    const [morgan] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "morgan@kinectem.demo"))
+      .limit(1);
+    expect(morgan).toBeTruthy();
+
+    function teamFollowCount(): Promise<number> {
+      return db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(
+            eq(teamFollowers.teamId, teamId),
+            eq(teamFollowers.userId, morgan.id),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function orgFollowCount(): Promise<number> {
+      return db
+        .select()
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, morgan.id))
+        .then((rows) => rows.length);
+    }
+
+    // Clean slate: no roster entry, no team/org follow rows for Morgan.
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, morgan.id),
+        ),
+      );
+    await db
+      .delete(organizationFollowers)
+      .where(eq(organizationFollowers.userId, morgan.id));
+
+    // First coach invite → pending entry + team/org auto-follow.
+    const first = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
+    expect(first.status).toBe(201);
+    expect(await teamFollowCount()).toBe(1);
+    expect(await orgFollowCount()).toBeGreaterThan(0);
+
+    // Revoke clears the pending entry (follow rows are intentionally kept).
+    const revoke = await coach.agent.delete(
+      `/api/v1/teams/${teamId}/invites/${first.body.id}`,
+    );
+    expect(revoke.status).toBe(200);
+
+    // Wipe the follow rows so we can prove the re-invite re-creates them
+    // rather than relying on the leftovers from the first invite.
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, morgan.id),
+        ),
+      );
+    await db
+      .delete(organizationFollowers)
+      .where(eq(organizationFollowers.userId, morgan.id));
+    expect(await teamFollowCount()).toBe(0);
+    expect(await orgFollowCount()).toBe(0);
+
+    // Re-invite → placement runs again AND the auto-follow re-fires.
+    const second = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
+    expect(second.status).toBe(201);
+
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      )
+      .limit(1);
+    expect(entry?.status).toBe("pending");
+    expect(await teamFollowCount()).toBe(1);
+    expect(await orgFollowCount()).toBeGreaterThan(0);
+  });
+
   // Task #648 — guard the Task #645 behavior: a *player* invite to an email
   // that already has a Kinectem account (usually the parent/guardian) must
   // NOT roster that account as the player. No roster entry, no team/org
