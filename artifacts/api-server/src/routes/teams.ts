@@ -932,18 +932,27 @@ router.post(
       })
       .returning();
 
-    // If a Kinectem account already exists for this email, also place that
-    // user on the roster as pending so they (and their linked guardian, if
-    // any) can accept the spot in-app without waiting for the email link.
-    // This mirrors the direct-add path's notification fan-out so that
-    // parents of children invited by email get the same /family deep-link
-    // they get from the direct-add path.
+    // If a Kinectem account already exists for this email, fan out an
+    // in-app notification so they (and their linked guardian, if any) can
+    // act without waiting for the email link.
+    //
+    // Coach/staff invites to an existing account place that user on the
+    // roster as pending so they can accept the spot in-app, mirroring the
+    // direct-add path's fan-out.
+    //
+    // Task #645 — Player invites are different: the matched account is
+    // usually the *parent*, not the child who plays. We must NOT put that
+    // account on the roster as the player. Instead we notify them and
+    // route them to the invite acceptance screen, where they confirm and
+    // pick the actual player via the existing chooser. No roster row,
+    // team-follow, or org-follow is created until the chooser completes —
+    // this aligns the existing-account fast path with the email-link flow.
     const [existingUser] = await db
       .select()
       .from(users)
       .where(eq(users.email, email.toLowerCase()))
       .limit(1);
-    if (existingUser) {
+    if (existingUser && dbRole === "coach") {
       const [existingEntry] = await db
         .select()
         .from(rosterEntries)
@@ -1024,6 +1033,38 @@ router.post(
             actorUserId: me.id,
           });
         }
+      }
+    } else if (existingUser) {
+      // Task #645 — player invite to an existing account. Create NO roster
+      // entry and run NO team/org auto-follow: the matched account is
+      // usually the parent, who must not be rostered as the player.
+      // Notify them (and their linked guardian, if any) with a deep-link to
+      // the invite acceptance screen, where they pick the real player via
+      // the existing chooser. We use the plain `roster_invite` kind (not
+      // `roster_invite_for_child`) precisely because there is no roster
+      // entry id to back the inline Accept/Decline buttons — the link must
+      // lead into the chooser instead. Minor-actor masking mirrors the
+      // coach path above.
+      const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+      await db.insert(notifications).values({
+        userId: existingUser.id,
+        kind: "roster_invite",
+        message: `${actorName} invited you to ${t.name}. Tap to choose who's playing.`,
+        link: `/invites/${invite.token}`,
+        actorUserId: me.id,
+      });
+      if (existingUser.parentId) {
+        const childFirstName =
+          (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
+            ? existingUser.name!.trim().split(/\s+/)[0]
+            : "your child";
+        await db.insert(notifications).values({
+          userId: existingUser.parentId,
+          kind: "roster_invite",
+          message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+          link: `/invites/${invite.token}`,
+          actorUserId: me.id,
+        });
       }
     } else {
       // Task #634 — no Kinectem account exists for this address, so the

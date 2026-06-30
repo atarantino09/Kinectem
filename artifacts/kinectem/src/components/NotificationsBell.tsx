@@ -49,6 +49,12 @@ import { useToast } from "@/hooks/use-toast";
 //                               `requires_follow_approval = true`.
 //   roster_invite            -> `/teams/<teamId>?roster=1&entryId=<entryId>`
 //                               source: routes/teams.ts (member add + invite redeem)
+//                               Task #645 — also used for *player* email
+//                               invites to an existing account, where the
+//                               link is `/invites/<token>` instead (no
+//                               roster entry exists yet; the recipient picks
+//                               the real player via the chooser). Rendered as
+//                               a plain clickable link either way.
 //   roster_invite_for_child  -> `/family?childId=...&entryId=...&teamId=...`
 //                               source: routes/teams.ts; also handled inline below
 //                               (Accept / Decline buttons on the row).
