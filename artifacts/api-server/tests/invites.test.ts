@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { db, notifications, rosterEntries, rosterInvites, users } from "@workspace/db";
+import {
+  db,
+  notifications,
+  organizationFollowers,
+  rosterEntries,
+  rosterInvites,
+  teamFollowers,
+  users,
+} from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
 async function getFootballTeamId(): Promise<string> {
@@ -185,6 +193,12 @@ describe("invites", () => {
   // reach the recipient again. For an existing account this means a fresh
   // pending roster entry + in-app notification; revoking must not leave a
   // dangling pending entry that silently blocks the re-invite.
+  //
+  // Task #645/#648 — this path only applies to invites that place the matched
+  // account on the roster as pending, i.e. *coach/staff* invites. Player
+  // invites to an existing account no longer create a roster entry (the
+  // matched account is usually the parent), so this test uses a coach invite
+  // to exercise the revoke-cleanup-then-reinvite mechanism #646 added.
   it("re-invites an existing account after revoking (notification fires again)", async () => {
     const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
     const teamId = await getFootballTeamId();
@@ -236,7 +250,7 @@ describe("invites", () => {
     // First invite → pending entry + notification.
     const first = await coach.agent
       .post(`/api/v1/teams/${teamId}/invites`)
-      .send({ email: "morgan@kinectem.demo", position: "player" });
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
     expect(first.status).toBe(201);
     const [afterFirst] = await pendingEntry();
     expect(afterFirst?.status).toBe("pending");
@@ -254,11 +268,204 @@ describe("invites", () => {
     // Re-invite → a fresh pending entry AND a new notification fire.
     const second = await coach.agent
       .post(`/api/v1/teams/${teamId}/invites`)
-      .send({ email: "morgan@kinectem.demo", position: "player" });
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
     expect(second.status).toBe(201);
     const [afterSecond] = await pendingEntry();
     expect(afterSecond?.status).toBe("pending");
     expect(await inviteNoteCount()).toBe(notesBefore + 2);
+  });
+
+  // Task #648 — guard the Task #645 behavior: a *player* invite to an email
+  // that already has a Kinectem account (usually the parent/guardian) must
+  // NOT roster that account as the player. No roster entry, no team/org
+  // follow — only a `roster_invite` notification deep-linking to the
+  // /invites/<token> chooser, fanned out to the recipient AND their parent.
+  it("player invite to an existing account creates no roster entry or follow, only a /invites notification", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+
+    // Samira is a seeded minor athlete linked to parent Lisa. She plays
+    // basketball, not on Varsity Football — a clean target for a player
+    // invite. Clear any stray football roster entry so we start from zero.
+    const [samira] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "samira@kinectem.demo"))
+      .limit(1);
+    expect(samira).toBeTruthy();
+    expect(samira.parentId).toBeTruthy();
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, samira.id),
+        ),
+      );
+
+    function rosterCount(userId: string): Promise<number> {
+      return db
+        .select()
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.userId, userId),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function teamFollowCount(userId: string): Promise<number> {
+      return db
+        .select()
+        .from(teamFollowers)
+        .where(
+          and(
+            eq(teamFollowers.teamId, teamId),
+            eq(teamFollowers.userId, userId),
+          ),
+        )
+        .then((rows) => rows.length);
+    }
+    function orgFollowCount(userId: string): Promise<number> {
+      return db
+        .select()
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.userId, userId))
+        .then((rows) => rows.length);
+    }
+    function inviteNotes(userId: string) {
+      return db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, userId),
+            eq(notifications.kind, "roster_invite"),
+          ),
+        );
+    }
+
+    const samiraRosterBefore = await rosterCount(samira.id);
+    const samiraTeamFollowBefore = await teamFollowCount(samira.id);
+    const samiraOrgFollowBefore = await orgFollowCount(samira.id);
+    const parentTeamFollowBefore = await teamFollowCount(samira.parentId!);
+    const parentOrgFollowBefore = await orgFollowCount(samira.parentId!);
+    const samiraNotesBefore = (await inviteNotes(samira.id)).length;
+    const parentNotesBefore = (await inviteNotes(samira.parentId!)).length;
+
+    const res = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "samira@kinectem.demo", position: "player" });
+    expect(res.status).toBe(201);
+    const token = res.body.token as string;
+    expect(token).toBeTruthy();
+
+    // No roster entry is created for the matched (parent) account — it must
+    // never surface as a pending player.
+    expect(await rosterCount(samira.id)).toBe(samiraRosterBefore);
+    // No team/org follow side-effects for the account or its guardian.
+    expect(await teamFollowCount(samira.id)).toBe(samiraTeamFollowBefore);
+    expect(await orgFollowCount(samira.id)).toBe(samiraOrgFollowBefore);
+    expect(await teamFollowCount(samira.parentId!)).toBe(parentTeamFollowBefore);
+    expect(await orgFollowCount(samira.parentId!)).toBe(parentOrgFollowBefore);
+
+    // A roster_invite notification deep-linking to the chooser fires for the
+    // recipient and (because parentId is set) for their guardian.
+    const samiraNotes = await inviteNotes(samira.id);
+    expect(samiraNotes.length).toBe(samiraNotesBefore + 1);
+    expect(samiraNotes.some((n) => n.link === `/invites/${token}`)).toBe(true);
+
+    const parentNotes = await inviteNotes(samira.parentId!);
+    expect(parentNotes.length).toBe(parentNotesBefore + 1);
+    expect(parentNotes.some((n) => n.link === `/invites/${token}`)).toBe(true);
+  });
+
+  // Task #648 companion — the coach/staff existing-account path is unchanged:
+  // it DOES place the matched account on the roster as pending and runs the
+  // team/org auto-follow, with a notification deep-linking to the roster row
+  // (NOT the /invites chooser).
+  it("coach invite to an existing account still creates a pending entry and follows", async () => {
+    const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+
+    // Morgan is a seeded athlete not on Varsity Football. Clear any prior
+    // football roster/follow rows so the invite starts from a clean slate.
+    const [morgan] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "morgan@kinectem.demo"))
+      .limit(1);
+    expect(morgan).toBeTruthy();
+    await db
+      .delete(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      );
+    await db
+      .delete(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, morgan.id),
+        ),
+      );
+
+    const res = await coach.agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: "morgan@kinectem.demo", position: "coach" });
+    expect(res.status).toBe(201);
+
+    // The matched account is rostered as pending coach.
+    const [entry] = await db
+      .select()
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.userId, morgan.id),
+        ),
+      )
+      .limit(1);
+    expect(entry?.status).toBe("pending");
+    expect(entry?.role).toBe("coach");
+
+    // Auto-follow side-effects fire: team follow + org follow.
+    const teamFollow = await db
+      .select()
+      .from(teamFollowers)
+      .where(
+        and(
+          eq(teamFollowers.teamId, teamId),
+          eq(teamFollowers.userId, morgan.id),
+        ),
+      );
+    expect(teamFollow.length).toBe(1);
+    const orgFollow = await db
+      .select()
+      .from(organizationFollowers)
+      .where(eq(organizationFollowers.userId, morgan.id));
+    expect(orgFollow.length).toBeGreaterThan(0);
+
+    // The notification deep-links to the roster row, not the /invites chooser.
+    const notes = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, morgan.id),
+          eq(notifications.kind, "roster_invite"),
+        ),
+      );
+    expect(
+      notes.some((n) => (n.link ?? "").includes(`/teams/${teamId}?roster=1`)),
+    ).toBe(true);
+    expect(notes.every((n) => !(n.link ?? "").startsWith("/invites/"))).toBe(
+      true,
+    );
   });
 
   describe("re-invite for an email with no account", () => {
