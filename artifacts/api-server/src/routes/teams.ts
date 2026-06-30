@@ -31,6 +31,7 @@ import {
   appBaseUrl,
   buildRosterEmail,
   sendCoachInviteEmail,
+  buildInviteAcceptUrl,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
@@ -952,6 +953,11 @@ router.post(
       .from(users)
       .where(eq(users.email, email.toLowerCase()))
       .limit(1);
+    // Task #654 — report the email-send outcome to the coach. `null` means
+    // no email was attempted (the invitee already has a Kinectem account and
+    // was reached via an in-app notification instead); `true`/`false` only
+    // apply to the no-account branch where we actually try to send.
+    let emailSent: boolean | null = null;
     if (existingUser && dbRole === "coach") {
       const [existingEntry] = await db
         .select()
@@ -1079,7 +1085,12 @@ router.post(
           coachName: actorName,
           token: invite.token,
         });
+        emailSent = true;
       } catch (err) {
+        // Task #654 — the pending invite is already persisted, so a delivery
+        // failure must NOT fail the request. Instead report it so the coach
+        // can fall back to copying the invite link and messaging directly.
+        emailSent = false;
         req.log.warn(
           { err, teamId, kind: "coach_invite" },
           "coach invite email send failed",
@@ -1087,7 +1098,14 @@ router.post(
       }
     }
 
-    res.status(201).json(toInvite(invite, me));
+    // Task #654 — append the email-send outcome and the public accept URL
+    // outside the locked openapi.yaml; the client reads them via a narrow cast
+    // (mirrors the `hasOwner`/`myClaimStatus` pattern).
+    res.status(201).json({
+      ...toInvite(invite, me),
+      emailSent,
+      acceptUrl: buildInviteAcceptUrl(invite.token),
+    });
   }),
 );
 

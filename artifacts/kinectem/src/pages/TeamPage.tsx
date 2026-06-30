@@ -385,6 +385,7 @@ export default function TeamPage() {
       <InviteRosterDialog
         teamId={teamId}
         seasonId={seasonId}
+        teamName={team.name}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
       />

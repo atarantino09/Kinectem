@@ -47,6 +47,7 @@ import {
   MinusCircle,
   Link2,
   Copy,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
@@ -79,6 +80,11 @@ type SendOutcome = {
   email: string;
   status: "success" | "skipped" | "failed";
   reason?: string;
+  // Task #654 — for successful sends, whether the invite email actually went
+  // out (true), failed to send (false), or was not attempted because the
+  // invitee already has an account and got an in-app notification (null).
+  emailSent?: boolean | null;
+  acceptUrl?: string;
 };
 
 function parseEmails(raw: string): string[] {
@@ -91,11 +97,13 @@ function parseEmails(raw: string): string[] {
 export function InviteRosterDialog({
   teamId,
   seasonId,
+  teamName,
   open,
   onOpenChange,
 }: {
   teamId: string;
   seasonId: string;
+  teamName: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -119,6 +127,16 @@ export function InviteRosterDialog({
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkResults, setBulkResults] = useState<SendOutcome[] | null>(null);
   const bulkAbortRef = useRef(false);
+
+  // Task #654 — outcome of the most recent single email invite, used to show
+  // honest "emailed / couldn't email" feedback plus a copy-link fallback.
+  const [inviteResult, setInviteResult] = useState<{
+    email: string;
+    emailSent: boolean | null;
+    acceptUrl: string;
+  } | null>(null);
+  const [resultCopied, setResultCopied] = useState(false);
+  const [resultMsgCopied, setResultMsgCopied] = useState(false);
 
   const addMember = useAddTeamMember();
   const createInvite = useCreateRosterInvite();
@@ -254,9 +272,29 @@ export function InviteRosterDialog({
       setBulkProgress({ done: 0, total: 0 });
       setBulkResults(null);
       setShowFullMessage(false);
+      setInviteResult(null);
+      setResultCopied(false);
+      setResultMsgCopied(false);
       bulkAbortRef.current = false;
     }
   }, [open]);
+
+  // Task #654 — short, ready-to-paste outreach for a single recipient. Unlike
+  // the long "join Kinectem" copy above, this names the specific team and the
+  // invitee's own accept link so a coach can text/email it directly.
+  const shortInviteMessage = (link: string) =>
+    `You've been invited to join ${teamName} on Kinectem — accept here: ${link}`;
+
+  const copyToClipboard = (text: string, label: string) =>
+    navigator.clipboard
+      .writeText(text)
+      .then(() => toast({ title: `${label} copied` }))
+      .catch(() =>
+        toast({
+          title: `Couldn't copy ${label.toLowerCase()}`,
+          variant: "destructive",
+        }),
+      );
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -315,7 +353,7 @@ export function InviteRosterDialog({
       return;
     }
     try {
-      await createInvite.mutateAsync({
+      const resp = await createInvite.mutateAsync({
         teamId,
         data: {
           email: email.trim(),
@@ -323,9 +361,25 @@ export function InviteRosterDialog({
           position: emailPosition,
         },
       });
-      toast({ title: `Invite sent to ${email}` });
+      // Task #654 — `emailSent` + `acceptUrl` are appended by the server
+      // outside the locked openapi.yaml, so read them via a narrow cast (same
+      // pattern as `hasOwner`/`myClaimStatus`).
+      const extra = resp as {
+        emailSent?: boolean | null;
+        acceptUrl?: string;
+        token?: string;
+      };
+      const acceptUrl =
+        extra.acceptUrl ??
+        `${window.location.origin}${import.meta.env.BASE_URL}invites/${extra.token ?? ""}`;
+      setResultCopied(false);
+      setResultMsgCopied(false);
+      setInviteResult({
+        email: email.trim(),
+        emailSent: extra.emailSent ?? null,
+        acceptUrl,
+      });
       await invalidate();
-      onOpenChange(false);
     } catch {
       toast({ title: "Failed to send invite", variant: "destructive" });
     }
@@ -402,12 +456,23 @@ export function InviteRosterDialog({
         if (idx >= validEmails.length) return;
         const addr = validEmails[idx];
         try {
-          await createRosterInvite(teamId, {
+          const resp = await createRosterInvite(teamId, {
             email: addr,
             seasonId,
             position: bulkPosition,
           });
-          sent.push({ email: addr, status: "success" });
+          // Task #654 — capture the per-recipient email outcome (appended
+          // outside the locked spec) so undelivered invites can be listed.
+          const extra = resp as {
+            emailSent?: boolean | null;
+            acceptUrl?: string;
+          };
+          sent.push({
+            email: addr,
+            status: "success",
+            emailSent: extra.emailSent ?? null,
+            acceptUrl: extra.acceptUrl,
+          });
         } catch (err) {
           let msg = "Failed";
           if (err && typeof err === "object" && "message" in err) {
@@ -464,6 +529,12 @@ export function InviteRosterDialog({
   const successCount = bulkResults?.filter((r) => r.status === "success").length ?? 0;
   const skippedCount = bulkResults?.filter((r) => r.status === "skipped").length ?? 0;
   const failedCount = bulkResults?.filter((r) => r.status === "failed").length ?? 0;
+  // Task #654 — invites that were created but whose email did NOT send. These
+  // need manual follow-up (copy the link), so surface them explicitly.
+  const undelivered =
+    bulkResults?.filter(
+      (r) => r.status === "success" && r.emailSent === false,
+    ) ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -683,6 +754,147 @@ export function InviteRosterDialog({
           </TabsContent>
 
           <TabsContent value="email" className="mt-4 space-y-4">
+            {inviteResult ? (
+              <div className="space-y-3" data-testid="invite-result-panel">
+                {inviteResult.emailSent === true && (
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">
+                        Invite emailed to {inviteResult.email}.
+                      </span>{" "}
+                      They'll get a link to accept. You can also share the link
+                      below as a backup.
+                    </p>
+                  </div>
+                )}
+                {inviteResult.emailSent === false && (
+                  <div
+                    className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                    data-testid="invite-email-failed"
+                  >
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">
+                        We couldn't send the email automatically.
+                      </span>{" "}
+                      The invite is still active — copy the link below and send
+                      it to {inviteResult.email} yourself.
+                    </p>
+                  </div>
+                )}
+                {inviteResult.emailSent === null && (
+                  <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                    <Mail className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">
+                        {inviteResult.email} already has a Kinectem account.
+                      </span>{" "}
+                      We sent them an in-app notification. You can also share the
+                      link below.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs">Invite link</Label>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center min-w-0">
+                    <code
+                      className="block sm:flex-1 min-w-0 max-w-full text-xs bg-muted px-3 py-2 rounded-lg truncate"
+                      data-testid="text-invite-accept-link"
+                    >
+                      {inviteResult.acceptUrl}
+                    </code>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        copyToClipboard(inviteResult.acceptUrl, "Link");
+                        setResultCopied(true);
+                        setTimeout(() => setResultCopied(false), 2000);
+                      }}
+                      className="gap-1 font-bold self-start sm:self-auto shrink-0"
+                      data-testid="button-copy-invite-accept-link"
+                    >
+                      {resultCopied ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="font-bold text-xs">Message to send</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        copyToClipboard(
+                          shortInviteMessage(inviteResult.acceptUrl),
+                          "Message",
+                        );
+                        setResultMsgCopied(true);
+                        setTimeout(() => setResultMsgCopied(false), 2000);
+                      }}
+                      className="gap-1 font-bold shrink-0"
+                      data-testid="button-copy-invite-accept-message"
+                    >
+                      {resultMsgCopied ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <pre
+                    className="whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                    data-testid="text-invite-accept-message"
+                  >
+                    {shortInviteMessage(inviteResult.acceptUrl)}
+                  </pre>
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setInviteResult(null);
+                      setEmail("");
+                      setName("");
+                    }}
+                    data-testid="btn-invite-another"
+                  >
+                    Invite someone else
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="brand"
+                    onClick={() => onOpenChange(false)}
+                    data-testid="btn-invite-result-done"
+                  >
+                    Done
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
             <form onSubmit={onSendInvite} className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Position</Label>
@@ -774,6 +986,7 @@ export function InviteRosterDialog({
                 </Button>
               </DialogFooter>
             </form>
+            )}
           </TabsContent>
 
           <TabsContent value="bulk" className="mt-4 space-y-3">
@@ -782,7 +995,7 @@ export function InviteRosterDialog({
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                     <p className="text-2xl font-black text-emerald-700">{successCount}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Sent</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Invited</p>
                   </div>
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                     <p className="text-2xl font-black text-amber-700">{skippedCount}</p>
@@ -800,8 +1013,11 @@ export function InviteRosterDialog({
                       className="flex items-center gap-2 p-2"
                       data-testid={`bulk-result-row-${r.status}`}
                     >
-                      {r.status === "success" && (
+                      {r.status === "success" && r.emailSent !== false && (
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                      {r.status === "success" && r.emailSent === false && (
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                       )}
                       {r.status === "skipped" && (
                         <MinusCircle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -810,12 +1026,61 @@ export function InviteRosterDialog({
                         <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                       )}
                       <span className="flex-1 truncate font-mono text-xs">{r.email}</span>
+                      {r.status === "success" && r.emailSent === false && (
+                        <span className="text-[11px] text-amber-700">Email not delivered</span>
+                      )}
                       {r.reason && (
                         <span className="text-[11px] text-muted-foreground">{r.reason}</span>
                       )}
                     </div>
                   ))}
                 </div>
+                {undelivered.length > 0 && (
+                  <div
+                    className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2"
+                    data-testid="bulk-undelivered-panel"
+                  >
+                    <div className="flex items-start gap-2 text-xs text-amber-900">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <p>
+                        <span className="font-bold">
+                          {undelivered.length} invite
+                          {undelivered.length === 1 ? "" : "s"} couldn't be
+                          emailed automatically.
+                        </span>{" "}
+                        The invites are still active — copy each link and send it
+                        to the person directly.
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {undelivered.map((r, i) => (
+                        <div
+                          key={`${r.email}-undelivered-${i}`}
+                          className="flex items-center gap-2"
+                          data-testid="bulk-undelivered-row"
+                        >
+                          <span className="flex-1 truncate font-mono text-[11px]">
+                            {r.email}
+                          </span>
+                          {r.acceptUrl && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 font-bold shrink-0 h-7"
+                              onClick={() =>
+                                copyToClipboard(r.acceptUrl!, "Link")
+                              }
+                              data-testid="button-copy-bulk-undelivered-link"
+                            >
+                              <Copy className="w-3 h-3" /> Copy link
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <DialogFooter>
                   <Button
                     type="button"
