@@ -95,6 +95,11 @@ describe("coach invite email (task #636)", () => {
     const token = res.body.token as string;
     expect(token).toBeTruthy();
 
+    // Task #654 — a successful send reports emailSent=true and still carries
+    // the public accept URL so the coach can copy-link regardless.
+    expect(res.body.emailSent).toBe(true);
+    expect(res.body.acceptUrl).toBe(buildInviteAcceptUrl(token));
+
     const sent = lastSentEmail();
     expect(sent.to).toBe(email);
 
@@ -123,8 +128,7 @@ describe("coach invite email (task #636)", () => {
     const teamId = await getFootballTeamId();
 
     // Morgan is a seeded athlete who is NOT on Varsity Football. Clear any
-    // prior roster entry so this invite creates a fresh pending placement +
-    // notification (the route skips both if an entry already exists).
+    // prior roster entry so we can assert the player-invite path creates none.
     const [morgan] = await db
       .select()
       .from(users)
@@ -146,10 +150,19 @@ describe("coach invite email (task #636)", () => {
       .send({ email: "morgan@kinectem.demo", position: "player" });
     expect(res.status).toBe(201);
 
+    // Task #654 — a known invitee is reached via in-app notification, so no
+    // email is attempted: emailSent is null (not false). The accept URL is
+    // still emitted for copy-link parity.
+    expect(res.body.emailSent).toBeNull();
+    expect(res.body.acceptUrl).toBe(buildInviteAcceptUrl(res.body.token));
+
     // Known address → no coach invite email.
     expect(fetchMock).not.toHaveBeenCalled();
 
-    // A pending roster entry + in-app roster_invite notification were created.
+    // Task #645 — a player invite to an existing account creates NO roster
+    // entry (the matched account may be the parent, not the player). The
+    // invitee is reached via an in-app roster_invite notification that links
+    // to the `/invites/<token>` chooser instead.
     const [entry] = await db
       .select()
       .from(rosterEntries)
@@ -160,8 +173,7 @@ describe("coach invite email (task #636)", () => {
         ),
       )
       .limit(1);
-    expect(entry).toBeTruthy();
-    expect(entry.status).toBe("pending");
+    expect(entry).toBeUndefined();
 
     const notes = await db
       .select()
@@ -172,9 +184,9 @@ describe("coach invite email (task #636)", () => {
           eq(notifications.kind, "roster_invite"),
         ),
       );
-    expect(notes.some((n) => n.link?.includes(`entryId=${entry.id}`))).toBe(
-      true,
-    );
+    expect(
+      notes.some((n) => n.link?.includes(`/invites/${res.body.token}`)),
+    ).toBe(true);
   });
 
   it("still creates the invite when email delivery fails (best-effort)", async () => {
@@ -194,6 +206,13 @@ describe("coach invite email (task #636)", () => {
     const token = res.body.token as string;
     expect(token).toBeTruthy();
     expect(fetchMock).toHaveBeenCalled();
+
+    // Task #654 — the copy-link fallback contract: a failed send must report
+    // emailSent=false (NOT true) and still hand back the accept URL so the
+    // coach can copy the link and message the invitee directly. This is the
+    // exact regression the task guards against.
+    expect(res.body.emailSent).toBe(false);
+    expect(res.body.acceptUrl).toBe(buildInviteAcceptUrl(token));
 
     const [invite] = await db
       .select()
