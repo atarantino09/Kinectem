@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  customFetch,
   useAcceptTeamInvite,
   useDeclineTeamInvite,
   useWithdrawRosterInvite,
@@ -188,6 +189,41 @@ export function TeamRosterTabs({
       toast({ title: "Invitation revoked" });
     } catch {
       toast({ title: "Failed to revoke invite", variant: "destructive" });
+    }
+  };
+
+  // Task #655 — re-send an invite whose email didn't arrive (bounced or
+  // landed in spam). The endpoint reuses the existing token (no new invite
+  // row), so we call it directly via customFetch — it's intentionally not
+  // in the locked openapi.yaml, like the other invite extras. The 200 body
+  // carries `emailSent` (true/false/null), appended outside the spec.
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const onResend = async (inviteId: string, label: string) => {
+    setResendingId(inviteId);
+    try {
+      const resp = await customFetch<{ emailSent?: boolean | null }>(
+        `/api/v1/teams/${teamId}/invites/${inviteId}/resend`,
+        { method: "POST" },
+      );
+      if (resp.emailSent === false) {
+        toast({
+          title: "Couldn't re-send the email",
+          description: `The invite for ${label} is still active — copy its link and share it directly.`,
+          variant: "destructive",
+        });
+      } else if (resp.emailSent === null) {
+        toast({
+          title: "Notification re-sent",
+          description: `${label} already has an account — we nudged them in-app.`,
+        });
+      } else {
+        toast({ title: `Invite re-sent to ${label}` });
+      }
+      await invalidate();
+    } catch {
+      toast({ title: "Failed to re-send invite", variant: "destructive" });
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -468,16 +504,29 @@ export function TeamRosterTabs({
               {i.createdAt && <span>· {formatDate(i.createdAt)}</span>}
             </div>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive shrink-0"
-            onClick={() => onRevoke(i.id, label)}
-            disabled={withdrawInvite.isPending}
-            data-testid={`btn-revoke-${i.id}`}
-          >
-            <X className="w-3 h-3 mr-1" /> Revoke
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 font-bold rounded-full"
+              onClick={() => onResend(i.id, label)}
+              disabled={resendingId === i.id}
+              data-testid={`btn-resend-${i.id}`}
+            >
+              <Mail className="w-3 h-3 mr-1" />
+              {resendingId === i.id ? "Sending…" : "Resend"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive"
+              onClick={() => onRevoke(i.id, label)}
+              disabled={withdrawInvite.isPending}
+              data-testid={`btn-revoke-${i.id}`}
+            >
+              <X className="w-3 h-3 mr-1" /> Revoke
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -763,16 +812,28 @@ export function TeamRosterTabs({
                             {formatDate(i.createdAt ?? "")}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive"
-                              onClick={() => onRevoke(i.id, label)}
-                              disabled={withdrawInvite.isPending}
-                              data-testid={`btn-revoke-${i.id}`}
-                            >
-                              <X className="w-3 h-3 mr-1" /> Revoke
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-3 font-bold rounded-full"
+                                onClick={() => onResend(i.id, label)}
+                                disabled={resendingId === i.id}
+                                data-testid={`btn-resend-${i.id}`}
+                              >
+                                {resendingId === i.id ? "Sending…" : "Resend"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-3 font-bold rounded-full text-destructive hover:text-destructive"
+                                onClick={() => onRevoke(i.id, label)}
+                                disabled={withdrawInvite.isPending}
+                                data-testid={`btn-revoke-${i.id}`}
+                              >
+                                <X className="w-3 h-3 mr-1" /> Revoke
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

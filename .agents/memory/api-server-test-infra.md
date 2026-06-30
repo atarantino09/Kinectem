@@ -12,6 +12,7 @@ description: How api-server vitest builds its DB, which tests fail pre-existing,
 ## Pre-existing failing tests (this environment) — do NOT attribute to your changes
 - `tests/posts.test.ts`: 17/56 fail on a **clean HEAD checkout** — mostly `expected 401 to be 204/403/404` (auth) plus a few missing-content assertions. Verified by reverting changes to HEAD and re-running.
 - `tests/tag-emails.test.ts`: ~2 fail with `SendGrid email delivery failed (401)` — invalid SendGrid key in dev/test env.
+- `tests/coach-invite-email.test.ts > ...known address`: fails `expected entry to be truthy` — the test sends `position: "player"`, but the create route's player-invite-to-existing-account branch (Task #645) intentionally creates NO roster entry (routes the parent to the chooser instead). The test asserts the old pre-#645 behavior, so it's stale. Fails even run alone; not caused by feature edits.
 - **Why:** the repo is mid-development; the API suite is not fully green in this environment. Verify a baseline (revert your files via `git show HEAD:path > path`, run, then restore) before assuming you broke something.
 - The whole api-server also has pervasive pre-existing TS errors (TS7030 "Not all code paths return a value", `string|string[]` arg mismatches) — a separate "fix backend type errors" concern, not caused by feature edits.
 

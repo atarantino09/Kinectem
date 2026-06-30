@@ -1183,6 +1183,173 @@ router.delete(
   }),
 );
 
+// Task #655 — re-send an invite that didn't arrive. A coach may need to
+// retry the email for a still-pending invite that bounced or landed in
+// spam. Keyed per inviter so one coach can't hammer the send path, and
+// shared across the resend route below. Modest allowance covers a few
+// honest retries while blocking abuse.
+const inviteResendLimiter = rateLimit({
+  name: "roster-invite-resend",
+  windowMs: 60_000,
+  max: 10,
+  keys: (req) => [req.sessionUser?.id ?? ipKey(req)],
+  message:
+    "You're re-sending invites too quickly. Please wait a moment and try again.",
+});
+
+// Task #655 — re-trigger the invite for an existing pending invite without
+// minting a new token or creating duplicate roster rows. Mirrors the
+// create path's fan-out and reports the same `emailSent` outcome:
+//   - no Kinectem account for the address → re-send the coach invite email
+//     (emailSent true/false).
+//   - account exists → re-fire the in-app notification (emailSent null),
+//     reusing the roster entry that the original send already created.
+// Idempotent on the persisted records (no new token / roster rows) and
+// rate-limited via inviteResendLimiter.
+router.post(
+  "/teams/:teamId/invites/:inviteId/resend",
+  inviteResendLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = req.params.teamId;
+    const inviteId = req.params.inviteId;
+    const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return notFound(res);
+    if (!(await canManageTeam(me.id, t)))
+      return apiError(res, 403, "Team coaches or org admins only");
+    // An archived team is read-only; don't re-send invites into it
+    // (mirrors the create path's archived guard).
+    if (t.archivedAt)
+      return apiError(res, 409, "Team is archived", { code: "team_archived" });
+    const [invite] = await db
+      .select()
+      .from(rosterInvites)
+      .where(
+        and(eq(rosterInvites.id, inviteId), eq(rosterInvites.teamId, teamId)),
+      )
+      .limit(1);
+    if (!invite) return notFound(res);
+    // Only a still-pending invite can be re-sent. Anything terminal
+    // (accepted / declined / expired / revoked) has nothing to re-deliver.
+    if (invite.status !== "pending")
+      return apiError(res, 409, "Invite is no longer pending", {
+        code: "invite_not_pending",
+      });
+    if (!invite.invitedEmail)
+      return apiError(res, 409, "Invite has no email to re-send", {
+        code: "invite_no_email",
+      });
+
+    const email = invite.invitedEmail;
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()))
+      .limit(1);
+
+    // Mirror the create path's outcome contract: `null` = no email was
+    // attempted (reached via in-app notification instead); `true`/`false`
+    // only apply to the no-account branch where we actually send.
+    let emailSent: boolean | null = null;
+    // Write-time mask when the actor is a minor (mirrors the create path).
+    const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+
+    if (existingUser) {
+      // Account exists — re-fire the in-app notification rather than an
+      // email, exactly as the original send did. We do NOT create or
+      // modify roster_entries here: the original send already placed any
+      // coach invitee, so re-sending must not duplicate roster rows.
+      if (invite.role === "coach") {
+        const [existingEntry] = await db
+          .select()
+          .from(rosterEntries)
+          .where(
+            and(
+              eq(rosterEntries.teamId, teamId),
+              eq(rosterEntries.userId, existingUser.id),
+            ),
+          )
+          .limit(1);
+        await db.insert(notifications).values({
+          userId: existingUser.id,
+          kind: "roster_invite",
+          message: `${actorName} invited you to ${t.name}. Tap to accept or decline.`,
+          link: existingEntry
+            ? `/teams/${teamId}?roster=1&entryId=${existingEntry.id}`
+            : `/invites/${invite.token}`,
+          actorUserId: me.id,
+        });
+        if (existingUser.parentId) {
+          const childFirstName =
+            (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
+              ? existingUser.name!.trim().split(/\s+/)[0]
+              : "your child";
+          await db.insert(notifications).values({
+            userId: existingUser.parentId,
+            kind: "roster_invite_for_child",
+            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+            link: existingEntry
+              ? `/family?childId=${existingUser.id}&entryId=${existingEntry.id}&teamId=${teamId}`
+              : `/invites/${invite.token}`,
+            actorUserId: me.id,
+          });
+        }
+      } else {
+        // Player invite to an existing (usually parent) account — route to
+        // the chooser via the token link, no roster row. Mirrors the
+        // create path's player branch.
+        await db.insert(notifications).values({
+          userId: existingUser.id,
+          kind: "roster_invite",
+          message: `${actorName} invited you to ${t.name}. Tap to choose who's playing.`,
+          link: `/invites/${invite.token}`,
+          actorUserId: me.id,
+        });
+        if (existingUser.parentId) {
+          const childFirstName =
+            (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
+              ? existingUser.name!.trim().split(/\s+/)[0]
+              : "your child";
+          await db.insert(notifications).values({
+            userId: existingUser.parentId,
+            kind: "roster_invite",
+            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+            link: `/invites/${invite.token}`,
+            actorUserId: me.id,
+          });
+        }
+      }
+    } else {
+      // No Kinectem account — re-send the coach invite email, reusing the
+      // existing token. Best-effort: a delivery failure is reported (not
+      // fatal) so the coach can fall back to copying the link.
+      try {
+        await sendCoachInviteEmail(email, {
+          coachName: actorName,
+          token: invite.token,
+        });
+        emailSent = true;
+      } catch (err) {
+        emailSent = false;
+        req.log.warn(
+          { err, teamId, kind: "coach_invite_resend" },
+          "coach invite resend email send failed",
+        );
+      }
+    }
+
+    // Mirror the create path: append the email-send outcome and accept URL
+    // outside the locked openapi.yaml; the client reads them via a narrow
+    // cast (same pattern as create).
+    res.json({
+      ...toInvite(invite, me),
+      emailSent,
+      acceptUrl: buildInviteAcceptUrl(invite.token),
+    });
+  }),
+);
+
 // Pending team-invites for a guardian-managed child. The parent (or a real
 // admin) needs a single endpoint that returns every team that has invited
 // this child but isn't accepted yet, plus enough metadata to render the
