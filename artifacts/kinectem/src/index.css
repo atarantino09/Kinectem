@@ -349,6 +349,33 @@
       background-position: 0% 50%;
     }
   }
+  /* Attention shimmer for the AI Assist button — a bright light band sweeps
+   * across the pill on a loop so managers notice it right away. Opt in per
+   * element; clipped to the button shape via overflow-hidden. */
+  .ai-assist-shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .ai-assist-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.6) 50%,
+      transparent 70%
+    );
+    transform: translateX(-100%);
+    animation: ai-assist-shine 2.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ai-assist-shine::after {
+      animation: none;
+      display: none;
+    }
+  }
   /* Small uppercase pill — matches the marketing site's "COMING SOON" tag */
   .brand-pill {
     display: inline-flex;
@@ -475,4 +502,9 @@
   0%   { background-position: 0% 0%; }
   50%  { background-position: 0% 100%; }
   100% { background-position: 0% 0%; }
+}
+
+@keyframes ai-assist-shine {
+  0%        { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
 }

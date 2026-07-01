@@ -207,7 +207,12 @@ export default function TeamPage() {
         targetTestId: "btn-edit-team",
         onEnter: () => setExpanded("posts"),
         title: "Edit your team",
-        body: "Change your team's name, sport, level, and cover photo here anytime.",
+        body: (
+          <>
+            Click <strong>Edit</strong> at the top of the page to change your
+            team's name, sport, level, and cover photo anytime.
+          </>
+        ),
       });
     }
     if (canManage) {
@@ -215,7 +220,14 @@ export default function TeamPage() {
         targetTestId: "btn-invite-roster",
         onEnter: () => setExpanded("roster"),
         title: "Build your roster",
-        body: "Invite coaches, players, and parents from here. Coaches you add become team admins who can help you run everything — invite by email or share a join link.",
+        body: (
+          <>
+            Open the <strong>Roster</strong> tab, then click{" "}
+            <strong>Invite</strong> to add coaches, players, and parents — by
+            email or a shareable join link. Coaches you add become team admins
+            who can help you run everything.
+          </>
+        ),
       });
     }
     if (canManage && canViewSchedule) {
@@ -223,7 +235,13 @@ export default function TeamPage() {
         targetTestId: "btn-add-event",
         onEnter: () => setExpanded("schedule"),
         title: "Add your schedule",
-        body: "Post practices and games here. Add them one at a time, or import a whole season at once with a CSV.",
+        body: (
+          <>
+            Open the <strong>Schedule</strong> tab, then click{" "}
+            <strong>Add Event</strong> to post practices and games — or{" "}
+            <strong>Import CSV</strong> to load a whole season at once.
+          </>
+        ),
       });
     }
     if (canPostHighlight) {
@@ -231,7 +249,14 @@ export default function TeamPage() {
         targetTestId: "btn-create-highlight",
         onEnter: () => setExpanded("posts"),
         title: "Post highlights",
-        body: "Share short video clips of great plays. Paste a YouTube or Vimeo link so the clip plays right on the page — other links still work but show as a plain link.",
+        body: (
+          <>
+            In <strong>Recent Posts</strong>, click{" "}
+            <strong>Post Highlight</strong> to share a clip. Paste a YouTube or
+            Vimeo link so it plays right on the page — other links still work but
+            show as a plain link.
+          </>
+        ),
       });
     }
     if (canPostRecap) {
@@ -239,13 +264,26 @@ export default function TeamPage() {
         targetTestId: "btn-create-recap",
         onEnter: () => setExpanded("posts"),
         title: "Write game recaps",
-        body: "Recap a game so it lives on your team page and each player's profile. Short on time? The built-in AI Assist drafts and polishes the write-up from a few quick notes.",
+        body: (
+          <>
+            In <strong>Recent Posts</strong>, click{" "}
+            <strong>Create Game Recap</strong>. Short on time? The built-in{" "}
+            <strong>AI Assist</strong> button drafts and polishes the write-up
+            from a few quick notes.
+          </>
+        ),
       });
       s.push({
         targetTestId: "btn-season-recap",
         onEnter: () => setExpanded("posts"),
         title: "Combined recaps",
-        body: "Roll several games into one story — perfect for a tournament weekend or a full-season wrap-up.",
+        body: (
+          <>
+            In <strong>Recent Posts</strong>, click{" "}
+            <strong>Combined Recap</strong> to roll several games into one story
+            — perfect for a tournament weekend or a full-season wrap-up.
+          </>
+        ),
       });
     }
     return s;

@@ -108,9 +108,9 @@ export function AiAssistButton({
     <>
       <Button
         type="button"
-        variant="outline"
+        variant="brand"
         size="sm"
-        className="h-7 gap-1.5 rounded-full text-xs font-bold"
+        className="ai-assist-shine h-7 gap-1.5 rounded-full text-xs font-bold"
         onClick={() => setOpen(true)}
         data-testid="button-ai-assist"
       >

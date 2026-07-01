@@ -22,7 +22,6 @@ type Rect = { top: number; left: number; width: number; height: number };
 
 const RING_PAD = 8;
 const CARD_W = 340;
-const CARD_H_EST = 220;
 
 /**
  * A forced, numbered "spotlight" walkthrough. It dims the page, rings the
@@ -119,14 +118,18 @@ export function SpotlightTour({
 
   let cardStyle: CSSProperties;
   if (rect) {
-    const below = rect.top + rect.height + 14;
-    const placeBelow = below + CARD_H_EST < vh;
-    const top = placeBelow
-      ? below
-      : Math.max(14, rect.top - 14 - CARD_H_EST);
-    let left = rect.left + rect.width / 2 - CARD_W / 2;
-    left = Math.min(Math.max(14, left), vw - CARD_W - 14);
-    cardStyle = { position: "fixed", top, left, width: CARD_W };
+    // Pin the card to whichever vertical half is opposite the target so it
+    // never sits on top of the highlighted button (or its neighbours). Center
+    // it horizontally in the viewport, clamped to stay fully on-screen.
+    const targetCenterY = rect.top + rect.height / 2;
+    const targetInTopHalf = targetCenterY < vh / 2;
+    const left = Math.min(
+      Math.max(14, vw / 2 - CARD_W / 2),
+      vw - CARD_W - 14,
+    );
+    cardStyle = targetInTopHalf
+      ? { position: "fixed", bottom: 24, left, width: CARD_W }
+      : { position: "fixed", top: 24, left, width: CARD_W };
   } else {
     cardStyle = {
       position: "fixed",
