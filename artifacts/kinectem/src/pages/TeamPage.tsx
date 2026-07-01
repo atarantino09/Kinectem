@@ -35,6 +35,10 @@ import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
 import { AdoptLinkCard } from "@/components/team-page/AdoptLinkCard";
 import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
+import {
+  SpotlightTour,
+  type TourStep,
+} from "@/components/team-page/SpotlightTour";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
@@ -42,6 +46,11 @@ import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastCompose
 import { Button } from "@/components/ui/button";
 import { Megaphone } from "lucide-react";
 import { useIsLg } from "@/hooks/use-mobile";
+
+// First-run walkthrough is shown once per browser (the OpenAPI contract is
+// locked, so there's no server-side "seen onboarding" flag). Bump the suffix
+// to re-show the tour to everyone after a meaningful revision.
+const TEAM_TOUR_KEY = "kinectem:team-tour-v1";
 
 export default function TeamPage() {
   const params = useParams<{ teamId: string }>();
@@ -72,6 +81,7 @@ export default function TeamPage() {
     showRoster ? "roster" : "posts",
   );
   const [followersOpen, setFollowersOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const isLg = useIsLg();
 
   // Re-evaluate when navigating between team URLs without remounting
@@ -184,6 +194,88 @@ export default function TeamPage() {
   // the server's `canCreateRecap` rule (org owner/admin, team coach,
   // or accepted roster member with `position = "author"`).
   const canPostRecap = !!team?.canAuthorRecaps;
+  // Mirrors TeamPostsSection's own gate for the "Post Highlight" CTA.
+  const canPostHighlight = isAdmin || isTeamMember;
+
+  // First-run guided walkthrough. Built only from the buttons this viewer can
+  // actually see (org admins get "Edit team"; coaches get the manage steps),
+  // so nobody is pointed at a control that isn't there.
+  const tourSteps = useMemo<TourStep[]>(() => {
+    const s: TourStep[] = [];
+    if (isAdmin) {
+      s.push({
+        targetTestId: "btn-edit-team",
+        onEnter: () => setExpanded("posts"),
+        title: "Edit your team",
+        body: "Change your team's name, sport, level, and cover photo here anytime.",
+      });
+    }
+    if (canManage) {
+      s.push({
+        targetTestId: "btn-invite-roster",
+        onEnter: () => setExpanded("roster"),
+        title: "Build your roster",
+        body: "Invite coaches, players, and parents from here. Coaches you add become team admins who can help you run everything — invite by email or share a join link.",
+      });
+    }
+    if (canManage && canViewSchedule) {
+      s.push({
+        targetTestId: "btn-add-event",
+        onEnter: () => setExpanded("schedule"),
+        title: "Add your schedule",
+        body: "Post practices and games here. Add them one at a time, or import a whole season at once with a CSV.",
+      });
+    }
+    if (canPostHighlight) {
+      s.push({
+        targetTestId: "btn-create-highlight",
+        onEnter: () => setExpanded("posts"),
+        title: "Post highlights",
+        body: "Share short video clips of great plays. Paste a YouTube or Vimeo link so the clip plays right on the page — other links still work but show as a plain link.",
+      });
+    }
+    if (canPostRecap) {
+      s.push({
+        targetTestId: "btn-create-recap",
+        onEnter: () => setExpanded("posts"),
+        title: "Write game recaps",
+        body: "Recap a game so it lives on your team page and each player's profile. Short on time? The built-in AI Assist drafts and polishes the write-up from a few quick notes.",
+      });
+      s.push({
+        targetTestId: "btn-season-recap",
+        onEnter: () => setExpanded("posts"),
+        title: "Combined recaps",
+        body: "Roll several games into one story — perfect for a tournament weekend or a full-season wrap-up.",
+      });
+    }
+    return s;
+  }, [isAdmin, canManage, canViewSchedule, canPostHighlight, canPostRecap]);
+
+  // Open the walkthrough once per browser, the first time a manager lands on
+  // any team. Suppressed when `?welcome=1` is present so it never stacks on the
+  // post-claim rundown dialog.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!canManage || wantsWelcome) return;
+    if (tourSteps.length === 0) return;
+    let alreadySeen = false;
+    try {
+      alreadySeen = localStorage.getItem(TEAM_TOUR_KEY) === "1";
+    } catch {
+      // storage blocked (private mode etc.) — treat as not seen
+    }
+    if (!alreadySeen) setTourOpen(true);
+  }, [canManage, wantsWelcome, tourSteps.length]);
+
+  const finishTour = () => {
+    try {
+      localStorage.setItem(TEAM_TOUR_KEY, "1");
+    } catch {
+      // ignore storage failures (private mode etc.) — tour just won't persist
+    }
+    setTourOpen(false);
+    setExpanded("posts");
+  };
 
   const { data: invitesResp } = useListRosterInvites(teamId, undefined, {
     query: queryOpts({ enabled: !!teamId && canManage }),
@@ -461,6 +553,10 @@ export default function TeamPage() {
             setInviteOpen(true);
           }}
         />
+      )}
+
+      {tourOpen && tourSteps.length > 0 && (
+        <SpotlightTour steps={tourSteps} onFinish={finishTour} />
       )}
     </div>
   );
