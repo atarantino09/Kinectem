@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { formatOrgName } from "@/lib/format";
 import {
@@ -8,8 +9,10 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Building2, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building2, ChevronRight, Plus } from "lucide-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
+import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 
 function OrgLogoTile({
   name,
@@ -36,8 +39,28 @@ export default function MyOrgsPage() {
   });
   const orgs = data?.data ?? [];
 
+  // Auto-open the Create Organization flow when we arrive with `?new=1`
+  // (e.g. straight after an "Organization Admin" signup). Strip the param
+  // afterward so a refresh doesn't re-trigger it.
+  const [createOpen, setCreateOpen] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") === "1") {
+      setCreateOpen(true);
+      params.delete("new");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    }
+  }, []);
+
   return (
     <div className="space-y-6">
+      <CreateOrgDialog open={createOpen} onOpenChange={setCreateOpen} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
@@ -47,13 +70,24 @@ export default function MyOrgsPage() {
             Organizations you belong to.
           </p>
         </div>
-        <Link
-          href="/organizations"
-          className="text-xs font-bold uppercase tracking-wider text-primary hover:underline shrink-0 mt-2"
-          data-testid="link-discover-orgs"
-        >
-          Discover
-        </Link>
+        <div className="flex items-center gap-3 shrink-0 mt-2">
+          <Link
+            href="/organizations"
+            className="text-xs font-bold uppercase tracking-wider text-primary hover:underline"
+            data-testid="link-discover-orgs"
+          >
+            Discover
+          </Link>
+          <Button
+            size="sm"
+            variant="brand"
+            className="font-bold rounded-full"
+            onClick={() => setCreateOpen(true)}
+            data-testid="btn-new-org"
+          >
+            <Plus className="w-4 h-4 mr-1" /> New organization
+          </Button>
+        </div>
       </div>
 
       {isLoading || !meId ? (
@@ -69,12 +103,22 @@ export default function MyOrgsPage() {
             <p className="text-sm text-muted-foreground">
               You're not a member of any organizations yet.
             </p>
-            <Link
-              href="/organizations"
-              className="inline-block mt-3 text-xs font-bold uppercase tracking-wider text-primary hover:underline"
-            >
-              Discover organizations
-            </Link>
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                variant="brand"
+                className="font-bold rounded-full"
+                onClick={() => setCreateOpen(true)}
+                data-testid="btn-empty-new-org"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Create an organization
+              </Button>
+              <Link
+                href="/organizations"
+                className="text-xs font-bold uppercase tracking-wider text-primary hover:underline"
+              >
+                Discover organizations
+              </Link>
+            </div>
           </CardContent>
         </Card>
       ) : (

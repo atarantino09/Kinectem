@@ -22,7 +22,12 @@ import {
   isValidDob,
 } from "@/lib/dob";
 
-export type Role = "athlete" | "coach" | "parent";
+// "org_admin" is a client-only onboarding choice, not a backend account
+// role. The `users.role` enum is locked to athlete/coach/parent/admin by the
+// OpenAPI spec, and admin === platform admin, so an org admin signs up as a
+// regular "coach" on the wire and becomes an actual organization admin by
+// creating an organization (they become its owner) right after signup.
+export type Role = "athlete" | "coach" | "parent" | "org_admin";
 
 function ageInYears(dob: string): number | null {
   if (!dob) return null;
@@ -124,12 +129,17 @@ export function SignUpForm({
           "We need a parent or guardian's email and their confirmation to continue.",
         );
       }
+      // Org admins don't have a distinct backend role — send them as a
+      // "coach" account; they get real org-admin powers by creating an org
+      // (becoming its owner) on the page we redirect to below.
+      const isOrgAdmin = effectiveRole === "org_admin";
+      const wireRole = isOrgAdmin ? "coach" : effectiveRole;
       const res = (await customFetch("/api/v1/auth/signup", {
         method: "POST",
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          role: effectiveRole,
+          role: wireRole,
           email: signupEmail.trim().toLowerCase(),
           password: signupPassword,
           dateOfBirth: dob || null,
@@ -142,7 +152,10 @@ export function SignUpForm({
         return;
       }
       await qc.invalidateQueries();
-      const dest = returnTo || "/";
+      // Org admins land straight on the Create Organization flow so their
+      // first action is setting up the org they'll administer. An explicit
+      // returnTo (e.g. an invite deep link) still wins.
+      const dest = returnTo || (isOrgAdmin ? "/organizations/mine?new=1" : "/");
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         window.location.assign(base + (dest.startsWith("/") ? dest : "/" + dest));
@@ -362,8 +375,18 @@ export function SignUpForm({
               <SelectItem value="athlete">Athlete</SelectItem>
               <SelectItem value="coach">Coach</SelectItem>
               <SelectItem value="parent">Parent / Guardian</SelectItem>
+              <SelectItem value="org_admin">Organization Admin</SelectItem>
             </SelectContent>
           </Select>
+          {role === "org_admin" && (
+            <p
+              className="text-xs text-slate-500"
+              data-testid="note-org-admin"
+            >
+              You'll set up your organization right after creating your
+              account.
+            </p>
+          )}
         </div>
       )}
 
