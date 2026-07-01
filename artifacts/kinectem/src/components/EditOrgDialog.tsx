@@ -32,6 +32,7 @@ import {
 } from "@/lib/shrinkImage";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
+import { apiErrorMessage } from "@/lib/api-errors";
 
 type OrgLike = {
   id: string;
@@ -141,8 +142,11 @@ export function EditOrgDialog({
         queryKey: getGetOrganizationByIdQueryKey(organization.id),
       });
       toast({ title: "Logo updated" });
-    } catch {
-      toast({ title: "Failed to upload logo", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: apiErrorMessage(err) ?? "Failed to upload logo",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
