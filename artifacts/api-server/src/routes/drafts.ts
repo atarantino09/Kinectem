@@ -37,6 +37,7 @@ import {
   apiError,
   safeAvatarUrl,
   notFound,
+  checkPostImagePayload,
   TRUSTED_MINOR_NAME_CONTEXT,
 } from "../lib/spec-helpers";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
@@ -281,6 +282,17 @@ router.patch(
     if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    // Task #692 — recap/post edits attach photos inline as base64 `data:` URLs.
+    // Reject an over-cap payload with a friendly 413 before any DB write (covers
+    // articles + org posts via coverImageUrl/photoUrls and highlights via
+    // thumbnailUrl), so an oversized edit surfaces "image too large" instead of
+    // an opaque body-parser failure or a silent no-op.
+    const patchBody = req.body ?? {};
+    const imgErr = checkPostImagePayload(
+      patchBody.coverImageUrl ?? patchBody.thumbnailUrl,
+      patchBody.photoUrls,
+    );
+    if (imgErr) return apiError(res, 413, imgErr);
     if (parsed.kind === "highlight") {
       return patchHighlight(req, res, me, parsed.id);
     }

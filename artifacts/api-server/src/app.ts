@@ -77,6 +77,18 @@ for (const imagePath of [
 ]) {
   app.patch(imagePath, imageUploadJson);
 }
+// Task #692 — game recaps attach photos inline as base64 `data:` URLs in the
+// `POST /posts` and `PATCH /posts/:postId` JSON body (`photoUrls` +
+// `coverImageUrl`), and a recap can carry SEVERAL photos, so this parser is
+// sized above the single-image one to fit a multi-photo recap. It stays in
+// lockstep with `MAX_POST_IMAGES_TOTAL_LENGTH` in spec-helpers.ts (24 MB
+// combined) plus JSON overhead; over-cap payloads reach the route and get a
+// friendly 413 (see checkPostImagePayload). Registered BEFORE the global
+// express.json() so this parser wins for these routes; every other route keeps
+// the tight 1 MB limit (S7).
+const postImageUploadJson = express.json({ limit: "25mb" });
+app.post("/api/v1/posts", postImageUploadJson);
+app.patch("/api/v1/posts/:postId", postImageUploadJson);
 // S7 — global JSON limit kept tight. Binary asset uploads use a dedicated
 // express.raw() parser (10 MB) on PUT /assets/:assetId/data, so this does not
 // affect uploads; all JSON request bodies are text-only.

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { db, highlightTags, rosterEntries, users } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
+import {
+  checkPostImagePayload,
+  MAX_IMAGE_DATA_URL_LENGTH,
+  MAX_POST_IMAGES_TOTAL_LENGTH,
+} from "../src/lib/spec-helpers";
 
 async function getOrgAndTeam(name = "Varsity Football") {
   const orgs = await request(app).get("/api/v1/organizations");
@@ -2476,6 +2481,115 @@ describe("posts", () => {
         (p: { id: string }) => p.id,
       );
       expect(selfIds).not.toContain(postId);
+    });
+  });
+
+  // Task #692 — recap photos are attached inline as base64 `data:` URLs in the
+  // POST /posts body. A dedicated 25 MB parser accepts a multi-photo recap, and
+  // the route rejects an over-cap payload with a friendly 413 (instead of the
+  // opaque body-parser PayloadTooLargeError) so the composer can show a helpful
+  // "image too large" message.
+  describe("recap photo payload limits", () => {
+    const smallDataUrl = () =>
+      `data:image/jpeg;base64,${"A".repeat(2 * 1024)}`;
+
+    it("accepts a recap with a normal-sized inline photo", async () => {
+      const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const { org } = await getOrgAndTeam();
+      const photo = smallDataUrl();
+      const create = await coachLogin.agent.post("/api/v1/posts").send({
+        postType: "long",
+        organizationId: org.id,
+        title: "Recap with photo",
+        description: "photo round-trip",
+        body: "Body",
+        gameDate: new Date().toISOString(),
+        photoUrls: [photo],
+        coverImageUrl: photo,
+      });
+      expect(create.status).toBe(201);
+      const urls: string[] = (create.body.assets ?? []).map(
+        (asset: { url: string }) => asset.url,
+      );
+      expect(urls).toContain(photo);
+    });
+
+    it("rejects a single over-cap photo with a friendly 413", async () => {
+      const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const { org } = await getOrgAndTeam();
+      // 21 MB data URL — under the 25 MB parser (so it reaches the route) but
+      // over the 20 MB per-image cap. Sent as the only image so the whole body
+      // stays under the parser limit.
+      const huge = `data:image/jpeg;base64,${"A".repeat(21 * 1024 * 1024)}`;
+      const res = await coachLogin.agent.post("/api/v1/posts").send({
+        postType: "long",
+        organizationId: org.id,
+        title: "Too big",
+        body: "Body",
+        gameDate: new Date().toISOString(),
+        photoUrls: [huge],
+      });
+      expect(res.status).toBe(413);
+      expect(res.body.code).toBe("PAYLOAD_TOO_LARGE");
+      expect(typeof res.body.error).toBe("string");
+    });
+
+    it("rejects photos that are too large in aggregate with a friendly 413", async () => {
+      const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const { org } = await getOrgAndTeam();
+      // Two DISTINCT ~12.4 MB photos: each under the 20 MB per-image cap, but
+      // ~24.8 MB combined is over the 24 MB aggregate cap — and still under the
+      // 25 MB parser, so the route (not the parser) produces the friendly error.
+      // (Distinct so the aggregate de-dup doesn't collapse them into one.)
+      const chunkA = `data:image/jpeg;base64,${"A".repeat(Math.floor(12.4 * 1024 * 1024))}`;
+      const chunkB = `data:image/jpeg;base64,${"B".repeat(Math.floor(12.4 * 1024 * 1024))}`;
+      const res = await coachLogin.agent.post("/api/v1/posts").send({
+        postType: "long",
+        organizationId: org.id,
+        title: "Too big together",
+        body: "Body",
+        gameDate: new Date().toISOString(),
+        photoUrls: [chunkA, chunkB],
+      });
+      expect(res.status).toBe(413);
+      expect(res.body.code).toBe("PAYLOAD_TOO_LARGE");
+    });
+  });
+
+  // The recap client historically sent `coverImageUrl: photos[0]` alongside the
+  // full `photoUrls`, so the aggregate check must NOT count the cover twice when
+  // it merely repeats the first photo — otherwise a size-compliant multi-photo
+  // recap gets a spurious 413.
+  describe("checkPostImagePayload aggregate accounting", () => {
+    const dataUrl = (bytes: number) =>
+      `data:image/jpeg;base64,${"A".repeat(bytes)}`;
+
+    it("counts a cover that repeats the first photo only once", () => {
+      // ~13 MB: one copy is under the 24 MB aggregate cap, two copies exceed it.
+      const photo = dataUrl(13 * 1024 * 1024);
+      expect(photo.length).toBeLessThan(MAX_IMAGE_DATA_URL_LENGTH);
+      expect(photo.length * 2).toBeGreaterThan(MAX_POST_IMAGES_TOTAL_LENGTH);
+      // Cover === first photo → deduped → within budget.
+      expect(checkPostImagePayload(photo, [photo])).toBeNull();
+    });
+
+    it("still rejects distinct photos that exceed the aggregate budget", () => {
+      const a = dataUrl(13 * 1024 * 1024);
+      const b = dataUrl(13 * 1024 * 1024).replace(/A/g, "B");
+      expect(checkPostImagePayload(null, [a, b])).not.toBeNull();
+    });
+
+    it("rejects any single photo over the per-image cap", () => {
+      const huge = dataUrl(MAX_IMAGE_DATA_URL_LENGTH + 1);
+      expect(checkPostImagePayload(null, [huge])).not.toBeNull();
+    });
+
+    it("ignores http(s) URLs (they don't bloat the JSON body)", () => {
+      expect(
+        checkPostImagePayload("https://example.com/a.jpg", [
+          "https://example.com/b.jpg",
+        ]),
+      ).toBeNull();
     });
   });
 });

@@ -38,7 +38,7 @@ export type ShrinkOptions = {
 // shrinks/errors before sending rather than getting a server-side 413.
 export const DATA_URL_MAX_LENGTH = 20 * 1024 * 1024;
 
-// Task #695 — profile avatars go through the 3-step asset pipeline and are
+// Profile avatars go through the 3-step asset pipeline and are
 // stored server-side as inline `data:` URLs, then shipped inline on every
 // user-bearing response. At egress the API drops any inline avatar whose
 // data-URL string is longer than MAX_AVATAR_DATA_URL_LENGTH (512 KB) to null,
@@ -75,6 +75,15 @@ export class AvatarTooLargeError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+// A game recap (and posts generally) can carry SEVERAL photos
+// inline as base64 `data:` URLs in one request body. `DATA_URL_MAX_LENGTH`
+// caps each image; this caps the COMBINED size of all attached photos so a
+// multi-photo recap stays within the server's dedicated 25 MB posts body
+// parser. Kept in lockstep with `MAX_POST_IMAGES_TOTAL_LENGTH` in
+// api-server/src/lib/spec-helpers.ts. Composers enforce this before sending so
+// the user gets a clear "too large" message rather than a server-side 413.
+export const POST_IMAGES_TOTAL_MAX_LENGTH = 24 * 1024 * 1024;
 
 // HEIC / HEIF photos straight off an iPhone aren't decodable by
 // non-Safari browsers (Chrome, Firefox, Android WebView), and even

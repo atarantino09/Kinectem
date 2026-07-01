@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { safeInternalPath } from "@/lib/safePath";
+import { apiErrorMessage } from "@/lib/api-errors";
 
 type DraftPayload = {
   id: string;
@@ -405,12 +406,14 @@ export function useNewPostForm({
       });
     }
     if (loadedKind === "org_post") {
+      // Only send `photoUrls`; the server derives `coverImageUrl` from
+      // `photoUrls[0]` when it's absent, so sending both would duplicate the
+      // (large, base64) first photo on the wire.
       return JSON.stringify({
         title: title.trim() || "Untitled",
         body,
         videoUrl: videoUrl || null,
         photoUrls: photos,
-        coverImageUrl: photos[0] ?? null,
       });
     }
     return JSON.stringify({
@@ -687,9 +690,11 @@ export function useNewPostForm({
             },
           } as object)
         : {}),
-      ...(photos.length > 0
-        ? ({ photoUrls: photos, coverImageUrl: photos[0] } as object)
-        : {}),
+      // Only send `photoUrls`; the server derives `coverImageUrl` from
+      // `photoUrls[0]`. Sending both would duplicate the (large, base64) first
+      // photo on the wire and could blow the request-body parser limit for an
+      // otherwise size-compliant multi-photo recap.
+      ...(photos.length > 0 ? ({ photoUrls: photos } as object) : {}),
       ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
       ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
       ...(!isShort && initialOpponent && initialOpponent.trim()
@@ -965,7 +970,34 @@ export function useNewPostForm({
         }
         setLocation(navTo);
       }
-    } catch {
+    } catch (err) {
+      // Task #692 — recap photos are sent inline in the JSON body. An
+      // over-cap payload comes back as a 413 (PAYLOAD_TOO_LARGE). Surface a
+      // photo-specific message instead of the generic "Failed to post", and be
+      // honest about whether the recap actually went live: when editing an
+      // already-published recap the post is still live (the PATCH just didn't
+      // save), whereas a create/publish 413 means nothing was posted.
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? (err as { status?: number }).status
+          : undefined;
+      if (status === 413) {
+        const detail = apiErrorMessage(err) ?? "That photo is too large.";
+        if (isEditingPublished && editId) {
+          toast({
+            title: "Couldn't save your photo",
+            description: `${detail} Your recap is still posted — your latest changes weren't saved.`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Photo too large",
+            description: `${detail} Your recap wasn't posted — remove or shrink a photo and try again.`,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
       toast({ title: "Failed to post", variant: "destructive" });
     }
   };

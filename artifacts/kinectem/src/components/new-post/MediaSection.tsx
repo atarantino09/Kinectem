@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
+  POST_IMAGES_TOTAL_MAX_LENGTH,
 } from "@/lib/shrinkImage";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 
@@ -58,8 +59,37 @@ export function MediaSection({
     }
     if (accepted.length === 0) return;
     try {
-      const next = await Promise.all(accepted.map((f) => shrinkImageToDataUrl(f)));
-      onPhotosChange([...photos, ...next]);
+      const shrunk = await Promise.all(
+        accepted.map((f) => shrinkImageToDataUrl(f)),
+      );
+      // Task #692 — the whole recap (all photos) is sent inline in one JSON
+      // body, so keep the COMBINED size within the server's posts body limit
+      // (POST_IMAGES_TOTAL_MAX_LENGTH). Accept photos in order until the next
+      // one would push the total over the cap; reject the overflow with a clear
+      // message instead of letting the request fail with a server-side 413.
+      let running = photos.reduce((sum, p) => sum + p.length, 0);
+      const fits: string[] = [];
+      let rejectedForSpace = 0;
+      for (const dataUrl of shrunk) {
+        if (running + dataUrl.length > POST_IMAGES_TOTAL_MAX_LENGTH) {
+          rejectedForSpace += 1;
+          continue;
+        }
+        running += dataUrl.length;
+        fits.push(dataUrl);
+      }
+      if (fits.length > 0) onPhotosChange([...photos, ...fits]);
+      if (rejectedForSpace > 0) {
+        toast({
+          title:
+            rejectedForSpace === 1
+              ? "Photo too large to add"
+              : `${rejectedForSpace} photos too large to add`,
+          description:
+            "These photos would make the post too big. Remove some photos or choose smaller ones.",
+          variant: "destructive",
+        });
+      }
     } catch {
       toast({ title: "Couldn't read those photos", variant: "destructive" });
     }

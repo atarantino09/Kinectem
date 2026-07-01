@@ -82,6 +82,7 @@ import {
   notFound,
   buildMinorNameContext,
   maskedDisplayName,
+  checkPostImagePayload,
   TRUSTED_MINOR_NAME_CONTEXT,
   type MinorNameViewerContext,
 } from "../lib/spec-helpers";
@@ -1707,6 +1708,12 @@ router.post(
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const body = req.body ?? {};
+    // Task #692 — recaps attach photos inline as base64 `data:` URLs. Reject an
+    // over-cap payload with a friendly 413 before any DB write, so an oversized
+    // recap surfaces "image too large" instead of an opaque body-parser failure
+    // (and never persists a photoless recap while the client thinks it failed).
+    const imgErr = checkPostImagePayload(body.coverImageUrl, body.photoUrls);
+    if (imgErr) return apiError(res, 413, imgErr);
     // Team selection rules. The team chosen here is the team the article
     // is filed under AND the roster the auto-tag fan-out runs against,
     // so it must be unambiguous — silently picking "any team in the

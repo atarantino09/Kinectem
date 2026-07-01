@@ -72,6 +72,49 @@ export const MAX_AVATAR_DATA_URL_LENGTH = 512 * 1024;
 // parser failure. `http(s)://` URLs are not length-limited here.
 export const MAX_IMAGE_DATA_URL_LENGTH = 20 * 1024 * 1024;
 
+// Task #692 — game recaps (and posts generally) can carry SEVERAL photos
+// inline as base64 `data:` URLs (`photoUrls` + `coverImageUrl`) on the
+// `POST /posts` and `PATCH /posts/:postId` routes. Each individual image is
+// still capped at `MAX_IMAGE_DATA_URL_LENGTH`, but the *combined* payload is
+// capped here so a multi-photo recap stays within the dedicated higher-limit
+// JSON body parser in `app.ts` (sized just above this). Kept in lockstep with
+// the client's `POST_IMAGES_TOTAL_MAX_LENGTH` in
+// `kinectem/src/lib/shrinkImage.ts`.
+export const MAX_POST_IMAGES_TOTAL_LENGTH = 24 * 1024 * 1024;
+
+// Validate the inline image payload on the post create/patch routes. Returns a
+// human-readable error message when the images are too large (so the caller can
+// send a friendly 413 instead of letting the request fail as an opaque
+// body-parser error), or `null` when the payload is acceptable. Only `data:`
+// URLs are length-checked — `http(s)://` URLs are fetched separately and don't
+// bloat the JSON body.
+export function checkPostImagePayload(
+  coverImageUrl: unknown,
+  photoUrls: unknown,
+): string | null {
+  // De-duplicate: the recap client sends `coverImageUrl: photos[0]` AND the
+  // full `photoUrls` array, so the cover is usually a repeat of the first
+  // photo. Counting it twice would fail valid multi-photo recaps against the
+  // aggregate cap even though the wire payload only carries each image once.
+  const urls = new Set<string>();
+  if (typeof coverImageUrl === "string") urls.add(coverImageUrl);
+  if (Array.isArray(photoUrls)) {
+    for (const u of photoUrls) if (typeof u === "string") urls.add(u);
+  }
+  let total = 0;
+  for (const u of urls) {
+    if (!u.startsWith("data:")) continue;
+    if (u.length > MAX_IMAGE_DATA_URL_LENGTH) {
+      return "That image is too large. Please choose a smaller photo.";
+    }
+    total += u.length;
+  }
+  if (total > MAX_POST_IMAGES_TOTAL_LENGTH) {
+    return "Those photos are too large together. Please remove some or choose smaller images.";
+  }
+  return null;
+}
+
 export function safeAvatarUrl(raw: string | null | undefined): string | null {
   if (raw == null) return null;
   if (typeof raw !== "string" || raw.length === 0) return null;
