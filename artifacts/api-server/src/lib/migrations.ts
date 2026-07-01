@@ -738,6 +738,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_claim_token_idx
   WHERE claim_token IS NOT NULL;
 `;
 
+// Operator outreach tracking for the admin claim-links screen — records
+// when the operator has added the org on Facebook. Independent from
+// outreach_messaged_at. Idempotent.
+const TASK_681_ORG_OUTREACH_FACEBOOK_ADDED = `
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS outreach_messaged_at timestamp;
+
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS outreach_facebook_added_at timestamp;
+`;
+
 // Additive: field / court / diamond number within the venue. Idempotent.
 const SCHEDULE_LOCATION_FIELD = `
 ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS location_field text;
@@ -1299,6 +1310,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-07-01-daily-admin-digest-settings",
     sql: DAILY_ADMIN_DIGEST_SETTINGS,
+  },
+  {
+    name: "2026-07-01-task-681-org-outreach-facebook-added",
+    sql: TASK_681_ORG_OUTREACH_FACEBOOK_ADDED,
   },
 ];
 

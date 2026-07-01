@@ -359,6 +359,11 @@ export const organizations = pgTable("organizations", {
   // claim their page. Nullable timestamp: NULL = not yet messaged. Operator
   // bookkeeping only; not exposed on any public org payload.
   outreachMessagedAt: timestamp("outreach_messaged_at"),
+  // Operator outreach tracking for the admin claim-links screen — set when
+  // the operator has added the org on Facebook. Nullable timestamp: NULL =
+  // not yet added. Operator bookkeeping only; not exposed on any public org
+  // payload. Independent from outreachMessagedAt.
+  outreachFacebookAddedAt: timestamp("outreach_facebook_added_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.

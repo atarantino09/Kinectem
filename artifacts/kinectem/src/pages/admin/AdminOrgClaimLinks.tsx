@@ -29,6 +29,7 @@ type ClaimLinkRow = {
   logoUrl: string | null;
   token: string;
   messagedAt: string | null;
+  facebookAddedAt: string | null;
 };
 
 type ClaimLinksResponse = { data: ClaimLinkRow[] };
@@ -154,6 +155,22 @@ export default function AdminOrgClaimLinks() {
       await customFetch(`/api/v1/admin/org-claim-links/${id}/messaged`, {
         method: "PATCH",
         body: JSON.stringify({ messaged }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
+    } catch (err) {
+      toast({
+        title: "Couldn't update",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleFacebookAdded = async (id: string, facebookAdded: boolean) => {
+    try {
+      await customFetch(`/api/v1/admin/org-claim-links/${id}/facebook-added`, {
+        method: "PATCH",
+        body: JSON.stringify({ facebookAdded }),
       });
       await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
     } catch (err) {
@@ -301,6 +318,7 @@ export default function AdminOrgClaimLinks() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[110px]">Facebook</TableHead>
             <TableHead className="w-[110px]">Messaged</TableHead>
             <TableHead>Organization</TableHead>
             <TableHead>Location</TableHead>
@@ -311,13 +329,13 @@ export default function AdminOrgClaimLinks() {
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+              <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : filtered.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+              <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                 No ownerless pages.
               </TableCell>
             </TableRow>
@@ -326,6 +344,14 @@ export default function AdminOrgClaimLinks() {
               const location = [r.city, r.state].filter(Boolean).join(", ");
               return (
                 <TableRow key={r.id} data-testid={`row-claim-link-${r.id}`}>
+                  <TableCell>
+                    <Checkbox
+                      checked={!!r.facebookAddedAt}
+                      onCheckedChange={(v) => toggleFacebookAdded(r.id, v === true)}
+                      aria-label={`Added ${r.name} on Facebook`}
+                      data-testid={`checkbox-facebook-added-${r.id}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Checkbox
                       checked={!!r.messagedAt}

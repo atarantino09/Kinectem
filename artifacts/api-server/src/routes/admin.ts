@@ -1694,6 +1694,7 @@ router.get(
         logoUrl: organizations.logoUrl,
         claimToken: organizations.claimToken,
         outreachMessagedAt: organizations.outreachMessagedAt,
+        outreachFacebookAddedAt: organizations.outreachFacebookAddedAt,
       })
       .from(organizations)
       .where(sql`NOT ${ownerExists}`)
@@ -1708,6 +1709,7 @@ router.get(
       logoUrl: string | null;
       token: string;
       messagedAt: string | null;
+      facebookAddedAt: string | null;
     }> = [];
     for (const r of rows) {
       let token = r.claimToken;
@@ -1727,6 +1729,9 @@ router.get(
         token,
         messagedAt: r.outreachMessagedAt
           ? r.outreachMessagedAt.toISOString()
+          : null,
+        facebookAddedAt: r.outreachFacebookAddedAt
+          ? r.outreachFacebookAddedAt.toISOString()
           : null,
       });
     }
@@ -1853,6 +1858,42 @@ router.patch(
       data: {
         id: org.id,
         messagedAt: org.messagedAt ? org.messagedAt.toISOString() : null,
+      },
+    });
+  }),
+);
+
+// Toggle whether the operator has added this org on Facebook. Independent
+// from the "messaged" flag. facebookAdded=true stamps now(), false clears.
+router.patch(
+  "/org-claim-links/:id/facebook-added",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const facebookAdded = req.body?.facebookAdded;
+    if (typeof facebookAdded !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "facebookAdded must be a boolean", code: "INVALID_BODY" });
+    }
+    const [org] = await db
+      .update(organizations)
+      .set({ outreachFacebookAddedAt: facebookAdded ? new Date() : null })
+      .where(eq(organizations.id, id))
+      .returning({
+        id: organizations.id,
+        facebookAddedAt: organizations.outreachFacebookAddedAt,
+      });
+    if (!org) {
+      return res
+        .status(404)
+        .json({ error: "organization not found", code: "ORG_NOT_FOUND" });
+    }
+    return res.json({
+      data: {
+        id: org.id,
+        facebookAddedAt: org.facebookAddedAt
+          ? org.facebookAddedAt.toISOString()
+          : null,
       },
     });
   }),
