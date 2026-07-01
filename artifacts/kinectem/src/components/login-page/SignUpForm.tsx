@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import {
   DOB_MONTHS,
   DOB_DAYS,
@@ -59,6 +59,7 @@ export function SignUpForm({
   const [role, setRole] = useState<Role>(initialRole);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   // Task #506 — Composed from three dropdowns instead of a native
   // <input type="date">. Same pattern as the profile editor (Task
   // #432): the native picker silently dropped values on some
@@ -401,16 +402,30 @@ export function SignUpForm({
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
             id="signup-password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete="new-password"
             required
             minLength={8}
             value={signupPassword}
             onChange={(e) => setSignupPassword(e.target.value)}
             placeholder="At least 8 characters"
-            className="rounded-xl h-11 pl-9"
+            className="rounded-xl h-11 pl-9 pr-10"
             data-testid="input-signup-password"
           />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            aria-pressed={showPassword}
+            data-testid="btn-toggle-signup-password"
+          >
+            {showPassword ? (
+              <EyeOff className="w-4 h-4" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+          </button>
         </div>
       </div>
 
