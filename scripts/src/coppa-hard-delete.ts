@@ -48,6 +48,7 @@ import {
   takedownRequests,
 } from "@workspace/db";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { hardDeleteUser } from "@workspace/user-hard-delete";
 
 const GRACE_HOURS = Number(process.env.COPPA_DELETION_GRACE_HOURS ?? "24");
 const APPLY = process.argv.includes("--apply");
@@ -254,50 +255,11 @@ async function resolveTakedown(): Promise<void> {
 
 // Task #368 — exported test entry point. Skips the cooling-off + status
 // guards so tests can drive the cascade phases directly. The CLI path
-// keeps its existing safeguards via `main()`.
+// keeps its existing safeguards via `main()`. Delegates to the shared
+// purge helper so the operator script and the admin "permanently delete
+// a deactivated account" route run the exact same phases.
 export async function hardDeleteUserCli(userId: string): Promise<void> {
-  // Phase (1a) — SET NULL FK columns: explicitly purge child-authored rows.
-  await db.delete(articles).where(eq(articles.authorId, userId));
-  await db.delete(highlights).where(eq(highlights.uploaderId, userId));
-  await db.delete(postComments).where(eq(postComments.authorId, userId));
-  // Phase (1b) — sender-side messages.
-  await db.delete(messages).where(eq(messages.senderUserId, userId));
-  // Phase (2) — redact recipient-side message bodies in conversations.
-  await db.execute(sql`
-    update ${messages}
-    set body = '[deleted]'
-    where ${messages.deletedAt} is null
-      and ${messages.conversationId} in (
-        select ${conversationParticipants.conversationId}
-        from ${conversationParticipants}
-        where ${conversationParticipants.participantType} = 'user'
-          and ${conversationParticipants.participantId} = ${userId}
-      )
-  `);
-  await db.execute(sql`
-    delete from ${conversations}
-    where ${conversations.id} in (
-      select ${conversationParticipants.conversationId}
-      from ${conversationParticipants}
-      where ${conversationParticipants.participantType} = 'user'
-        and ${conversationParticipants.participantId} = ${userId}
-    )
-    and (
-      select count(*) from ${conversationParticipants} cp2
-      where cp2.conversation_id = ${conversations.id}
-    ) <= 1
-  `);
-  // Phase (3) — polymorphic conversation_participants rows for the child.
-  await db
-    .delete(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.participantType, "user"),
-        eq(conversationParticipants.participantId, userId),
-      ),
-    );
-  // Phase (4) — users row; cascade handles the rest.
-  await db.delete(users).where(eq(users.id, userId));
+  await hardDeleteUser(userId);
 }
 
 async function main(): Promise<void> {
@@ -454,71 +416,11 @@ async function main(): Promise<void> {
     }),
   });
 
-  // Phase (1a) — explicitly delete every row whose FK to users.id is
-  // declared `ON DELETE SET NULL` in the schema. Without this we would
-  // leave child-authored content in place with a NULLed `authorId` /
-  // `uploaderId` / etc., violating COPPA right-to-delete. The list of
-  // SET NULL columns mirrors lib/db/src/schema/index.ts. Cascading FKs
-  // (e.g. roster_entries, post_reactions, user_followers, parental_
-  // consents → users) are handled by the final users-row delete.
-  await db.delete(articles).where(eq(articles.authorId, u.id));
-  await db.delete(highlights).where(eq(highlights.uploaderId, u.id));
-  await db.delete(postComments).where(eq(postComments.authorId, u.id));
-
-  // Phase (1b) — hard-delete messages the child authored. Cascades
-  // through message_assets via FK.
-  await db.delete(messages).where(eq(messages.senderUserId, u.id));
-
-  // Phase (2) — redact recipient-side message bodies in conversations
-  // the child participated in. This preserves the adult counterpart's
-  // ability to navigate the conversation but scrubs every message
-  // identifying or addressed to the child. We use a correlated
-  // subquery to scope the update to conversations the child was in.
-  await db.execute(sql`
-    update ${messages}
-    set body = '[deleted]'
-    where ${messages.deletedAt} is null
-      and ${messages.conversationId} in (
-        select ${conversationParticipants.conversationId}
-        from ${conversationParticipants}
-        where ${conversationParticipants.participantType} = 'user'
-          and ${conversationParticipants.participantId} = ${u.id}
-      )
-  `);
-
-  // Drop the conversation row entirely if the child was the only
-  // participant left after their record is removed (happens in
-  // direct-message threads). This also cascades message rows.
-  await db.execute(sql`
-    delete from ${conversations}
-    where ${conversations.id} in (
-      select ${conversationParticipants.conversationId}
-      from ${conversationParticipants}
-      where ${conversationParticipants.participantType} = 'user'
-        and ${conversationParticipants.participantId} = ${u.id}
-    )
-    and (
-      select count(*) from ${conversationParticipants} cp2
-      where cp2.conversation_id = ${conversations.id}
-    ) <= 1
-  `);
-
-  // Phase (3) — explicitly remove the child's conversation_participants
-  // rows. participantId is polymorphic (no FK to users.id), so the
-  // final cascade on `users` would otherwise leave orphaned rows.
-  await db
-    .delete(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.participantType, "user"),
-        eq(conversationParticipants.participantId, u.id),
-      ),
-    );
-
-  // Phase (4) — drop the users row; FK cascade handles the remaining
-  // tables that ARE declared cascade (roster_entries, post_reactions,
-  // post_shares, user_followers, parental_consents linkage, etc.).
-  await db.delete(users).where(eq(users.id, u.id));
+  // Run the shared COPPA-safe purge (content delete, message redaction,
+  // orphan cleanup, users-row delete) inside a transaction + per-user
+  // advisory lock. Identical phases run for the admin permanent-delete
+  // route via @workspace/user-hard-delete — do not duplicate them here.
+  await hardDeleteUser(u.id);
   console.log(`  deleted ${u.id}`);
   console.log("Done.");
 }

@@ -117,6 +117,71 @@ describe("admin", () => {
       expect(after2.status).toBe(200);
     });
 
+    it("permanently deletes a deactivated account and frees its email", async () => {
+      const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
+      const email = `perm-delete-${Date.now()}@kinectem.demo`;
+      const create = await agent.post("/api/v1/admin/users").send({
+        firstName: "Perm",
+        lastName: "Delete",
+        email,
+        password: "test12345",
+        role: "athlete",
+      });
+      expect(create.status).toBe(201);
+      const newId = create.body.id;
+
+      // The email is taken while the account exists.
+      const dupWhileActive = await agent.post("/api/v1/admin/users").send({
+        firstName: "Dup",
+        lastName: "Attempt",
+        email,
+        password: "test12345",
+        role: "athlete",
+      });
+      expect(dupWhileActive.status).toBe(409);
+
+      // Cannot permanently delete while still active.
+      const tooEarly = await agent
+        .delete(`/api/v1/admin/users/${newId}/permanent`)
+        .send({ confirm: email });
+      expect(tooEarly.status).toBe(400);
+      expect(tooEarly.body.code).toBe("NOT_DEACTIVATED");
+
+      // Deactivate first.
+      expect((await agent.delete(`/api/v1/admin/users/${newId}`)).status).toBe(200);
+
+      // Wrong confirmation is rejected.
+      const wrong = await agent
+        .delete(`/api/v1/admin/users/${newId}/permanent`)
+        .send({ confirm: "not the name" });
+      expect(wrong.status).toBe(400);
+      expect(wrong.body.code).toBe("CONFIRMATION_REQUIRED");
+
+      // Correct confirmation (by email) purges the account.
+      const del = await agent
+        .delete(`/api/v1/admin/users/${newId}/permanent`)
+        .send({ confirm: email });
+      expect(del.status).toBe(200);
+      expect(del.body.ok).toBe(true);
+
+      // Gone even for admin includeDeleted listing.
+      const list = await agent.get("/api/v1/admin/users?includeDeleted=1");
+      const found = list.body.data.find((u: { id: string }) => u.id === newId);
+      expect(found).toBeUndefined();
+
+      // Email is freed: a brand-new account with the same address now
+      // succeeds instead of colliding with the purged one.
+      const reuse = await agent.post("/api/v1/admin/users").send({
+        firstName: "Fresh",
+        lastName: "Start",
+        email,
+        password: "test12345",
+        role: "athlete",
+      });
+      expect(reuse.status).toBe(201);
+      expect(reuse.body.id).not.toBe(newId);
+    });
+
     it("admins can update another user's role", async () => {
       const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
       const target = await loginAs((u) => u.role === "athlete");

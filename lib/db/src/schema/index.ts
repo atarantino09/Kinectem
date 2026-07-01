@@ -43,6 +43,7 @@ export const adminActionTypeEnum = pgEnum("admin_action_type", [
   "update_user",
   "soft_delete_user",
   "restore_user",
+  "permanent_delete_user",
   "reset_password",
   "masquerade_start",
   "masquerade_stop",

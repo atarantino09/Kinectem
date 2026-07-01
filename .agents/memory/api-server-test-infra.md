@@ -7,6 +7,7 @@ description: How api-server vitest builds its DB, which tests fail pre-existing,
 
 - The test DB (`kinectem_api_test`) is **rebuilt from the live DB via `pg_dump --schema-only` in `tests/globalSetup.ts`**, NOT from the Drizzle schema file. Consequences:
   - Editing `lib/db/src/schema/index.ts` alone does **not** reach the tests. The new schema must be applied to the live `DATABASE_URL` (migration or `drizzle-kit push`) first, then `pg_dump` copies it.
+  - `runStartupMigrations` runs only in `src/index.ts` (the server entry), **not** in `src/app.ts` (what tests import). So a newly-registered startup migration (e.g. an enum `ADD VALUE`) never auto-applies in tests — apply the DDL to the dev `DATABASE_URL` yourself first (the idempotent migration SQL is safe to run by hand), then the `pg_dump` picks it up.
   - `pg_dump` runs with `ON_ERROR_STOP=1`, so a successful test run proves the schema (incl. extensions like `pg_trgm` and trigram GIN indexes) reproduces cleanly.
 
 ## Pre-existing failing tests (this environment) — do NOT attribute to your changes

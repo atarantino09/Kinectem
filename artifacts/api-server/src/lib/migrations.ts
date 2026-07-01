@@ -1134,6 +1134,22 @@ CREATE TABLE IF NOT EXISTS daily_admin_digest_settings (
 );
 `;
 
+// Task #686 — Admin "permanently delete a deactivated account" action.
+// Adds the `permanent_delete_user` value to the admin_action_type enum so
+// the route can record the hard-delete in admin_activity_log. Idempotent.
+const TASK_686_PERMANENT_DELETE_USER = `
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'admin_action_type' AND e.enumlabel = 'permanent_delete_user'
+  ) THEN
+    ALTER TYPE admin_action_type ADD VALUE 'permanent_delete_user';
+  END IF;
+END$migration$;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1314,6 +1330,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-07-01-task-681-org-outreach-facebook-added",
     sql: TASK_681_ORG_OUTREACH_FACEBOOK_ADDED,
+  },
+  {
+    name: "2026-07-01-task-686-permanent-delete-user",
+    sql: TASK_686_PERMANENT_DELETE_USER,
   },
 ];
 

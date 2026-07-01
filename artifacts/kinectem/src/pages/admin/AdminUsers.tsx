@@ -79,6 +79,7 @@ export default function AdminUsers() {
   const [page, setPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [permDeleting, setPermDeleting] = useState<AdminUser | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -274,14 +275,24 @@ export default function AdminUsers() {
                 </TableCell>
                 <TableCell className="text-right space-x-1">
                   {u.deletedAt ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => restore(u.id)}
-                      data-testid={`btn-restore-${u.email}`}
-                    >
-                      Restore
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => restore(u.id)}
+                        data-testid={`btn-restore-${u.email}`}
+                      >
+                        Restore
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setPermDeleting(u)}
+                        data-testid={`btn-permanent-delete-${u.email}`}
+                      >
+                        Permanently delete
+                      </Button>
+                    </>
                   ) : (
                     <>
                       <Button
@@ -358,7 +369,102 @@ export default function AdminUsers() {
         onOpenChange={(v) => !v && setEditing(null)}
         onSaved={refetch}
       />
+      <PermanentDeleteDialog
+        user={permDeleting}
+        onOpenChange={(v) => !v && setPermDeleting(null)}
+        onDeleted={refetch}
+      />
     </AdminLayout>
+  );
+}
+
+function PermanentDeleteDialog({
+  user,
+  onOpenChange,
+  onDeleted,
+}: {
+  user: AdminUser | null;
+  onOpenChange: (v: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const [confirm, setConfirm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setConfirm("");
+  }, [user]);
+
+  const expectedName = (user?.displayName ?? "").trim();
+  const expectedEmail = (user?.email ?? "").trim();
+  const normalized = confirm.trim().replace(/\s+/g, " ").toLowerCase();
+  const matches =
+    (expectedName.length > 0 && normalized === expectedName.replace(/\s+/g, " ").toLowerCase()) ||
+    (expectedEmail.length > 0 && normalized === expectedEmail.toLowerCase());
+
+  const submit = async () => {
+    if (!user || !matches) return;
+    setSubmitting(true);
+    try {
+      await customFetch(`/api/v1/admin/users/${user.id}/permanent`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm }),
+      });
+      toast({ title: "Account permanently deleted", description: "Its email is now free to reuse." });
+      onOpenChange(false);
+      onDeleted();
+    } catch (err) {
+      toast({ title: "Failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!user} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Permanently delete account</DialogTitle>
+          <DialogDescription>
+            This cannot be undone. It removes the account and all of its content
+            from the database, freeing the email for a brand-new signup.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="text-sm text-muted-foreground">
+            Type the account's exact name{" "}
+            <span className="font-semibold text-foreground">{expectedName}</span>
+            {expectedEmail ? (
+              <>
+                {" "}or email{" "}
+                <span className="font-semibold text-foreground">{expectedEmail}</span>
+              </>
+            ) : null}{" "}
+            to confirm.
+          </div>
+          <Input
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder={expectedEmail || expectedName}
+            data-testid="input-permanent-delete-confirm"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={submit}
+            disabled={!matches || submitting}
+            data-testid="btn-confirm-permanent-delete"
+          >
+            {submitting ? "Deleting…" : "Permanently delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -26,6 +26,7 @@ import {
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { hardDeleteUser } from "@workspace/user-hard-delete";
 import { asyncHandler } from "../lib/async-handler";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
@@ -61,6 +62,7 @@ async function logAdminAction(
     | "update_user"
     | "soft_delete_user"
     | "restore_user"
+    | "permanent_delete_user"
     | "reset_password"
     | "masquerade_start"
     | "masquerade_stop",
@@ -610,6 +612,65 @@ router.post(
       .returning();
     await logAdminAction(req.realUser!.id, "restore_user", "user", u.id, {});
     res.json(toPrivateUser(updated));
+  }),
+);
+
+// Task #686 — permanently hard-delete an already-deactivated account.
+// Two-step by design: an account must first be deactivated (soft-deleted,
+// `deletedAt` set) before it can be purged here. Runs the shared COPPA-safe
+// purge (authored content deleted, received messages redacted, orphaned
+// conversation rows cleaned, then the users row deleted so cascades fire),
+// which frees the email for a brand-new signup. Confirmation requires the
+// caller to echo back the account's exact name or email.
+const PermanentDeleteBody = z.object({
+  confirm: z.string(),
+});
+
+const normalizeConfirm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+router.delete(
+  "/users/:userId/permanent",
+  asyncHandler(async (req, res) => {
+    const parsed = PermanentDeleteBody.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Type the account's exact name or email to confirm.",
+        code: "CONFIRMATION_REQUIRED",
+      });
+      return;
+    }
+    const [u] = await db.select().from(users).where(eq(users.id, p(req.params.userId))).limit(1);
+    if (!u) return notFound(res, "User not found");
+    if (u.id === req.realUser!.id) {
+      res.status(400).json({ error: "You cannot delete your own admin account." });
+      return;
+    }
+    if (!u.deletedAt) {
+      res.status(400).json({
+        error: "Deactivate the account before permanently deleting it.",
+        code: "NOT_DEACTIVATED",
+      });
+      return;
+    }
+    const confirm = normalizeConfirm(parsed.data.confirm);
+    const expectedName = normalizeConfirm(u.name ?? "");
+    const expectedEmail = normalizeConfirm(u.email ?? "");
+    const matches =
+      (expectedName.length > 0 && confirm === expectedName) ||
+      (expectedEmail.length > 0 && confirm === expectedEmail);
+    if (!matches) {
+      res.status(400).json({
+        error: "Type the account's exact name or email to confirm.",
+        code: "CONFIRMATION_REQUIRED",
+      });
+      return;
+    }
+    // Snapshot identifying fields for the audit row before the purge; the
+    // users row is gone once hardDeleteUser returns.
+    const snapshot = { name: u.name, email: u.email };
+    await hardDeleteUser(u.id);
+    await logAdminAction(req.realUser!.id, "permanent_delete_user", "user", u.id, snapshot);
+    res.json({ ok: true, id: u.id });
   }),
 );
 

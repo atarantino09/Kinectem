@@ -260,6 +260,9 @@ importers:
       '@workspace/invite-copy':
         specifier: workspace:*
         version: link:../../lib/invite-copy
+      '@workspace/user-hard-delete':
+        specifier: workspace:*
+        version: link:../../lib/user-hard-delete
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -970,6 +973,19 @@ importers:
 
   lib/invite-copy: {}
 
+  lib/user-hard-delete:
+    dependencies:
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../db
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.18.0)(pg@8.20.0)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
+
   scripts:
     dependencies:
       '@workspace/daily-admin-digest':
@@ -978,6 +994,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../lib/db
+      '@workspace/user-hard-delete':
+        specifier: workspace:*
+        version: link:../lib/user-hard-delete
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.18.0)(pg@8.20.0)

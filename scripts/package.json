@@ -31,6 +31,7 @@
   "dependencies": {
     "@workspace/daily-admin-digest": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/user-hard-delete": "workspace:*",
     "drizzle-orm": "catalog:",
     "sharp": "^0.34.4"
   },
