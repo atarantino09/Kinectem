@@ -1271,6 +1271,29 @@ export const emailProviderKeys = pgTable("email_provider_keys", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Recipient list for the Daily Admin Digest — arbitrary operator email
+// addresses (NOT app users) managed by the platform admin. `normalizedEmail`
+// (lowercased) is unique so the same inbox can't be added twice. `enabled`
+// soft-toggles a recipient without deleting the row; `lastSentAt` is stamped by
+// the cron on a successful send.
+export const dailyAdminDigestRecipients = pgTable(
+  "daily_admin_digest_recipients",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    normalizedEmail: text("normalized_email").notNull().unique(),
+    label: text("label"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdById: uuid("created_by_id").references(
+      (): AnyPgColumn => users.id,
+      { onDelete: "set null" },
+    ),
+    lastSentAt: timestamp("last_sent_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+);
+
 // Append-only audit log for every consent-relevant event. Used to satisfy
 // the FTC requirement that the operator retain proof of consent and to
 // give parents a transparent history.

@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Megaphone,
   Trophy,
+  CalendarClock,
   ArrowLeft,
   Lock,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/admin/org-claim-links", label: "Claim links", icon: Link2 },
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },
   { href: "/admin/email", label: "Email", icon: Mail },
+  { href: "/admin/daily-digest", label: "Daily digest", icon: CalendarClock },
   { href: "/admin/promo-codes", label: "Promo codes", icon: Tag },
   { href: "/admin/organizations", label: "Organizations", icon: Building2 },
   { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },

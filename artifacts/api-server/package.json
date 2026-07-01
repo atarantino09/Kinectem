@@ -18,6 +18,7 @@
     "@scalar/api-reference": "^1.52.4",
     "@stoplight/prism-cli": "^5.14.2",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/daily-admin-digest": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/invite-copy": "workspace:*",
     "cookie-parser": "^1.4.7",

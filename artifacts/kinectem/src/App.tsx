@@ -52,6 +52,9 @@ const AdminOrgClaimLinks = lazy(
   () => import("@/pages/admin/AdminOrgClaimLinks"),
 );
 const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
+const AdminDailyDigest = lazy(
+  () => import("@/pages/admin/AdminDailyDigest"),
+);
 const AdminEmailSettings = lazy(
   () => import("@/pages/admin/AdminEmailSettings"),
 );
@@ -147,6 +150,7 @@ function Router() {
             <Route path="/admin/founding-100" component={AdminFounding100} />
             <Route path="/admin/org-claim-links" component={AdminOrgClaimLinks} />
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
+            <Route path="/admin/daily-digest" component={AdminDailyDigest} />
             <Route path="/admin/email" component={AdminEmailSettings} />
             <Route path="/admin/promo-codes" component={AdminPromoCodes} />
             <Route path="/admin/schedule" component={AdminSchedule} />

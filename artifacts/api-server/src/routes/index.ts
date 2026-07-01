@@ -33,6 +33,7 @@ import subscriptionsRouter from "./subscriptions";
 import announcementsRouter from "./announcements";
 import tournamentsRouter from "./tournaments";
 import broadcastsRouter from "./broadcasts";
+import dailyAdminDigestRouter from "./daily-admin-digest";
 
 const router: Router = Router();
 
@@ -76,5 +77,6 @@ router.use(subscriptionsRouter);
 router.use(announcementsRouter);
 router.use(tournamentsRouter);
 router.use(broadcastsRouter);
+router.use(dailyAdminDigestRouter);
 
 export default router;

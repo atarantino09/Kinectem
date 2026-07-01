@@ -24,10 +24,12 @@
     "send-billing-reminders": "tsx ./src/send-billing-reminders.ts",
     "send-weekly-digest": "tsx ./src/send-weekly-digest.ts",
     "send-inactivity-nudge": "tsx ./src/send-inactivity-nudge.ts",
+    "send-daily-admin-digest": "tsx ./src/send-daily-admin-digest.ts",
     "seed-game-recap-demo": "tsx ./src/seed-game-recap-demo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@workspace/daily-admin-digest": "workspace:*",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:",
     "sharp": "^0.34.4"

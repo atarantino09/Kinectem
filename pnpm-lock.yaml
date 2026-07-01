@@ -251,6 +251,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/daily-admin-digest':
+        specifier: workspace:*
+        version: link:../../lib/daily-admin-digest
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
@@ -927,6 +930,19 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
 
+  lib/daily-admin-digest:
+    dependencies:
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../db
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.1(@opentelemetry/api@1.9.0)(@types/pg@8.18.0)(pg@8.20.0)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
+
   lib/db:
     dependencies:
       drizzle-orm:
@@ -956,6 +972,9 @@ importers:
 
   scripts:
     dependencies:
+      '@workspace/daily-admin-digest':
+        specifier: workspace:*
+        version: link:../lib/daily-admin-digest
       '@workspace/db':
         specifier: workspace:*
         version: link:../lib/db

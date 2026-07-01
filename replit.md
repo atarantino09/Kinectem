@@ -53,6 +53,7 @@ Run with `pnpm --filter @workspace/scripts run <name>`. All accept `--dry-run`/`
   - `send-billing-reminders` — "add a card before Oct 1" to orgs with a plan but no card. **Schedule once for 2026-09-15.**
   - `send-weekly-digest` — weekly team-activity digest. **Schedule weekly.**
   - `send-inactivity-nudge` — "we miss you" to users inactive `--days` (default 21).
+- **Daily admin digest** (`send-daily-admin-digest`): emails enabled operator recipients a summary of *yesterday's* activity (counts + itemized lists; minor names masked; free-text UGC kept count-only; quiet-day email still sends). Recipients managed in-app at `/app/admin/daily-digest`; **schedule daily** via a Scheduled Deployment. Window is computed in `ADMIN_DIGEST_TIME_ZONE` (default UTC). Flags: `--dry-run`/`--stdout`/`--day=YYYY-MM-DD`.
 - **COPPA delete**: `coppa:delete -- <userId> --apply` — operator hard-delete after the cooling-off window (default 24h, override `COPPA_DELETION_GRACE_HOURS`).
 
 ## Deployment
@@ -110,6 +111,7 @@ Invite delivery flags only advance once the Signed Event Webhook is wired. In Se
 ### Email & infra
 
 - **SendGrid via Replit connector** — creds pulled per-send (no caching). Connector is the source of truth for the sender; do NOT also set `EMAIL_FROM` in Secrets (it silently overrides). `APP_BASE_URL` is env-only.
+- **Daily admin digest** goes to *operator* addresses (not app users), so there is NO minor→guardian routing and NO unsubscribe link — it is an internal ops email. The COPPA concern is content: itemize only public names (orgs/teams) + masked minor display names, and keep free-text UGC (recap/highlight titles, report reasons/notes) **count-only**. In-app preview uses the admin-aware `lib/email.ts` sender; the cron uses the connector/env sender in `scripts/src/lib/email-campaign.ts`.
 
 ### Frontend conventions
 
