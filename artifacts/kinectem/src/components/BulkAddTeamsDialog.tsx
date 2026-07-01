@@ -193,6 +193,12 @@ export function BulkAddTeamsDialog({
     }
   };
 
+  // After a run where everything succeeded we clear the textarea, so
+  // `names` is empty while `results` still holds the successes. In that
+  // state, swap the primary action to a "Done" button that closes the
+  // dialog instead of leaving a disabled "Create teams".
+  const showDone = !busy && results.length > 0 && names.length === 0;
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -309,26 +315,39 @@ export function BulkAddTeamsDialog({
           )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => handleOpenChange(false)}
-              disabled={busy}
-            >
-              {results.length > 0 && !busy ? "Close" : "Cancel"}
-            </Button>
-            <Button
-              type="submit"
-              variant="brand"
-              disabled={busy || names.length === 0 || atLimit || wouldExceed}
-              data-testid="btn-bulk-create-teams"
-            >
-              {busy
-                ? "Creating..."
-                : names.length > 0
-                  ? `Create ${names.length} team${names.length === 1 ? "" : "s"}`
-                  : "Create teams"}
-            </Button>
+            {showDone ? (
+              <Button
+                type="button"
+                variant="brand"
+                onClick={() => handleOpenChange(false)}
+                data-testid="btn-bulk-done"
+              >
+                Done
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => handleOpenChange(false)}
+                  disabled={busy}
+                >
+                  {results.length > 0 && !busy ? "Close" : "Cancel"}
+                </Button>
+                <Button
+                  type="submit"
+                  variant="brand"
+                  disabled={busy || names.length === 0 || atLimit || wouldExceed}
+                  data-testid="btn-bulk-create-teams"
+                >
+                  {busy
+                    ? "Creating..."
+                    : names.length > 0
+                      ? `Create ${names.length} team${names.length === 1 ? "" : "s"}`
+                      : "Create teams"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
