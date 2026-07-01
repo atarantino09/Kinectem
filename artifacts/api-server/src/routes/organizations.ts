@@ -79,6 +79,7 @@ import {
   notFound,
   buildMinorNameContext,
   TRUSTED_MINOR_NAME_CONTEXT,
+  MAX_IMAGE_DATA_URL_LENGTH,
 } from "../lib/spec-helpers";
 import {
   loadPostStats,
@@ -560,6 +561,18 @@ router.patch(
       patch.zipCode = zipCode;
     }
     if (typeof body.logoUrl === "string") {
+      // Task #691 — org logos arrive inline as base64 `data:` URLs; reject
+      // over-cap values with a friendly 413 instead of an opaque parser error.
+      if (
+        body.logoUrl.startsWith("data:") &&
+        body.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH
+      ) {
+        return apiError(
+          res,
+          413,
+          "That image is too large. Please choose a smaller photo.",
+        );
+      }
       patch.logoUrl = body.logoUrl === "" ? null : body.logoUrl;
     } else if (body.logoUrl === null) {
       patch.logoUrl = null;

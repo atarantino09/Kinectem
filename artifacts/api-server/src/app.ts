@@ -60,6 +60,23 @@ app.post(
   express.raw({ type: "application/json" }),
   sendgridWebhookHandler,
 );
+// Task #691 — team banner, org logo, and user/avatar PATCH routes accept the
+// image inline as a base64 `data:` URL in the JSON body, which routinely
+// exceeds the tight 1 MB global limit below. Give just those routes a
+// higher-limit JSON parser sized to the client's DATA_URL_MAX_LENGTH contract
+// (~20 MB encoded, see kinectem/src/lib/shrinkImage.ts) plus JSON overhead.
+// Registered BEFORE the global express.json() so this parser runs first; the
+// global parser then no-ops for these requests (body-parser skips once
+// req._body is set). Every other route keeps the tight 1 MB limit (S7).
+const imageUploadJson = express.json({ limit: "21mb" });
+for (const imagePath of [
+  "/api/v1/teams/:teamId",
+  "/api/v1/organizations/:orgId",
+  "/api/v1/users/:userId",
+  "/api/v1/admin/users/:userId",
+]) {
+  app.patch(imagePath, imageUploadJson);
+}
 // S7 — global JSON limit kept tight. Binary asset uploads use a dedicated
 // express.raw() parser (10 MB) on PUT /assets/:assetId/data, so this does not
 // affect uploads; all JSON request bodies are text-only.

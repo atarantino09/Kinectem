@@ -32,6 +32,7 @@ import {
 } from "@/lib/shrinkImage";
 import { BlurFillImage } from "@/components/BlurFillImage";
 import { SPORTS } from "@/lib/sports";
+import { apiErrorMessage } from "@/lib/api-errors";
 
 type TeamLike = {
   id: string;
@@ -129,8 +130,11 @@ export function EditTeamDialog({
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
       toast({ title: "Team photo updated" });
-    } catch {
-      toast({ title: "Failed to upload team photo", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: apiErrorMessage(err) ?? "Failed to upload team photo",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }

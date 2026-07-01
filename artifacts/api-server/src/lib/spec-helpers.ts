@@ -62,6 +62,16 @@ export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
 // don't bloat the JSON response.
 export const MAX_AVATAR_DATA_URL_LENGTH = 512 * 1024;
 
+// Task #691 — team banners and org logos are sent inline as base64 `data:`
+// URLs in the PATCH body (unlike avatars, which go through the asset-upload
+// pipeline and arrive as http(s) URLs). This cap is the largest inline data
+// URL those routes will accept and is kept in lockstep with the client's
+// `DATA_URL_MAX_LENGTH` in `kinectem/src/lib/shrinkImage.ts`. The dedicated
+// higher-limit JSON body parser in `app.ts` is sized just above this so an
+// over-cap value reaches the route and gets a friendly 413 instead of a raw
+// parser failure. `http(s)://` URLs are not length-limited here.
+export const MAX_IMAGE_DATA_URL_LENGTH = 20 * 1024 * 1024;
+
 export function safeAvatarUrl(raw: string | null | undefined): string | null {
   if (raw == null) return null;
   if (typeof raw !== "string" || raw.length === 0) return null;

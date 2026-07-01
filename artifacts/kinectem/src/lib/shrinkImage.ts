@@ -31,9 +31,11 @@ export type ShrinkOptions = {
   maxDimension?: number;
   quality?: number;
 };
-// Server's express.json limit is 25mb. Base64-encoded data URLs add
-// ~33% overhead, so cap the *encoded* string well below that to leave
-// room for the rest of the JSON body and any header bloat.
+// The image-bearing PATCH routes (team, org, user) use a dedicated 21 MB
+// express.json parser server-side (see api-server/src/app.ts), and the server
+// rejects inline data: URLs over MAX_IMAGE_DATA_URL_LENGTH (20 MB, kept in
+// lockstep with this constant). Cap the *encoded* string here so the client
+// shrinks/errors before sending rather than getting a server-side 413.
 export const DATA_URL_MAX_LENGTH = 20 * 1024 * 1024;
 
 // HEIC / HEIF photos straight off an iPhone aren't decodable by

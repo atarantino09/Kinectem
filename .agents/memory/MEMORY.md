@@ -11,6 +11,7 @@
 - [Runtime-error overlay "(unknown runtime error)"](runtime-error-overlay-resizeobserver.md) — empty/dismissable dev overlay = benign ResizeObserver loop (null evt.error); suppressed via inline head guard in index.html.
 - [Tailwind v4 bare CSS-var](tailwind-v4-bare-var.md) — `max-h-[--foo]` silently breaks in v4 (no var()) → no max-height → dropdowns don't scroll; use `[var(--foo)]`.
 - [Team banner blur-fill display](team-banner-blur-fill.md) — team hero photos use BlurFillImage (contain over blurred cover), NOT object-cover crop; team upload flows have no crop step.
+- [Inline image upload body limit](inline-image-body-limit.md) — banners/logos are inline base64 data: URLs; global express.json is 1MB, so image PATCH routes need a dedicated 21MB parser + 20MB cap kept in lockstep client/server.
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.
 - [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769/`string|string[]`/AuthorRoleLabel noise; rateLimit needs `name`.
 - [Startup migration registration](startup-migration-registration.md) — schema changes need a registered entry in migrations.ts MIGRATIONS array; dev push/raw SQL alone never reaches production.

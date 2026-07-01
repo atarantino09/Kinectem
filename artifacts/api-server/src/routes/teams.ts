@@ -63,6 +63,7 @@ import {
   apiError,
   safeAvatarUrl,
   notFound,
+  MAX_IMAGE_DATA_URL_LENGTH,
 } from "../lib/spec-helpers";
 import {
   loadPostStats,
@@ -302,9 +303,35 @@ router.patch(
     } else if (body.website !== undefined) {
       return apiError(res, 400, "website must be a string or null");
     }
-    if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl;
-    if (typeof body.bannerUrl === "string") patch.bannerUrl = body.bannerUrl;
-    else if (body.bannerUrl === null) patch.bannerUrl = null;
+    // Task #691 — logo/banner arrive inline as base64 `data:` URLs. Reject
+    // over-cap values with a friendly 413 (mirrors the app.ts body-parser
+    // limit) instead of letting them fail as an opaque parser error.
+    if (typeof body.logoUrl === "string") {
+      if (
+        body.logoUrl.startsWith("data:") &&
+        body.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH
+      ) {
+        return apiError(
+          res,
+          413,
+          "That image is too large. Please choose a smaller photo.",
+        );
+      }
+      patch.logoUrl = body.logoUrl;
+    }
+    if (typeof body.bannerUrl === "string") {
+      if (
+        body.bannerUrl.startsWith("data:") &&
+        body.bannerUrl.length > MAX_IMAGE_DATA_URL_LENGTH
+      ) {
+        return apiError(
+          res,
+          413,
+          "That image is too large. Please choose a smaller photo.",
+        );
+      }
+      patch.bannerUrl = body.bannerUrl;
+    } else if (body.bannerUrl === null) patch.bannerUrl = null;
     if (body.gender === null) {
       patch.gender = null;
     } else if (typeof body.gender === "string") {
