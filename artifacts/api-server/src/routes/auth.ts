@@ -74,7 +74,10 @@ const LoginBody = z.object({
 const SignupBody = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1).optional().default(""),
-  role: z.enum(["athlete", "coach", "admin", "parent"]),
+  // `admin` is the GLOBAL platform-admin role — it is never a valid
+  // public-signup role. Org-level admin is link-derived (claim-token
+  // flow), so signup only offers athlete / coach / parent.
+  role: z.enum(["athlete", "coach", "parent"]),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   dateOfBirth: z.string().optional().nullable(),
@@ -298,6 +301,20 @@ router.post(
   "/auth/signup",
   signupLimiter,
   asyncHandler(async (req, res) => {
+    // Defense in depth: the platform `admin` role can never be created via
+    // public signup. `admin` is the GLOBAL platform admin (unlocks /admin);
+    // legitimate org admin is link-derived (claim-token flow). Reject a
+    // crafted request before it can reach the insert, even if the UI is
+    // bypassed. The Zod enum below also excludes `admin`.
+    if ((req.body as { role?: unknown } | undefined)?.role === "admin") {
+      apiError(
+        res,
+        403,
+        "Platform admin accounts cannot be created through signup.",
+        { code: "ADMIN_SIGNUP_FORBIDDEN" },
+      );
+      return;
+    }
     const body = SignupBody.parse(req.body);
     const dob = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
     // Server-side age gate is mandatory for athlete signup. The signed

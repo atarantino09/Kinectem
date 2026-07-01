@@ -111,6 +111,29 @@ describe("auth", () => {
     expect(me.body.id).toBe(res.body.id);
   });
 
+  it("rejects a crafted signup that asks for the platform admin role", async () => {
+    const email = `rogue-admin-${Date.now()}@kinectem.test`;
+    const res = await request(app)
+      .post("/api/v1/auth/signup")
+      .send({
+        firstName: "Rogue",
+        lastName: "Admin",
+        role: "admin",
+        email,
+        password: "supersecret1",
+      });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("ADMIN_SIGNUP_FORBIDDEN");
+
+    // No account should have been created.
+    const [row] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    expect(row).toBeUndefined();
+  });
+
   it("blocks signup for under-13 athletes without a guardian email", async () => {
     const dob = new Date();
     dob.setFullYear(dob.getFullYear() - 10);

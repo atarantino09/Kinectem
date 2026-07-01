@@ -22,7 +22,7 @@ import {
   isValidDob,
 } from "@/lib/dob";
 
-export type Role = "athlete" | "coach" | "admin" | "parent";
+export type Role = "athlete" | "coach" | "parent";
 
 function ageInYears(dob: string): number | null {
   if (!dob) return null;
@@ -362,7 +362,6 @@ export function SignUpForm({
               <SelectItem value="athlete">Athlete</SelectItem>
               <SelectItem value="coach">Coach</SelectItem>
               <SelectItem value="parent">Parent / Guardian</SelectItem>
-              <SelectItem value="admin">Org admin</SelectItem>
             </SelectContent>
           </Select>
         </div>
