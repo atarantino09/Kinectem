@@ -53,7 +53,7 @@ Run with `pnpm --filter @workspace/scripts run <name>`. All accept `--dry-run`/`
   - `send-billing-reminders` — "add a card before Oct 1" to orgs with a plan but no card. **Schedule once for 2026-09-15.**
   - `send-weekly-digest` — weekly team-activity digest. **Schedule weekly.**
   - `send-inactivity-nudge` — "we miss you" to users inactive `--days` (default 21).
-- **Daily admin digest** (`send-daily-admin-digest`): emails enabled operator recipients a summary of *yesterday's* activity (counts + itemized lists; minor names masked; free-text UGC kept count-only; quiet-day email still sends). Recipients managed in-app at `/app/admin/daily-digest`; **schedule daily** via a Scheduled Deployment. Window is computed in `ADMIN_DIGEST_TIME_ZONE` (default UTC). Flags: `--dry-run`/`--stdout`/`--day=YYYY-MM-DD`.
+- **Daily admin digest** (`send-daily-admin-digest`): emails enabled operator recipients a summary of *yesterday's* activity (counts + itemized lists; minor names masked; free-text UGC kept count-only; quiet-day email still sends). Recipients + a global on/off toggle managed in-app at `/app/admin/daily-digest`; **schedule daily** via a Scheduled Deployment. The cron honors the toggle — **ON by default** (absent `daily_admin_digest_settings` row = on, so a freshly-published DB needs no setup); when OFF the scheduled run sends nothing but the in-app "send preview" still works. `--stdout` renders regardless of the toggle. Window is computed in `ADMIN_DIGEST_TIME_ZONE` (default UTC). Flags: `--dry-run`/`--stdout`/`--day=YYYY-MM-DD`.
 - **COPPA delete**: `coppa:delete -- <userId> --apply` — operator hard-delete after the cooling-off window (default 24h, override `COPPA_DELETION_GRACE_HOURS`).
 
 ## Deployment

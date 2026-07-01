@@ -1112,6 +1112,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS daily_admin_digest_recipients_normalized_email
   ON daily_admin_digest_recipients (normalized_email);
 `;
 
+// Daily Admin Digest — single-row global on/off switch for the cron. Absence of
+// a row means ENABLED (on by default). Idempotent.
+const DAILY_ADMIN_DIGEST_SETTINGS = `
+CREATE TABLE IF NOT EXISTS daily_admin_digest_settings (
+  id text PRIMARY KEY DEFAULT 'default',
+  enabled boolean NOT NULL DEFAULT true,
+  updated_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1284,6 +1295,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-07-01-daily-admin-digest-recipients",
     sql: DAILY_ADMIN_DIGEST_RECIPIENTS,
+  },
+  {
+    name: "2026-07-01-daily-admin-digest-settings",
+    sql: DAILY_ADMIN_DIGEST_SETTINGS,
   },
 ];
 

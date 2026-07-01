@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useWhoami } from "@/hooks/useWhoami";
-import { CalendarClock, Loader2, Plus, Send, Trash2, UserPlus } from "lucide-react";
+import { CalendarClock, Loader2, Plus, Power, Send, Trash2, UserPlus } from "lucide-react";
 
 type Recipient = {
   id: string;
@@ -45,6 +45,16 @@ export default function AdminDailyDigest() {
   });
   const recipients = data?.data ?? [];
 
+  const { data: settings } = useQuery<{ enabled: boolean }>({
+    queryKey: ["admin", "daily-digest", "settings"],
+    queryFn: () =>
+      customFetch<{ enabled: boolean }>(`/api/v1/admin/daily-digest/settings`, {
+        method: "GET",
+      }),
+  });
+  const digestEnabled = settings?.enabled ?? true;
+  const [savingEnabled, setSavingEnabled] = useState(false);
+
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false);
@@ -61,6 +71,31 @@ export default function AdminDailyDigest() {
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["admin", "daily-digest", "recipients"] });
+  };
+
+  const toggleDigest = async (enabled: boolean) => {
+    setSavingEnabled(true);
+    try {
+      await customFetch(`/api/v1/admin/daily-digest/settings`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      qc.invalidateQueries({ queryKey: ["admin", "daily-digest", "settings"] });
+      toast({
+        title: enabled ? "Daily digest turned on" : "Daily digest turned off",
+        description: enabled
+          ? "The scheduled email will send every morning."
+          : "The scheduled email is paused. You can still send previews.",
+      });
+    } catch (err) {
+      toast({
+        title: "Update failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEnabled(false);
+    }
   };
 
   const add = async () => {
@@ -182,6 +217,35 @@ export default function AdminDailyDigest() {
       </div>
 
       <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Power className="h-5 w-5" /> Scheduled digest
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-medium">
+                {digestEnabled ? "On" : "Off"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {digestEnabled
+                  ? "The digest emails go out automatically every morning."
+                  : "The scheduled email is paused. Previews below still work."}
+              </p>
+            </div>
+            <Switch
+              checked={digestEnabled}
+              disabled={savingEnabled}
+              onCheckedChange={toggleDigest}
+              aria-label="Daily digest enabled"
+              data-testid="switch-digest-enabled"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl mt-4">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <UserPlus className="h-5 w-5" /> Add a recipient

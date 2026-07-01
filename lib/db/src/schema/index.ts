@@ -1294,6 +1294,21 @@ export const dailyAdminDigestRecipients = pgTable(
   },
 );
 
+// Global on/off switch for the Daily Admin Digest cron. Single-row table keyed
+// by a fixed id ("default") so the admin toggle is a trivial upsert. When no row
+// exists the digest is treated as ENABLED (on by default). When disabled, the
+// scheduled cron builds and sends nothing; the in-app "send preview" is
+// unaffected so an admin can still test the output.
+export const dailyAdminDigestSettings = pgTable("daily_admin_digest_settings", {
+  id: text("id").primaryKey().default("default"),
+  enabled: boolean("enabled").notNull().default(true),
+  updatedById: uuid("updated_by_id").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Append-only audit log for every consent-relevant event. Used to satisfy
 // the FTC requirement that the operator retain proof of consent and to
 // give parents a transparent history.

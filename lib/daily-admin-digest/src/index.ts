@@ -27,6 +27,7 @@ import {
   rosterInvites,
   parentalConsents,
   dailyAdminDigestRecipients,
+  dailyAdminDigestSettings,
 } from "@workspace/db/schema";
 import { and, gte, lt, eq, isNull, count, desc } from "drizzle-orm";
 
@@ -216,6 +217,35 @@ export function listActiveDigestRecipients(
     .from(dailyAdminDigestRecipients)
     .where(eq(dailyAdminDigestRecipients.enabled, true))
     .orderBy(dailyAdminDigestRecipients.createdAt);
+}
+
+// Global on/off switch for the cron. Absence of a row means ENABLED (on by
+// default), so a brand-new/freshly-published DB sends digests without any setup.
+export async function isDigestEnabled(database: Db): Promise<boolean> {
+  const [row] = await database
+    .select({ enabled: dailyAdminDigestSettings.enabled })
+    .from(dailyAdminDigestSettings)
+    .where(eq(dailyAdminDigestSettings.id, "default"))
+    .limit(1);
+  return row ? row.enabled : true;
+}
+
+// Upsert the singleton settings row to flip the cron on/off. `updatedById` is
+// the admin who made the change (nullable).
+export async function setDigestEnabled(
+  database: Db,
+  enabled: boolean,
+  updatedById?: string | null,
+): Promise<boolean> {
+  const [row] = await database
+    .insert(dailyAdminDigestSettings)
+    .values({ id: "default", enabled, updatedById: updatedById ?? null })
+    .onConflictDoUpdate({
+      target: dailyAdminDigestSettings.id,
+      set: { enabled, updatedById: updatedById ?? null, updatedAt: new Date() },
+    })
+    .returning({ enabled: dailyAdminDigestSettings.enabled });
+  return row?.enabled ?? enabled;
 }
 
 async function countIn(

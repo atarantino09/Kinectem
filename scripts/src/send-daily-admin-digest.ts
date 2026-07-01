@@ -28,6 +28,7 @@ import {
   getDigestWindow,
   getDigestWindowForDate,
   listActiveDigestRecipients,
+  isDigestEnabled,
   DEFAULT_DIGEST_TIME_ZONE,
 } from "@workspace/daily-admin-digest";
 import { dailyAdminDigestRecipients } from "@workspace/db";
@@ -61,6 +62,16 @@ async function main() {
   if (toStdout) {
     console.log(`Subject: ${digest.subject}\n`);
     console.log(digest.text);
+    return;
+  }
+
+  // Global on/off switch, controlled by the admin toggle at
+  // /app/admin/daily-digest. On by default. --stdout above always renders for
+  // manual inspection; a real or dry run honors the switch.
+  if (!(await isDigestEnabled(db))) {
+    console.log(
+      `${dryRun ? "[dry-run] " : ""}Daily digest is turned OFF in admin settings. Nothing sent.`,
+    );
     return;
   }
 

@@ -3,6 +3,8 @@ import { db, dailyAdminDigestRecipients } from "@workspace/db";
 import {
   buildDailyAdminDigest,
   getDigestWindow,
+  isDigestEnabled,
+  setDigestEnabled,
   DEFAULT_DIGEST_TIME_ZONE,
 } from "@workspace/daily-admin-digest";
 import { eq } from "drizzle-orm";
@@ -57,6 +59,39 @@ router.get(
       .from(dailyAdminDigestRecipients)
       .orderBy(dailyAdminDigestRecipients.createdAt);
     res.json({ data: rows.map(serialize) });
+  }),
+);
+
+// Admin-only: read the global cron on/off switch. Absent row => enabled.
+router.get(
+  "/admin/daily-digest/settings",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    res.json({ enabled: await isDigestEnabled(db) });
+  }),
+);
+
+const SettingsBody = z.object({ enabled: z.boolean() });
+
+// Admin-only: flip the daily cron on/off. On by default; turning it off stops
+// the scheduled send entirely (the "send preview now" button still works).
+router.patch(
+  "/admin/daily-digest/settings",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = SettingsBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid request.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const enabled = await setDigestEnabled(
+      db,
+      parsed.data.enabled,
+      req.realUser?.id ?? null,
+    );
+    res.json({ enabled });
   }),
 );
 
