@@ -359,7 +359,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                       className={`w-10 h-10 rounded-lg shrink-0 ${
                         displayedAvatarUrl ? "cursor-pointer" : ""
                       }`}
-                      imgClassName={`w-10 h-10 rounded-lg object-cover shrink-0 ${
+                      imgClassName={`w-10 h-10 rounded-lg object-contain bg-muted shrink-0 ${
                         displayedAvatarUrl ? "cursor-pointer" : ""
                       }`}
                     />

@@ -19,7 +19,7 @@ function OrgLogoTile({
       logoUrl={logoUrl}
       name={name}
       className="w-14 h-14 rounded-xl shrink-0"
-      imgClassName="w-14 h-14 rounded-xl object-cover bg-muted shrink-0"
+      imgClassName="w-14 h-14 rounded-xl object-contain bg-muted shrink-0"
     />
   );
 }

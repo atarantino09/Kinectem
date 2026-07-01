@@ -556,7 +556,7 @@ function OrgLogoThumb({
       data-testid={`img-suggested-org-logo-${orgId}`}
       className={cn("rounded-lg shrink-0", sizeClass)}
       imgClassName={cn(
-        "rounded-lg object-cover border border-border bg-muted shrink-0",
+        "rounded-lg object-contain border border-border bg-muted shrink-0",
         sizeClass,
       )}
     />

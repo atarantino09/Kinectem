@@ -4,6 +4,7 @@ import { useCrossEntitySearch, queryOpts } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Trophy, User as UserIcon } from "lucide-react";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
@@ -92,12 +93,11 @@ export default function SearchPage() {
             {orgs.map((o) => (
               <Link key={o.id} href={`/organizations/${o.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
-                  <TeamAvatar
-                    avatarUrl={o.avatarUrl}
-                    displayName={o.name}
-                    size="lg"
-                    rounded="lg"
-                    fallbackClassName="bg-slate-100 text-slate-800"
+                  <OrgLogo
+                    logoUrl={o.avatarUrl}
+                    name={o.name}
+                    className="w-10 h-10 rounded-lg shrink-0"
+                    imgClassName="w-10 h-10 rounded-lg object-contain bg-muted shrink-0"
                   />
                   <div className="min-w-0">
                     <p className="font-bold text-sm truncate">{formatOrgName(o.name)}</p>
