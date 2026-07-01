@@ -289,6 +289,21 @@ export function SignUpForm({
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
+      {effectiveRole === "parent" && (
+        <div
+          className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3"
+          data-testid="note-guardian-account"
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-violet-700">
+            Guardian account
+          </div>
+          <p className="mt-1 text-xs text-violet-900">
+            These details are for{" "}
+            <span className="font-semibold">your own guardian account</span>.
+            You'll add your athlete's profile — no email needed — right after.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label

@@ -72,7 +72,14 @@ export default function LoginPage() {
 
   const initialRole: Role =
     initialSignup === "parent" ? "parent" : "athlete";
-  const heading = HEADINGS[mode];
+  const heading =
+    mode === "signup" && initialSignup === "parent"
+      ? {
+          title: "Create your guardian account",
+          subtitle:
+            "Set up your own account first — you'll add your athlete's profile next.",
+        }
+      : HEADINGS[mode];
 
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 text-slate-900">

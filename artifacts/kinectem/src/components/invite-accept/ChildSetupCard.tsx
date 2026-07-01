@@ -79,6 +79,9 @@ export function ChildSetupCard({
             <UserPlus className="w-4 h-4 text-white" />
           </div>
           <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-purple-600">
+              Athlete setup
+            </div>
             <h2 className="font-black tracking-tight">
               Add your child{children.length > 0 ? "ren" : ""} to the roster
             </h2>
@@ -165,11 +168,15 @@ export function ChildSetupCard({
 
         {showCreateForm ? (
           <form onSubmit={onSubmit} className="space-y-3">
-            {hasLinkedChildren && (
+            <div className="space-y-1">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Create a new child account
+                New athlete
               </div>
-            )}
+              <p className="text-xs text-muted-foreground">
+                No email needed — this athlete profile lives under your guardian
+                account.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
                 <Label className="font-bold text-xs">First name</Label>
@@ -196,7 +203,7 @@ export function ChildSetupCard({
               disabled={saving}
               data-testid="btn-add-child"
             >
-              {saving ? "Adding..." : "Add child to roster"}
+              {saving ? "Adding..." : "Add athlete to roster"}
             </Button>
           </form>
         ) : (
@@ -207,7 +214,7 @@ export function ChildSetupCard({
             onClick={() => setRevealCreateForm(true)}
             data-testid="btn-show-create-child-form"
           >
-            <Plus className="w-4 h-4 mr-1" /> Create a new child account
+            <Plus className="w-4 h-4 mr-1" /> Create a new athlete account
           </Button>
         )}
 
