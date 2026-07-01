@@ -46,7 +46,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Camera, ChevronDown, Loader2, Pencil, Plus, Trophy, X } from "lucide-react";
-import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
+import { shrinkImageToFit, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 import { US_STATES } from "@/lib/usStates";
 import { SPORTS } from "@/lib/sports";
 import { DOB_MONTHS, DOB_DAYS, DOB_YEARS, parseDob } from "@/lib/dob";
@@ -375,10 +375,11 @@ export function EditProfileDialog({
     setAvatarUploading(true);
     setAvatarError(null);
     try {
-      // The cropper already constrains output size, but we still run it
-      // through shrinkImage for consistent JPEG encoding and the global
-      // 1024px longest-edge cap before pushing to object storage.
-      const prepared = await shrinkImage(cropped);
+      // Task #695 — avatars are stored inline as `data:` URLs and dropped to
+      // the initials fallback at egress if they exceed the 512 KB display cap.
+      // `shrinkImageToFit` steps dimension/quality down until the encoded data
+      // URL is guaranteed to fit, so a saved photo never silently vanishes.
+      const prepared = await shrinkImageToFit(cropped);
       if (uploadGenRef.current !== myGen) return;
       const url = await uploadAvatarFile(prepared);
       if (uploadGenRef.current !== myGen) return;

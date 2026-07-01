@@ -38,6 +38,44 @@ export type ShrinkOptions = {
 // shrinks/errors before sending rather than getting a server-side 413.
 export const DATA_URL_MAX_LENGTH = 20 * 1024 * 1024;
 
+// Task #695 — profile avatars go through the 3-step asset pipeline and are
+// stored server-side as inline `data:` URLs, then shipped inline on every
+// user-bearing response. At egress the API drops any inline avatar whose
+// data-URL string is longer than MAX_AVATAR_DATA_URL_LENGTH (512 KB) to null,
+// so the browser silently falls back to the initials circle. Kept in lockstep
+// with `MAX_AVATAR_DATA_URL_LENGTH` in api-server/src/lib/spec-helpers.ts.
+// We shrink avatars client-side so the *encoded* data URL always fits under
+// this cap, so a saved photo never silently disappears into initials.
+export const AVATAR_DISPLAY_MAX_DATA_URL_LENGTH = 512 * 1024;
+
+// Avatars are square-cropped and rendered small (largest on-screen use is a
+// few hundred CSS px), so a 512 px longest edge is already retina-crisp. We
+// step down dimension then quality until the encoded data URL fits the cap.
+const AVATAR_FIT_DIMENSIONS = [512, 384, 256, 192, 128];
+const AVATAR_FIT_QUALITIES = [0.85, 0.75, 0.65];
+
+// The server stores an uploaded asset as `data:${mime};base64,${base64}`
+// (see api-server/src/routes/assets.ts). Base64 encodes 3 bytes as 4 chars,
+// so we can predict the exact stored data-URL length from a File's byte size
+// and decide client-side whether it will survive the egress cap.
+export function dataUrlLengthForBytes(byteLength: number, mimeType: string): number {
+  const prefix = `data:${mimeType || "application/octet-stream"};base64,`;
+  return prefix.length + 4 * Math.ceil(byteLength / 3);
+}
+
+// Thrown when an image can't be made small enough to survive the avatar
+// display cap (in practice unreachable for real photos — a 128 px JPEG is a
+// few KB — but surfaced as a clear message instead of a silent drop).
+export class AvatarTooLargeError extends Error {
+  readonly name = "AvatarTooLargeError";
+  constructor(
+    message = "That photo is too large to use as a profile picture. Try a different image.",
+  ) {
+    super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 // HEIC / HEIF photos straight off an iPhone aren't decodable by
 // non-Safari browsers (Chrome, Firefox, Android WebView), and even
 // Safari's `createImageBitmap` support is patchy. Detect by MIME type
@@ -209,6 +247,77 @@ export async function shrinkImage(
     });
   } catch {
     return file;
+  } finally {
+    loaded.cleanup();
+  }
+}
+
+// Task #695 — shrink an image so its stored `data:` URL is guaranteed to fit
+// under `maxDataUrlLength` (the avatar display cap by default). Unlike
+// `shrinkImage` (a single best-effort downscale with a generous budget), this
+// steps dimension and quality down until the encoded size fits, so the
+// uploaded avatar is never dropped to the initials fallback at egress. Throws
+// `AvatarTooLargeError` if even the smallest attempt won't fit, or
+// `UnsupportedImageFormatError` for HEIC/HEIF.
+export async function shrinkImageToFit(
+  file: File,
+  maxDataUrlLength: number = AVATAR_DISPLAY_MAX_DATA_URL_LENGTH,
+): Promise<File> {
+  if (isUnsupportedHeicImage(file)) {
+    throw new UnsupportedImageFormatError();
+  }
+  // Animated GIFs can't be re-encoded to JPEG without losing animation, so we
+  // can only keep them if they already fit; otherwise there's no safe shrink.
+  if (file.type === "image/gif") {
+    if (dataUrlLengthForBytes(file.size, file.type) <= maxDataUrlLength) return file;
+    throw new AvatarTooLargeError(
+      "That animated GIF is too large for a profile photo. Try a JPG or PNG.",
+    );
+  }
+  if (typeof document === "undefined") return file;
+
+  let loaded: Awaited<ReturnType<typeof loadImage>>;
+  try {
+    loaded = await loadImage(file);
+  } catch {
+    // Decoder refused this file — we can't re-encode it. Keep it only if the
+    // original already fits, otherwise surface a clear error.
+    if (
+      dataUrlLengthForBytes(file.size, file.type || "application/octet-stream") <=
+      maxDataUrlLength
+    ) {
+      return file;
+    }
+    throw new AvatarTooLargeError();
+  }
+
+  try {
+    const { source, width, height } = loaded;
+    if (!width || !height) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
+    for (const dim of AVATAR_FIT_DIMENSIONS) {
+      const scale = Math.min(1, dim / Math.max(width, height));
+      const targetW = Math.max(1, Math.round(width * scale));
+      const targetH = Math.max(1, Math.round(height * scale));
+      const canvas = resizeStepped(source, width, height, targetW, targetH);
+      if (!canvas) continue;
+      for (const quality of AVATAR_FIT_QUALITIES) {
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", quality),
+        );
+        if (!blob) continue;
+        if (dataUrlLengthForBytes(blob.size, "image/jpeg") <= maxDataUrlLength) {
+          return new File([blob], `${baseName}.jpg`, {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          });
+        }
+      }
+    }
+    // Every attempt (down to 128 px @ 0.65) still exceeded the cap. This is
+    // effectively unreachable for a real photo, but fail loudly rather than
+    // upload something the server will drop to initials.
+    throw new AvatarTooLargeError();
   } finally {
     loaded.cleanup();
   }
