@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  customFetch,
   useAddTeamMember,
   useCreateRosterInvite,
   createRosterInvite,
   useGetOrCreateTeamJoinLink,
   useGetLoggedInUser,
+  useSearchUsers,
   useListTeamMembers,
   useListRosterInvites,
   getListTeamMembersQueryKey,
@@ -111,8 +111,7 @@ export function InviteRosterDialog({
   const { toast } = useToast();
 
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchUser[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [position, setPosition] = useState<AddTeamMemberRequestPosition>("player");
 
   const [email, setEmail] = useState("");
@@ -264,7 +263,7 @@ export function InviteRosterDialog({
   useEffect(() => {
     if (!open) {
       setQuery("");
-      setResults([]);
+      setDebouncedQuery("");
       setEmail("");
       setName("");
       setBulkText("");
@@ -297,29 +296,17 @@ export function InviteRosterDialog({
       );
 
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const r = await customFetch<{ data: SearchUser[] }>(
-          `/api/v1/users?q=${encodeURIComponent(query.trim())}`,
-        );
-        if (!cancelled) setResults(r.data ?? []);
-      } catch {
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
+    const t = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(t);
   }, [query]);
+
+  const trimmedQuery = debouncedQuery.trim();
+  const searchEnabled = trimmedQuery.length >= 2;
+  const { data: searchData, isFetching: searching } = useSearchUsers(
+    { search: trimmedQuery },
+    { query: queryOpts({ enabled: searchEnabled }) },
+  );
+  const results: SearchUser[] = searchEnabled ? searchData?.data ?? [] : [];
 
   const invalidate = async () => {
     await Promise.all([
