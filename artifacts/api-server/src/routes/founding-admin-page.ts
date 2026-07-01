@@ -131,6 +131,20 @@ const PAGE = String.raw`<!doctype html>
       <div id="adminStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
     </div>
 
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700;">Add a platform admin</div>
+          <div class="sub">Promote one account to admin <strong>without</strong> demoting anyone — use this to keep multiple admins. The account must already exist (sign up on the live site first).</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <input id="addAdminEmail" type="email" placeholder="admin@example.com" style="min-width:240px;" />
+          <button id="addAdminBtn" class="primary">Add as admin</button>
+        </div>
+      </div>
+      <div id="addAdminStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
+    </div>
+
     <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
       <div style="font-weight:700; color:var(--danger);">Delete a specific organization</div>
       <div class="sub">Permanently deletes <strong>one</strong> organization by ID, plus its teams and all their content (rosters, recaps, highlights, schedule, followers, invites). User accounts are left untouched. This cannot be undone. Type the organization's exact name to confirm.</div>
@@ -360,6 +374,25 @@ const PAGE = String.raw`<!doctype html>
     } finally { btn.disabled = false; }
   }
 
+  async function onAddAdmin() {
+    var email = ($("addAdminEmail").value || "").trim();
+    var s = $("addAdminStatus");
+    if (!email) { s.style.color = "var(--danger)"; s.textContent = "Enter an email address."; return; }
+    if (!confirm("Make " + email + " a platform admin? Existing admins stay admins.")) return;
+    var btn = $("addAdminBtn"); btn.disabled = true;
+    s.style.color = "var(--muted)"; s.textContent = "Updating…";
+    try {
+      var data = await api("/add-admin", { method: "POST", body: JSON.stringify({ email: email }) });
+      s.style.color = "var(--muted)";
+      s.textContent = data.alreadyAdmin
+        ? (data.adminEmail + " was already an admin.")
+        : (data.adminEmail + " is now an admin. Existing admins were left in place.");
+      toast("Admin added");
+    } catch (e) {
+      s.style.color = "var(--danger)"; s.textContent = e.message;
+    } finally { btn.disabled = false; }
+  }
+
   async function onDeleteOrg() {
     var s = $("delOrgStatus");
     var id = ($("delOrgId").value || "").trim();
@@ -386,6 +419,8 @@ const PAGE = String.raw`<!doctype html>
   $("seedBtn").addEventListener("click", onSeed);
   $("adminBtn").addEventListener("click", onSetAdmin);
   $("adminEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") onSetAdmin(); });
+  $("addAdminBtn").addEventListener("click", onAddAdmin);
+  $("addAdminEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") onAddAdmin(); });
   $("delOrgBtn").addEventListener("click", onDeleteOrg);
   $("search").addEventListener("input", renderRows);
 

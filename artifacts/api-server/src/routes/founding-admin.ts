@@ -425,6 +425,80 @@ router.post(
   }),
 );
 
+// Additive counterpart to set-sole-admin: promote ONE existing account to admin
+// while leaving every current admin in place. Used when the operator wants more
+// than one platform admin (set-sole-admin would demote the others). Idempotent —
+// re-running for an existing admin is a no-op. The target must already exist
+// (sign up on the live site first); we never create accounts here.
+const addAdminLimiter = rateLimit({
+  name: "founding-admin-add-admin",
+  windowMs: ONE_HOUR,
+  max: 12,
+  keys: (req) => [ipKey(req)],
+  message: "Too many attempts. Please wait a while before trying again.",
+});
+
+const AddAdminBody = z.object({
+  email: z.string().trim().email("Please enter a valid email address").max(320),
+});
+
+router.post(
+  "/founding-admin/add-admin",
+  requireFoundingAdmin,
+  addAdminLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = AddAdminBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.errors[0]?.message ?? "A valid email is required.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const email = parsed.data.email.toLowerCase();
+
+    const result = await db.transaction(async (tx) => {
+      // Share the set-sole-admin advisory lock so an add and a set-sole run
+      // can't interleave and leave the admin set inconsistent.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:set-sole-admin'))`);
+
+      const [target] = await tx
+        .select({ id: users.id, email: users.email, role: users.role })
+        .from(users)
+        .where(sql`lower(${users.email}) = ${email}`)
+        .limit(1);
+
+      if (!target) {
+        return { notFound: true as const };
+      }
+
+      const alreadyAdmin = target.role === "admin";
+      if (!alreadyAdmin) {
+        await tx.update(users).set({ role: "admin" }).where(eq(users.id, target.id));
+      }
+
+      return { notFound: false as const, adminEmail: target.email, alreadyAdmin };
+    });
+
+    if (result.notFound) {
+      apiError(res, 404, "No live account with that email yet. Sign up on the live site with it first, then try again.", {
+        code: "USER_NOT_FOUND",
+      });
+      return;
+    }
+
+    req.log.info(
+      { adminEmail: result.adminEmail, alreadyAdmin: result.alreadyAdmin },
+      "founding-admin add admin",
+    );
+
+    res.json({
+      ok: true,
+      adminEmail: result.adminEmail,
+      alreadyAdmin: result.alreadyAdmin,
+    });
+  }),
+);
+
 // Targeted, destructive "delete one organization (and its teams)" action from
 // inside the deployment. Publishing syncs schema only and the agent has
 // read-only prod access, so a prod cleanup has to run from this authed operator
