@@ -404,7 +404,7 @@ export async function sendParentalConsentNoticeEmail(
   athleteName: string,
   token: string,
 ): Promise<void> {
-  const url = `${appBaseUrl()}/guardian-consent/${token}`;
+  const url = `${appBaseUrl()}/app/guardian-consent/${token}`;
   await sendEmail({
     to,
     kind: "parental_consent_notice",
@@ -435,7 +435,7 @@ export async function sendParentalConsentFollowupEmail(
   athleteName: string,
   token: string,
 ): Promise<void> {
-  const url = `${appBaseUrl()}/guardian-consent/${token}/finalize`;
+  const url = `${appBaseUrl()}/app/guardian-consent/${token}/finalize`;
   await sendEmail({
     to,
     kind: "parental_consent_followup",
@@ -463,7 +463,7 @@ export async function sendParentalConsentFinalizedEmail(
   athleteName: string,
   revokeToken: string,
 ): Promise<void> {
-  const revokeUrl = `${appBaseUrl()}/guardian-revoke/${revokeToken}`;
+  const revokeUrl = `${appBaseUrl()}/app/guardian-revoke/${revokeToken}`;
   await sendEmail({
     to,
     kind: "parental_consent_finalized",
@@ -482,7 +482,7 @@ You can also manage the account from your Family page after signing in to Kinect
 }
 
 export function buildScheduleUrl(teamId: string): string {
-  return `${appBaseUrl()}/teams/${teamId}`;
+  return `${appBaseUrl()}/app/teams/${teamId}`;
 }
 
 // Shared, already-formatted descriptor for the two schedule emails below.
@@ -619,7 +619,7 @@ export async function sendScheduleChangeNoticeEmail(
 // ---------------------------------------------------------------------------
 
 function settingsUrl(): string {
-  return `${appBaseUrl()}/settings`;
+  return `${appBaseUrl()}/app/settings`;
 }
 
 function firstNameOf(name: string): string {
