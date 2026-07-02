@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { BlurFillImage } from "@/components/BlurFillImage";
+import { FitText } from "@/components/FitText";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -301,9 +302,16 @@ export function TeamHeaderCard({
           </div>
           <div className="flex-1 min-w-0 sm:pb-2">
             <div className="flex items-start gap-3 flex-wrap">
-              <h1 className="text-5xl font-black tracking-tight leading-[1.05]">
-                {team.name}
-              </h1>
+              <div className="flex-1 min-w-0">
+                <FitText
+                  as="h1"
+                  max={48}
+                  min={18}
+                  className="font-black tracking-tight"
+                >
+                  {team.name}
+                </FitText>
+              </div>
               {isAdmin && (
                 <Button
                   size="sm"
