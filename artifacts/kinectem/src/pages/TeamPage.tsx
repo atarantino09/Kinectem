@@ -531,7 +531,7 @@ export default function TeamPage() {
       </div>
 
       {isLg && (
-        <aside className="lg:sticky lg:top-20 lg:self-start space-y-6">
+        <aside className="lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto space-y-6">
           <TeamRosterRail players={players} staff={staff} />
           {canViewSchedule && (
             <ScheduleUpNext
