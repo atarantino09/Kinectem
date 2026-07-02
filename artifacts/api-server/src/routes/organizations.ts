@@ -848,7 +848,8 @@ router.get(
       .from(teams)
       .where(
         and(eq(teams.organizationId, org.id), isNull(teams.archivedAt)),
-      );
+      )
+      .orderBy(sql`nullif(btrim(lower(${teams.name})), '') asc nulls last`);
     // B1 — resolve every team's member count in a single grouped query
     // instead of one count query per team (was N+1).
     const countByTeam = await memberCountByTeam(teamRows.map((t) => t.id));
