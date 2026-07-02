@@ -272,7 +272,7 @@ export function TeamHeaderCard({
                   <img
                     src={orgLogoUrl}
                     alt={logoLabel}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain p-1"
                     data-testid="img-team-photo"
                   />
                 ) : (
