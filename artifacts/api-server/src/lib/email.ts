@@ -301,9 +301,14 @@ export async function sendCoachInviteEmail(
 export function buildPostUrl(link: string): string {
   // Callers store post links as relative paths (e.g. "/posts/article-…").
   // Stitch them onto the configured app base url so the email lands users
-  // on the same page the bell row would.
+  // on the same page the bell row would. The web app is served under the
+  // "/app" prefix, so relative routes MUST be prefixed with "/app" or the
+  // proxy falls through to the marketing site (a bare "/posts/…" is not an
+  // app route). Guard against double-prefixing if a caller already did it.
   const path = link.startsWith("/") ? link : `/${link}`;
-  return `${appBaseUrl()}${path}`;
+  const appPath =
+    path === "/app" || path.startsWith("/app/") ? path : `/app${path}`;
+  return `${appBaseUrl()}${appPath}`;
 }
 
 // Sent when a player is newly tagged on a recap or highlight (task #324).

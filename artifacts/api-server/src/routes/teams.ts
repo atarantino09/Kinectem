@@ -547,7 +547,7 @@ router.post(
           buildRosterEmail(ctx, {
             subject: `You've been added to ${t.name}`,
             message: `${actorName} added you to ${t.name}. Tap to accept or decline.`,
-            link: `${appBaseUrl()}/teams/${teamId}?roster=1&entryId=${entry.id}`,
+            link: `${appBaseUrl()}/app/teams/${teamId}?roster=1&entryId=${entry.id}`,
           }),
       });
       // Fan out to the linked guardian, if any. A parent managing an
@@ -772,7 +772,7 @@ router.patch(
           buildRosterEmail(ctx, {
             subject: `Your role on ${t.name} changed`,
             message: `${actorName} changed your role on ${t.name} to ${roleLabel}.`,
-            link: `${appBaseUrl()}/teams/${teamId}?roster=1&entryId=${entry.id}`,
+            link: `${appBaseUrl()}/app/teams/${teamId}?roster=1&entryId=${entry.id}`,
           }),
       });
       if (u.parentId) {

@@ -276,7 +276,7 @@ export async function notifyStaffOfGameRecapReminder(args: {
     })),
   );
   // Task #633 — also nudge by email (gated by prefs; minors -> guardian).
-  const teamUrl = `${appBaseUrl()}/teams/${args.teamId}`;
+  const teamUrl = `${appBaseUrl()}/app/teams/${args.teamId}`;
   await dispatchNotificationEmailToMany({
     userIds: recipients,
     category: "reminder_game_recap",
@@ -409,7 +409,7 @@ export async function notifyTeamFollowersOfNewRecap(args: {
     .map((r) => r.userId)
     .filter((id) => id !== args.actorUserId);
   if (recipientIds.length === 0) return;
-  const postUrl = `${appBaseUrl()}/posts/${articlePostId(args.articleId)}`;
+  const postUrl = `${appBaseUrl()}/app/posts/${articlePostId(args.articleId)}`;
   await dispatchNotificationEmailToMany({
     userIds: recipientIds,
     excludeRecipientUserId: args.actorUserId,
@@ -447,7 +447,7 @@ export async function notifyTeamFollowersOfNewHighlight(args: {
     .map((r) => r.userId)
     .filter((id) => id !== args.actorUserId);
   if (recipientIds.length === 0) return;
-  const postUrl = `${appBaseUrl()}/posts/${highlightPostId(args.highlightId)}`;
+  const postUrl = `${appBaseUrl()}/app/posts/${highlightPostId(args.highlightId)}`;
   await dispatchNotificationEmailToMany({
     userIds: recipientIds,
     excludeRecipientUserId: args.actorUserId ?? undefined,

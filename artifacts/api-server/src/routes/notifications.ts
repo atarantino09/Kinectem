@@ -250,7 +250,7 @@ router.get(
           unsubscribePage(
             "Invalid link",
             `<p>This unsubscribe link is invalid or incomplete.</p>
-<p>You can manage all your email preferences in <a href="${appBaseUrl()}/settings">Settings</a>.</p>`,
+<p>You can manage all your email preferences in <a href="${appBaseUrl()}/app/settings">Settings</a>.</p>`,
           ),
         );
     }
@@ -267,7 +267,7 @@ router.get(
       unsubscribePage(
         "You're unsubscribed",
         `<p>You've been unsubscribed from ${what}. It may take a moment to take effect.</p>
-<p>You can re-enable or fine-tune anything in <a href="${appBaseUrl()}/settings">Settings</a>.</p>
+<p>You can re-enable or fine-tune anything in <a href="${appBaseUrl()}/app/settings">Settings</a>.</p>
 <p>Note: essential account emails (security, consent) are always sent.</p>`,
       ),
     );
