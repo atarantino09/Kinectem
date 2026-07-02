@@ -125,7 +125,7 @@ export default function MessagesPage() {
   const items = convs?.data ?? [];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 -mt-2">
+    <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-4 -mt-2">
       <aside className="space-y-1">
         <div className="flex items-center justify-between px-2 mb-2">
           <h2 className="text-xl font-black tracking-tight">Messages</h2>

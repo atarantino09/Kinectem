@@ -174,7 +174,7 @@ export default function FeedPage() {
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_300px] gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_300px] gap-6">
       {/* Left sidebar */}
       <aside className="hidden lg:block lg:sticky lg:top-16 lg:self-start lg:max-h-[calc(100vh-4rem-1.5rem)] lg:overflow-y-auto space-y-4">
         {me && (
@@ -274,7 +274,7 @@ export default function FeedPage() {
       </aside>
 
       {/* Center feed */}
-      <div className="space-y-4">
+      <div className="space-y-4 min-w-0">
         <h2 className="text-3xl font-black tracking-tight">
           Latest <span className="brand-gradient-text">Activity</span>
         </h2>

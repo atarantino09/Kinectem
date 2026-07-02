@@ -91,7 +91,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6" data-testid="admin-layout">
+    <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6" data-testid="admin-layout">
       <aside className="md:sticky md:top-20 self-start space-y-1">
         <Link href="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Kinectem
