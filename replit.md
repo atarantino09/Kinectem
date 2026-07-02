@@ -127,7 +127,7 @@ Invite delivery flags only advance once the Signed Event Webhook is wired. In Se
 
 ## Paused work
 
-- **Task #505 — Pre-launch hardening** (paused, no code started). Checklist: (1) Managed Postgres cutover (Neon) + backups/PITR, (2) object storage for uploads, (3) scheduled COPPA + backfill jobs, (4) shared-state rate limiting across Autoscale instances, (5) custom domain + `LAUNCH.md` runbook. Spec at `.local/tasks/task-505.md`; resume by re-prompting #505.
+- **Task #505 — Pre-launch hardening** (in progress). Checklist: (1) Managed Postgres cutover (Neon) + backups/PITR, (2) object storage for uploads, (3) scheduled COPPA + backfill jobs, (4) shared-state rate limiting across Autoscale instances, (5) custom domain + `LAUNCH.md` runbook. **Phase 1 code prep done**: `PG_POOL_MAX`/idle/connect-timeout-tunable pool in `lib/db/src/index.ts` (budget = maxInstances × PG_POOL_MAX ≤ Neon pooled cap), multi-instance `db:load-check` harness (`@workspace/scripts`), and `LAUNCH.md` cutover runbook. Remaining Phase 1 (provision Neon, dump/restore, swap `DATABASE_URL` in Deployment Secrets, publish, prod-validate) is **user-initiated** — no Neon/Redis Replit integration exists, so credentials come from the user. **Phase 2** (Redis shared-state rate limiting, AI Assist limiter first) starts only after Phase 1 is validated in prod. Spec at `.local/tasks/task-505.md`.
 
 ## Pointers
 

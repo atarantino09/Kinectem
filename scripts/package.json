@@ -15,6 +15,7 @@
     "bulk-import-organizations": "tsx ./src/bulk-import-organizations.ts",
     "burn-walkthrough-captions": "tsx ./src/burn-walkthrough-captions.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
+    "db:load-check": "tsx ./src/db-load-check.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
     "export-org-claim-links": "tsx ./src/export-org-claim-links.ts",
     "export-org-names": "tsx ./src/export-org-names.ts",
@@ -33,10 +34,12 @@
     "@workspace/db": "workspace:*",
     "@workspace/user-hard-delete": "workspace:*",
     "drizzle-orm": "catalog:",
+    "pg": "^8.20.0",
     "sharp": "^0.34.4"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.18.0",
     "playwright": "^1.60.0",
     "tsx": "catalog:"
   }
