@@ -23,6 +23,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -41,6 +42,8 @@ import {
   Archive,
   Building2,
   ChevronDown,
+  Search,
+  X,
   ExternalLink,
   ListPlus,
   Megaphone,
@@ -702,7 +705,13 @@ function TeamsRail({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
+  const [query, setQuery] = useState("");
   const innerRef = useRef<HTMLDivElement>(null);
+
+  const q = query.trim().toLowerCase();
+  const filteredTeams = q
+    ? teams.filter((t) => (t.name ?? "").toLowerCase().includes(q))
+    : teams;
 
   // Cap the list at roughly the visible viewport. The cap matches the
   // CSS expression below (calc(100vh - 14rem)) so overflow detection
@@ -725,7 +734,7 @@ function TeamsRail({
       ro.disconnect();
       window.removeEventListener("resize", check);
     };
-  }, [teams.length]);
+  }, [filteredTeams.length]);
 
   return (
     <Card
@@ -788,6 +797,38 @@ function TeamsRail({
         </div>
       ) : (
         <>
+          <div className="px-2 pt-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search teams…"
+                className="pl-8 pr-8 h-9"
+                data-testid="input-search-teams"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear team search"
+                  data-testid="btn-clear-team-search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+          {filteredTeams.length === 0 ? (
+            <div className="p-8 text-center">
+              <Search className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                No teams match “{query.trim()}”.
+              </p>
+            </div>
+          ) : (
           <div
             className={
               expanded
@@ -796,7 +837,7 @@ function TeamsRail({
             }
           >
             <div ref={innerRef} className="flex flex-col gap-2 p-2">
-              {teams.map((team) => (
+              {filteredTeams.map((team) => (
                 <Link key={team.id} href={`/teams/${team.id}`}>
                   <div
                     className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
@@ -839,7 +880,8 @@ function TeamsRail({
               ))}
             </div>
           </div>
-          {hasOverflow && (
+          )}
+          {hasOverflow && filteredTeams.length > 0 && (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
@@ -847,7 +889,7 @@ function TeamsRail({
               data-testid="btn-toggle-teams-expand"
               aria-expanded={expanded}
             >
-              {expanded ? "Show less" : `Show all ${teams.length} teams`}
+              {expanded ? "Show less" : `Show all ${filteredTeams.length} teams`}
               <ChevronDown
                 className={`w-4 h-4 transition-transform ${
                   expanded ? "rotate-180" : ""
