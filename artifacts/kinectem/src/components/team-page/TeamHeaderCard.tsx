@@ -286,7 +286,7 @@ export function TeamHeaderCard({
             {hasOrg ? (
               <Link
                 href={`/organizations/${org!.id}`}
-                className="mt-2 font-bold text-sm text-muted-foreground hover:text-primary uppercase tracking-wider text-center sm:text-left max-w-[8rem] block leading-tight cursor-pointer"
+                className="mt-2 font-bold text-sm text-muted-foreground hover:text-primary uppercase tracking-wider text-center sm:text-left max-w-[8rem] leading-tight line-clamp-3 cursor-pointer"
                 data-testid="link-team-org"
               >
                 {formatOrgName(org!.name ?? "")}

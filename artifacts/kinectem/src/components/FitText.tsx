@@ -73,7 +73,7 @@ export function FitText({
       </span>
       <span
         className="block overflow-hidden text-ellipsis whitespace-nowrap"
-        style={{ fontSize, lineHeight }}
+        style={{ fontSize, lineHeight, paddingBottom: "0.15em" }}
       >
         {children}
       </span>
