@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { FitText } from "@/components/FitText";
 import { PersonaPill } from "@/components/PersonaPill";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
@@ -375,9 +376,14 @@ export default function OrganizationPage() {
                   </AvatarLightbox>
                 </div>
                 <div className="pb-1 sm:pb-2 min-w-0 flex-1">
-                  <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight sm:leading-none break-words">
+                  <FitText
+                    as="h1"
+                    max={36}
+                    min={14}
+                    className="font-black tracking-tight"
+                  >
                     {formatOrgName(organization.name)}
-                  </h1>
+                  </FitText>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium flex-wrap">
                     <span className="font-bold text-foreground">@{organization.slug}</span>
                     {organization.role && (
