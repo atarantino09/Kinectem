@@ -30,6 +30,7 @@ import {
   contentReports,
   parentChildNotificationReads,
   messageChildHides,
+  userPinnedTeams,
 } from "@workspace/db";
 import {
   and,
@@ -107,6 +108,73 @@ router.patch(
   "/users/me/settings",
   asyncHandler(async (req, res) => {
     res.json({ share_to_facebook_default: !!req.body?.share_to_facebook_default });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Pinned teams — the viewer's own personalization (max 5). Pinned teams
+// float to the top of the viewer's team lists on their profile and on any
+// org page. Full-replace PUT mirrors the /users/:userId/sports pattern; the
+// submitted array order becomes the stored pin order.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/users/me/pinned-teams",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const rows = await db
+      .select({ teamId: userPinnedTeams.teamId })
+      .from(userPinnedTeams)
+      .where(eq(userPinnedTeams.userId, me.id))
+      .orderBy(asc(userPinnedTeams.position), asc(userPinnedTeams.createdAt));
+    res.json({ teamIds: rows.map((r) => r.teamId) });
+  }),
+);
+
+router.put(
+  "/users/me/pinned-teams",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    // The OpenAPI validator enforces `maxItems: 5` + uuid shape before the
+    // handler runs; de-dupe here so a repeated id can't waste a slot.
+    const requested: string[] = Array.isArray(req.body?.teamIds)
+      ? (req.body.teamIds as string[])
+      : [];
+    const deduped = requested.filter(
+      (id, i) => requested.indexOf(id) === i,
+    );
+    // Defense-in-depth: the OpenAPI validator already caps this at 5, but
+    // enforce here too in case the spec wiring ever changes.
+    if (deduped.length > 5) {
+      return apiError(res, 400, "You can pin up to 5 teams");
+    }
+    // Ignore non-existent team ids (they'd violate the FK and never render).
+    const existing =
+      deduped.length > 0
+        ? await db
+            .select({ id: teams.id })
+            .from(teams)
+            .where(inArray(teams.id, deduped))
+        : [];
+    const validIds = new Set(existing.map((r) => r.id));
+    const finalIds = deduped.filter((id) => validIds.has(id));
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(userPinnedTeams)
+        .where(eq(userPinnedTeams.userId, me.id));
+      if (finalIds.length > 0) {
+        await tx.insert(userPinnedTeams).values(
+          finalIds.map((teamId, position) => ({
+            userId: me.id,
+            teamId,
+            position,
+          })),
+        );
+      }
+    });
+    res.json({ teamIds: finalIds });
   }),
 );
 

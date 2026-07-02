@@ -1253,6 +1253,32 @@ export const UpdateMySettingsResponse = zod
   );
 
 /**
+ * Returns the viewer's pinned team ids in pin order (max 5). Pinned teams float to the top of the viewer's team lists on their profile and on any organization page.
+
+ * @summary List the authenticated user's pinned team ids (self only)
+ */
+export const GetMyPinnedTeamsResponse = zod.object({
+  teamIds: zod.array(zod.string().uuid()),
+});
+
+/**
+ * Full-replace semantics — the submitted array (max 5) overwrites the stored list, and its order becomes the pin order. Unknown or non-existent team ids are ignored.
+
+ * @summary Replace the authenticated user's pinned team ids (self only)
+ */
+export const updateMyPinnedTeamsBodyTeamIdsMax = 5;
+
+export const UpdateMyPinnedTeamsBody = zod.object({
+  teamIds: zod
+    .array(zod.string().uuid())
+    .max(updateMyPinnedTeamsBodyTeamIdsMax),
+});
+
+export const UpdateMyPinnedTeamsResponse = zod.object({
+  teamIds: zod.array(zod.string().uuid()),
+});
+
+/**
  * @summary List organizations the user belongs to
  */
 export const ListUserOrganizationsParams = zod.object({

@@ -450,6 +450,20 @@ export const userSports = pgTable("user_sports", {
   sport: text("sport").notNull(),
 }, (t) => ({ pk: primaryKey({ columns: [t.userId, t.sport] }) }));
 
+// Per-user pinned teams (max 5, enforced in the route + OpenAPI maxItems).
+// A viewer's own personalization: pinned teams float to the top of the
+// team lists on their profile and on any org page. `position` preserves the
+// user's chosen pin order (assigned by array index on full-replace PUT).
+export const userPinnedTeams = pgTable("user_pinned_teams", {
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.teamId] }),
+  userIdIdx: index("user_pinned_teams_user_id_idx").on(t.userId),
+}));
+
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Task #628 — nullable to support "solo teams" created by visiting coaches

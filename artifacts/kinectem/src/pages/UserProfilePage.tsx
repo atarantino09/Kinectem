@@ -34,6 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { usePinnedTeams } from "@/hooks/usePinnedTeams";
+import { PinTeamButton, PinnedSectionLabel } from "@/components/PinTeamButton";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { NoIndex } from "@/components/NoIndex";
 import {
@@ -83,6 +85,12 @@ export default function UserProfilePage() {
   const followUser = useFollowUser();
   const unfollowUser = useUnfollowUser();
   const startConversation = useCreateConversation();
+  const {
+    pinnedSet,
+    pinnedIds,
+    togglePin,
+    enabled: pinEnabled,
+  } = usePinnedTeams();
   const onToggleFollow = async () => {
     if (!user) return;
     try {
@@ -145,6 +153,23 @@ export default function UserProfilePage() {
   const displayName = `${user.firstName} ${user.lastName}`;
   const orgs = orgsResp?.data ?? [];
   const teams = teamsResp?.data ?? [];
+  // Pinned teams (the viewer's own personalization) float to the top, in
+  // pin order. Toggles only show on the viewer's own profile.
+  const canTogglePins = user.isOwnProfile === true && pinEnabled;
+  const pinnedOrder = new Map(pinnedIds.map((id, i) => [id, i] as const));
+  const teamsSorted = [...teams].sort((a, b) => {
+    const ap = pinnedSet.has(a.teamId);
+    const bp = pinnedSet.has(b.teamId);
+    if (ap && bp) {
+      return (pinnedOrder.get(a.teamId) ?? 0) - (pinnedOrder.get(b.teamId) ?? 0);
+    }
+    if (ap) return -1;
+    if (bp) return 1;
+    return 0;
+  });
+  const pinnedTeamCount = teamsSorted.filter((t) =>
+    pinnedSet.has(t.teamId),
+  ).length;
   // Server returns the private response (with `parentId`) when the viewer
   // is the linked parent, so the simple comparison below is sufficient.
   const isParentOfThisUser =
@@ -208,7 +233,7 @@ export default function UserProfilePage() {
     </Link>
   ));
 
-  const teamItems: ReactNode[] = teams.map((t) => {
+  const teamItems: ReactNode[] = teamsSorted.map((t) => {
     const isPending = t.status === "pending";
     return (
       <Link key={t.id} href={`/teams/${t.teamId}`}>
@@ -269,6 +294,13 @@ export default function UserProfilePage() {
                 </div>
               )}
             </div>
+            {canTogglePins && (
+              <PinTeamButton
+                teamId={t.teamId}
+                pinned={pinnedSet.has(t.teamId)}
+                onToggle={togglePin}
+              />
+            )}
           </CardContent>
         </Card>
       </Link>
@@ -324,6 +356,7 @@ export default function UserProfilePage() {
           icon={<Shield className="w-5 h-5 text-primary" />}
           testId="teams"
           items={teamItems}
+          pinnedCount={canTogglePins ? pinnedTeamCount : 0}
         />
       )}
       {familyItems.length > 0 && (
@@ -614,17 +647,20 @@ function AffiliationColumn({
   icon,
   testId,
   items,
+  pinnedCount,
 }: {
   title: string;
   icon: ReactNode;
   testId: string;
   items: ReactNode[];
+  pinnedCount?: number;
 }) {
   const [open, setOpen] = useState(false);
   // Caller must skip rendering this card when items is empty.
   if (items.length === 0) return null;
   const hasMore = items.length > 1;
-  const [first, ...rest] = items;
+  const first = items[0];
+  const pinnedN = pinnedCount ?? 0;
   return (
     <div
       className="rounded-xl border border-border bg-card shadow-sm"
@@ -667,8 +703,24 @@ function AffiliationColumn({
         data-testid={`affiliation-content-${testId}`}
       >
         <div className="flex flex-col gap-3">
-          {first}
-          {hasMore && open && rest}
+          {!open ? (
+            first
+          ) : pinnedN > 0 ? (
+            <>
+              <PinnedSectionLabel
+                label="Pinned"
+                showStar
+                testId={`pinned-divider-${testId}`}
+              />
+              {items.slice(0, pinnedN)}
+              {pinnedN < items.length && (
+                <PinnedSectionLabel label="All teams" />
+              )}
+              {items.slice(pinnedN)}
+            </>
+          ) : (
+            items
+          )}
         </div>
       </div>
     </div>

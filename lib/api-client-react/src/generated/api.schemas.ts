@@ -447,6 +447,15 @@ export interface UserSportsResponse {
   sports: string[];
 }
 
+export interface UpdatePinnedTeamsRequest {
+  /** @maxItems 5 */
+  teamIds: string[];
+}
+
+export interface PinnedTeamsResponse {
+  teamIds: string[];
+}
+
 /**
  * Free-form settings bag. Known keys below; clients may receive additional keys in the future.
  */

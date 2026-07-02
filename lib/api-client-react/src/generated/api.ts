@@ -284,6 +284,7 @@ import type {
   PaginatedUserTeamMembershipsResponse,
   PhoneListResponse,
   PhoneResponse,
+  PinnedTeamsResponse,
   PostApprovalResponse,
   PostPreviewResponse,
   PostResponse,
@@ -328,6 +329,7 @@ import type {
   UpdateMemberRoleRequest,
   UpdateOrganizationRequest,
   UpdatePhoneRequest,
+  UpdatePinnedTeamsRequest,
   UpdatePostRequest,
   UpdatePrivacySettingsRequest,
   UpdateSharePreferenceRequest,
@@ -1916,6 +1918,180 @@ export const useUpdateMySettings = <
   TContext
 > => {
   return useMutation(getUpdateMySettingsMutationOptions(options));
+};
+
+/**
+ * Returns the viewer's pinned team ids in pin order (max 5). Pinned teams float to the top of the viewer's team lists on their profile and on any organization page.
+
+ * @summary List the authenticated user's pinned team ids (self only)
+ */
+export const getGetMyPinnedTeamsUrl = () => {
+  return `/api/v1/users/me/pinned-teams`;
+};
+
+export const getMyPinnedTeams = async (
+  options?: RequestInit,
+): Promise<PinnedTeamsResponse> => {
+  return customFetch<PinnedTeamsResponse>(getGetMyPinnedTeamsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyPinnedTeamsQueryKey = () => {
+  return [`/api/v1/users/me/pinned-teams`] as const;
+};
+
+export const getGetMyPinnedTeamsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyPinnedTeams>>,
+  TError = ErrorType<UnauthorizedResponse | InternalServerErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPinnedTeams>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyPinnedTeamsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMyPinnedTeams>>
+  > = ({ signal }) => getMyPinnedTeams({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPinnedTeams>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyPinnedTeamsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyPinnedTeams>>
+>;
+export type GetMyPinnedTeamsQueryError = ErrorType<
+  UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary List the authenticated user's pinned team ids (self only)
+ */
+
+export function useGetMyPinnedTeams<
+  TData = Awaited<ReturnType<typeof getMyPinnedTeams>>,
+  TError = ErrorType<UnauthorizedResponse | InternalServerErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPinnedTeams>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyPinnedTeamsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Full-replace semantics — the submitted array (max 5) overwrites the stored list, and its order becomes the pin order. Unknown or non-existent team ids are ignored.
+
+ * @summary Replace the authenticated user's pinned team ids (self only)
+ */
+export const getUpdateMyPinnedTeamsUrl = () => {
+  return `/api/v1/users/me/pinned-teams`;
+};
+
+export const updateMyPinnedTeams = async (
+  updatePinnedTeamsRequest: UpdatePinnedTeamsRequest,
+  options?: RequestInit,
+): Promise<PinnedTeamsResponse> => {
+  return customFetch<PinnedTeamsResponse>(getUpdateMyPinnedTeamsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updatePinnedTeamsRequest),
+  });
+};
+
+export const getUpdateMyPinnedTeamsMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyPinnedTeams>>,
+    TError,
+    { data: BodyType<UpdatePinnedTeamsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMyPinnedTeams>>,
+  TError,
+  { data: BodyType<UpdatePinnedTeamsRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateMyPinnedTeams"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMyPinnedTeams>>,
+    { data: BodyType<UpdatePinnedTeamsRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateMyPinnedTeams(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMyPinnedTeamsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMyPinnedTeams>>
+>;
+export type UpdateMyPinnedTeamsMutationBody =
+  BodyType<UpdatePinnedTeamsRequest>;
+export type UpdateMyPinnedTeamsMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Replace the authenticated user's pinned team ids (self only)
+ */
+export const useUpdateMyPinnedTeams = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyPinnedTeams>>,
+    TError,
+    { data: BodyType<UpdatePinnedTeamsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMyPinnedTeams>>,
+  TError,
+  { data: BodyType<UpdatePinnedTeamsRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateMyPinnedTeamsMutationOptions(options));
 };
 
 /**

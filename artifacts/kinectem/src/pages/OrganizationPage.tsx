@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -24,6 +24,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { usePinnedTeams } from "@/hooks/usePinnedTeams";
+import { PinTeamButton, PinnedSectionLabel } from "@/components/PinTeamButton";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -707,11 +709,33 @@ function TeamsRail({
   const [hasOverflow, setHasOverflow] = useState(false);
   const [query, setQuery] = useState("");
   const innerRef = useRef<HTMLDivElement>(null);
+  const {
+    pinnedSet,
+    pinnedIds,
+    togglePin,
+    enabled: pinEnabled,
+  } = usePinnedTeams();
 
   const q = query.trim().toLowerCase();
   const filteredTeams = q
     ? teams.filter((t) => (t.name ?? "").toLowerCase().includes(q))
     : teams;
+  // Pinned teams (the viewer's own personalization) float to the top, in pin
+  // order, within whatever the current search shows.
+  const pinnedOrder = new Map(pinnedIds.map((id, i) => [id, i] as const));
+  const sortedTeams = [...filteredTeams].sort((a, b) => {
+    const ap = pinnedSet.has(a.id);
+    const bp = pinnedSet.has(b.id);
+    if (ap && bp) {
+      return (pinnedOrder.get(a.id) ?? 0) - (pinnedOrder.get(b.id) ?? 0);
+    }
+    if (ap) return -1;
+    if (bp) return 1;
+    return 0;
+  });
+  const pinnedCount = pinEnabled
+    ? sortedTeams.filter((t) => pinnedSet.has(t.id)).length
+    : 0;
 
   // Cap the list at roughly the visible viewport. The cap matches the
   // CSS expression below (calc(100vh - 14rem)) so overflow detection
@@ -837,12 +861,25 @@ function TeamsRail({
             }
           >
             <div ref={innerRef} className="flex flex-col gap-2 p-2">
-              {filteredTeams.map((team) => (
-                <Link key={team.id} href={`/teams/${team.id}`}>
-                  <div
-                    className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
-                    data-testid={`card-team-${team.id}`}
-                  >
+              {pinnedCount > 0 && (
+                <PinnedSectionLabel
+                  label="Pinned"
+                  showStar
+                  testId="pinned-divider-org"
+                />
+              )}
+              {sortedTeams.map((team, i) => (
+                <Fragment key={team.id}>
+                  {pinnedCount > 0 &&
+                    i === pinnedCount &&
+                    pinnedCount < sortedTeams.length && (
+                      <PinnedSectionLabel label="All teams" />
+                    )}
+                  <Link href={`/teams/${team.id}`}>
+                    <div
+                      className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
+                      data-testid={`card-team-${team.id}`}
+                    >
                     {/* Banner visual: team-specific photo if set, otherwise
                         the same gradient empty-state used by the team-page
                         hero so branding stays consistent. */}
@@ -857,17 +894,27 @@ function TeamsRail({
                       )}
                     </div>
                     <div className="p-2.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">
-                          {team.name}
-                        </h3>
-                        {team.sport && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] uppercase tracking-wider font-bold shrink-0"
-                          >
-                            {team.sport}
-                          </Badge>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">
+                            {team.name}
+                          </h3>
+                          {team.sport && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+                            >
+                              {team.sport}
+                            </Badge>
+                          )}
+                        </div>
+                        {pinEnabled && (
+                          <PinTeamButton
+                            teamId={team.id}
+                            pinned={pinnedSet.has(team.id)}
+                            onToggle={togglePin}
+                            className="-mr-1"
+                          />
                         )}
                       </div>
                       <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground mt-0.5">
@@ -875,8 +922,9 @@ function TeamsRail({
                         {team.followerCount ?? 0} Followers
                       </div>
                     </div>
-                  </div>
-                </Link>
+                    </div>
+                  </Link>
+                </Fragment>
               ))}
             </div>
           </div>

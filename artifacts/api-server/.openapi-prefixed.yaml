@@ -530,6 +530,51 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/v1/users/me/pinned-teams:
+    get:
+      operationId: getMyPinnedTeams
+      summary: List the authenticated user's pinned team ids (self only)
+      description: |
+        Returns the viewer's pinned team ids in pin order (max 5). Pinned teams float to the top of the viewer's team lists on their profile and on any organization page.
+      tags:
+        - Users
+      responses:
+        "200":
+          description: The user's pinned team ids in pin order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PinnedTeamsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      operationId: updateMyPinnedTeams
+      summary: Replace the authenticated user's pinned team ids (self only)
+      description: |
+        Full-replace semantics — the submitted array (max 5) overwrites the stored list, and its order becomes the pin order. Unknown or non-existent team ids are ignored.
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePinnedTeamsRequest"
+      responses:
+        "200":
+          description: Updated pinned team ids in pin order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PinnedTeamsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/users/{userId}/organizations:
     get:
       operationId: listUserOrganizations
@@ -7579,6 +7624,28 @@ components:
           type: array
           items:
             type: string
+    UpdatePinnedTeamsRequest:
+      type: object
+      required:
+        - teamIds
+      additionalProperties: false
+      properties:
+        teamIds:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            format: uuid
+    PinnedTeamsResponse:
+      type: object
+      required:
+        - teamIds
+      properties:
+        teamIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     UserSettingsResponse:
       type: object
       additionalProperties: true

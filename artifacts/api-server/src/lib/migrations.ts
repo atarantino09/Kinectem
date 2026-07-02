@@ -1150,6 +1150,17 @@ BEGIN
 END$migration$;
 `;
 
+const USER_PINNED_TEAMS = `
+CREATE TABLE IF NOT EXISTS user_pinned_teams (
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id    uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  position   integer NOT NULL DEFAULT 0,
+  created_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, team_id)
+);
+CREATE INDEX IF NOT EXISTS user_pinned_teams_user_id_idx ON user_pinned_teams(user_id);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1334,6 +1345,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-07-01-task-686-permanent-delete-user",
     sql: TASK_686_PERMANENT_DELETE_USER,
+  },
+  {
+    name: "2026-07-02-user-pinned-teams",
+    sql: USER_PINNED_TEAMS,
   },
 ];
 
