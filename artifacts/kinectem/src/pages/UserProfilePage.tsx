@@ -217,20 +217,17 @@ export default function UserProfilePage() {
           data-testid={`card-team-${t.teamId}`}
         >
           <CardContent className="p-4 flex items-center gap-3">
-            {/* Banner-style thumbnail mirroring the team-page hero and the
-                follow-suggestions rail. Uses the team's editable
-                `bannerUrl` (cover-cropped) and falls back to the same
-                soft primary gradient when no team photo is set. */}
-            <div className="relative w-16 h-12 rounded-md overflow-hidden border border-border shrink-0 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
-              {t.teamBannerUrl && (
-                <img
-                  src={t.teamBannerUrl}
-                  alt={`${t.teamName} background`}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  data-testid={`img-profile-team-banner-${t.teamId}`}
-                />
-              )}
-            </div>
+            {/* Square team avatar: shows the team's editable banner when set
+                and falls back to the team's initials — mirrors the
+                Organizations/Family cards and avoids an empty placeholder. */}
+            <TeamAvatar
+              avatarUrl={t.teamBannerUrl}
+              displayName={t.teamName}
+              size="xl"
+              rounded="lg"
+              className="shrink-0"
+              data-testid={`img-profile-team-banner-${t.teamId}`}
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2 min-w-0">
                 <p className="font-bold text-sm truncate">{t.teamName}</p>
@@ -241,34 +238,36 @@ export default function UserProfilePage() {
                   {t.jerseyNumber ? `#${t.jerseyNumber}` : "—"}
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                <Badge
-                  variant="outline"
-                  className="text-[10px] uppercase tracking-wider font-bold"
-                >
-                  {t.organization
-                    ? formatOrgName(t.organization.name)
-                    : "Independent team"}
-                </Badge>
-                {t.position === "parent" && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] uppercase tracking-wider font-bold"
-                    data-testid={`badge-team-parent-${t.teamId}`}
-                  >
-                    Parent
-                  </Badge>
-                )}
-                {isPending && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
-                    data-testid={`badge-team-pending-${t.teamId}`}
-                  >
-                    Pending
-                  </Badge>
-                )}
-              </div>
+              <p
+                className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground truncate mt-0.5"
+                data-testid={`text-team-org-${t.teamId}`}
+              >
+                {t.organization
+                  ? formatOrgName(t.organization.name)
+                  : "Independent team"}
+              </p>
+              {(t.position === "parent" || isPending) && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  {t.position === "parent" && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] uppercase tracking-wider font-bold"
+                      data-testid={`badge-team-parent-${t.teamId}`}
+                    >
+                      Parent
+                    </Badge>
+                  )}
+                  {isPending && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] uppercase tracking-wider font-bold border-amber-500 text-amber-700 dark:text-amber-400"
+                      data-testid={`badge-team-pending-${t.teamId}`}
+                    >
+                      Pending
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
