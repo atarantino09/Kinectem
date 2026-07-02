@@ -460,12 +460,20 @@ export default function TeamPage() {
             right rail on lg+. Only one instance mounts at a time so
             test ids stay unique. */}
         {!isLg && (
-          <TeamRosterRail
-            players={players}
-            staff={staff}
-            canManage={canManage}
-            onOpenInvite={() => setInviteOpen(true)}
-          />
+          <>
+            <TeamRosterRail
+              players={players}
+              staff={staff}
+              canManage={canManage}
+              onOpenInvite={() => setInviteOpen(true)}
+            />
+            {canViewSchedule && (
+              <ScheduleUpNext
+                teamId={teamId}
+                onOpenSchedule={() => setExpanded("schedule")}
+              />
+            )}
+          </>
         )}
 
         {expanded === "posts" && (
@@ -483,12 +491,6 @@ export default function TeamPage() {
               </div>
             )}
             <TournamentScheduleCard teamId={teamId} canPostRecap={canPostRecap} />
-            {canViewSchedule && (
-              <ScheduleUpNext
-                teamId={teamId}
-                onOpenSchedule={() => setExpanded("schedule")}
-              />
-            )}
             <TeamPostsSection
               teamId={teamId}
               isAdmin={isAdmin}
@@ -529,8 +531,14 @@ export default function TeamPage() {
       </div>
 
       {isLg && (
-        <aside className="lg:sticky lg:top-20 lg:self-start">
+        <aside className="lg:sticky lg:top-20 lg:self-start space-y-6">
           <TeamRosterRail players={players} staff={staff} />
+          {canViewSchedule && (
+            <ScheduleUpNext
+              teamId={teamId}
+              onOpenSchedule={() => setExpanded("schedule")}
+            />
+          )}
         </aside>
       )}
 
