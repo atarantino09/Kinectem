@@ -489,8 +489,11 @@ export function EventFormDialog({
                     id="seriesStart"
                     type="date"
                     value={seriesStart}
-                    max={seriesEnd || undefined}
-                    onChange={(e) => setSeriesStart(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSeriesStart(v);
+                      if (v && seriesEnd && seriesEnd < v) setSeriesEnd(v);
+                    }}
                     className="mt-2"
                     data-testid="input-series-start"
                   />
