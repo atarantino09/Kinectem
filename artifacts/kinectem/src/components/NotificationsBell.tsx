@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Bell, ShieldAlert, Users } from "lucide-react";
+import { Bell, ShieldAlert, Users, CheckCheck } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 
@@ -155,8 +155,6 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
-  // Guard so the auto-clear fires at most once per dropdown-open. Reset on close.
-  const clearedThisOpenRef = useRef(false);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetUnreadNotificationCountQueryKey() });
@@ -170,8 +168,8 @@ export function NotificationsBell() {
   // disappears from the dropdown the instant the user's action succeeds.
   // Cancels any in-flight list refetches first — otherwise a response
   // that started before the action (e.g. the refetch fired by
-  // `markAll.mutate()` on dropdown-open) can land after our setQueryData
-  // call and transiently re-add the row before the final `invalidate()`
+  // `markEverythingRead()`) can land after our setQueryData call and
+  // transiently re-add the row before the final `invalidate()`
   // reconciles with the server.
   const removeFromList = async (notificationId: string) => {
     await qc.cancelQueries({ queryKey: getListNotificationsQueryKey() });
@@ -199,15 +197,14 @@ export function NotificationsBell() {
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) {
-      clearedThisOpenRef.current = false;
-      return;
-    }
-    if (clearedThisOpenRef.current) return;
-    clearedThisOpenRef.current = true;
+  };
 
-    // Optimistically zero the badges so the dot disappears the instant
-    // the dropdown opens. The mutations below reconcile via invalidate().
+  // Explicit "mark all read" — invoked from the dropdown header button, NOT
+  // on open. Opening the bell must leave notifications visible and unread so
+  // the user can actually see what came in before clearing them.
+  const markEverythingRead = () => {
+    // Optimistically zero the badges so the dot disappears immediately.
+    // The mutations below reconcile via invalidate().
     qc.setQueryData<NotificationUnreadCount | undefined>(
       getGetUnreadNotificationCountQueryKey(),
       (prev) => (prev ? { ...prev, unreadCount: 0 } : prev),
@@ -410,6 +407,16 @@ export function NotificationsBell() {
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h4 className="font-black tracking-tight text-sm">Notifications</h4>
+          {unread > 0 && (
+            <button
+              onClick={markEverythingRead}
+              className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground hover:text-foreground"
+              data-testid="button-mark-all-read"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Mark all read
+            </button>
+          )}
         </div>
         {childrenUnread > 0 && (
           <button
