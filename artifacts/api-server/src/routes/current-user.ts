@@ -138,29 +138,46 @@ router.put(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    // The OpenAPI validator enforces `maxItems: 5` + uuid shape before the
-    // handler runs; de-dupe here so a repeated id can't waste a slot.
+    // The OpenAPI validator enforces the global `maxItems` + uuid shape before
+    // the handler runs; de-dupe here so a repeated id can't waste a slot.
     const requested: string[] = Array.isArray(req.body?.teamIds)
       ? (req.body.teamIds as string[])
       : [];
     const deduped = requested.filter(
       (id, i) => requested.indexOf(id) === i,
     );
-    // Defense-in-depth: the OpenAPI validator already caps this at 5, but
-    // enforce here too in case the spec wiring ever changes.
-    if (deduped.length > 5) {
-      return apiError(res, 400, "You can pin up to 5 teams");
+    // Defense-in-depth global safety cap (matches openapi `maxItems: 50`).
+    if (deduped.length > 50) {
+      return apiError(res, 400, "Too many pinned teams");
     }
     // Ignore non-existent team ids (they'd violate the FK and never render).
+    // Fetch each team's org so we can enforce the per-org cap below.
     const existing =
       deduped.length > 0
         ? await db
-            .select({ id: teams.id })
+            .select({ id: teams.id, organizationId: teams.organizationId })
             .from(teams)
             .where(inArray(teams.id, deduped))
         : [];
+    const orgByTeamId = new Map(existing.map((r) => [r.id, r.organizationId]));
     const validIds = new Set(existing.map((r) => r.id));
     const finalIds = deduped.filter((id) => validIds.has(id));
+    // Enforce max 5 pinned teams PER organization. Independent/solo teams
+    // (no org) share a single "no-org" bucket, also capped at 5. Mirrors the
+    // client-side per-org cap in usePinnedTeams.
+    const perOrgCounts = new Map<string, number>();
+    for (const id of finalIds) {
+      const bucket = orgByTeamId.get(id) ?? "__independent__";
+      const n = (perOrgCounts.get(bucket) ?? 0) + 1;
+      if (n > 5) {
+        return apiError(
+          res,
+          400,
+          "You can pin up to 5 teams per organization",
+        );
+      }
+      perOrgCounts.set(bucket, n);
+    }
     await db.transaction(async (tx) => {
       await tx
         .delete(userPinnedTeams)

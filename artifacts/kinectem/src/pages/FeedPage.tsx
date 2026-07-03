@@ -26,6 +26,9 @@ type SidebarTeam = {
   name: string;
   logoUrl: string | null;
   orgName: string | null;
+  // Real org id (null for independent/solo teams). Used to scope the per-org
+  // pin cap even for orphan teams that aren't in the viewer's own org list.
+  orgId: string | null;
 };
 
 type SidebarOrg = {
@@ -81,6 +84,7 @@ export default function FeedPage() {
           name: t.teamName,
           logoUrl: t.teamAvatarUrl ?? null,
           orgName: null,
+          orgId: null,
         });
         continue;
       }
@@ -90,6 +94,7 @@ export default function FeedPage() {
         name: t.teamName,
         logoUrl: t.teamAvatarUrl ?? null,
         orgName: t.organization.name,
+        orgId: t.organization.id,
       });
       teamsByOrg.set(t.organization.id, arr);
     }
@@ -289,7 +294,12 @@ export default function FeedPage() {
                               teamLogoUrl={t.logoUrl}
                               hideAvatar
                               isPinned={isTeamPinned(t.id)}
-                              onTogglePin={() => toggleTeamPin(t.id)}
+                              onTogglePin={() =>
+                                toggleTeamPin(
+                                  t.id,
+                                  org.teams.map((x) => x.id),
+                                )
+                              }
                             />
                           ))}
                         </div>
@@ -309,7 +319,14 @@ export default function FeedPage() {
                           t.orgName ? formatOrgName(t.orgName) : "Independent team"
                         }
                         isPinned={isTeamPinned(t.id)}
-                        onTogglePin={() => toggleTeamPin(t.id)}
+                        onTogglePin={() =>
+                          toggleTeamPin(
+                            t.id,
+                            orphanTeams
+                              .filter((x) => x.orgId === t.orgId)
+                              .map((x) => x.id),
+                          )
+                        }
                       />
                     ))}
                   </div>

@@ -448,7 +448,7 @@ export interface UserSportsResponse {
 }
 
 export interface UpdatePinnedTeamsRequest {
-  /** @maxItems 5 */
+  /** @maxItems 50 */
   teamIds: string[];
 }
 

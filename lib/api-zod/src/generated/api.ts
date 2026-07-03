@@ -1266,7 +1266,7 @@ export const GetMyPinnedTeamsResponse = zod.object({
 
  * @summary Replace the authenticated user's pinned team ids (self only)
  */
-export const updateMyPinnedTeamsBodyTeamIdsMax = 5;
+export const updateMyPinnedTeamsBodyTeamIdsMax = 50;
 
 export const UpdateMyPinnedTeamsBody = zod.object({
   teamIds: zod

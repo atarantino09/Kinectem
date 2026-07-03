@@ -1007,7 +1007,12 @@ function TeamsRail({
                           <PinTeamButton
                             teamId={team.id}
                             pinned={pinnedSet.has(team.id)}
-                            onToggle={togglePin}
+                            onToggle={(id) =>
+                              togglePin(
+                                id,
+                                teams.map((x) => x.id),
+                              )
+                            }
                             className="-mr-1"
                           />
                         )}

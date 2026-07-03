@@ -233,6 +233,15 @@ export default function UserProfilePage() {
     </Link>
   ));
 
+  // Team ids grouped by org (independent/solo teams share one bucket) so the
+  // per-org pin cap can be scoped when toggling.
+  const teamIdsByBucket = new Map<string, string[]>();
+  for (const t of teams) {
+    const bucket = t.organization?.id ?? "__independent__";
+    const arr = teamIdsByBucket.get(bucket) ?? [];
+    arr.push(t.teamId);
+    teamIdsByBucket.set(bucket, arr);
+  }
   const teamItems: ReactNode[] = teamsSorted.map((t) => {
     const isPending = t.status === "pending";
     return (
@@ -298,7 +307,14 @@ export default function UserProfilePage() {
               <PinTeamButton
                 teamId={t.teamId}
                 pinned={pinnedSet.has(t.teamId)}
-                onToggle={togglePin}
+                onToggle={(id) =>
+                  togglePin(
+                    id,
+                    teamIdsByBucket.get(
+                      t.organization?.id ?? "__independent__",
+                    ) ?? [],
+                  )
+                }
               />
             )}
           </CardContent>

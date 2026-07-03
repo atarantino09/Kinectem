@@ -7677,7 +7677,7 @@ components:
       properties:
         teamIds:
           type: array
-          maxItems: 5
+          maxItems: 50
           items:
             type: string
             format: uuid
