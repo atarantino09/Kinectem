@@ -480,9 +480,9 @@ export function ManageMembersDialog({
                           </Badge>
                         )}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1">
                         {roleBadge(i.role as Role)}
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground min-w-0 break-words">
                           Invited by {i.invitedBy.displayName}
                         </span>
                       </div>
@@ -492,7 +492,7 @@ export function ManageMembersDialog({
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2 w-full pl-12">
                       <Button
                         size="sm"
                         variant="outline"
