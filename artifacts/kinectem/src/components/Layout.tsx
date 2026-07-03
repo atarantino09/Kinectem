@@ -77,7 +77,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
-    await qc.invalidateQueries();
+    // Drop all cached data synchronously instead of invalidating (which awaits
+    // a refetch of every query and blocks the redirect, keeping the stale
+    // signed-in UI on screen and letting the refetches 401 in the background).
+    // Cancelling first stops any in-flight refetches from re-populating.
+    void qc.cancelQueries();
+    qc.clear();
     if (typeof window !== "undefined") {
       const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       window.location.assign(`${base}/login`);
