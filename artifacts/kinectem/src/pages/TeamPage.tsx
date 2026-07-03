@@ -454,6 +454,11 @@ export default function TeamPage() {
           onToggleFollow={onToggleFollow}
           onEdit={() => setEditOpen(true)}
           onOpenFollowers={() => setFollowersOpen(true)}
+          onReplayTour={
+            canManage && tourSteps.length > 0
+              ? () => setTourOpen(true)
+              : undefined
+          }
         />
 
         <FollowListDialog

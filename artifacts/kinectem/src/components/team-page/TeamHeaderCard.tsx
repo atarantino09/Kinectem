@@ -36,6 +36,7 @@ import {
   Camera,
   Trash2,
   CalendarDays,
+  Compass,
 } from "lucide-react";
 
 export type TeamPanel = "posts" | "roster" | "schedule" | "admin";
@@ -72,6 +73,8 @@ interface TeamHeaderCardProps {
   onToggleFollow: () => void;
   onEdit: () => void;
   onOpenFollowers: () => void;
+  /** When provided, shows a "Show me around" control that replays the tour. */
+  onReplayTour?: () => void;
 }
 
 export function TeamHeaderCard({
@@ -86,6 +89,7 @@ export function TeamHeaderCard({
   onToggleFollow,
   onEdit,
   onOpenFollowers,
+  onReplayTour,
 }: TeamHeaderCardProps) {
   // The foreground square ALWAYS shows the org's logo so every team in
   // the same organization carries identical top-of-page branding. The
@@ -322,6 +326,18 @@ export function TeamHeaderCard({
                 >
                   <Pencil className="w-3.5 h-3.5 mr-1.5" />
                   Edit
+                </Button>
+              )}
+              {onReplayTour && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-3 font-bold rounded-full mt-2"
+                  onClick={onReplayTour}
+                  data-testid="btn-team-replay-tour"
+                >
+                  <Compass className="w-3.5 h-3.5 mr-1.5" />
+                  Show me around
                 </Button>
               )}
             </div>

@@ -44,6 +44,7 @@ import {
   Archive,
   Building2,
   ChevronDown,
+  Compass,
   Search,
   X,
   ExternalLink,
@@ -613,6 +614,14 @@ export default function OrganizationPage() {
                       >
                         <Megaphone className="w-4 h-4 mr-2" /> Send announcement
                       </DropdownMenuItem>
+                      {orgTourSteps.length > 0 && (
+                        <DropdownMenuItem
+                          onClick={() => setOrgTourOpen(true)}
+                          data-testid="btn-org-replay-tour"
+                        >
+                          <Compass className="w-4 h-4 mr-2" /> Show me around
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         asChild
                         data-testid="link-org-getting-started"
