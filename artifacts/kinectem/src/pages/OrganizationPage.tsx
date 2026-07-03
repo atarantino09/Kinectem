@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -705,10 +705,7 @@ function TeamsRail({
   onAddTeam: () => void;
   onBulkAddTeams: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [hasOverflow, setHasOverflow] = useState(false);
   const [query, setQuery] = useState("");
-  const innerRef = useRef<HTMLDivElement>(null);
   const {
     pinnedSet,
     pinnedIds,
@@ -736,29 +733,6 @@ function TeamsRail({
   const pinnedCount = pinEnabled
     ? sortedTeams.filter((t) => pinnedSet.has(t.id)).length
     : 0;
-
-  // Cap the list at roughly the visible viewport. The cap matches the
-  // CSS expression below (calc(100vh - 14rem)) so overflow detection
-  // and rendering stay in sync.
-  useEffect(() => {
-    const inner = innerRef.current;
-    if (!inner) return;
-    const remPx = parseFloat(
-      getComputedStyle(document.documentElement).fontSize || "16",
-    );
-    const check = () => {
-      const capPx = window.innerHeight - 14 * remPx;
-      setHasOverflow(inner.scrollHeight > capPx + 1);
-    };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(inner);
-    window.addEventListener("resize", check);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", check);
-    };
-  }, [filteredTeams.length]);
 
   return (
     <Card
@@ -854,13 +828,9 @@ function TeamsRail({
             </div>
           ) : (
           <div
-            className={
-              expanded
-                ? "overflow-y-auto scrollbar-thin max-h-[calc(100vh-14rem)]"
-                : "overflow-hidden max-h-[calc(100vh-14rem)]"
-            }
+            className="overflow-y-auto scrollbar-thin max-h-[calc(100vh-14rem)]"
           >
-            <div ref={innerRef} className="flex flex-col gap-2 p-2">
+            <div className="flex flex-col gap-2 p-2">
               {pinnedCount > 0 && (
                 <PinnedSectionLabel
                   label="Pinned"
@@ -928,23 +898,6 @@ function TeamsRail({
               ))}
             </div>
           </div>
-          )}
-          {hasOverflow && filteredTeams.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-muted/40 border-t border-border transition-colors"
-              data-testid="btn-toggle-teams-expand"
-              aria-expanded={expanded}
-            >
-              {expanded ? "Show less" : `Show all ${filteredTeams.length} teams`}
-              <ChevronDown
-                className={`w-4 h-4 transition-transform ${
-                  expanded ? "rotate-180" : ""
-                }`}
-                aria-hidden
-              />
-            </button>
           )}
         </>
       )}
