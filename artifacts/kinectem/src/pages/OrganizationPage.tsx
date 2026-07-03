@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -74,6 +74,10 @@ import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
 import { NewsletterDialog } from "@/components/NewsletterDialog";
 import { ManageMembersDialog } from "@/components/ManageMembersDialog";
 import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastComposeDialog";
+import {
+  SpotlightTour,
+  type TourStep,
+} from "@/components/team-page/SpotlightTour";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { formatOrgName } from "@/lib/format";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
@@ -86,6 +90,13 @@ type TeamRailItem = {
   bannerUrl?: string | null;
   followerCount?: number | null;
 };
+
+// First-run org walkthrough is shown once per org, per browser (the OpenAPI
+// contract is locked, so there's no server-side "seen onboarding" flag). Keying
+// per org means a newly promoted or newly invited co-admin gets the tour the
+// first time they view that org as an admin, even if they've seen it on another
+// org. Bump the prefix to re-show the tour to everyone after a revision.
+const ORG_TOUR_KEY_PREFIX = "kinectem:org-tour-v1:";
 
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
@@ -106,6 +117,10 @@ export default function OrganizationPage() {
   // `kinectem:welcome-org:<orgId>` and we consume it on mount so a
   // refresh / revisit can never re-trigger the modal.
   const [welcomeOrgName, setWelcomeOrgName] = useState<string | null>(null);
+  const [orgTourOpen, setOrgTourOpen] = useState(false);
+  // Gate the first-run tour until the post-create welcome / bulk-add popups
+  // have been resolved on mount, so the tour never flashes on top of them.
+  const [firstRunResolved, setFirstRunResolved] = useState(false);
   useEffect(() => {
     if (!orgId) return;
     // After checkout, OrgSubscribePage stashes a bulk-add flag so we land
@@ -117,6 +132,7 @@ export default function OrganizationPage() {
         sessionStorage.removeItem(bulkKey);
         sessionStorage.removeItem(`kinectem:welcome-org:${orgId}`);
         setBulkTeamsOpen(true);
+        setFirstRunResolved(true);
         return;
       }
     } catch {
@@ -131,6 +147,7 @@ export default function OrganizationPage() {
       // sessionStorage unavailable; nothing to show.
     }
     if (name) setWelcomeOrgName(name);
+    setFirstRunResolved(true);
   }, [orgId]);
   const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
@@ -176,6 +193,102 @@ export default function OrganizationPage() {
     (joinReqResp?.data?.length ?? 0) + (postApprovalsResp?.data?.length ?? 0);
   const followOrg = useFollowOrg();
   const unfollowOrg = useUnfollowOrg();
+
+  // Role-tailored first-run walkthrough for org owners/admins. The targets are
+  // all rendered whenever `isOrgManager` is true (see JSX below); the tour
+  // scrolls each into view. Steps whose target never mounts fall back to a
+  // centered card, so this stays resilient if a control is conditionally hidden.
+  const orgTourSteps = useMemo<TourStep[]>(
+    () => [
+      {
+        targetTestId: "btn-manage-admins-hero",
+        title: "Manage admins & members",
+        body: (
+          <>
+            Click <strong>Manage members</strong> to add co-admins, promote
+            members, and invite people to help you run the organization.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-org-more-menu",
+        title: "Edit & announce",
+        body: (
+          <>
+            The <strong>More</strong> menu is where you{" "}
+            <strong>edit the organization</strong> (name, logo, details) and{" "}
+            <strong>send an announcement</strong> to everyone in your teams.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-add-team",
+        title: "Add your teams",
+        body: (
+          <>
+            Use <strong>Add team</strong> to create a team, or{" "}
+            <strong>Bulk add</strong> to spin up a whole season at once. Add a
+            coach to each team so they can manage their own roster.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-new-org-post",
+        title: "Post an update",
+        body: (
+          <>
+            Click <strong>New post</strong> to share news with everyone who
+            follows your organization.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-org-newsletter",
+        title: "Send a newsletter",
+        body: (
+          <>
+            <strong>Newsletter</strong> emails a roundup to your followers —
+            perfect for a monthly recap or a big announcement.
+          </>
+        ),
+      },
+    ],
+    [],
+  );
+
+  // Open the org walkthrough once per org (per browser), the first time an
+  // owner/admin lands on the page. Gated on `isManagerRole` so a newly promoted
+  // or newly invited co-admin gets it on their first admin view. Suppressed
+  // until the post-create welcome / bulk-add popups resolve so tours never stack.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!orgId || !firstRunResolved || !isManagerRole) return;
+    if (welcomeOrgName !== null || createTeamOpen || bulkTeamsOpen) return;
+    let alreadySeen = false;
+    try {
+      alreadySeen = localStorage.getItem(ORG_TOUR_KEY_PREFIX + orgId) === "1";
+    } catch {
+      // storage blocked (private mode etc.) — treat as not seen
+    }
+    if (!alreadySeen) setOrgTourOpen(true);
+  }, [
+    orgId,
+    firstRunResolved,
+    isManagerRole,
+    welcomeOrgName,
+    createTeamOpen,
+    bulkTeamsOpen,
+  ]);
+
+  const finishOrgTour = () => {
+    try {
+      if (orgId) localStorage.setItem(ORG_TOUR_KEY_PREFIX + orgId, "1");
+    } catch {
+      // ignore storage failures (private mode etc.) — tour just won't persist
+    }
+    setOrgTourOpen(false);
+  };
+
   const onToggleFollow = async () => {
     if (!organization) return;
     try {
@@ -688,6 +801,9 @@ export default function OrganizationPage() {
           </aside>
         )}
       </div>
+      {orgTourOpen && orgTourSteps.length > 0 && (
+        <SpotlightTour steps={orgTourSteps} onFinish={finishOrgTour} />
+      )}
     </>
   );
 }

@@ -48,9 +48,15 @@ import { Megaphone } from "lucide-react";
 import { useIsLg } from "@/hooks/use-mobile";
 
 // First-run walkthrough is shown once per browser (the OpenAPI contract is
-// locked, so there's no server-side "seen onboarding" flag). Bump the suffix
-// to re-show the tour to everyone after a meaningful revision.
-const TEAM_TOUR_KEY = "kinectem:team-tour-v1";
+// locked, so there's no server-side "seen onboarding" flag). The "seen" flag
+// is keyed PER TEAM so a manager (coach or org admin) gets the walkthrough the
+// first time on each team they manage — a coach newly assigned to a brand-new
+// team still gets it even if they saw the tour on another team. The old global
+// `kinectem:team-tour-v1` flag is left orphaned; users who already completed it
+// see the tour at most once more per already-managed team (accepted tradeoff —
+// a locked OpenAPI spec leaves no server state for a cleaner migration). Bump
+// the prefix to re-show the tour to everyone after a meaningful revision.
+const TEAM_TOUR_KEY_PREFIX = "kinectem:team-tour-v1:";
 
 export default function TeamPage() {
   const params = useParams<{ teamId: string }>();
@@ -296,18 +302,19 @@ export default function TeamPage() {
     if (typeof window === "undefined") return;
     if (!canManage || wantsWelcome) return;
     if (tourSteps.length === 0) return;
+    if (!teamId) return;
     let alreadySeen = false;
     try {
-      alreadySeen = localStorage.getItem(TEAM_TOUR_KEY) === "1";
+      alreadySeen = localStorage.getItem(TEAM_TOUR_KEY_PREFIX + teamId) === "1";
     } catch {
       // storage blocked (private mode etc.) — treat as not seen
     }
     if (!alreadySeen) setTourOpen(true);
-  }, [canManage, wantsWelcome, tourSteps.length]);
+  }, [canManage, wantsWelcome, tourSteps.length, teamId]);
 
   const finishTour = () => {
     try {
-      localStorage.setItem(TEAM_TOUR_KEY, "1");
+      if (teamId) localStorage.setItem(TEAM_TOUR_KEY_PREFIX + teamId, "1");
     } catch {
       // ignore storage failures (private mode etc.) — tour just won't persist
     }
