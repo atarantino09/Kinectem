@@ -40,6 +40,7 @@ export function SpotlightTour({
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const retryRef = useRef<number | null>(null);
+  const settleRef = useRef<number[]>([]);
 
   const step = steps[index];
   const total = steps.length;
@@ -54,6 +55,8 @@ export function SpotlightTour({
   const locate = useCallback(
     (testId: string) => {
       if (retryRef.current) window.clearTimeout(retryRef.current);
+      settleRef.current.forEach((t) => window.clearTimeout(t));
+      settleRef.current = [];
       let tries = 0;
       const attempt = () => {
         const el = document.querySelector<HTMLElement>(
@@ -63,6 +66,18 @@ export function SpotlightTour({
           el.scrollIntoView({ block: "center", inline: "nearest" });
           // Re-measure on the next frame so the value reflects the scroll.
           window.requestAnimationFrame(() => measure(el));
+          // Layout can still shift after the target is found — e.g. an image
+          // above it (org logo / avatar) finishing loading pushes it
+          // sideways or down. Re-measure a few times so the ring lands on the
+          // element's final resting position instead of a stale rect.
+          settleRef.current = [100, 250, 500, 900, 1400].map((d) =>
+            window.setTimeout(() => {
+              const cur = document.querySelector<HTMLElement>(
+                `[data-testid="${testId}"]`,
+              );
+              if (cur) measure(cur);
+            }, d),
+          );
           return;
         }
         tries += 1;
@@ -86,6 +101,8 @@ export function SpotlightTour({
     return () => {
       window.clearTimeout(id);
       if (retryRef.current) window.clearTimeout(retryRef.current);
+      settleRef.current.forEach((t) => window.clearTimeout(t));
+      settleRef.current = [];
     };
   }, [index, step, locate]);
 
@@ -100,9 +117,24 @@ export function SpotlightTour({
     };
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
+    // Reflows from late-loading content (images above the target) change the
+    // page layout without firing scroll/resize. Observe the body plus the
+    // target and its offset parent so both vertical reflows and width-only
+    // redistributions (which may not change the body's box) re-position the
+    // ring.
+    const ro = new ResizeObserver(onMove);
+    ro.observe(document.body);
+    const el = document.querySelector<HTMLElement>(
+      `[data-testid="${step.targetTestId}"]`,
+    );
+    if (el) {
+      ro.observe(el);
+      if (el.offsetParent instanceof HTMLElement) ro.observe(el.offsetParent);
+    }
     return () => {
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
+      ro.disconnect();
     };
   }, [step, measure]);
 
