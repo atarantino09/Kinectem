@@ -284,6 +284,7 @@ import type {
   PaginatedUserTeamMembershipsResponse,
   PhoneListResponse,
   PhoneResponse,
+  PinnedOrgsResponse,
   PinnedTeamsResponse,
   PostApprovalResponse,
   PostPreviewResponse,
@@ -329,6 +330,7 @@ import type {
   UpdateMemberRoleRequest,
   UpdateOrganizationRequest,
   UpdatePhoneRequest,
+  UpdatePinnedOrgsRequest,
   UpdatePinnedTeamsRequest,
   UpdatePostRequest,
   UpdatePrivacySettingsRequest,
@@ -2092,6 +2094,179 @@ export const useUpdateMyPinnedTeams = <
   TContext
 > => {
   return useMutation(getUpdateMyPinnedTeamsMutationOptions(options));
+};
+
+/**
+ * Returns the viewer's pinned organization ids in pin order (max 5). Pinned orgs float to the top of the viewer's "Your Orgs and Teams" sidebar on the feed.
+
+ * @summary List the authenticated user's pinned organization ids (self only)
+ */
+export const getGetMyPinnedOrgsUrl = () => {
+  return `/api/v1/users/me/pinned-orgs`;
+};
+
+export const getMyPinnedOrgs = async (
+  options?: RequestInit,
+): Promise<PinnedOrgsResponse> => {
+  return customFetch<PinnedOrgsResponse>(getGetMyPinnedOrgsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyPinnedOrgsQueryKey = () => {
+  return [`/api/v1/users/me/pinned-orgs`] as const;
+};
+
+export const getGetMyPinnedOrgsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyPinnedOrgs>>,
+  TError = ErrorType<UnauthorizedResponse | InternalServerErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPinnedOrgs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyPinnedOrgsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyPinnedOrgs>>> = ({
+    signal,
+  }) => getMyPinnedOrgs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPinnedOrgs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyPinnedOrgsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyPinnedOrgs>>
+>;
+export type GetMyPinnedOrgsQueryError = ErrorType<
+  UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary List the authenticated user's pinned organization ids (self only)
+ */
+
+export function useGetMyPinnedOrgs<
+  TData = Awaited<ReturnType<typeof getMyPinnedOrgs>>,
+  TError = ErrorType<UnauthorizedResponse | InternalServerErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPinnedOrgs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyPinnedOrgsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Full-replace semantics — the submitted array (max 5) overwrites the stored list, and its order becomes the pin order. Unknown or non-existent organization ids are ignored.
+
+ * @summary Replace the authenticated user's pinned organization ids (self only)
+ */
+export const getUpdateMyPinnedOrgsUrl = () => {
+  return `/api/v1/users/me/pinned-orgs`;
+};
+
+export const updateMyPinnedOrgs = async (
+  updatePinnedOrgsRequest: UpdatePinnedOrgsRequest,
+  options?: RequestInit,
+): Promise<PinnedOrgsResponse> => {
+  return customFetch<PinnedOrgsResponse>(getUpdateMyPinnedOrgsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updatePinnedOrgsRequest),
+  });
+};
+
+export const getUpdateMyPinnedOrgsMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyPinnedOrgs>>,
+    TError,
+    { data: BodyType<UpdatePinnedOrgsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMyPinnedOrgs>>,
+  TError,
+  { data: BodyType<UpdatePinnedOrgsRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateMyPinnedOrgs"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMyPinnedOrgs>>,
+    { data: BodyType<UpdatePinnedOrgsRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateMyPinnedOrgs(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMyPinnedOrgsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMyPinnedOrgs>>
+>;
+export type UpdateMyPinnedOrgsMutationBody = BodyType<UpdatePinnedOrgsRequest>;
+export type UpdateMyPinnedOrgsMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+>;
+
+/**
+ * @summary Replace the authenticated user's pinned organization ids (self only)
+ */
+export const useUpdateMyPinnedOrgs = <
+  TError = ErrorType<
+    BadRequestResponse | UnauthorizedResponse | InternalServerErrorResponse
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyPinnedOrgs>>,
+    TError,
+    { data: BodyType<UpdatePinnedOrgsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMyPinnedOrgs>>,
+  TError,
+  { data: BodyType<UpdatePinnedOrgsRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateMyPinnedOrgsMutationOptions(options));
 };
 
 /**

@@ -464,6 +464,21 @@ export const userPinnedTeams = pgTable("user_pinned_teams", {
   userIdIdx: index("user_pinned_teams_user_id_idx").on(t.userId),
 }));
 
+// Per-user pinned orgs (max 5, enforced in the route + OpenAPI maxItems).
+// Mirrors userPinnedTeams: a viewer's own personalization that floats their
+// most-used orgs to the top of the "Your Orgs and Teams" sidebar. `position`
+// preserves the user's chosen pin order (assigned by array index on the
+// full-replace PUT).
+export const userPinnedOrgs = pgTable("user_pinned_orgs", {
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.orgId] }),
+  userIdIdx: index("user_pinned_orgs_user_id_idx").on(t.userId),
+}));
+
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Task #628 — nullable to support "solo teams" created by visiting coaches

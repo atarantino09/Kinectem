@@ -456,6 +456,15 @@ export interface PinnedTeamsResponse {
   teamIds: string[];
 }
 
+export interface UpdatePinnedOrgsRequest {
+  /** @maxItems 5 */
+  orgIds: string[];
+}
+
+export interface PinnedOrgsResponse {
+  orgIds: string[];
+}
+
 /**
  * Free-form settings bag. Known keys below; clients may receive additional keys in the future.
  */

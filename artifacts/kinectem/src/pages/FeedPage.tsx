@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Pin, PinOff } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -18,6 +18,7 @@ import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
+import { usePinnedOrgs } from "@/hooks/usePinnedOrgs";
 
 type SidebarTeam = {
   id: string;
@@ -42,7 +43,11 @@ export default function FeedPage() {
     query: queryOpts({ enabled: !!me?.id }),
   });
 
+  const { pinnedIds, isPinned, togglePin } = usePinnedOrgs();
+
   const { orgGroups, orphanTeams } = useMemo(() => {
+    const byName = (a: { name: string }, b: { name: string }) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     const teamsByOrg = new Map<string, SidebarTeam[]>();
     // Task #628 — solo teams (tournament funnel) have no org; collect them
     // separately so they render in the org-less "orphan teams" group.
@@ -73,15 +78,29 @@ export default function FeedPage() {
         id: org.id,
         name: org.name,
         logoUrl: org.logoUrl ?? null,
-        teams: teamsByOrg.get(org.id) ?? [],
+        // Teams within each org are listed A→Z.
+        teams: (teamsByOrg.get(org.id) ?? []).slice().sort(byName),
       };
+    });
+    // Pinned orgs float to the top in the user's chosen pin order; the rest
+    // follow alphabetically by name.
+    const pinRank = new Map(pinnedIds.map((id, i) => [id, i]));
+    orgGroups.sort((a, b) => {
+      const ra = pinRank.get(a.id);
+      const rb = pinRank.get(b.id);
+      if (ra !== undefined && rb !== undefined) return ra - rb;
+      if (ra !== undefined) return -1;
+      if (rb !== undefined) return 1;
+      return byName(a, b);
     });
     const orphanTeams: SidebarTeam[] = [];
     for (const [orgId, teams] of teamsByOrg) {
       if (!orgIds.has(orgId)) orphanTeams.push(...teams);
     }
-    return { orgGroups, orphanTeams: [...orphanTeams, ...soloTeams] };
-  }, [myOrgs, myTeams]);
+    // Independent / orphan teams (incl. solo teams) are also listed A→Z.
+    const allOrphans = [...orphanTeams, ...soloTeams].sort(byName);
+    return { orgGroups, orphanTeams: allOrphans };
+  }, [myOrgs, myTeams, pinnedIds]);
 
   const hasSidebarItems = orgGroups.length > 0 || orphanTeams.length > 0;
   const [expandedOrgs, setExpandedOrgs] = useState<Record<string, boolean>>({});
@@ -235,6 +254,8 @@ export default function FeedPage() {
                         hasTeams={hasTeams}
                         isExpanded={isExpanded}
                         onToggle={() => toggleOrg(org.id)}
+                        isPinned={isPinned(org.id)}
+                        onTogglePin={() => togglePin(org.id)}
                       />
                       {hasTeams && isExpanded && (
                         <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
@@ -357,6 +378,8 @@ function OrgLinkRow({
   hasTeams,
   isExpanded,
   onToggle,
+  isPinned,
+  onTogglePin,
 }: {
   orgId: string;
   orgName: string;
@@ -364,9 +387,11 @@ function OrgLinkRow({
   hasTeams: boolean;
   isExpanded: boolean;
   onToggle: () => void;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 }) {
   return (
-    <div className="w-full flex items-center gap-1 py-1.5 px-1 rounded-md hover:bg-muted/50">
+    <div className="group w-full flex items-center gap-1 py-1.5 px-1 rounded-md hover:bg-muted/50">
       {hasTeams ? (
         <button
           type="button"
@@ -400,6 +425,26 @@ function OrgLinkRow({
           <span className="truncate flex-1">{formatOrgName(orgName)}</span>
         </div>
       </Link>
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={onTogglePin}
+          aria-label={isPinned ? `Unpin ${orgName}` : `Pin ${orgName}`}
+          aria-pressed={isPinned}
+          data-testid={`pin-org-${orgId}`}
+          className={
+            isPinned
+              ? "shrink-0 p-0.5 rounded text-primary hover:bg-muted"
+              : "shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted opacity-0 group-hover:opacity-100 focus:opacity-100"
+          }
+        >
+          {isPinned ? (
+            <PinOff className="w-3.5 h-3.5" />
+          ) : (
+            <Pin className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

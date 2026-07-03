@@ -31,6 +31,7 @@ import {
   parentChildNotificationReads,
   messageChildHides,
   userPinnedTeams,
+  userPinnedOrgs,
 } from "@workspace/db";
 import {
   and,
@@ -175,6 +176,73 @@ router.put(
       }
     });
     res.json({ teamIds: finalIds });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Pinned orgs — the viewer's own personalization (max 5). Pinned orgs float
+// to the top of the "Your Orgs and Teams" sidebar on the feed. Full-replace
+// PUT mirrors the pinned-teams routes above; the submitted array order
+// becomes the stored pin order.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/users/me/pinned-orgs",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const rows = await db
+      .select({ orgId: userPinnedOrgs.orgId })
+      .from(userPinnedOrgs)
+      .where(eq(userPinnedOrgs.userId, me.id))
+      .orderBy(asc(userPinnedOrgs.position), asc(userPinnedOrgs.createdAt));
+    res.json({ orgIds: rows.map((r) => r.orgId) });
+  }),
+);
+
+router.put(
+  "/users/me/pinned-orgs",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    // The OpenAPI validator enforces `maxItems: 5` + uuid shape before the
+    // handler runs; de-dupe here so a repeated id can't waste a slot.
+    const requested: string[] = Array.isArray(req.body?.orgIds)
+      ? (req.body.orgIds as string[])
+      : [];
+    const deduped = requested.filter(
+      (id, i) => requested.indexOf(id) === i,
+    );
+    // Defense-in-depth: the OpenAPI validator already caps this at 5, but
+    // enforce here too in case the spec wiring ever changes.
+    if (deduped.length > 5) {
+      return apiError(res, 400, "You can pin up to 5 organizations");
+    }
+    // Ignore non-existent org ids (they'd violate the FK and never render).
+    const existing =
+      deduped.length > 0
+        ? await db
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(inArray(organizations.id, deduped))
+        : [];
+    const validIds = new Set(existing.map((r) => r.id));
+    const finalIds = deduped.filter((id) => validIds.has(id));
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(userPinnedOrgs)
+        .where(eq(userPinnedOrgs.userId, me.id));
+      if (finalIds.length > 0) {
+        await tx.insert(userPinnedOrgs).values(
+          finalIds.map((orgId, position) => ({
+            userId: me.id,
+            orgId,
+            position,
+          })),
+        );
+      }
+    });
+    res.json({ orgIds: finalIds });
   }),
 );
 

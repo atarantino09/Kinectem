@@ -1161,6 +1161,20 @@ CREATE TABLE IF NOT EXISTS user_pinned_teams (
 CREATE INDEX IF NOT EXISTS user_pinned_teams_user_id_idx ON user_pinned_teams(user_id);
 `;
 
+// Task #717 — Per-user pinned orgs (max 5, enforced in the route +
+// OpenAPI maxItems). Mirrors user_pinned_teams so a viewer can float their
+// most-used orgs to the top of the "Your Orgs and Teams" sidebar. Idempotent.
+const USER_PINNED_ORGS = `
+CREATE TABLE IF NOT EXISTS user_pinned_orgs (
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  org_id     uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  position   integer NOT NULL DEFAULT 0,
+  created_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, org_id)
+);
+CREATE INDEX IF NOT EXISTS user_pinned_orgs_user_id_idx ON user_pinned_orgs(user_id);
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1349,6 +1363,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-07-02-user-pinned-teams",
     sql: USER_PINNED_TEAMS,
+  },
+  {
+    name: "2026-07-03-task-717-user-pinned-orgs",
+    sql: USER_PINNED_ORGS,
   },
 ];
 
