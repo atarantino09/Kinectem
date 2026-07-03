@@ -508,3 +508,27 @@
   0%        { transform: translateX(-100%); }
   60%, 100% { transform: translateX(100%); }
 }
+/* Thin, always-visible scrollbar for scrollable rails (e.g. the org Teams
+   list). macOS overlay scrollbars auto-hide, making long lists look
+   un-scrollable, so force a visible track/thumb here. */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+    scrollbar-gutter: stable;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.4);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.6);
+  }
+}

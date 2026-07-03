@@ -856,7 +856,7 @@ function TeamsRail({
           <div
             className={
               expanded
-                ? "overflow-y-auto max-h-[calc(100vh-14rem)]"
+                ? "overflow-y-auto scrollbar-thin max-h-[calc(100vh-14rem)]"
                 : "overflow-hidden max-h-[calc(100vh-14rem)]"
             }
           >
