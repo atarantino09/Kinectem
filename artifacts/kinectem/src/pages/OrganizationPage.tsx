@@ -92,12 +92,12 @@ type TeamRailItem = {
   followerCount?: number | null;
 };
 
-// First-run org walkthrough is shown once per org, per browser (the OpenAPI
-// contract is locked, so there's no server-side "seen onboarding" flag). Keying
-// per org means a newly promoted or newly invited co-admin gets the tour the
-// first time they view that org as an admin, even if they've seen it on another
-// org. Bump the prefix to re-show the tour to everyone after a revision.
-const ORG_TOUR_KEY_PREFIX = "kinectem:org-tour-v1:";
+// First-run org walkthrough is shown ONCE per user, per browser (the OpenAPI
+// contract is locked, so there's no server-side "seen onboarding" flag). The
+// "seen" flag is a single global key — the first time an owner/admin lands on
+// any org page they get the tour, and never again on any other org. Bump the
+// key to re-show the tour to everyone after a meaningful revision.
+const ORG_TOUR_KEY = "kinectem:org-tour-v1";
 
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
@@ -257,17 +257,17 @@ export default function OrganizationPage() {
     [],
   );
 
-  // Open the org walkthrough once per org (per browser), the first time an
-  // owner/admin lands on the page. Gated on `isManagerRole` so a newly promoted
-  // or newly invited co-admin gets it on their first admin view. Suppressed
-  // until the post-create welcome / bulk-add popups resolve so tours never stack.
+  // Open the org walkthrough once per user (per browser), the first time an
+  // owner/admin lands on any org page. Gated on `isManagerRole` so a
+  // non-manager viewer never triggers it. Suppressed until the post-create
+  // welcome / bulk-add popups resolve so tours never stack.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!orgId || !firstRunResolved || !isManagerRole) return;
     if (welcomeOrgName !== null || createTeamOpen || bulkTeamsOpen) return;
     let alreadySeen = false;
     try {
-      alreadySeen = localStorage.getItem(ORG_TOUR_KEY_PREFIX + orgId) === "1";
+      alreadySeen = localStorage.getItem(ORG_TOUR_KEY) === "1";
     } catch {
       // storage blocked (private mode etc.) — treat as not seen
     }
@@ -283,7 +283,7 @@ export default function OrganizationPage() {
 
   const finishOrgTour = () => {
     try {
-      if (orgId) localStorage.setItem(ORG_TOUR_KEY_PREFIX + orgId, "1");
+      localStorage.setItem(ORG_TOUR_KEY, "1");
     } catch {
       // ignore storage failures (private mode etc.) — tour just won't persist
     }

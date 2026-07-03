@@ -13,19 +13,17 @@ walkthroughs / spotlight tours) persists its "already seen" flag in
 "seen onboarding" field on the API and none can be added. Per-browser localStorage
 is the only place to remember it. This means the tour can re-show on a new
 device/browser — accepted tradeoff, matches standard product-tour behavior.
-Bump the key prefix (e.g. `kinectem:team-tour-v1:` → `-v2:`) to re-show to everyone.
+Bump the key (e.g. `kinectem:team-tour-v1` → `-v2`) to re-show to everyone.
 
-**Keying is per-entity, NOT global:** the team tour key is
-`kinectem:team-tour-v1:<teamId>` and the org tour key is
-`kinectem:org-tour-v1:<orgId>`. Rationale: a coach newly assigned to a brand-new
-team must get the team tour even if they saw it on another team; a newly
-promoted / newly invited co-admin must get the org tour the first time they view
-that org as an admin. The org tour is auto-triggered purely by the current
-user's role gate (`isManagerRole`) + a per-org localStorage check — no extra code
-per promotion/invite path (accept-invite lands on `/organizations/:orgId` with no
-suppressing param). The old *global* `kinectem:team-tour-v1` flag is left
-orphaned; users who already completed it see the team tour at most once more per
-already-managed team (no cleaner migration possible — no server state).
+**Keying is GLOBAL (once per user/browser), NOT per-entity.** Product decision:
+each tour shows at most once ever — the team tour the first time a manager
+(coach or org admin) opens *any* team page, the org tour the first time an
+owner/admin opens *any* org page. Keys are the bare globals `kinectem:team-tour-v1`
+and `kinectem:org-tour-v1` (no `<teamId>`/`<orgId>` suffix).
+**Why:** the user explicitly wanted it to pop up only once per user, not once per
+team/org. This supersedes the earlier per-entity design (which re-showed the tour
+on each newly-managed team/org). Triggers stay role-gated (org: `isManagerRole`;
+team: `canManage`) so non-managers never see it.
 
 **How to apply:**
 - Read the flag inside a try/catch and default to "not seen" when storage throws
