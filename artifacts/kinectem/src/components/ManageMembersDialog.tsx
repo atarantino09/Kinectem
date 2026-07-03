@@ -978,7 +978,7 @@ function AddAdminDialog({
                       </Button>
                     </div>
                     <pre
-                      className="whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                      className="whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
                       data-testid="text-invite-accept-message"
                     >
                       {shortInviteMessage(inviteResult.acceptUrl)}

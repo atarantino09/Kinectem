@@ -17,9 +17,13 @@ min-content size. So the grid track still expands to the full URL width.
 
 **How to apply:**
 - For wrapping text that contains long tokens/URLs (e.g. a "message to send" `<pre>`),
-  use `[overflow-wrap:anywhere]` (or `break-all`) — these DO collapse min-content so
-  the string wraps and the track stays within `max-w-*`.
-- For single-line display, `truncate` (adds `overflow:hidden`) also keeps min-content
-  small; pair with `min-w-0` on its flex parent.
+  use **`break-all`** (`word-break: break-all`) — a core utility that reliably collapses
+  min-content so the string wraps and the track stays within `max-w-*`.
+- **Do NOT use the arbitrary property `[overflow-wrap:anywhere]` here** — it silently did
+  NOT take effect in this project's Tailwind v4 setup (the class produced no wrap, URL
+  still blew out the grid). Prefer the first-class `break-all`. (Plain `break-words` =
+  `overflow-wrap: break-word` also does not shrink min-content — same failure.)
+- For single-line display, `truncate` (adds `overflow:hidden`) keeps min-content small;
+  pair with `min-w-0` on its flex parent.
 - Root cause is min-content, not the visible overflow — fix the string element, not by
   slapping `overflow-x-hidden` on the whole dialog (that just hides clipped content).

@@ -613,7 +613,7 @@ export function InviteRosterDialog({
                       <div className="relative">
                         <pre
                           className={
-                            "whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
+                            "whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
                             (showFullMessage ? "" : " max-h-40 overflow-hidden")
                           }
                           data-testid="text-invite-message"
@@ -851,7 +851,7 @@ export function InviteRosterDialog({
                     </Button>
                   </div>
                   <pre
-                    className="whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
+                    className="whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5"
                     data-testid="text-invite-accept-message"
                   >
                     {shortInviteMessage(inviteResult.acceptUrl)}
