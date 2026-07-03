@@ -40,8 +40,6 @@ const AFTER_BULLETS = "There's no cost to families. Setup takes about two minute
 
 const CTA_LABEL = "Set up your player's account →";
 
-const QUESTIONS = "Questions? Just reply to this email.";
-
 // Re-exported so a surface can render a structured preview if needed without
 // re-typing the wording.
 export const COACH_INVITE_CONTENT = {
@@ -52,7 +50,6 @@ export const COACH_INVITE_CONTENT = {
   bullets: BULLETS,
   afterBullets: AFTER_BULLETS,
   ctaLabel: CTA_LABEL,
-  questions: QUESTIONS,
 } as const;
 
 function escapeHtml(value: string): string {
@@ -79,7 +76,6 @@ export function buildCoachInviteText({ coachName, link }: CoachInviteVars): stri
     bulletLines,
     AFTER_BULLETS,
     `${CTA_LABEL} ${link}`,
-    QUESTIONS,
     `— Coach ${coachName}`,
   ].join("\n\n");
 }
@@ -101,7 +97,6 @@ export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): stri
     `<ul>\n${bulletItems}\n</ul>`,
     `<p>${escapeHtml(AFTER_BULLETS)}</p>`,
     `<p><a href="${linkAttr}">${escapeHtml(CTA_LABEL)}</a></p>`,
-    `<p>${escapeHtml(QUESTIONS)}</p>`,
     `<p>— Coach ${escapeHtml(coachName)}</p>`,
   ].join("\n");
 }
