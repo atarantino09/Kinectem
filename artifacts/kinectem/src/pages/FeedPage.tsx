@@ -19,6 +19,7 @@ import { OrgLogo } from "@/components/OrgLogoFallback";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { usePinnedOrgs } from "@/hooks/usePinnedOrgs";
+import { usePinnedTeams } from "@/hooks/usePinnedTeams";
 
 type SidebarTeam = {
   id: string;
@@ -43,11 +44,32 @@ export default function FeedPage() {
     query: queryOpts({ enabled: !!me?.id }),
   });
 
-  const { pinnedIds, isPinned, togglePin } = usePinnedOrgs();
+  const {
+    pinnedIds,
+    isPinned: isOrgPinned,
+    togglePin: toggleOrgPin,
+  } = usePinnedOrgs();
+  const {
+    pinnedIds: pinnedTeamIds,
+    isPinned: isTeamPinned,
+    togglePin: toggleTeamPin,
+  } = usePinnedTeams();
 
   const { orgGroups, orphanTeams } = useMemo(() => {
     const byName = (a: { name: string }, b: { name: string }) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    // Pinned teams float to the top of their group in the user's chosen pin
+    // order; the rest stay A→Z.
+    const teamPinRank = new Map(pinnedTeamIds.map((id, i) => [id, i]));
+    const sortTeams = (arr: SidebarTeam[]) =>
+      arr.slice().sort((a, b) => {
+        const ra = teamPinRank.get(a.id);
+        const rb = teamPinRank.get(b.id);
+        if (ra !== undefined && rb !== undefined) return ra - rb;
+        if (ra !== undefined) return -1;
+        if (rb !== undefined) return 1;
+        return byName(a, b);
+      });
     const teamsByOrg = new Map<string, SidebarTeam[]>();
     // Task #628 — solo teams (tournament funnel) have no org; collect them
     // separately so they render in the org-less "orphan teams" group.
@@ -78,8 +100,8 @@ export default function FeedPage() {
         id: org.id,
         name: org.name,
         logoUrl: org.logoUrl ?? null,
-        // Teams within each org are listed A→Z.
-        teams: (teamsByOrg.get(org.id) ?? []).slice().sort(byName),
+        // Teams within each org: pinned first (pin order), rest A→Z.
+        teams: sortTeams(teamsByOrg.get(org.id) ?? []),
       };
     });
     // Pinned orgs float to the top in the user's chosen pin order; the rest
@@ -97,10 +119,10 @@ export default function FeedPage() {
     for (const [orgId, teams] of teamsByOrg) {
       if (!orgIds.has(orgId)) orphanTeams.push(...teams);
     }
-    // Independent / orphan teams (incl. solo teams) are also listed A→Z.
-    const allOrphans = [...orphanTeams, ...soloTeams].sort(byName);
+    // Independent / orphan teams (incl. solo teams): pinned first, rest A→Z.
+    const allOrphans = sortTeams([...orphanTeams, ...soloTeams]);
     return { orgGroups, orphanTeams: allOrphans };
-  }, [myOrgs, myTeams, pinnedIds]);
+  }, [myOrgs, myTeams, pinnedIds, pinnedTeamIds]);
 
   const hasSidebarItems = orgGroups.length > 0 || orphanTeams.length > 0;
   const [expandedOrgs, setExpandedOrgs] = useState<Record<string, boolean>>({});
@@ -254,8 +276,8 @@ export default function FeedPage() {
                         hasTeams={hasTeams}
                         isExpanded={isExpanded}
                         onToggle={() => toggleOrg(org.id)}
-                        isPinned={isPinned(org.id)}
-                        onTogglePin={() => togglePin(org.id)}
+                        isPinned={isOrgPinned(org.id)}
+                        onTogglePin={() => toggleOrgPin(org.id)}
                       />
                       {hasTeams && isExpanded && (
                         <div className="ml-5 mt-1 mb-2 border-l-2 border-border pl-3 space-y-0.5">
@@ -266,6 +288,8 @@ export default function FeedPage() {
                               teamName={t.name}
                               teamLogoUrl={t.logoUrl}
                               hideAvatar
+                              isPinned={isTeamPinned(t.id)}
+                              onTogglePin={() => toggleTeamPin(t.id)}
                             />
                           ))}
                         </div>
@@ -284,6 +308,8 @@ export default function FeedPage() {
                         subtitle={
                           t.orgName ? formatOrgName(t.orgName) : "Independent team"
                         }
+                        isPinned={isTeamPinned(t.id)}
+                        onTogglePin={() => toggleTeamPin(t.id)}
                       />
                     ))}
                   </div>
@@ -455,36 +481,66 @@ function TeamLinkRow({
   teamLogoUrl,
   subtitle,
   hideAvatar,
+  isPinned,
+  onTogglePin,
 }: {
   teamId: string;
   teamName: string;
   teamLogoUrl: string | null;
   subtitle?: string;
   hideAvatar?: boolean;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 }) {
   return (
-    <Link href={`/teams/${teamId}`} data-testid={`link-team-${teamId}`}>
-      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer py-1.5 px-1.5 rounded-md hover:bg-muted/50">
-        {!hideAvatar && (
-          <TeamAvatar
-            avatarUrl={teamLogoUrl}
-            displayName={teamName}
-            size="xs"
-            rounded="lg"
-            className="w-5 h-5 shrink-0"
-            fallbackClassName="bg-muted text-muted-foreground"
-          />
-        )}
-        <span className="truncate flex-1 min-w-0">
-          <span className="truncate">{teamName}</span>
-          {subtitle && (
-            <span className="ml-1 text-[10px] font-medium text-muted-foreground/80">
-              · {subtitle}
-            </span>
+    <div className="group flex items-center gap-1 py-1.5 px-1.5 rounded-md hover:bg-muted/50">
+      <Link
+        href={`/teams/${teamId}`}
+        data-testid={`link-team-${teamId}`}
+        className="flex-1 min-w-0"
+      >
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary cursor-pointer">
+          {!hideAvatar && (
+            <TeamAvatar
+              avatarUrl={teamLogoUrl}
+              displayName={teamName}
+              size="xs"
+              rounded="lg"
+              className="w-5 h-5 shrink-0"
+              fallbackClassName="bg-muted text-muted-foreground"
+            />
           )}
-        </span>
-      </div>
-    </Link>
+          <span className="truncate flex-1 min-w-0">
+            <span className="truncate">{teamName}</span>
+            {subtitle && (
+              <span className="ml-1 text-[10px] font-medium text-muted-foreground/80">
+                · {subtitle}
+              </span>
+            )}
+          </span>
+        </div>
+      </Link>
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={onTogglePin}
+          aria-label={isPinned ? `Unpin ${teamName}` : `Pin ${teamName}`}
+          aria-pressed={isPinned}
+          data-testid={`pin-team-${teamId}`}
+          className={
+            isPinned
+              ? "shrink-0 p-0.5 rounded text-primary hover:bg-muted"
+              : "shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted opacity-0 group-hover:opacity-100 focus:opacity-100"
+          }
+        >
+          {isPinned ? (
+            <PinOff className="w-3.5 h-3.5" />
+          ) : (
+            <Pin className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 
