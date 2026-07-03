@@ -161,7 +161,7 @@ Your free launch period wraps up on October 1, when annual billing begins for yo
 
 Add your card: ${url}
 
-It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts. Questions? Just reply to this email.
+It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts.
 
 Thanks for being one of our founding organizations — here's to a great season ahead.
 
@@ -171,7 +171,7 @@ Thanks for being one of our founding organizations — here's to a great season 
 <p>It's been a joy watching <strong>${escapeHtml(args.orgName)}</strong> bring its teams, players, and families onto Kinectem. 🎉</p>
 <p>Your free launch period wraps up on <strong>October 1</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until October 1.</strong></p>
 <p><a href="${escapeHtml(url)}">Add your card →</a></p>
-<p>It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts. Questions? Just reply to this email.</p>
+<p>It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts.</p>
 <p>Thanks for being one of our founding organizations — here's to a great season ahead.</p>
 <p>— The Kinectem Team</p>`;
 
