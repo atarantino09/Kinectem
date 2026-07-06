@@ -287,6 +287,20 @@ export default function TeamPage() {
           </>
         ),
       });
+      s.push({
+        targetTestId: "btn-create-recap",
+        onEnter: () => setExpanded("posts"),
+        title: "Start with your past games",
+        body: (
+          <>
+            Don't leave your team page blank — hit{" "}
+            <strong>Create Game Recap</strong> and back-log recaps from past
+            weeks and seasons. Filling in your history gives players and families
+            something to scroll from day one, and it only takes a few minutes per
+            game with <strong>AI Assist</strong>.
+          </>
+        ),
+      });
     }
     return s;
   }, [isAdmin, canManage, canViewSchedule, canPostHighlight, canPostRecap]);
