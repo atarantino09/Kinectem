@@ -7749,7 +7749,10 @@ components:
       properties:
         teamIds:
           type: array
-          maxItems: 5
+          # Global safety cap only. The real rule is max 5 pinned teams PER
+          # organization (independent teams share one bucket), enforced in the
+          # PUT /users/me/pinned-teams handler.
+          maxItems: 50
           items:
             type: string
             format: uuid
