@@ -124,7 +124,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/organizations", label: "Orgs", icon: Building2 },
     { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
     { href: "/announcements", label: "Announcements", icon: Megaphone, testId: "link-announcements", badge: announcementsUnread },
-    ...(whoami?.isGuardian
+    ...(whoami?.isGuardian || whoami?.realUser?.role === "parent"
       ? [{ href: "/family", label: "Family", icon: Users, testId: "link-family" } satisfies NavItem]
       : []),
     ...(isAdmin
@@ -215,7 +215,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <MobileTopBar
           meId={currentUser?.id}
           unreadCount={unreadCount}
-          isGuardian={whoami?.isGuardian === true}
+          isGuardian={
+            whoami?.isGuardian === true || whoami?.realUser?.role === "parent"
+          }
           onOpenNav={() => setMobileNavOpen(true)}
         />
       ) : (

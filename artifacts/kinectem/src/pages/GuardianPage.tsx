@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users } from "lucide-react";
@@ -8,6 +9,16 @@ import { ChildRow } from "@/components/guardian-page/ChildRow";
 import { MinorControls } from "@/components/guardian-page/MinorControls";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
 import { useWhoami } from "@/hooks/useWhoami";
+import {
+  SpotlightTour,
+  type TourStep,
+} from "@/components/team-page/SpotlightTour";
+
+// First-run walkthrough of the Family dashboard. Shown once per browser the
+// first time a parent/guardian lands here (localStorage — the API spec is
+// locked so there's no server "seen onboarding" field). Bump the key to
+// re-show to everyone.
+const FAMILY_TOUR_KEY = "kinectem:family-tour-v1";
 
 export default function GuardianPage() {
   const { data: whoami } = useWhoami();
@@ -15,10 +26,89 @@ export default function GuardianPage() {
   // Guardian capability is "this user has at least one linked child"
   // (any role), not `role === "parent"`. Whoami exposes this directly.
   const isGuardian = whoami?.isGuardian === true;
+  // A brand-new parent has no linked child yet, so `isGuardian` is still
+  // false — include `role === "parent"` so they get the walkthrough too.
+  const isParentPersona =
+    isGuardian || whoami?.realUser?.role === "parent";
+
+  const [tourOpen, setTourOpen] = useState(false);
+
+  const tourSteps = useMemo<TourStep[]>(
+    () => [
+      {
+        targetTestId: "family-header",
+        title: "Welcome to your Family dashboard",
+        body: (
+          <>
+            This is your home base for keeping your children safe on Kinectem.
+            Link their accounts, review what happens on them, and act on your
+            child's behalf — all from here.
+          </>
+        ),
+      },
+      {
+        targetTestId: "input-search-child",
+        title: "Link your child's account",
+        body: (
+          <>
+            Start by searching for your child by name to link their account.
+            Once linked, everything they do flows through this dashboard for
+            your review.
+          </>
+        ),
+      },
+      {
+        targetTestId: "card-linked-children",
+        title: "Manage your children",
+        body: (
+          <>
+            Each linked child shows up here. You can approve their follow
+            requests, DMs, comments, and tags, edit their profile, and control
+            their privacy — all on their behalf.
+          </>
+        ),
+      },
+      {
+        targetTestId: "card-email-pref",
+        title: "Choose your email updates",
+        body: (
+          <>
+            Pick which email alerts you get about your children's activity and
+            account so nothing important slips past you.
+          </>
+        ),
+      },
+    ],
+    [],
+  );
+
+  // Pop the walkthrough once per browser, the first time a parent/guardian
+  // opens the Family page. Read in try/catch so blocked storage (private
+  // mode) just treats it as not-yet-seen.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isParentPersona) return;
+    let alreadySeen = false;
+    try {
+      alreadySeen = localStorage.getItem(FAMILY_TOUR_KEY) === "1";
+    } catch {
+      // storage blocked — treat as not seen
+    }
+    if (!alreadySeen) setTourOpen(true);
+  }, [isParentPersona]);
+
+  const finishTour = () => {
+    try {
+      localStorage.setItem(FAMILY_TOUR_KEY, "1");
+    } catch {
+      // ignore storage failures (private mode etc.) — tour just won't persist
+    }
+    setTourOpen(false);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3" data-testid="family-header">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
           <Users className="w-5 h-5 text-white" />
         </div>
@@ -51,7 +141,7 @@ export default function GuardianPage() {
 
       <EmailPrefCard enabled={isGuardian} />
 
-      <Card className="rounded-xl border-border">
+      <Card className="rounded-xl border-border" data-testid="card-linked-children">
         <CardContent className="p-6 space-y-4">
           <h2 className="font-black tracking-tight">Linked children</h2>
           {dash.loading ? (
@@ -113,6 +203,10 @@ export default function GuardianPage() {
       )}
 
       <LinkChildSearch children={dash.children} onLinked={dash.refresh} />
+
+      {tourOpen && (
+        <SpotlightTour steps={tourSteps} onFinish={finishTour} />
+      )}
     </div>
   );
 }
