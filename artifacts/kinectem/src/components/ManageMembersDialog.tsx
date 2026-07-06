@@ -779,7 +779,7 @@ function AddAdminDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <div>
             <Label className="text-xs font-bold">Role</Label>
             <div className="flex gap-2 mt-1">

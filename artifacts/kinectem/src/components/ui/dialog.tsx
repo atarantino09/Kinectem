@@ -48,7 +48,14 @@ const DialogContent = React.forwardRef<
           // mobile browser URL bar) bounds the dialog. overflow-y-auto lets
           // tall content scroll inside the dialog so the footer stays
           // reachable; on desktop where content fits, this is a no-op.
-          "pointer-events-auto relative grid w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
+          // grid-cols-[minmax(0,1fr)] gives the single content column a 0 floor
+          // so it can shrink below its min-content. Without it the grid track
+          // grows to fit a long unbreakable descendant (invite URLs, tokens),
+          // blowing the dialog past max-w-* and forcing a horizontal scrollbar
+          // (overflow-y-auto computes overflow-x to auto too), which clips the
+          // close button and other content. With the 0 floor, child truncate /
+          // break-all utilities actually take effect and the width stays capped.
+          "pointer-events-auto relative grid grid-cols-[minmax(0,1fr)] w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
           className
         )}
         {...props}

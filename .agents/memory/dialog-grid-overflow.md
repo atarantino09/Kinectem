@@ -27,3 +27,15 @@ min-content size. So the grid track still expands to the full URL width.
   pair with `min-w-0` on its flex parent.
 - Root cause is min-content, not the visible overflow — fix the string element, not by
   slapping `overflow-x-hidden` on the whole dialog (that just hides clipped content).
+
+**Shared-component floor (preferred global fix):** the `DialogContent` grid now sets
+`grid-cols-[minmax(0,1fr)]`, giving its single content column a 0 floor instead of `auto`
+(min-content). This lets the column shrink below its content and makes descendant
+`truncate`/`break-all` actually take effect, so a long invite URL/token can no longer
+blow the modal past `max-w-*` or force a horizontal scrollbar (`overflow-y-auto` computes
+`overflow-x` to `auto` too). This is a standard arbitrary *value* (works fine in v4 —
+unlike the bare-var / arbitrary-property gotchas above).
+
+**Per-dialog belt-and-suspenders:** adding `min-w-0` to a direct grid *item* also overrides
+its automatic min-content minimum, so `min-w-0` on the panel wrapper fixes one dialog on
+its own even without the shared floor.
