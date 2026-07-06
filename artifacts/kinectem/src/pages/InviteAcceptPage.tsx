@@ -300,7 +300,15 @@ export default function InviteAcceptPage() {
           onLastNameChange={setLastName}
           onAddExistingChild={onAddExistingChild}
           onSubmit={onAddChild}
-          onFinish={() => navigate(`/teams/${envelope.team.id}`)}
+          onFinish={() =>
+            // Route through the Family dashboard walkthrough, then land them on
+            // the team they were just invited to (see GuardianPage `?tour`).
+            navigate(
+              `/family?tour=1&next=${encodeURIComponent(
+                `/teams/${envelope.team.id}`,
+              )}`,
+            )
+          }
         />
       )}
     </div>

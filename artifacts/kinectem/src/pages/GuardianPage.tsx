@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users } from "lucide-react";
@@ -14,24 +15,29 @@ import {
   type TourStep,
 } from "@/components/team-page/SpotlightTour";
 
-// First-run walkthrough of the Family dashboard. Shown once per browser the
-// first time a parent/guardian lands here (localStorage — the API spec is
-// locked so there's no server "seen onboarding" field). Bump the key to
-// re-show to everyone.
-const FAMILY_TOUR_KEY = "kinectem:family-tour-v1";
-
+// Walkthrough of the Family dashboard. Triggered right after a parent finishes
+// creating their child during team-invite acceptance: that flow redirects here
+// with `?tour=1&next=/teams/<id>`, we run the tour, then land them on the
+// invited team. `next` is an internal path only (must start with "/").
 export default function GuardianPage() {
   const { data: whoami } = useWhoami();
   const dash = useGuardianDashboard();
   // Guardian capability is "this user has at least one linked child"
   // (any role), not `role === "parent"`. Whoami exposes this directly.
   const isGuardian = whoami?.isGuardian === true;
-  // A brand-new parent has no linked child yet, so `isGuardian` is still
-  // false — include `role === "parent"` so they get the walkthrough too.
-  const isParentPersona =
-    isGuardian || whoami?.realUser?.role === "parent";
+
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const wantsTour = searchParams.get("tour") === "1";
+  const nextDest = searchParams.get("next");
 
   const [tourOpen, setTourOpen] = useState(false);
+  const [tourHandled, setTourHandled] = useState(false);
+
+  // Ring the first child's real "Require tag consent" toggle when we can; fall
+  // back to the whole linked-children card before the roster has loaded.
+  const firstChildId = dash.children[0]?.id;
 
   const tourSteps = useMemo<TourStep[]>(
     () => [
@@ -41,19 +47,8 @@ export default function GuardianPage() {
         body: (
           <>
             This is your home base for keeping your children safe on Kinectem.
-            Link their accounts, review what happens on them, and act on your
-            child's behalf — all from here.
-          </>
-        ),
-      },
-      {
-        targetTestId: "input-search-child",
-        title: "Link your child's account",
-        body: (
-          <>
-            Start by searching for your child by name to link their account.
-            Once linked, everything they do flows through this dashboard for
-            your review.
+            Review everything that happens on their accounts and act on their
+            behalf — all from here.
           </>
         ),
       },
@@ -62,9 +57,23 @@ export default function GuardianPage() {
         title: "Manage your children",
         body: (
           <>
-            Each linked child shows up here. You can approve their follow
+            Each of your children shows up here. You can approve their follow
             requests, DMs, comments, and tags, edit their profile, and control
             their privacy — all on their behalf.
+          </>
+        ),
+      },
+      {
+        targetTestId: firstChildId
+          ? `switch-consent-${firstChildId}`
+          : "card-linked-children",
+        title: "Tagging made simple",
+        body: (
+          <>
+            By default you approve every tag before it appears. Switch{" "}
+            <strong>Require tag consent</strong> off and posts get tagged to
+            your child automatically — no approving each notification. You can
+            still remove any tag you don't want afterward.
           </>
         ),
       },
@@ -79,31 +88,25 @@ export default function GuardianPage() {
         ),
       },
     ],
-    [],
+    [firstChildId],
   );
 
-  // Pop the walkthrough once per browser, the first time a parent/guardian
-  // opens the Family page. Read in try/catch so blocked storage (private
-  // mode) just treats it as not-yet-seen.
+  // Open the walkthrough when we arrive from the invite child-setup flow
+  // (`?tour=1`). One-shot per mount so it never re-pops if the param lingers.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isParentPersona) return;
-    let alreadySeen = false;
-    try {
-      alreadySeen = localStorage.getItem(FAMILY_TOUR_KEY) === "1";
-    } catch {
-      // storage blocked — treat as not seen
+    if (wantsTour && !tourHandled) {
+      setTourOpen(true);
+      setTourHandled(true);
     }
-    if (!alreadySeen) setTourOpen(true);
-  }, [isParentPersona]);
+  }, [wantsTour, tourHandled]);
 
   const finishTour = () => {
-    try {
-      localStorage.setItem(FAMILY_TOUR_KEY, "1");
-    } catch {
-      // ignore storage failures (private mode etc.) — tour just won't persist
-    }
     setTourOpen(false);
+    // Land them on the team they were invited to. `next` must be a strictly
+    // internal path — a single leading "/" not followed by "/" or "\", so
+    // protocol-relative ("//evil.com") and backslash tricks can't redirect off
+    // site. Anything else is ignored and they simply stay on /family.
+    if (nextDest && /^\/[^/\\]/.test(nextDest)) navigate(nextDest);
   };
 
   return (
