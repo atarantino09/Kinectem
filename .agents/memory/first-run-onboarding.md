@@ -15,15 +15,21 @@ is the only place to remember it. This means the tour can re-show on a new
 device/browser — accepted tradeoff, matches standard product-tour behavior.
 Bump the key (e.g. `kinectem:team-tour-v1` → `-v2`) to re-show to everyone.
 
-**Keying is GLOBAL (once per user/browser), NOT per-entity.** Product decision:
-each tour shows at most once ever — the team tour the first time a manager
+**Keying is per USER (not per-entity, not bare per-browser).** Product decision:
+each tour shows at most once per account — the team tour the first time a manager
 (coach or org admin) opens *any* team page, the org tour the first time an
-owner/admin opens *any* org page. Keys are the bare globals `kinectem:team-tour-v1`
-and `kinectem:org-tour-v1` (no `<teamId>`/`<orgId>` suffix).
+owner/admin opens *any* org page. The team key is `kinectem:team-tour-v1:<userId>`
+(no `<teamId>` suffix). A bare per-browser key was a bug: a new coach signing in
+on a browser where another account had dismissed the tour never saw it.
 **Why:** the user explicitly wanted it to pop up only once per user, not once per
-team/org. This supersedes the earlier per-entity design (which re-showed the tour
-on each newly-managed team/org). Triggers stay role-gated (org: `isManagerRole`;
-team: `canManage`) so non-managers never see it.
+team/org. This supersedes both the per-entity design and the bare-global key.
+Triggers stay role-gated (org: `isManagerRole`; team: `canManage`) so non-managers
+never see it. Gate reads/writes on `me?.id` being loaded.
+
+**Freshness after invite accept:** `canManage` derives from the members-list query
+(30s staleTime), so accepting a roster invite must invalidate cached queries for
+that team (InviteAcceptPage does, via a team-id predicate) or the tour/manager UI
+can lag on first landing.
 
 **How to apply:**
 - Read the flag inside a try/catch and default to "not seen" when storage throws

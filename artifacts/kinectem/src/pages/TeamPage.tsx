@@ -305,26 +305,31 @@ export default function TeamPage() {
     return s;
   }, [isAdmin, canManage, canViewSchedule, canPostHighlight, canPostRecap]);
 
-  // Open the walkthrough once per browser, the first time a manager lands on
-  // any team. Suppressed when `?welcome=1` is present so it never stacks on the
-  // post-claim rundown dialog.
+  // Open the walkthrough once per account (per browser), the first time a
+  // manager lands on any team. Suppressed when `?welcome=1` is present so it
+  // never stacks on the post-claim rundown dialog.
+  // The "seen" flag is scoped per user id — a bare per-browser key meant a
+  // brand-new coach signing in on a browser where ANY other account had
+  // already dismissed the tour would never see it.
+  const tourStorageKey = me?.id ? `${TEAM_TOUR_KEY}:${me.id}` : null;
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!canManage || wantsWelcome) return;
     if (tourSteps.length === 0) return;
-    if (!teamId) return;
+    if (!teamId || !tourStorageKey) return;
     let alreadySeen = false;
     try {
-      alreadySeen = localStorage.getItem(TEAM_TOUR_KEY) === "1";
+      alreadySeen = localStorage.getItem(tourStorageKey) === "1";
     } catch {
       // storage blocked (private mode etc.) — treat as not seen
     }
     if (!alreadySeen) setTourOpen(true);
-  }, [canManage, wantsWelcome, tourSteps.length, teamId]);
+  }, [canManage, wantsWelcome, tourSteps.length, teamId, tourStorageKey]);
 
   const finishTour = () => {
     try {
-      localStorage.setItem(TEAM_TOUR_KEY, "1");
+      if (tourStorageKey) localStorage.setItem(tourStorageKey, "1");
     } catch {
       // ignore storage failures (private mode etc.) — tour just won't persist
     }

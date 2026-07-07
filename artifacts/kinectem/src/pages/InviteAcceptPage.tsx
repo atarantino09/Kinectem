@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export default function InviteAcceptPage() {
   const token = params?.token ?? "";
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const { data: me } = useGetLoggedInUser();
 
   const [envelope, setEnvelope] = useState<InviteEnvelope | null>(null);
@@ -124,6 +126,19 @@ export default function InviteAcceptPage() {
         { method: "POST" },
       );
       setAccepted(true);
+      // Accepting changes this user's roster status and capabilities on the
+      // team. Drop any cached team/member data so the team page we navigate to
+      // sees the fresh state immediately (e.g. the coach walkthrough gates on
+      // `canManage`, which is derived from the members list).
+      await qc.invalidateQueries({
+        predicate: (q) => {
+          const url =
+            Array.isArray(q.queryKey) && typeof q.queryKey[0] === "string"
+              ? q.queryKey[0]
+              : "";
+          return url.includes(`/teams/${envelope!.team.id}`);
+        },
+      });
       if (r.requiresChildSetup) {
         setNeedsChildSetup(true);
         if (childHint) {
