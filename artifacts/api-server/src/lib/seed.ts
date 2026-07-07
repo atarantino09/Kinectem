@@ -69,6 +69,15 @@ async function ensureRequiredDemoUsers(passwordHash: string): Promise<void> {
 }
 
 export async function seedIfEmpty(): Promise<void> {
+  // Demo data is dev-only. In production this routine used to resurrect the
+  // "required demo users" (and demo-activity backfills) on every Autoscale
+  // boot, so operator-deleted demo accounts kept coming back. Real prod
+  // seeding happens via the founding-admin page instead.
+  if (process.env.NODE_ENV === "production") {
+    logger.info("Production environment — skipping demo seed/backfills");
+    return;
+  }
+
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(users);
