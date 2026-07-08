@@ -38,6 +38,11 @@ const BULLETS: readonly string[] = [
 
 const AFTER_BULLETS = "There's no cost to families. Setup takes about two minutes.";
 
+const LEARN_MORE =
+  "Check out www.kinectem.com to learn even more prior to signing up.";
+
+const LEARN_MORE_URL = "https://www.kinectem.com";
+
 const CTA_LABEL = "Set up your player's account →";
 
 // Re-exported so a surface can render a structured preview if needed without
@@ -49,6 +54,7 @@ export const COACH_INVITE_CONTENT = {
   controlIntro: CONTROL_INTRO,
   bullets: BULLETS,
   afterBullets: AFTER_BULLETS,
+  learnMore: LEARN_MORE,
   ctaLabel: CTA_LABEL,
 } as const;
 
@@ -75,6 +81,7 @@ export function buildCoachInviteText({ coachName, link }: CoachInviteVars): stri
     CONTROL_INTRO,
     bulletLines,
     AFTER_BULLETS,
+    LEARN_MORE,
     `${CTA_LABEL} ${link}`,
     `— Coach ${coachName}`,
   ].join("\n\n");
@@ -95,7 +102,7 @@ export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): stri
     `<p>${escapeHtml(INTRO_PARAGRAPHS[2])}</p>`,
     `<p>${escapeHtml(CONTROL_INTRO)}</p>`,
     `<ul>\n${bulletItems}\n</ul>`,
-    `<p>${escapeHtml(AFTER_BULLETS)}</p>`,
+    `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p><a href="${linkAttr}">${escapeHtml(CTA_LABEL)}</a></p>`,
     `<p>— Coach ${escapeHtml(coachName)}</p>`,
   ].join("\n");
