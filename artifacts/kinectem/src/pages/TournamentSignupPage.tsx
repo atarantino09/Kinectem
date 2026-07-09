@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { namesRoughlyMatch } from "@/lib/name-match";
 
 // Task #628 — Solo-team signup + participant claim (`/t/<slug>/signup`). A
-// signed-in visiting coach picks an unclaimed team-name slot, names their
-// SOLO team (no organization), and claims it. On success they land on the new
-// temporary team page. Hand-written customFetch — no openapi.yaml entry.
+// signed-in visiting coach picks an unclaimed team-name slot, then EITHER
+// claims it to an existing Kinectem team they manage (no duplicate team
+// created) OR names a new SOLO team (no organization). Hand-written
+// customFetch — no openapi.yaml entry.
 
 type Participant = {
   id: string;
@@ -34,6 +37,13 @@ type TournamentResponse = {
   participants: Participant[];
 };
 
+type ManageableTeam = {
+  id: string;
+  name: string;
+  sport: string | null;
+  organizationId: string | null;
+};
+
 function groupLabel(division: string, bracket: string): string {
   const parts = [division, bracket].filter((p) => p && p.trim() !== "");
   return parts.length ? parts.join(" · ") : "General";
@@ -51,6 +61,13 @@ export default function TournamentSignupPage() {
   const [sport, setSport] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
+  // "existing" = claim to a team I already manage; "new" = create a solo team.
+  const [mode, setMode] = useState<"existing" | "new">("new");
+  const [existingTeamId, setExistingTeamId] = useState<string>("");
+  // Coach-confirmed name-mismatch gate: when the slot name and the chosen
+  // team's name don't roughly match, an explicit acknowledgement is required.
+  const [mismatchConfirmed, setMismatchConfirmed] = useState(false);
+
   const q = useQuery<TournamentResponse>({
     queryKey: ["tournament", slug],
     queryFn: () =>
@@ -61,6 +78,20 @@ export default function TournamentSignupPage() {
     enabled: !!slug,
     retry: false,
   });
+
+  const myTeamsQ = useQuery<{ data: ManageableTeam[] }>({
+    queryKey: ["my-manageable-teams"],
+    queryFn: () =>
+      customFetch<{ data: ManageableTeam[] }>(`/api/v1/my/manageable-teams`),
+    enabled: !!me,
+    retry: false,
+  });
+  const myTeams = myTeamsQ.data?.data ?? [];
+
+  // Default to the existing-team branch for coaches who already have a team.
+  useEffect(() => {
+    if (myTeams.length > 0) setMode("existing");
+  }, [myTeams.length]);
 
   // Redirect anonymous visitors to signup/login, returning here afterward.
   useEffect(() => {
@@ -76,6 +107,24 @@ export default function TournamentSignupPage() {
     [q.data],
   );
 
+  const selectedSlot = useMemo(
+    () => unclaimed.find((p) => p.id === selectedId) ?? null,
+    [unclaimed, selectedId],
+  );
+  const chosenTeam = useMemo(
+    () => myTeams.find((t) => t.id === existingTeamId) ?? null,
+    [myTeams, existingTeamId],
+  );
+  const nameMismatch =
+    !!selectedSlot &&
+    !!chosenTeam &&
+    !namesRoughlyMatch(selectedSlot.name, chosenTeam.name);
+
+  // Any change of slot or team resets the acknowledgement.
+  useEffect(() => {
+    setMismatchConfirmed(false);
+  }, [selectedId, existingTeamId]);
+
   // The picked slot name IS the team name from the uploaded schedule — sync it
   // on every pick (unless the coach has manually typed a different name).
   const [nameEdited, setNameEdited] = useState(false);
@@ -89,7 +138,18 @@ export default function TournamentSignupPage() {
       toast({ title: "Pick a team name to claim first.", variant: "destructive" });
       return;
     }
-    if (!teamName.trim()) {
+    if (mode === "existing" && !existingTeamId) {
+      toast({ title: "Pick which of your teams is claiming this slot.", variant: "destructive" });
+      return;
+    }
+    if (mode === "existing" && nameMismatch && !mismatchConfirmed) {
+      toast({
+        title: "The names don't match — confirm this is your team's slot first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (mode === "new" && !teamName.trim()) {
       toast({ title: "Give your team a name.", variant: "destructive" });
       return;
     }
@@ -103,11 +163,15 @@ export default function TournamentSignupPage() {
         `/api/v1/competitions/${encodeURIComponent(slug)}/claim`,
         {
           method: "POST",
-          body: JSON.stringify({
-            participantId: selectedId,
-            teamName: teamName.trim(),
-            sport: sport.trim() || null,
-          }),
+          body: JSON.stringify(
+            mode === "existing"
+              ? { participantId: selectedId, existingTeamId }
+              : {
+                  participantId: selectedId,
+                  teamName: teamName.trim(),
+                  sport: sport.trim() || null,
+                },
+          ),
         },
       );
       toast({
@@ -115,7 +179,11 @@ export default function TournamentSignupPage() {
           ? "Claim submitted — the organizer will review it shortly."
           : "Your team is in! Welcome to the competition.",
       });
-      navigate(`/teams/${res.teamId}?welcome=1`);
+      navigate(
+        mode === "existing"
+          ? `/teams/${res.teamId}`
+          : `/teams/${res.teamId}?welcome=1`,
+      );
     } catch (err) {
       toast({
         title: (err as Error)?.message ?? "Couldn't claim that slot",
@@ -171,8 +239,7 @@ export default function TournamentSignupPage() {
         </Link>
         <h1 className="text-2xl font-black tracking-tight">Sign up your team</h1>
         <p className="text-sm text-muted-foreground">
-          Claim your team name to get a free temporary team page so you can
-          write game recaps during the tournament.
+          Claim your team name so your games and recaps live on Kinectem.
         </p>
       </div>
 
@@ -216,46 +283,156 @@ export default function TournamentSignupPage() {
 
       <Card className="rounded-xl border-border" data-testid="card-team-details">
         <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-black tracking-tight">2. Team details</h2>
-          <div className="space-y-2">
-            <Label htmlFor="teamName">Team name</Label>
-            <Input
-              id="teamName"
-              value={teamName}
-              onChange={(e) => {
-                setNameEdited(true);
-                setTeamName(e.target.value);
-              }}
-              placeholder="e.g. Riverside United 14U"
-              maxLength={120}
-              data-testid="input-team-name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="sport">Sport (optional)</Label>
-            <Input
-              id="sport"
-              value={sport}
-              onChange={(e) => setSport(e.target.value)}
-              placeholder="e.g. Soccer"
-              maxLength={100}
-              data-testid="input-sport"
-            />
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-            This is a <span className="font-bold">temporary team</span> with no
-            organization. You can write recaps while the tournament is active.
-            After it ends, create or join a real organization to keep full
-            access.
-          </div>
-          <Button
-            className="font-bold w-full"
-            disabled={submitting || !selectedId}
-            onClick={submit}
-            data-testid="btn-submit-signup"
-          >
-            {submitting ? "Setting up your team…" : "Create team & claim slot"}
-          </Button>
+          <h2 className="text-lg font-black tracking-tight">2. Your team</h2>
+
+          {myTeams.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setMode("existing")}
+                className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                  mode === "existing"
+                    ? "border-primary ring-2 ring-primary/30"
+                    : "border-border hover:border-primary/50"
+                }`}
+                data-testid="btn-mode-existing"
+              >
+                <p className="text-sm font-bold">Use one of my teams</p>
+                <p className="text-xs text-muted-foreground">
+                  Link this slot to a team you already manage on Kinectem.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("new")}
+                className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                  mode === "new"
+                    ? "border-primary ring-2 ring-primary/30"
+                    : "border-border hover:border-primary/50"
+                }`}
+                data-testid="btn-mode-new"
+              >
+                <p className="text-sm font-bold">Create a new team</p>
+                <p className="text-xs text-muted-foreground">
+                  Set up a temporary team page just for this competition.
+                </p>
+              </button>
+            </div>
+          )}
+
+          {mode === "existing" && myTeams.length > 0 ? (
+            <div className="space-y-3">
+              <Label>Which team is this?</Label>
+              <div className="grid gap-2">
+                {myTeams.map((tm) => (
+                  <button
+                    key={tm.id}
+                    type="button"
+                    onClick={() => setExistingTeamId(tm.id)}
+                    className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                      existingTeamId === tm.id
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    data-testid={`btn-pick-team-${tm.id}`}
+                  >
+                    <p className="text-sm font-bold truncate">{tm.name}</p>
+                    {tm.sport && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {tm.sport}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {selectedSlot && chosenTeam && (
+                <div
+                  className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-2"
+                  data-testid="text-claim-confirm"
+                >
+                  <p>
+                    You're claiming{" "}
+                    <span className="font-bold">{selectedSlot.name}</span> as{" "}
+                    <span className="font-bold">{chosenTeam.name}</span>. The
+                    competition's games will show on your team page.
+                  </p>
+                  {nameMismatch && (
+                    <label
+                      className="flex items-start gap-2 text-foreground cursor-pointer"
+                      data-testid="label-mismatch-confirm"
+                    >
+                      <Checkbox
+                        checked={mismatchConfirmed}
+                        onCheckedChange={(v) => setMismatchConfirmed(v === true)}
+                        data-testid="checkbox-mismatch-confirm"
+                      />
+                      <span>
+                        These names don't match — I confirm{" "}
+                        <span className="font-bold">{selectedSlot.name}</span> in
+                        this competition is my team{" "}
+                        <span className="font-bold">{chosenTeam.name}</span>.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+              <Button
+                className="font-bold w-full"
+                disabled={
+                  submitting ||
+                  !selectedId ||
+                  !existingTeamId ||
+                  (nameMismatch && !mismatchConfirmed)
+                }
+                onClick={submit}
+                data-testid="btn-submit-signup"
+              >
+                {submitting ? "Claiming…" : "Claim slot for my team"}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="teamName">Team name</Label>
+                <Input
+                  id="teamName"
+                  value={teamName}
+                  onChange={(e) => {
+                    setNameEdited(true);
+                    setTeamName(e.target.value);
+                  }}
+                  placeholder="e.g. Riverside United 14U"
+                  maxLength={120}
+                  data-testid="input-team-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sport">Sport (optional)</Label>
+                <Input
+                  id="sport"
+                  value={sport}
+                  onChange={(e) => setSport(e.target.value)}
+                  placeholder="e.g. Soccer"
+                  maxLength={100}
+                  data-testid="input-sport"
+                />
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+                This is a <span className="font-bold">temporary team</span> with no
+                organization. You can write recaps while the tournament is active.
+                After it ends, create or join a real organization to keep full
+                access.
+              </div>
+              <Button
+                className="font-bold w-full"
+                disabled={submitting || !selectedId}
+                onClick={submit}
+                data-testid="btn-submit-signup"
+              >
+                {submitting ? "Setting up your team…" : "Create team & claim slot"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

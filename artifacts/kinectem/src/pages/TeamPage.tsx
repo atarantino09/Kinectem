@@ -40,11 +40,12 @@ import {
   type TourStep,
 } from "@/components/team-page/SpotlightTour";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
+import { ClaimCompetitionDialog } from "@/components/team-page/ClaimCompetitionDialog";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
 import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastComposeDialog";
 import { Button } from "@/components/ui/button";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Trophy } from "lucide-react";
 import { useIsLg } from "@/hooks/use-mobile";
 
 // First-run walkthrough is shown ONCE per user, per browser (the OpenAPI
@@ -79,6 +80,7 @@ export default function TeamPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [adoptOpen, setAdoptOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [claimCompOpen, setClaimCompOpen] = useState(false);
   const [expanded, setExpanded] = useState<TeamPanel>(
     showRoster ? "roster" : "posts",
   );
@@ -505,16 +507,28 @@ export default function TeamPage() {
 
         {expanded === "posts" && (
           <>
-            {canBroadcast && (
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => setBroadcastOpen(true)}
-                  className="font-bold rounded-full"
-                  data-testid="btn-team-broadcast"
-                >
-                  <Megaphone className="w-4 h-4 mr-1.5" /> Message team
-                </Button>
+            {(canBroadcast || canManage) && (
+              <div className="flex justify-end gap-2 flex-wrap">
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setClaimCompOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-claim-competition"
+                  >
+                    <Trophy className="w-4 h-4 mr-1.5" /> Claim competition games
+                  </Button>
+                )}
+                {canBroadcast && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setBroadcastOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-team-broadcast"
+                  >
+                    <Megaphone className="w-4 h-4 mr-1.5" /> Message team
+                  </Button>
+                )}
               </div>
             )}
             <TournamentScheduleCard teamId={teamId} canPostRecap={canPostRecap} />
@@ -582,6 +596,15 @@ export default function TeamPage() {
           open={broadcastOpen}
           onOpenChange={setBroadcastOpen}
           target={{ kind: "team", id: teamId, name: team.name }}
+        />
+      )}
+
+      {canManage && (
+        <ClaimCompetitionDialog
+          open={claimCompOpen}
+          onOpenChange={setClaimCompOpen}
+          teamId={teamId}
+          teamName={team.name}
         />
       )}
 

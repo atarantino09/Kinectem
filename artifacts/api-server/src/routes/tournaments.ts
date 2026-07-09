@@ -20,6 +20,7 @@ import {
   rosterEntries,
   articles,
   gameScoreReports,
+  organizationAdmins,
 } from "@workspace/db";
 import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
@@ -395,6 +396,61 @@ async function competitionListRow(t: typeof tournaments.$inferSelect) {
     createdAt: t.createdAt.toISOString(),
   };
 }
+
+// GET /my/manageable-teams — every team the caller can claim a competition
+// slot for (mirrors canManageTeam: accepted coach, solo-team creator, or
+// owner/admin of the parent org). Used by the signup funnel's
+// "claim to my existing team" branch.
+router.get(
+  "/my/manageable-teams",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+
+    const [coachRows, createdRows, orgAdminRows] = await Promise.all([
+      db
+        .select({ t: teams })
+        .from(rosterEntries)
+        .innerJoin(teams, eq(teams.id, rosterEntries.teamId))
+        .where(
+          and(
+            eq(rosterEntries.userId, me.id),
+            eq(rosterEntries.role, "coach"),
+            eq(rosterEntries.status, "accepted"),
+          ),
+        ),
+      db.select({ t: teams }).from(teams).where(eq(teams.createdById, me.id)),
+      db
+        .select({ t: teams })
+        .from(organizationAdmins)
+        .innerJoin(
+          teams,
+          eq(teams.organizationId, organizationAdmins.organizationId),
+        )
+        .where(
+          and(
+            eq(organizationAdmins.userId, me.id),
+            inArray(organizationAdmins.role, ["owner", "admin"]),
+          ),
+        ),
+    ]);
+
+    const byId = new Map<string, typeof teams.$inferSelect>();
+    for (const { t } of [...coachRows, ...createdRows, ...orgAdminRows]) {
+      byId.set(t.id, t);
+    }
+    const data = Array.from(byId.values())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        sport: t.sport ?? null,
+        organizationId: t.organizationId ?? null,
+      }));
+    res.json({ data });
+  }),
+);
 
 router.get(
   "/my/competitions",
@@ -1038,12 +1094,20 @@ router.post(
 
 const ALLOWED_GENDERS = ["boys", "girls", "coed"] as const;
 
-const ClaimBody = z.object({
-  participantId: z.string().uuid("Invalid participant"),
-  teamName: z.string().trim().min(1, "Team name is required").max(120),
-  sport: z.string().trim().max(100).optional().nullable(),
-  gender: z.enum(ALLOWED_GENDERS).optional().nullable(),
-});
+const ClaimBody = z
+  .object({
+    participantId: z.string().uuid("Invalid participant"),
+    // Branch A — create a new SOLO team named `teamName`.
+    teamName: z.string().trim().min(1, "Team name is required").max(120).optional(),
+    sport: z.string().trim().max(100).optional().nullable(),
+    gender: z.enum(ALLOWED_GENDERS).optional().nullable(),
+    // Branch B — claim the slot TO an existing Kinectem team the caller
+    // manages (no new team created). Mutually exclusive with teamName.
+    existingTeamId: z.string().uuid("Invalid team").optional(),
+  })
+  .refine((b) => !!b.teamName !== !!b.existingTeamId, {
+    message: "Provide either a new team name or an existing team.",
+  });
 
 class AlreadyClaimedError extends Error {}
 
@@ -1099,13 +1163,106 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
     // the claim parks in the pending_* columns until approved in the console.
     const autoApprove = tournament.autoApproveClaims;
 
+    // Branch B — claim to an EXISTING team the caller manages. No team row is
+    // created; the slot links straight to the real team (same race-safe
+    // conditional UPDATE + pending-approval flow as the solo branch).
+    if (body.existingTeamId) {
+      const [existingTeam] = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.id, body.existingTeamId))
+        .limit(1);
+      if (!existingTeam) return apiError(res, 404, "Team not found");
+      if (!(await canManageTeam(me.id, existingTeam))) {
+        return apiError(
+          res,
+          403,
+          "Only a coach or admin of that team can claim a slot for it.",
+          { code: "FORBIDDEN" },
+        );
+      }
+      // One slot per team per competition. The check + update run inside a
+      // transaction behind an advisory lock keyed on (tournament, team) so
+      // two concurrent claims for DIFFERENT slots can't both pass the
+      // precheck (TOCTOU — same pattern as the per-tier team-cap guard).
+      class TeamAlreadyInError extends Error {}
+      let claimed: (typeof tournamentParticipants.$inferSelect)[];
+      try {
+        claimed = await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext(${tournament.id}), hashtext(${existingTeam.id}))`,
+          );
+          const [alreadyIn] = await tx
+            .select({ id: tournamentParticipants.id })
+            .from(tournamentParticipants)
+            .where(
+              and(
+                eq(tournamentParticipants.tournamentId, tournament.id),
+                or(
+                  eq(tournamentParticipants.teamId, existingTeam.id),
+                  eq(tournamentParticipants.pendingTeamId, existingTeam.id),
+                ),
+              ),
+            )
+            .limit(1);
+          if (alreadyIn) throw new TeamAlreadyInError();
+          return tx
+            .update(tournamentParticipants)
+            .set(
+              autoApprove
+                ? {
+                    teamId: existingTeam.id,
+                    claimedByUserId: me.id,
+                    claimedAt: new Date(),
+                  }
+                : {
+                    pendingTeamId: existingTeam.id,
+                    pendingClaimedByUserId: me.id,
+                    pendingClaimedAt: new Date(),
+                  },
+            )
+            .where(
+              and(
+                eq(tournamentParticipants.id, body.participantId),
+                eq(tournamentParticipants.tournamentId, tournament.id),
+                isNull(tournamentParticipants.teamId),
+                isNull(tournamentParticipants.pendingTeamId),
+              ),
+            )
+            .returning();
+        });
+      } catch (err) {
+        if (err instanceof TeamAlreadyInError) {
+          return apiError(
+            res,
+            409,
+            "That team already holds (or has a pending claim on) a slot in this competition.",
+            { code: "TEAM_ALREADY_IN_COMPETITION" },
+          );
+        }
+        throw err;
+      }
+      if (claimed.length === 0) {
+        return apiError(res, 409, "That team slot was just claimed by someone else.", {
+          code: "ALREADY_CLAIMED",
+        });
+      }
+      return res.status(201).json({
+        ok: true,
+        teamId: existingTeam.id,
+        tournamentSlug: tournament.slug,
+        pendingApproval: !autoApprove,
+        existingTeam: true,
+      });
+    }
+
     try {
       const result = await db.transaction(async (tx) => {
         const [team] = await tx
           .insert(teams)
           .values({
             organizationId: null,
-            name: body.teamName,
+            name: body.teamName!,
             createdById: me.id,
             sport: body.sport ?? undefined,
             gender: body.gender ?? undefined,
