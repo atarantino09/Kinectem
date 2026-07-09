@@ -738,29 +738,32 @@ function SchedulePanel({
         <code className="block rounded-md bg-muted p-2 text-[11px] leading-relaxed break-words">
           {CSV_HEADER}
         </code>
-        <div className="flex items-center justify-end gap-1">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void f.text().then(setCsv);
-              e.target.value = "";
-            }}
-            data-testid="input-csv-file"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="rounded-full font-bold text-muted-foreground"
-            onClick={() => fileRef.current?.click()}
-            data-testid="btn-csv-choose-file"
-          >
-            Choose file
-          </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void f.text().then(setCsv);
+            e.target.value = "";
+          }}
+          data-testid="input-csv-file"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full border-dashed font-bold"
+          onClick={() => fileRef.current?.click()}
+          data-testid="btn-csv-choose-file"
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          Choose CSV file from your computer
+        </Button>
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+            or paste the CSV below
+          </p>
           <Button
             type="button"
             variant="ghost"

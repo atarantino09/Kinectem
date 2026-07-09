@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, CalendarDays, MapPin, ExternalLink, Settings2 } from "lucide-react";
+import { Trophy, CalendarDays, MapPin, ExternalLink, Settings2, Upload } from "lucide-react";
 
 // Competitions §4 — self-serve competition creation + "my competitions" list.
 // Any signed-in user can create a tournament or league they operate; the
@@ -415,30 +415,31 @@ function CreateCompetitionCard() {
               Upload the game schedule CSV. Re-uploading later is safe — games
               update in place and claimed teams keep their claims.
             </p>
-            <div className="flex items-center justify-end gap-1">
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void f.text().then(setCsv);
-                  e.target.value = "";
-                }}
-                data-testid="input-wizard-csv-file"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="rounded-full font-bold text-muted-foreground"
-                onClick={() => fileRef.current?.click()}
-                data-testid="btn-wizard-csv-choose-file"
-              >
-                Choose file
-              </Button>
-            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void f.text().then(setCsv);
+                e.target.value = "";
+              }}
+              data-testid="input-wizard-csv-file"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-dashed font-bold"
+              onClick={() => fileRef.current?.click()}
+              data-testid="btn-wizard-csv-choose-file"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Choose CSV file from your computer
+            </Button>
+            <p className="text-center text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+              or paste the CSV below
+            </p>
             <textarea
               value={csv}
               onChange={(e) => setCsv(e.target.value)}
