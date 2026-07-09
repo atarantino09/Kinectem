@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { BrandColorField } from "@/components/BrandColorField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,32 +133,12 @@ function BrandingPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="b-color" className="text-xs font-bold">
-              Brand color <span className="text-muted-foreground">(#rrggbb)</span>
-            </Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="b-color"
-                value={brandColor}
-                onChange={(e) => setBrandColor(e.target.value)}
-                placeholder="#1e293b"
-                maxLength={7}
-                data-testid="input-brand-color"
-              />
-              <span
-                className="h-8 w-8 shrink-0 rounded-md border border-border"
-                style={{
-                  backgroundColor: colorOk && brandColor.trim() ? brandColor.trim() : "#e2e8f0",
-                }}
-              />
-            </div>
-            {!colorOk && (
-              <p className="text-xs font-bold text-red-700">
-                Use a hex color like #1e293b.
-              </p>
-            )}
-          </div>
+          <BrandColorField
+            value={brandColor}
+            onChange={setBrandColor}
+            logoUrl={logoUrl}
+            idPrefix="brand"
+          />
           <div className="space-y-1.5">
             <Label htmlFor="b-logo" className="text-xs font-bold">
               Logo URL

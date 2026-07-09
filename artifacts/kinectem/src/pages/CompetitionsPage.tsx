@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { BrandColorField } from "@/components/BrandColorField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -322,37 +323,11 @@ function CreateCompetitionCard() {
         {step === 2 && createdId && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Give your public page a look. You can skip this and edit branding
-              any time from the console.
+              Give your public page a look. Paste a logo URL and we'll suggest
+              brand colors straight from it — or pick one from the color wheel.
+              You can skip this and edit branding any time from the console.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="w-color" className="text-xs font-bold">
-                  Brand color <span className="text-muted-foreground">(#rrggbb)</span>
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="w-color"
-                    value={brandColor}
-                    onChange={(e) => setBrandColor(e.target.value)}
-                    placeholder="#1e293b"
-                    maxLength={7}
-                    data-testid="input-wizard-brand-color"
-                  />
-                  <span
-                    className="h-8 w-8 shrink-0 rounded-md border border-border"
-                    style={{
-                      backgroundColor:
-                        colorOk && brandColor.trim() ? brandColor.trim() : "#e2e8f0",
-                    }}
-                  />
-                </div>
-                {!colorOk && (
-                  <p className="text-xs font-bold text-red-700">
-                    Use a hex color like #1e293b.
-                  </p>
-                )}
-              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="w-logo" className="text-xs font-bold">
                   Logo URL
@@ -365,6 +340,12 @@ function CreateCompetitionCard() {
                   data-testid="input-wizard-logo-url"
                 />
               </div>
+              <BrandColorField
+                value={brandColor}
+                onChange={setBrandColor}
+                logoUrl={logoUrl}
+                idPrefix="wizard-brand"
+              />
               <div className="space-y-1.5">
                 <Label htmlFor="w-banner" className="text-xs font-bold">
                   Banner URL
