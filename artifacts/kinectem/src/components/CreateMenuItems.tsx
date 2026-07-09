@@ -3,7 +3,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Building2, Plus, Trophy } from "lucide-react";
+import { Building2, Medal, Plus, Trophy } from "lucide-react";
 
 type Props = {
   canAuthorRecap: boolean;
@@ -28,6 +28,12 @@ export function CreateMenuItems({ canAuthorRecap, onCreateOrg }: Props) {
       <DropdownMenuSeparator />
       <DropdownMenuItem onSelect={onCreateOrg} data-testid="menu-create-org">
         <Building2 className="w-4 h-4 mr-2" /> New Organization
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onSelect={() => setLocation("/competitions")}
+        data-testid="menu-create-competition"
+      >
+        <Medal className="w-4 h-4 mr-2" /> New Competition
       </DropdownMenuItem>
     </>
   );
