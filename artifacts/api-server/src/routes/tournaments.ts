@@ -27,7 +27,7 @@ import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
-import { apiError } from "../lib/spec-helpers";
+import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
 import { resolveScore } from "../lib/score-resolve";
 import {
   canManageOrganization,
@@ -190,6 +190,18 @@ const HttpUrl = z
   .trim()
   .max(2000)
   .regex(/^https?:\/\//, "Must be an http(s) URL");
+
+// Logo/banner also accept inline base64 `data:image/...` URLs uploaded from
+// the branding UI (same pattern as org logos / team banners). Over-cap data
+// URLs are rejected with a friendly 413 before Zod parsing in the PATCH
+// handler, so the max() here only guards plain URLs.
+const ImageUrl = z.union([
+  HttpUrl,
+  z
+    .string()
+    .max(MAX_IMAGE_DATA_URL_LENGTH)
+    .regex(/^data:image\//, "Must be an image data: URL"),
+]);
 
 // ---------------------------------------------------------------------------
 // POST /competitions — ANY signed-in user creates a competition and becomes
@@ -355,9 +367,9 @@ const UpdateCompetitionBody = z.object({
   location: z.string().trim().max(200).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   autoApproveClaims: z.boolean().optional(),
-  logoUrl: HttpUrl.nullable().optional(),
+  logoUrl: ImageUrl.nullable().optional(),
   brandColor: BrandColor.nullable().optional(),
-  bannerUrl: HttpUrl.nullable().optional(),
+  bannerUrl: ImageUrl.nullable().optional(),
   websiteUrl: HttpUrl.nullable().optional(),
 });
 
@@ -380,6 +392,22 @@ router.patch(
       });
     }
 
+    // Friendly 413 for over-cap inline images (matches org-logo behavior)
+    // instead of an opaque Zod max-length error.
+    for (const field of ["logoUrl", "bannerUrl"] as const) {
+      const v = (req.body as Record<string, unknown>)?.[field];
+      if (
+        typeof v === "string" &&
+        v.startsWith("data:") &&
+        v.length > MAX_IMAGE_DATA_URL_LENGTH
+      ) {
+        return apiError(
+          res,
+          413,
+          "That image is too large. Please choose a smaller photo.",
+        );
+      }
+    }
     const parsed = UpdateCompetitionBody.safeParse(req.body);
     if (!parsed.success) {
       const first = parsed.error.errors[0];

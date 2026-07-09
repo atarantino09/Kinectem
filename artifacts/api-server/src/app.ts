@@ -74,6 +74,7 @@ for (const imagePath of [
   "/api/v1/organizations/:orgId",
   "/api/v1/users/:userId",
   "/api/v1/admin/users/:userId",
+  "/api/v1/competitions/:competitionId",
 ]) {
   app.patch(imagePath, imageUploadJson);
 }

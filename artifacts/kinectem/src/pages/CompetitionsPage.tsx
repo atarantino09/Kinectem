@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
+import { BrandImageField } from "@/components/BrandImageField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -323,41 +324,31 @@ function CreateCompetitionCard() {
         {step === 2 && createdId && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Give your public page a look. Paste a logo URL and we'll suggest
+              Give your public page a look. Upload your logo and we'll suggest
               brand colors straight from it — or pick one from the color wheel.
               You can skip this and edit branding any time from the console.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="w-logo" className="text-xs font-bold">
-                  Logo URL
-                </Label>
-                <Input
-                  id="w-logo"
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                  placeholder="https://…/logo.png"
-                  data-testid="input-wizard-logo-url"
-                />
-              </div>
+              <BrandImageField
+                label="Logo"
+                value={logoUrl}
+                onChange={setLogoUrl}
+                kind="logo"
+                idPrefix="wizard-logo"
+              />
               <BrandColorField
                 value={brandColor}
                 onChange={setBrandColor}
                 logoUrl={logoUrl}
                 idPrefix="wizard-brand"
               />
-              <div className="space-y-1.5">
-                <Label htmlFor="w-banner" className="text-xs font-bold">
-                  Banner URL
-                </Label>
-                <Input
-                  id="w-banner"
-                  value={bannerUrl}
-                  onChange={(e) => setBannerUrl(e.target.value)}
-                  placeholder="https://…/banner.jpg"
-                  data-testid="input-wizard-banner-url"
-                />
-              </div>
+              <BrandImageField
+                label="Banner"
+                value={bannerUrl}
+                onChange={setBannerUrl}
+                kind="banner"
+                idPrefix="wizard-banner"
+              />
               <div className="space-y-1.5">
                 <Label htmlFor="w-site" className="text-xs font-bold">
                   Official website

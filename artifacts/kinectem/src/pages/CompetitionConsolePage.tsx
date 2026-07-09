@@ -3,6 +3,7 @@ import { Link, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
+import { BrandImageField } from "@/components/BrandImageField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -139,30 +140,20 @@ function BrandingPanel({
             logoUrl={logoUrl}
             idPrefix="brand"
           />
-          <div className="space-y-1.5">
-            <Label htmlFor="b-logo" className="text-xs font-bold">
-              Logo URL
-            </Label>
-            <Input
-              id="b-logo"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://…/logo.png"
-              data-testid="input-logo-url"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="b-banner" className="text-xs font-bold">
-              Banner URL
-            </Label>
-            <Input
-              id="b-banner"
-              value={bannerUrl}
-              onChange={(e) => setBannerUrl(e.target.value)}
-              placeholder="https://…/banner.jpg"
-              data-testid="input-banner-url"
-            />
-          </div>
+          <BrandImageField
+            label="Logo"
+            value={logoUrl}
+            onChange={setLogoUrl}
+            kind="logo"
+            idPrefix="brand-logo"
+          />
+          <BrandImageField
+            label="Banner"
+            value={bannerUrl}
+            onChange={setBannerUrl}
+            kind="banner"
+            idPrefix="brand-banner"
+          />
           <div className="space-y-1.5">
             <Label htmlFor="b-site" className="text-xs font-bold">
               Official website
