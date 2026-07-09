@@ -16,6 +16,7 @@ import {
   Upload,
   ExternalLink,
   Palette,
+  Pencil,
   ShieldCheck,
   ArrowLeft,
   Newspaper,
@@ -50,6 +51,10 @@ interface CompetitionDetail {
     slug: string;
     name: string;
     type: "tournament" | "league";
+    startDate: string;
+    endDate: string;
+    location: string | null;
+    description: string | null;
     autoApproveClaims: boolean;
     logoUrl: string | null;
     brandColor: string | null;
@@ -76,6 +81,177 @@ const CSV_HEADER =
 const SAMPLE = `${CSV_HEADER}
 1,2026-07-11,09:00,U12,boys,Gold,A,Riverside Park,CA,Field 2,Thunder FC,2,Lightning SC,1
 2,2026-07-11,10:30,U12,boys,Gold,A,Riverside Park,CA,Field 2,Strikers,,Comets,`;
+
+function DetailsPanel({
+  detail,
+  competitionId,
+}: {
+  detail: CompetitionDetail["competition"];
+  competitionId: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [name, setName] = useState(detail.name);
+  const [type, setType] = useState<"tournament" | "league">(detail.type);
+  const [startDate, setStartDate] = useState(detail.startDate);
+  const [endDate, setEndDate] = useState(detail.endDate);
+  const [location, setLocation] = useState(detail.location ?? "");
+  const [description, setDescription] = useState(detail.description ?? "");
+
+  useEffect(() => {
+    setName(detail.name);
+    setType(detail.type);
+    setStartDate(detail.startDate);
+    setEndDate(detail.endDate);
+    setLocation(detail.location ?? "");
+    setDescription(detail.description ?? "");
+  }, [
+    detail.name,
+    detail.type,
+    detail.startDate,
+    detail.endDate,
+    detail.location,
+    detail.description,
+  ]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/v1/competitions/${competitionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          type,
+          startDate,
+          endDate,
+          location: location.trim() || null,
+          description: description.trim() || null,
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["competition"] });
+      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+      toast({ title: "Details saved" });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't save details",
+        description:
+          err instanceof Error ? err.message : "Check the values and try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const datesOk = !!startDate && !!endDate && endDate >= startDate;
+  const canSave = name.trim().length > 0 && datesOk && !save.isPending;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Pencil className="w-4 h-4" />
+          Competition details
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="d-name" className="text-xs font-bold">
+              Name
+            </Label>
+            <Input
+              id="d-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              data-testid="input-details-name"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">Type</Label>
+            <div className="flex gap-2">
+              {(["tournament", "league"] as const).map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  size="sm"
+                  variant={type === t ? "brand" : "outline"}
+                  className="capitalize font-bold rounded-full"
+                  onClick={() => setType(t)}
+                  data-testid={`btn-details-type-${t}`}
+                >
+                  {t}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="d-start" className="text-xs font-bold">
+              Start date
+            </Label>
+            <Input
+              id="d-start"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              data-testid="input-details-start"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="d-end" className="text-xs font-bold">
+              End date
+            </Label>
+            <Input
+              id="d-end"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              data-testid="input-details-end"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="d-location" className="text-xs font-bold">
+              Location <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="d-location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Riverside Sports Complex"
+              data-testid="input-details-location"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="d-description" className="text-xs font-bold">
+              Description <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <textarea
+              id="d-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Anything coaches should know about this competition."
+              className="w-full rounded-lg border border-border bg-background p-3 text-sm"
+              data-testid="input-details-description"
+            />
+          </div>
+        </div>
+        {!datesOk && startDate && endDate ? (
+          <p className="text-xs text-destructive">
+            End date must be on or after the start date.
+          </p>
+        ) : null}
+        <Button
+          variant="brand"
+          onClick={() => save.mutate()}
+          disabled={!canSave}
+          data-testid="btn-save-details"
+        >
+          {save.isPending ? "Saving…" : "Save details"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 function BrandingPanel({
   detail,
@@ -921,6 +1097,11 @@ export default function CompetitionConsolePage() {
         </div>
       </div>
 
+      {detail ? (
+        <DetailsPanel detail={detail} competitionId={row.id} />
+      ) : (
+        <Skeleton className="h-48 rounded-xl" />
+      )}
       <ClaimsPanel
         competitionId={row.id}
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
