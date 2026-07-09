@@ -113,12 +113,15 @@ async function loadVisiblePost(
 // view the album (same as the recap) but cannot contribute. Org posts
 // restrict uploads to anyone with an org membership row; posts with no
 // team/org (profile-only highlights) accept uploads from the author only.
+// NOTE: platform admins get NO upload bypass here (per product decision —
+// admins moderate via delete, they don't contribute photos to teams they
+// aren't part of). Uploads are strictly the team community: post author,
+// org managers, accepted roster members, parents of active members, and
+// team managers (incl. solo-team creators).
 async function canContributeToAlbum(
   userId: string,
-  isPlatformAdmin: boolean,
   post: VisiblePost,
 ): Promise<boolean> {
-  if (isPlatformAdmin) return true;
   if (post.authorId === userId) return true;
   if (post.teamId) {
     const [team] = await db
@@ -257,7 +260,7 @@ router.get(
       .orderBy(desc(albumPhotos.createdAt));
     // Viewer capabilities so the client can hide the upload button for
     // followers and the delete button for photos the viewer can't remove.
-    const canUpload = await canContributeToAlbum(me.id, isAdmin, post);
+    const canUpload = await canContributeToAlbum(me.id, post);
     const canModerate = isAdmin || (await canModerateAlbum(me.id, post));
     res.json({
       data: rows.map((r) => ({
@@ -315,7 +318,7 @@ router.post(
     }
     // Uploads are restricted to the team community (roster members,
     // parents of active members, org managers). Followers get 403.
-    if (!(await canContributeToAlbum(me.id, isAdmin, post))) {
+    if (!(await canContributeToAlbum(me.id, post))) {
       apiError(res, 403, "Only team members can add photos to this album", {
         code: "ALBUM_MEMBERS_ONLY",
       });
