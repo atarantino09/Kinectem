@@ -59,6 +59,7 @@ export default function AdminModeration() {
           <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
           <TabsTrigger value="takedowns" data-testid="tab-takedowns">Takedowns</TabsTrigger>
           <TabsTrigger value="org-claims" data-testid="tab-org-claims">Org claims</TabsTrigger>
+          <TabsTrigger value="competitions" data-testid="tab-competitions">Competitions</TabsTrigger>
         </TabsList>
         <TabsContent value="reports">
           <ReportsPanel />
@@ -71,6 +72,9 @@ export default function AdminModeration() {
         </TabsContent>
         <TabsContent value="org-claims">
           <OrgClaimsPanel />
+        </TabsContent>
+        <TabsContent value="competitions">
+          <CompetitionsModerationPanel />
         </TabsContent>
       </Tabs>
     </AdminLayout>
@@ -592,5 +596,281 @@ function OrgClaimsPanel() {
         ))
       )}
     </div>
+  );
+}
+
+// Competitions moderation (§11) — self-serve competition pages are a public
+// branding surface; admins can strip junk branding, rename, and unfeature
+// recaps here. Reuses operator endpoints (platform admin passes the
+// canOperateCompetition gate). customFetch — routes are outside openapi.yaml.
+type CompetitionModRow = {
+  id: string;
+  slug: string;
+  name: string;
+  type: "tournament" | "league";
+  startDate: string;
+  endDate: string;
+  location: string | null;
+  ownerUserId: string | null;
+  brandColor: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  websiteUrl: string | null;
+  matchCount: number;
+  participantCount: number;
+  featuredCount: number;
+  createdAt: string;
+};
+
+type CompetitionRecapRow = {
+  id: string;
+  title: string;
+  teamName: string;
+  featured: boolean;
+  createdAt: string;
+};
+
+function CompetitionsModerationPanel() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ data: CompetitionModRow[] }>({
+    queryKey: ["admin", "competitions", "moderation"],
+    queryFn: () =>
+      customFetch<{ data: CompetitionModRow[] }>(`/api/v1/admin/tournaments`, {
+        method: "GET",
+      }),
+  });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "competitions", "moderation"] });
+    qc.invalidateQueries({ queryKey: ["competition"] });
+  };
+
+  const patch = async (id: string, body: Record<string, unknown>, done: string) => {
+    try {
+      await customFetch(`/api/v1/competitions/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast({ title: done });
+      refresh();
+    } catch (err) {
+      toast({ title: "Failed", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+
+  const rows = data?.data ?? [];
+  return (
+    <div className="space-y-3 mt-3">
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No competitions yet.</p>
+      ) : (
+        rows.map((c) => (
+          <CompetitionModCard key={c.id} row={c} onPatch={patch} />
+        ))
+      )}
+    </div>
+  );
+}
+
+function CompetitionModCard({
+  row: c,
+  onPatch,
+}: {
+  row: CompetitionModRow;
+  onPatch: (id: string, body: Record<string, unknown>, done: string) => Promise<void>;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(c.name);
+  const [showRecaps, setShowRecaps] = useState(false);
+
+  const { data: recapData, isLoading: recapsLoading } = useQuery<{
+    data: CompetitionRecapRow[];
+  }>({
+    queryKey: ["admin", "competition-recaps", c.id],
+    queryFn: () =>
+      customFetch<{ data: CompetitionRecapRow[] }>(
+        `/api/v1/competitions/${c.id}/recaps`,
+        { method: "GET" },
+      ),
+    enabled: showRecaps,
+  });
+
+  const unfeature = async (articleId: string) => {
+    try {
+      await customFetch(`/api/v1/competitions/${c.id}/recaps/${articleId}/feature`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ featured: false }),
+      });
+      toast({ title: "Recap removed from public rail" });
+      qc.invalidateQueries({ queryKey: ["admin", "competition-recaps", c.id] });
+      qc.invalidateQueries({ queryKey: ["admin", "competitions", "moderation"] });
+    } catch (err) {
+      toast({ title: "Failed", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+
+  const featuredRecaps = (recapData?.data ?? []).filter((r) => r.featured);
+  const hasBranding = !!(c.brandColor || c.logoUrl || c.bannerUrl || c.websiteUrl);
+
+  return (
+    <Card data-testid={`card-mod-competition-${c.id}`}>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            {c.logoUrl ? (
+              <img
+                src={c.logoUrl}
+                alt=""
+                className="h-10 w-10 rounded-md border border-border object-contain bg-background shrink-0"
+              />
+            ) : (
+              <span
+                className="h-10 w-10 rounded-md border border-border shrink-0"
+                style={{ backgroundColor: c.brandColor ?? "#e2e8f0" }}
+              />
+            )}
+            <div className="min-w-0">
+              {renaming ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    maxLength={200}
+                    className="h-8 w-56"
+                    data-testid={`input-rename-${c.id}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    disabled={!newName.trim()}
+                    onClick={async () => {
+                      await onPatch(c.id, { name: newName.trim() }, "Competition renamed");
+                      setRenaming(false);
+                    }}
+                    data-testid={`btn-rename-save-${c.id}`}
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setRenaming(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <p className="font-bold truncate" data-testid={`text-mod-comp-name-${c.id}`}>
+                  {c.name}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground truncate">
+                /c/{c.slug} · {c.startDate} → {c.endDate}
+                {c.location ? ` · ${c.location}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="secondary" className="capitalize">{c.type}</Badge>
+            {c.brandColor && (
+              <span
+                className="h-5 w-5 rounded border border-border"
+                title={c.brandColor}
+                style={{ backgroundColor: c.brandColor }}
+              />
+            )}
+            {c.featuredCount > 0 && (
+              <Badge variant="outline">{c.featuredCount} featured</Badge>
+            )}
+          </div>
+        </div>
+        {c.websiteUrl && (
+          <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            Website: {c.websiteUrl}
+          </p>
+        )}
+        {c.bannerUrl && (
+          <img
+            src={c.bannerUrl}
+            alt=""
+            className="max-h-24 rounded-md border border-border object-contain"
+          />
+        )}
+        <div className="flex gap-2 pt-1 flex-wrap">
+          {!renaming && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setNewName(c.name);
+                setRenaming(true);
+              }}
+              data-testid={`btn-rename-${c.id}`}
+            >
+              Rename
+            </Button>
+          )}
+          {hasBranding && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                onPatch(
+                  c.id,
+                  { brandColor: null, logoUrl: null, bannerUrl: null, websiteUrl: null },
+                  "Branding cleared",
+                )
+              }
+              data-testid={`btn-clear-branding-${c.id}`}
+            >
+              Clear branding
+            </Button>
+          )}
+          {c.featuredCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowRecaps((v) => !v)}
+              data-testid={`btn-toggle-featured-${c.id}`}
+            >
+              {showRecaps ? "Hide featured recaps" : "Review featured recaps"}
+            </Button>
+          )}
+        </div>
+        {showRecaps && (
+          <div className="space-y-2 border-t border-border pt-3">
+            {recapsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading recaps…</p>
+            ) : featuredRecaps.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No featured recaps.</p>
+            ) : (
+              featuredRecaps.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-2 text-sm"
+                  data-testid={`row-featured-recap-${r.id}`}
+                >
+                  <span className="min-w-0 truncate">
+                    <span className="font-semibold">{r.title}</span>{" "}
+                    <span className="text-muted-foreground">— {r.teamName}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => unfeature(r.id)}
+                    data-testid={`btn-unfeature-${r.id}`}
+                  >
+                    Unfeature
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

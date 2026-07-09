@@ -1175,6 +1175,60 @@ CREATE TABLE IF NOT EXISTS user_pinned_orgs (
 CREATE INDEX IF NOT EXISTS user_pinned_orgs_user_id_idx ON user_pinned_orgs(user_id);
 `;
 
+// Competitions step 1 — generalize tournaments → competitions at the app
+// level. SQL table names intentionally stay `tournaments`/`tournament_*`
+// (physical renames risk drop+create data loss at publish time). All
+// statements are additive + idempotent; backfills only fill NULLs so a
+// re-run never clobbers newer values.
+const COMPETITIONS_STEP1 = `
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'tournament';
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS owner_user_id uuid REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS auto_approve_claims boolean NOT NULL DEFAULT true;
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS logo_url text;
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS brand_color text;
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS banner_url text;
+  ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS website_url text;
+  -- One-time legacy backfill only: rows created before this feature shipped
+  -- get owner = creator. Newer rows whose owner was deleted (FK SET NULL)
+  -- must stay ownerless (platform-admin-operated), not silently revert to
+  -- the creator on the next boot.
+  UPDATE tournaments SET owner_user_id = created_by_id
+    WHERE owner_user_id IS NULL AND created_at < '2026-07-09T00:00:00Z';
+
+  ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS home_score_official integer;
+  ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_score_official integer;
+  ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'scheduled';
+  UPDATE tournament_matches
+    SET home_score_official = home_score,
+        away_score_official = away_score
+    WHERE home_score_official IS NULL
+      AND away_score_official IS NULL
+      AND home_score IS NOT NULL
+      AND away_score IS NOT NULL;
+
+  ALTER TABLE articles ADD COLUMN IF NOT EXISTS competition_id uuid REFERENCES tournaments(id) ON DELETE SET NULL;
+  ALTER TABLE articles ADD COLUMN IF NOT EXISTS competition_game_id uuid REFERENCES tournament_matches(id) ON DELETE SET NULL;
+  ALTER TABLE articles ADD COLUMN IF NOT EXISTS featured boolean NOT NULL DEFAULT false;
+  CREATE INDEX IF NOT EXISTS articles_competition_id_idx ON articles(competition_id);
+
+  CREATE TABLE IF NOT EXISTS game_score_reports (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    competition_game_id uuid NOT NULL REFERENCES tournament_matches(id) ON DELETE CASCADE,
+    team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    reported_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+    home_score integer NOT NULL,
+    away_score integer NOT NULL,
+    created_at timestamp NOT NULL DEFAULT now(),
+    updated_at timestamp NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS game_score_reports_game_id_idx ON game_score_reports(competition_game_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS game_score_reports_unique_game_team ON game_score_reports(competition_game_id, team_id);
+
+  ALTER TABLE tournament_participants ADD COLUMN IF NOT EXISTS pending_team_id uuid REFERENCES teams(id) ON DELETE SET NULL;
+  ALTER TABLE tournament_participants ADD COLUMN IF NOT EXISTS pending_claimed_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE tournament_participants ADD COLUMN IF NOT EXISTS pending_claimed_at timestamp;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1367,6 +1421,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-07-03-task-717-user-pinned-orgs",
     sql: USER_PINNED_ORGS,
+  },
+  {
+    name: "2026-07-09-competitions-step1",
+    sql: COMPETITIONS_STEP1,
   },
 ];
 

@@ -18,6 +18,8 @@ import {
   tournamentMatches,
   teams,
   rosterEntries,
+  articles,
+  gameScoreReports,
 } from "@workspace/db";
 import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
@@ -26,6 +28,7 @@ import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { apiError } from "../lib/spec-helpers";
+import { resolveScore } from "../lib/score-resolve";
 import {
   canManageOrganization,
   canManageTeam,
@@ -155,11 +158,48 @@ function slotKey(division: string, bracket: string, nameKey: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// POST /tournaments — operator creates a tournament (platform admin only)
+// Competition operator scope (Competitions §3). A competition's OWNER (the
+// creator, `ownerUserId`) can manage only their own competitions — branding,
+// schedule uploads, claim settings, curation. Platform admins retain global
+// oversight. This is per-competition scope, NOT a platform role.
 // ---------------------------------------------------------------------------
 
-const CreateTournamentBody = z.object({
-  name: z.string().trim().min(1, "Tournament name is required").max(200),
+type SessionUserLike = { id: string; role: string };
+
+function canOperateCompetition(
+  me: SessionUserLike,
+  competition: { ownerUserId: string | null; createdById: string | null },
+): boolean {
+  if (me.role === "admin") return true;
+  // ownerUserId is backfilled from createdById; fall back for safety.
+  const owner = competition.ownerUserId ?? competition.createdById;
+  return owner != null && owner === me.id;
+}
+
+const COMPETITION_TYPES = ["tournament", "league"] as const;
+
+// Optional #rrggbb hex color for the public-page theme.
+const BrandColor = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "brandColor must be a #rrggbb hex color");
+
+// http(s) URL fields (logo/banner/website) — plain URLs, max 2000 chars.
+const HttpUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .regex(/^https?:\/\//, "Must be an http(s) URL");
+
+// ---------------------------------------------------------------------------
+// POST /competitions — ANY signed-in user creates a competition and becomes
+// its operator/owner (self-serve, Competitions §3). The legacy platform-admin
+// POST /tournaments below reuses the same handler with an admin gate.
+// ---------------------------------------------------------------------------
+
+const CreateCompetitionBody = z.object({
+  name: z.string().trim().min(1, "Competition name is required").max(200),
+  type: z.enum(COMPETITION_TYPES).optional(),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD"),
@@ -170,48 +210,228 @@ const CreateTournamentBody = z.object({
   description: z.string().trim().max(2000).optional().nullable(),
 });
 
+const createCompetitionHandler = asyncHandler(async (req, res) => {
+  const me = req.sessionUser;
+  if (!me) return apiError(res, 401, "Not authenticated");
+  const parsed = CreateCompetitionBody.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.errors[0];
+    return apiError(res, 400, first?.message ?? "Invalid competition details.", {
+      code: "VALIDATION_FAILED",
+      extras: { fields: parsed.error.flatten().fieldErrors },
+    });
+  }
+  const body = parsed.data;
+  if (body.endDate < body.startDate) {
+    return apiError(res, 400, "endDate must be on or after startDate");
+  }
+
+  const [row] = await db
+    .insert(tournaments)
+    .values({
+      slug: slugify(body.name),
+      name: body.name,
+      type: body.type ?? "tournament",
+      startDate: body.startDate,
+      endDate: body.endDate,
+      location: body.location ?? null,
+      description: body.description ?? null,
+      createdById: me.id,
+      ownerUserId: me.id,
+    })
+    .returning();
+
+  res.status(201).json({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    type: row.type,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    location: row.location,
+    description: row.description,
+    createdAt: row.createdAt.toISOString(),
+  });
+});
+
+router.post(
+  "/competitions",
+  requireAuth,
+  tournamentWriteLimiter,
+  createCompetitionHandler,
+);
+
+// Legacy admin path — kept for back-compat with the existing admin console.
 router.post(
   "/tournaments",
   requireAdmin,
   tournamentWriteLimiter,
+  createCompetitionHandler,
+);
+
+// ---------------------------------------------------------------------------
+// GET /my/competitions — competitions the signed-in user owns (operator
+// console listing). Same shape as the admin listing.
+// ---------------------------------------------------------------------------
+
+async function competitionListRow(t: typeof tournaments.$inferSelect) {
+  const [{ matchCount }] = await db
+    .select({ matchCount: sql<number>`count(*)::int` })
+    .from(tournamentMatches)
+    .where(eq(tournamentMatches.tournamentId, t.id));
+  const [{ participantCount }] = await db
+    .select({ participantCount: sql<number>`count(*)::int` })
+    .from(tournamentParticipants)
+    .where(eq(tournamentParticipants.tournamentId, t.id));
+  const [{ claimedCount }] = await db
+    .select({ claimedCount: sql<number>`count(*)::int` })
+    .from(tournamentParticipants)
+    .where(
+      and(
+        eq(tournamentParticipants.tournamentId, t.id),
+        sql`${tournamentParticipants.teamId} IS NOT NULL`,
+      ),
+    );
+  const [{ pendingClaimCount }] = await db
+    .select({ pendingClaimCount: sql<number>`count(*)::int` })
+    .from(tournamentParticipants)
+    .where(
+      and(
+        eq(tournamentParticipants.tournamentId, t.id),
+        sql`${tournamentParticipants.pendingTeamId} IS NOT NULL`,
+        isNull(tournamentParticipants.teamId),
+      ),
+    );
+  return {
+    id: t.id,
+    slug: t.slug,
+    name: t.name,
+    type: t.type,
+    startDate: t.startDate,
+    endDate: t.endDate,
+    location: t.location,
+    autoApproveClaims: t.autoApproveClaims,
+    logoUrl: t.logoUrl,
+    brandColor: t.brandColor,
+    matchCount,
+    participantCount,
+    claimedCount,
+    pendingClaimCount,
+    createdAt: t.createdAt.toISOString(),
+  };
+}
+
+router.get(
+  "/my/competitions",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const parsed = CreateTournamentBody.safeParse(req.body);
+    const rows = await db
+      .select()
+      .from(tournaments)
+      .where(
+        or(
+          eq(tournaments.ownerUserId, me.id),
+          and(isNull(tournaments.ownerUserId), eq(tournaments.createdById, me.id)),
+        ),
+      )
+      .orderBy(desc(tournaments.createdAt));
+    const data = await Promise.all(rows.map(competitionListRow));
+    res.json({ data });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /competitions/:id — owner/admin edits details, type, claim setting,
+// and branding (Competitions §2, §8, §9b).
+// ---------------------------------------------------------------------------
+
+const UpdateCompetitionBody = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  type: z.enum(COMPETITION_TYPES).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  location: z.string().trim().max(200).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  autoApproveClaims: z.boolean().optional(),
+  logoUrl: HttpUrl.nullable().optional(),
+  brandColor: BrandColor.nullable().optional(),
+  bannerUrl: HttpUrl.nullable().optional(),
+  websiteUrl: HttpUrl.nullable().optional(),
+});
+
+router.patch(
+  "/competitions/:id",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can edit it.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+
+    const parsed = UpdateCompetitionBody.safeParse(req.body);
     if (!parsed.success) {
       const first = parsed.error.errors[0];
-      return apiError(res, 400, first?.message ?? "Invalid tournament details.", {
+      return apiError(res, 400, first?.message ?? "Invalid competition details.", {
         code: "VALIDATION_FAILED",
         extras: { fields: parsed.error.flatten().fieldErrors },
       });
     }
     const body = parsed.data;
-    if (body.endDate < body.startDate) {
+    const startDate = body.startDate ?? competition.startDate;
+    const endDate = body.endDate ?? competition.endDate;
+    if (endDate < startDate) {
       return apiError(res, 400, "endDate must be on or after startDate");
     }
 
     const [row] = await db
-      .insert(tournaments)
-      .values({
-        slug: slugify(body.name),
-        name: body.name,
-        startDate: body.startDate,
-        endDate: body.endDate,
-        location: body.location ?? null,
-        description: body.description ?? null,
-        createdById: me.id,
+      .update(tournaments)
+      .set({
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.type !== undefined ? { type: body.type } : {}),
+        ...(body.startDate !== undefined ? { startDate: body.startDate } : {}),
+        ...(body.endDate !== undefined ? { endDate: body.endDate } : {}),
+        ...(body.location !== undefined ? { location: body.location } : {}),
+        ...(body.description !== undefined
+          ? { description: body.description }
+          : {}),
+        ...(body.autoApproveClaims !== undefined
+          ? { autoApproveClaims: body.autoApproveClaims }
+          : {}),
+        ...(body.logoUrl !== undefined ? { logoUrl: body.logoUrl } : {}),
+        ...(body.brandColor !== undefined ? { brandColor: body.brandColor } : {}),
+        ...(body.bannerUrl !== undefined ? { bannerUrl: body.bannerUrl } : {}),
+        ...(body.websiteUrl !== undefined ? { websiteUrl: body.websiteUrl } : {}),
+        updatedAt: new Date(),
       })
+      .where(eq(tournaments.id, competition.id))
       .returning();
 
-    res.status(201).json({
+    res.json({
       id: row.id,
       slug: row.slug,
       name: row.name,
+      type: row.type,
       startDate: row.startDate,
       endDate: row.endDate,
       location: row.location,
       description: row.description,
-      createdAt: row.createdAt.toISOString(),
+      autoApproveClaims: row.autoApproveClaims,
+      logoUrl: row.logoUrl,
+      brandColor: row.brandColor,
+      bannerUrl: row.bannerUrl,
+      websiteUrl: row.websiteUrl,
     });
   }),
 );
@@ -238,15 +458,33 @@ router.get(
           .select({ participantCount: sql<number>`count(*)::int` })
           .from(tournamentParticipants)
           .where(eq(tournamentParticipants.tournamentId, t.id));
+        const [{ featuredCount }] = await db
+          .select({ featuredCount: sql<number>`count(*)::int` })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.competitionId, t.id),
+              eq(articles.featured, true),
+              eq(articles.status, "published"),
+              isNull(articles.hiddenAt),
+            ),
+          );
         return {
           id: t.id,
           slug: t.slug,
           name: t.name,
+          type: t.type,
           startDate: t.startDate,
           endDate: t.endDate,
           location: t.location,
+          ownerUserId: t.ownerUserId ?? t.createdById ?? null,
+          brandColor: t.brandColor,
+          logoUrl: t.logoUrl,
+          bannerUrl: t.bannerUrl,
+          websiteUrl: t.websiteUrl,
           matchCount,
           participantCount,
+          featuredCount,
           createdAt: t.createdAt.toISOString(),
         };
       }),
@@ -262,15 +500,13 @@ router.get(
 // division / bracket / field / time for display.
 // ---------------------------------------------------------------------------
 
-router.get(
-  "/tournaments/:slug",
-  asyncHandler(async (req, res) => {
+const publicCompetitionRead = asyncHandler(async (req, res) => {
     const [tournament] = await db
       .select()
       .from(tournaments)
       .where(eq(tournaments.slug, req.params.slug))
       .limit(1);
-    if (!tournament) return apiError(res, 404, "Tournament not found");
+    if (!tournament) return apiError(res, 404, "Competition not found");
 
     const partRows = await db
       .select()
@@ -284,22 +520,90 @@ router.get(
       .from(tournamentMatches)
       .where(eq(tournamentMatches.tournamentId, tournament.id));
 
+    // Score ladder (§6) — load self-reports for every game in one query and
+    // resolve each game to its highest tier. Only official/confirmed scores
+    // are public on this page; reported/disputed stay hidden here.
+    const reportRows = matchRows.length
+      ? await db
+          .select()
+          .from(gameScoreReports)
+          .where(
+            inArray(
+              gameScoreReports.competitionGameId,
+              matchRows.map((m) => m.id),
+            ),
+          )
+      : [];
+    const reportsByGame = new Map<string, typeof reportRows>();
+    for (const r of reportRows) {
+      const arr = reportsByGame.get(r.competitionGameId) ?? [];
+      arr.push(r);
+      reportsByGame.set(r.competitionGameId, arr);
+    }
+
     // Active window: today's date (UTC calendar) within [startDate, endDate]
     // inclusive — same comparison the recap gate uses.
     const today = new Date().toISOString().slice(0, 10);
     const isActive = today >= tournament.startDate && today <= tournament.endDate;
 
+    const claimedCount = partRows.filter((p) => p.teamId != null).length;
+
+    // Featured game recaps rail (§7) — published recaps the operator featured.
+    // The card carries the AUTHORING TEAM's identity (name), sitting inside
+    // the competition-branded page.
+    const featuredRows = await db
+      .select({ article: articles, teamName: teams.name })
+      .from(articles)
+      .innerJoin(teams, eq(teams.id, articles.teamId))
+      .where(
+        and(
+          eq(articles.competitionId, tournament.id),
+          eq(articles.featured, true),
+          eq(articles.status, "published"),
+          isNull(articles.hiddenAt),
+        ),
+      )
+      .orderBy(desc(articles.createdAt))
+      .limit(12);
+
+    const competitionMeta = {
+      id: tournament.id,
+      slug: tournament.slug,
+      name: tournament.name,
+      type: tournament.type,
+      startDate: tournament.startDate,
+      endDate: tournament.endDate,
+      location: tournament.location,
+      description: tournament.description,
+      isActive,
+      isEnded: today > tournament.endDate,
+      autoApproveClaims: tournament.autoApproveClaims,
+      logoUrl: tournament.logoUrl,
+      brandColor: tournament.brandColor,
+      bannerUrl: tournament.bannerUrl,
+      websiteUrl: tournament.websiteUrl,
+      claimedCount,
+      participantCount: partRows.length,
+    };
+
     res.json({
-      tournament: {
-        id: tournament.id,
-        slug: tournament.slug,
-        name: tournament.name,
-        startDate: tournament.startDate,
-        endDate: tournament.endDate,
-        location: tournament.location,
-        description: tournament.description,
-        isActive,
-      },
+      // Emitted under both keys so the legacy /t page and the new /c page
+      // read the same payload during the rename transition.
+      tournament: competitionMeta,
+      competition: competitionMeta,
+      featuredRecaps: featuredRows.map(({ article: a, teamName }) => ({
+        id: a.id,
+        title: a.title,
+        summary: a.summary,
+        coverImageUrl: a.coverImageUrl,
+        gameDate: a.gameDate,
+        opponentName: a.opponentName,
+        teamScore: a.teamScore,
+        opponentScore: a.opponentScore,
+        teamId: a.teamId,
+        teamName,
+        publishedAt: a.publishedAt,
+      })),
       participants: partRows.map((p) => ({
         id: p.id,
         name: p.name,
@@ -314,6 +618,10 @@ router.get(
         .map((m) => {
           const home = m.homeParticipantId ? partById.get(m.homeParticipantId) : null;
           const away = m.awayParticipantId ? partById.get(m.awayParticipantId) : null;
+          const resolved = resolveScore(m, reportsByGame.get(m.id) ?? [], [
+            home?.teamId,
+            away?.teamId,
+          ]);
           return {
             id: m.id,
             matchNumber: m.matchNumber,
@@ -330,8 +638,13 @@ router.get(
             awayName: away?.name ?? null,
             homeParticipantId: m.homeParticipantId,
             awayParticipantId: m.awayParticipantId,
-            homeScore: m.homeScore,
-            awayScore: m.awayScore,
+            // Public score = official or confirmed only (§6). Reported /
+            // disputed scores never leak onto the shareable page.
+            homeScore: resolved.public ? resolved.homeScore : null,
+            awayScore: resolved.public ? resolved.awayScore : null,
+            scoreState: resolved.state,
+            homeTeamId: home?.teamId ?? null,
+            awayTeamId: away?.teamId ?? null,
           };
         })
         .sort((a, b) => {
@@ -347,8 +660,10 @@ router.get(
           });
         }),
     });
-  }),
-);
+});
+
+router.get("/tournaments/:slug", publicCompetitionRead);
+router.get("/competitions/:slug", publicCompetitionRead);
 
 // ---------------------------------------------------------------------------
 // POST /tournaments/:id/import — operator uploads the match-slot CSV.
@@ -364,11 +679,7 @@ const ImportBody = z.object({
   csv: z.string().min(1).max(2_000_000),
 });
 
-router.post(
-  "/tournaments/:id/import",
-  requireAdmin,
-  tournamentWriteLimiter,
-  asyncHandler(async (req, res) => {
+const importScheduleHandler = asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const [tournament] = await db
@@ -376,7 +687,17 @@ router.post(
       .from(tournaments)
       .where(eq(tournaments.id, req.params.id))
       .limit(1);
-    if (!tournament) return apiError(res, 404, "Tournament not found");
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    // Owner-or-admin (Competitions §3): the operator uploads their own
+    // schedule; platform admins retain global access.
+    if (!canOperateCompetition(me, tournament)) {
+      return apiError(
+        res,
+        403,
+        "Only the competition operator can upload its schedule.",
+        { code: "COMPETITION_FORBIDDEN" },
+      );
+    }
 
     const parsed = ImportBody.safeParse(req.body);
     if (!parsed.success) {
@@ -531,6 +852,10 @@ router.post(
             awayParticipantId,
             homeScore: m.homeScore,
             awayScore: m.awayScore,
+            // Competitions §6/§8 — CSV scores are OPERATOR data, so they land
+            // straight in the official tier.
+            homeScoreOfficial: m.homeScore,
+            awayScoreOfficial: m.awayScore,
           })
           .onConflictDoUpdate({
             target: [tournamentMatches.tournamentId, tournamentMatches.matchNumber],
@@ -548,6 +873,11 @@ router.post(
               awayParticipantId,
               homeScore: m.homeScore,
               awayScore: m.awayScore,
+              // Append-friendly re-import: a CSV row WITH scores corrects the
+              // official score; a blank-score row keeps whatever official
+              // score already exists (e.g. one the operator entered in-app).
+              homeScoreOfficial: sql`COALESCE(${m.homeScore ?? null}::int, ${tournamentMatches.homeScoreOfficial})`,
+              awayScoreOfficial: sql`COALESCE(${m.awayScore ?? null}::int, ${tournamentMatches.awayScoreOfficial})`,
               updatedAt: new Date(),
             },
           });
@@ -566,7 +896,19 @@ router.post(
       matchesUpserted: summary.matchesUpserted,
       participantCount: summary.participantCount,
     });
-  }),
+});
+
+router.post(
+  "/tournaments/:id/import",
+  requireAuth,
+  tournamentWriteLimiter,
+  importScheduleHandler,
+);
+router.post(
+  "/competitions/:id/import",
+  requireAuth,
+  tournamentWriteLimiter,
+  importScheduleHandler,
 );
 
 // ---------------------------------------------------------------------------
@@ -592,11 +934,7 @@ const ClaimBody = z.object({
 
 class AlreadyClaimedError extends Error {}
 
-router.post(
-  "/tournaments/:slug/claim",
-  requireAuth,
-  tournamentWriteLimiter,
-  asyncHandler(async (req, res) => {
+const claimSlotHandler = asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const [tournament] = await db
@@ -604,7 +942,7 @@ router.post(
       .from(tournaments)
       .where(eq(tournaments.slug, req.params.slug))
       .limit(1);
-    if (!tournament) return apiError(res, 404, "Tournament not found");
+    if (!tournament) return apiError(res, 404, "Competition not found");
 
     const parsed = ClaimBody.safeParse(req.body);
     if (!parsed.success) {
@@ -635,6 +973,18 @@ router.post(
         code: "ALREADY_CLAIMED",
       });
     }
+    if (participant.pendingTeamId) {
+      return apiError(
+        res,
+        409,
+        "A claim for that team slot is already awaiting operator approval.",
+        { code: "CLAIM_PENDING" },
+      );
+    }
+
+    // auto_approve_claims (Competitions §5): when the operator turns it off,
+    // the claim parks in the pending_* columns until approved in the console.
+    const autoApprove = tournament.autoApproveClaims;
 
     try {
       const result = await db.transaction(async (tx) => {
@@ -659,16 +1009,25 @@ router.post(
         });
         const claimed = await tx
           .update(tournamentParticipants)
-          .set({
-            teamId: team.id,
-            claimedByUserId: me.id,
-            claimedAt: new Date(),
-          })
+          .set(
+            autoApprove
+              ? {
+                  teamId: team.id,
+                  claimedByUserId: me.id,
+                  claimedAt: new Date(),
+                }
+              : {
+                  pendingTeamId: team.id,
+                  pendingClaimedByUserId: me.id,
+                  pendingClaimedAt: new Date(),
+                },
+          )
           .where(
             and(
               eq(tournamentParticipants.id, body.participantId),
               eq(tournamentParticipants.tournamentId, tournament.id),
               isNull(tournamentParticipants.teamId),
+              isNull(tournamentParticipants.pendingTeamId),
             ),
           )
           .returning();
@@ -680,6 +1039,7 @@ router.post(
         ok: true,
         teamId: result.team.id,
         tournamentSlug: tournament.slug,
+        pendingApproval: !autoApprove,
       });
     } catch (err) {
       if (err instanceof AlreadyClaimedError) {
@@ -689,6 +1049,524 @@ router.post(
       }
       throw err;
     }
+});
+
+router.post(
+  "/tournaments/:slug/claim",
+  requireAuth,
+  tournamentWriteLimiter,
+  claimSlotHandler,
+);
+router.post(
+  "/competitions/:slug/claim",
+  requireAuth,
+  tournamentWriteLimiter,
+  claimSlotHandler,
+);
+
+// ---------------------------------------------------------------------------
+// Pending-claim review (Competitions §5) — owner/admin lists, approves, or
+// rejects claims while auto_approve_claims is off. Approve promotes the
+// pending_* columns into the real claim (race-safe conditional UPDATE);
+// reject clears them. The claimant's solo team survives a rejection.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/competitions/:id/claims/pending",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can review claims.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+
+    const rows = await db
+      .select({
+        participant: tournamentParticipants,
+        teamName: teams.name,
+      })
+      .from(tournamentParticipants)
+      .leftJoin(teams, eq(teams.id, tournamentParticipants.pendingTeamId))
+      .where(
+        and(
+          eq(tournamentParticipants.tournamentId, competition.id),
+          sql`${tournamentParticipants.pendingTeamId} IS NOT NULL`,
+          isNull(tournamentParticipants.teamId),
+        ),
+      );
+
+    res.json({
+      data: rows.map(({ participant: p, teamName }) => ({
+        participantId: p.id,
+        slotName: p.name,
+        division: p.division,
+        bracket: p.bracket,
+        age: p.age,
+        gender: p.gender,
+        pendingTeamId: p.pendingTeamId,
+        pendingTeamName: teamName,
+        pendingClaimedAt: p.pendingClaimedAt?.toISOString() ?? null,
+      })),
+    });
+  }),
+);
+
+const ClaimDecisionBody = z.object({
+  approve: z.boolean(),
+});
+
+router.post(
+  "/competitions/:id/claims/:participantId/decide",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can review claims.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+
+    const parsed = ClaimDecisionBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Invalid request.", { code: "VALIDATION_FAILED" });
+    }
+
+    const [participant] = await db
+      .select()
+      .from(tournamentParticipants)
+      .where(
+        and(
+          eq(tournamentParticipants.id, String(req.params.participantId)),
+          eq(tournamentParticipants.tournamentId, competition.id),
+        ),
+      )
+      .limit(1);
+    if (!participant) return apiError(res, 404, "Team slot not found");
+    if (!participant.pendingTeamId) {
+      return apiError(res, 409, "No pending claim on that team slot.", {
+        code: "NO_PENDING_CLAIM",
+      });
+    }
+
+    if (parsed.data.approve) {
+      // Race-safe promote: only while the slot is still unclaimed and the
+      // pending claim is unchanged.
+      const updated = await db
+        .update(tournamentParticipants)
+        .set({
+          teamId: participant.pendingTeamId,
+          claimedByUserId: participant.pendingClaimedByUserId,
+          claimedAt: new Date(),
+          pendingTeamId: null,
+          pendingClaimedByUserId: null,
+          pendingClaimedAt: null,
+        })
+        .where(
+          and(
+            eq(tournamentParticipants.id, participant.id),
+            eq(tournamentParticipants.pendingTeamId, participant.pendingTeamId),
+            isNull(tournamentParticipants.teamId),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        return apiError(res, 409, "That claim was just resolved elsewhere.", {
+          code: "ALREADY_CLAIMED",
+        });
+      }
+      return res.json({ ok: true, approved: true, participantId: participant.id });
+    }
+
+    await db
+      .update(tournamentParticipants)
+      .set({
+        pendingTeamId: null,
+        pendingClaimedByUserId: null,
+        pendingClaimedAt: null,
+      })
+      .where(
+        and(
+          eq(tournamentParticipants.id, participant.id),
+          eq(tournamentParticipants.pendingTeamId, participant.pendingTeamId),
+        ),
+      );
+    res.json({ ok: true, approved: false, participantId: participant.id });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Recap curation (§7) — operator console queue + feature/hide toggles.
+// Queue = published game recaps whose competition_id matches, newest first.
+// "Feature" sets articles.featured = true (renders on the public rail);
+// "Hide" sets it back to false. Neither affects the recap on its own team
+// page — score/feature state never blocks recap publishing.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/competitions/:id/recaps",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can curate recaps.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+
+    const rows = await db
+      .select({ article: articles, teamName: teams.name })
+      .from(articles)
+      .innerJoin(teams, eq(teams.id, articles.teamId))
+      .where(
+        and(
+          eq(articles.competitionId, competition.id),
+          eq(articles.status, "published"),
+          isNull(articles.hiddenAt),
+        ),
+      )
+      .orderBy(desc(articles.createdAt))
+      .limit(100);
+
+    res.json({
+      data: rows.map(({ article: a, teamName }) => ({
+        id: a.id,
+        title: a.title,
+        summary: a.summary,
+        coverImageUrl: a.coverImageUrl,
+        gameDate: a.gameDate,
+        opponentName: a.opponentName,
+        teamScore: a.teamScore,
+        opponentScore: a.opponentScore,
+        teamId: a.teamId,
+        teamName,
+        featured: a.featured,
+        competitionGameId: a.competitionGameId,
+        createdAt: a.createdAt.toISOString(),
+      })),
+    });
+  }),
+);
+
+const FeatureBody = z.object({
+  featured: z.boolean(),
+});
+
+router.post(
+  "/competitions/:id/recaps/:articleId/feature",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can curate recaps.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+    const parsed = FeatureBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Invalid request.", { code: "VALIDATION_FAILED" });
+    }
+
+    const updated = await db
+      .update(articles)
+      .set({ featured: parsed.data.featured, updatedAt: new Date() })
+      .where(
+        and(
+          eq(articles.id, String(req.params.articleId)),
+          eq(articles.competitionId, competition.id),
+        ),
+      )
+      .returning({ id: articles.id, featured: articles.featured });
+    if (updated.length === 0) {
+      return apiError(res, 404, "Game recap not found in this competition.");
+    }
+    res.json({ ok: true, id: updated[0].id, featured: updated[0].featured });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Score ladder (§6) — team self-report, dispute queue, operator official score.
+// ---------------------------------------------------------------------------
+
+const ScoreReportBody = z.object({
+  homeScore: z.number().int().min(0).max(999),
+  awayScore: z.number().int().min(0).max(999),
+});
+
+// POST /competitions/games/:gameId/report-score — a manager of a CLAIMED team
+// on either side of the game reports the final score (home/away oriented).
+// One report per (game, team); re-reporting updates in place.
+router.post(
+  "/competitions/games/:gameId/report-score",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = ScoreReportBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Invalid request.", { code: "VALIDATION_FAILED" });
+    }
+
+    // Pre-transaction permission work (reads only) — the official-score
+    // guard is re-checked inside the transaction under a row lock so a
+    // concurrent operator write can't race a report in after the fact.
+    const [game] = await db
+      .select()
+      .from(tournamentMatches)
+      .where(eq(tournamentMatches.id, String(req.params.gameId)))
+      .limit(1);
+    if (!game) return apiError(res, 404, "Game not found");
+
+    // Which claimed side (if any) does the caller manage?
+    const sideIds = [game.homeParticipantId, game.awayParticipantId].filter(
+      (x): x is string => x != null,
+    );
+    if (sideIds.length === 0) return apiError(res, 404, "Game not found");
+    const sides = await db
+      .select()
+      .from(tournamentParticipants)
+      .where(inArray(tournamentParticipants.id, sideIds));
+    const sideTeamIds = sides.map((s) => s.teamId);
+    let myTeamId: string | null = null;
+    for (const side of sides) {
+      if (!side.teamId) continue;
+      const [team] = await db.select().from(teams).where(eq(teams.id, side.teamId)).limit(1);
+      if (team && (await canManageTeam(me.id, team))) {
+        myTeamId = team.id;
+        break;
+      }
+    }
+    if (!myTeamId) {
+      return apiError(
+        res,
+        403,
+        "Only a coach or manager of a claimed team in this game can report its score.",
+        { code: "COMPETITION_FORBIDDEN" },
+      );
+    }
+    const reportingTeamId = myTeamId;
+
+    const outcome = await db.transaction(async (tx) => {
+      // Lock the match row, then re-check the official-score guard.
+      const [locked] = await tx
+        .select()
+        .from(tournamentMatches)
+        .where(eq(tournamentMatches.id, game.id))
+        .for("update")
+        .limit(1);
+      if (!locked) return { kind: "gone" as const };
+      if (locked.homeScoreOfficial != null && locked.awayScoreOfficial != null) {
+        return { kind: "official" as const };
+      }
+
+      await tx
+        .insert(gameScoreReports)
+        .values({
+          competitionGameId: game.id,
+          teamId: reportingTeamId,
+          reportedByUserId: me.id,
+          homeScore: parsed.data.homeScore,
+          awayScore: parsed.data.awayScore,
+        })
+        .onConflictDoUpdate({
+          target: [gameScoreReports.competitionGameId, gameScoreReports.teamId],
+          set: {
+            homeScore: parsed.data.homeScore,
+            awayScore: parsed.data.awayScore,
+            reportedByUserId: me.id,
+            updatedAt: new Date(),
+          },
+        });
+
+      const reports = await tx
+        .select()
+        .from(gameScoreReports)
+        .where(eq(gameScoreReports.competitionGameId, game.id));
+      return {
+        kind: "ok" as const,
+        resolved: resolveScore(locked, reports, sideTeamIds),
+      };
+    });
+
+    if (outcome.kind === "gone") return apiError(res, 404, "Game not found");
+    if (outcome.kind === "official") {
+      return apiError(res, 409, "This game already has an official score.", {
+        code: "SCORE_OFFICIAL",
+      });
+    }
+    res.json({
+      ok: true,
+      gameId: game.id,
+      teamId: reportingTeamId,
+      scoreState: outcome.resolved.state,
+    });
+  }),
+);
+
+// GET /competitions/:id/disputes — operator queue of games where the two
+// teams' reports disagree and no official score exists yet.
+router.get(
+  "/competitions/:id/disputes",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can review disputes.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+
+    const games = await db
+      .select()
+      .from(tournamentMatches)
+      .where(eq(tournamentMatches.tournamentId, competition.id));
+    const gameIds = games.map((g) => g.id);
+    const reports = gameIds.length
+      ? await db
+          .select({ report: gameScoreReports, teamName: teams.name })
+          .from(gameScoreReports)
+          .innerJoin(teams, eq(teams.id, gameScoreReports.teamId))
+          .where(inArray(gameScoreReports.competitionGameId, gameIds))
+      : [];
+    const byGame = new Map<string, typeof reports>();
+    for (const r of reports) {
+      const arr = byGame.get(r.report.competitionGameId) ?? [];
+      arr.push(r);
+      byGame.set(r.report.competitionGameId, arr);
+    }
+
+    const partIds = games
+      .flatMap((g) => [g.homeParticipantId, g.awayParticipantId])
+      .filter((x): x is string => x != null);
+    const parts = partIds.length
+      ? await db
+          .select()
+          .from(tournamentParticipants)
+          .where(inArray(tournamentParticipants.id, partIds))
+      : [];
+    const partById = new Map(parts.map((p) => [p.id, p]));
+
+    const disputes = games
+      .filter((g) => {
+        const rs = byGame.get(g.id) ?? [];
+        const sideTeamIds = [
+          g.homeParticipantId ? partById.get(g.homeParticipantId)?.teamId : null,
+          g.awayParticipantId ? partById.get(g.awayParticipantId)?.teamId : null,
+        ];
+        return (
+          resolveScore(g, rs.map((r) => r.report), sideTeamIds).state ===
+          "disputed"
+        );
+      })
+      .map((g) => ({
+        gameId: g.id,
+        matchNumber: g.matchNumber,
+        matchDate: g.matchDate,
+        division: g.division,
+        bracket: g.bracket,
+        homeName: g.homeParticipantId
+          ? (partById.get(g.homeParticipantId)?.name ?? null)
+          : null,
+        awayName: g.awayParticipantId
+          ? (partById.get(g.awayParticipantId)?.name ?? null)
+          : null,
+        reports: (byGame.get(g.id) ?? []).map((r) => ({
+          teamId: r.report.teamId,
+          teamName: r.teamName,
+          homeScore: r.report.homeScore,
+          awayScore: r.report.awayScore,
+          updatedAt: r.report.updatedAt.toISOString(),
+        })),
+      }));
+
+    res.json({ data: disputes });
+  }),
+);
+
+// POST /competitions/:id/games/:gameId/official-score — operator enters the
+// official score in one action; promotes the game to the Official tier
+// (resolves any dispute).
+router.post(
+  "/competitions/:id/games/:gameId/official-score",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, req.params.id))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!canOperateCompetition(me, competition)) {
+      return apiError(res, 403, "Only the competition operator can set official scores.", {
+        code: "COMPETITION_FORBIDDEN",
+      });
+    }
+    const parsed = ScoreReportBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Invalid request.", { code: "VALIDATION_FAILED" });
+    }
+
+    const updated = await db
+      .update(tournamentMatches)
+      .set({
+        homeScoreOfficial: parsed.data.homeScore,
+        awayScoreOfficial: parsed.data.awayScore,
+        status: "completed",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tournamentMatches.id, String(req.params.gameId)),
+          eq(tournamentMatches.tournamentId, competition.id),
+        ),
+      )
+      .returning({ id: tournamentMatches.id });
+    if (updated.length === 0) {
+      return apiError(res, 404, "Game not found in this competition.");
+    }
+    res.json({ ok: true, gameId: updated[0].id, scoreState: "official" });
   }),
 );
 

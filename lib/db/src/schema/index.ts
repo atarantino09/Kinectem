@@ -639,6 +639,13 @@ export const articles = pgTable("articles", {
   // game recaps) from a normal single-game recap. NULL = single game;
   // "combined" = multi-game recap. Drives a distinct post card pill.
   recapKind: text("recap_kind"),
+  // Competitions (§7) — set when this game recap belongs to a claimed
+  // competition game (derivable game → slot → competition, denormalized for
+  // the curation queue + featured rail queries). `featured` is toggled by
+  // the competition operator; the public page rail renders featured recaps.
+  competitionId: uuid("competition_id").references((): AnyPgColumn => tournaments.id, { onDelete: "set null" }),
+  competitionGameId: uuid("competition_game_id").references((): AnyPgColumn => tournamentMatches.id, { onDelete: "set null" }),
+  featured: boolean("featured").notNull().default(false),
   status: articleStatusEnum("status").notNull().default("published"),
   publishedAt: timestamp("published_at"),
   hiddenAt: timestamp("hidden_at"),
@@ -1449,6 +1456,25 @@ export const tournaments = pgTable("tournaments", {
   description: text("description"),
   // Operator who created/uploaded the tournament (platform admin).
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  // Competitions generalization — SQL table names intentionally stay
+  // `tournaments`/`tournament_*` (a physical rename risks drop+create data
+  // loss at publish time); the app-level entity is "competition".
+  // `type` is the only mechanical distinction: tournaments are one-weekend
+  // events, leagues span a season and get incremental-append imports.
+  type: text("type").notNull().default("tournament"),
+  // Self-serve owner/operator. Backfilled from createdById for legacy rows;
+  // scopes the operator console (branding, imports, curation, claims).
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  // When false, slot claims land as pending and the operator approves each
+  // one in the console before the team links to its games.
+  autoApproveClaims: boolean("auto_approve_claims").notNull().default(true),
+  // Branding — drives the public /c/<slug> page theme. brand_color is a hex
+  // string; the competition page hero uses it, team surfaces only show a
+  // small competition badge.
+  logoUrl: text("logo_url"),
+  brandColor: text("brand_color"),
+  bannerUrl: text("banner_url"),
+  websiteUrl: text("website_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1475,6 +1501,12 @@ export const tournamentParticipants = pgTable("tournament_participants", {
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "set null" }),
   claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
   claimedAt: timestamp("claimed_at"),
+  // Pending claim (competition auto_approve_claims = false): the claim parks
+  // here until the operator approves (moves to teamId/claimedBy*) or rejects
+  // (clears). The slot still reads as unclaimed publicly while pending.
+  pendingTeamId: uuid("pending_team_id").references(() => teams.id, { onDelete: "set null" }),
+  pendingClaimedByUserId: uuid("pending_claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  pendingClaimedAt: timestamp("pending_claimed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   byTournament: index("tournament_participants_tournament_id_idx").on(t.tournamentId),
@@ -1507,6 +1539,15 @@ export const tournamentMatches = pgTable("tournament_matches", {
   awayParticipantId: uuid("away_participant_id").references((): AnyPgColumn => tournamentParticipants.id, { onDelete: "set null" }),
   homeScore: integer("home_score"),
   awayScore: integer("away_score"),
+  // Official score tier (§6 score ladder) — set by CSV import rows that
+  // carry scores or entered by the operator. Highest-priority tier; when
+  // both are non-null the score shows everywhere. Backfilled from the
+  // legacy homeScore/awayScore import columns.
+  homeScoreOfficial: integer("home_score_official"),
+  awayScoreOfficial: integer("away_score_official"),
+  // scheduled | canceled | postponed | completed (text to avoid a new enum
+  // migration hazard; validated at the route layer).
+  status: text("status").notNull().default("scheduled"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({
@@ -1514,6 +1555,28 @@ export const tournamentMatches = pgTable("tournament_matches", {
   uniqueNumber: uniqueIndex("tournament_matches_unique_number").on(
     t.tournamentId,
     t.matchNumber,
+  ),
+}));
+
+// Competitions §6 — one row per team that self-reports a score for a
+// competition game. Feeds the score-resolution ladder: two agreeing reports
+// = Confirmed (public); one report = team-local ("as reported"); two
+// disagreeing reports = Disputed (flagged to the operator, hidden publicly).
+// One report per (game, team); re-reporting updates in place.
+export const gameScoreReports = pgTable("game_score_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  competitionGameId: uuid("competition_game_id").references(() => tournamentMatches.id, { onDelete: "cascade" }).notNull(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  reportedByUserId: uuid("reported_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  homeScore: integer("home_score").notNull(),
+  awayScore: integer("away_score").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  byGame: index("game_score_reports_game_id_idx").on(t.competitionGameId),
+  uniquePerTeam: uniqueIndex("game_score_reports_unique_game_team").on(
+    t.competitionGameId,
+    t.teamId,
   ),
 }));
 

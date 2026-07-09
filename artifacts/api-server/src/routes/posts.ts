@@ -87,6 +87,7 @@ import {
   type MinorNameViewerContext,
 } from "../lib/spec-helpers";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
+import { deriveCompetitionLink } from "../lib/competition-link";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
@@ -1912,6 +1913,15 @@ router.post(
       // anything else is a normal single-game recap (null).
       const recapKind: string | null =
         body.recapKind === "combined" ? "combined" : null;
+      // Competitions §7 — stamp the recap with its competition (and, when
+      // unambiguous, the specific game) if this team has a claimed slot.
+      // Best-effort; never blocks publishing. Combined recaps span many
+      // games so they only get the competition-level link.
+      const rawLink = await deriveCompetitionLink(teamId, gameDate);
+      const competitionLink =
+        recapKind === "combined"
+          ? { competitionId: rawLink.competitionId, competitionGameId: null }
+          : rawLink;
       const [a] = await db
         .insert(articles)
         .values({
@@ -1928,6 +1938,8 @@ router.post(
           opponentScore,
           gameDate,
           recapKind,
+          competitionId: competitionLink.competitionId,
+          competitionGameId: competitionLink.competitionGameId,
           status,
           publishedAt: status === "published" ? new Date() : null,
         })

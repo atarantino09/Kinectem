@@ -40,7 +40,7 @@ function groupLabel(division: string, bracket: string): string {
 }
 
 export default function TournamentSignupPage() {
-  const [, params] = useRoute("/t/:slug/signup");
+  const [, params] = useRoute("/c/:slug/signup");
   const slug = params?.slug ?? "";
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -55,7 +55,7 @@ export default function TournamentSignupPage() {
     queryKey: ["tournament", slug],
     queryFn: () =>
       customFetch<TournamentResponse>(
-        `/api/v1/tournaments/${encodeURIComponent(slug)}`,
+        `/api/v1/competitions/${encodeURIComponent(slug)}`,
         { method: "GET" },
       ),
     enabled: !!slug,
@@ -66,7 +66,7 @@ export default function TournamentSignupPage() {
   useEffect(() => {
     if (!meLoading && !me) {
       navigate(
-        `/login?signup=1&returnTo=${encodeURIComponent(`/t/${slug}/signup`)}`,
+        `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup`)}`,
       );
     }
   }, [meLoading, me, navigate, slug]);
@@ -95,8 +95,12 @@ export default function TournamentSignupPage() {
     }
     setSubmitting(true);
     try {
-      const res = await customFetch<{ ok: boolean; teamId: string }>(
-        `/api/v1/tournaments/${encodeURIComponent(slug)}/claim`,
+      const res = await customFetch<{
+        ok: boolean;
+        teamId: string;
+        pendingApproval?: boolean;
+      }>(
+        `/api/v1/competitions/${encodeURIComponent(slug)}/claim`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -106,7 +110,11 @@ export default function TournamentSignupPage() {
           }),
         },
       );
-      toast({ title: "Your team is in! Welcome to the tournament." });
+      toast({
+        title: res.pendingApproval
+          ? "Claim submitted — the organizer will review it shortly."
+          : "Your team is in! Welcome to the competition.",
+      });
       navigate(`/teams/${res.teamId}?welcome=1`);
     } catch (err) {
       toast({
@@ -156,7 +164,7 @@ export default function TournamentSignupPage() {
   return (
     <div className="min-h-screen max-w-2xl mx-auto p-6 space-y-6">
       <div className="space-y-1">
-        <Link href={`/t/${slug}`}>
+        <Link href={`/c/${slug}`}>
           <span className="text-xs text-muted-foreground hover:underline cursor-pointer">
             ← Back to {t.name}
           </span>

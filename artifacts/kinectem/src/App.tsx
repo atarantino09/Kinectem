@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -31,8 +31,12 @@ const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
 const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
 const ClaimOrgPage = lazy(() => import("@/pages/ClaimOrgPage"));
 const TeamAdoptPage = lazy(() => import("@/pages/TeamAdoptPage"));
-const TournamentPage = lazy(() => import("@/pages/TournamentPage"));
+const CompetitionPage = lazy(() => import("@/pages/CompetitionPage"));
 const TournamentSignupPage = lazy(() => import("@/pages/TournamentSignupPage"));
+const CompetitionsPage = lazy(() => import("@/pages/CompetitionsPage"));
+const CompetitionConsolePage = lazy(
+  () => import("@/pages/CompetitionConsolePage"),
+);
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 const GuardianConfirmPage = lazy(() => import("@/pages/GuardianConfirmPage"));
@@ -103,8 +107,15 @@ function Router() {
       <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
       <Route path="/claim/:token" component={ClaimOrgPage} />
       <Route path="/adopt-team/:token" component={TeamAdoptPage} />
-      <Route path="/t/:slug/signup" component={TournamentSignupPage} />
-      <Route path="/t/:slug" component={TournamentPage} />
+      <Route path="/c/:slug/signup" component={TournamentSignupPage} />
+      <Route path="/c/:slug" component={CompetitionPage} />
+      {/* Legacy tournament links — redirect /t/* to /c/* */}
+      <Route path="/t/:slug/signup">
+        {(p) => <Redirect to={`/c/${p.slug}/signup`} replace />}
+      </Route>
+      <Route path="/t/:slug">
+        {(p) => <Redirect to={`/c/${p.slug}`} replace />}
+      </Route>
       <Route path="/posts/new" component={NewPostPage} />
 
       {/* Layout routes */}
@@ -139,6 +150,8 @@ function Router() {
               component={OrgSubscribePage}
             />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
+            <Route path="/competitions/:id" component={CompetitionConsolePage} />
+            <Route path="/competitions" component={CompetitionsPage} />
             <Route path="/teams" component={MyTeamsPage} />
             <Route path="/teams/:teamId" component={TeamPage} />
             <Route path="/users/:userId" component={UserProfilePage} />
