@@ -731,26 +731,24 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           )}
           {!isShort && (
             <Link href={`/posts/${post.id}?album=1`}>
-              <div className="relative inline-flex">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="font-bold gap-1.5 h-8"
-                  data-testid={`button-album-${post.id}`}
-                  aria-label="Open photo album"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  Photos
-                </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold gap-1.5 h-8"
+                data-testid={`button-album-${post.id}`}
+                aria-label="Open photo album"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Photos
                 {albumPhotoCount > 0 && (
                   <span
-                    className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center leading-none pointer-events-none"
+                    className="text-[9px] font-bold leading-none rounded-full bg-primary text-primary-foreground min-w-3.5 h-3.5 px-1 flex items-center justify-center"
                     data-testid={`badge-album-count-${post.id}`}
                   >
                     {albumPhotoCount > 99 ? "99+" : albumPhotoCount}
                   </span>
                 )}
-              </div>
+              </Button>
             </Link>
           )}
           {post.recentReactorName && post.reactionCount > 0 && (
