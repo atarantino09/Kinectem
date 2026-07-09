@@ -181,6 +181,10 @@ export default function TournamentSignupPage() {
           <h2 className="text-lg font-black tracking-tight">
             1. Pick your team name
           </h2>
+          <p className="text-sm text-muted-foreground">
+            Click your team's name in this list — or scroll all the way down
+            and write it in if you don't see it.
+          </p>
           {unclaimed.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Every team name in this tournament has already been claimed.
