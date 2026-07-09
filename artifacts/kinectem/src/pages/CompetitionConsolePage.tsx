@@ -691,16 +691,17 @@ function SchedulePanel({
   const qc = useQueryClient();
   const { toast } = useToast();
   const [csv, setCsv] = useState("");
+  const [pasteOpen, setPasteOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const importMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (csvText: string) =>
       customFetch<{ matchesUpserted: number; participantCount: number }>(
         `/api/v1/competitions/${competitionId}/import`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ csv }),
+          body: JSON.stringify({ csv: csvText }),
         },
       ),
     onSuccess: (r) => {
@@ -745,54 +746,80 @@ function SchedulePanel({
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) void f.text().then(setCsv);
+            if (f)
+              void f.text().then((text) => {
+                setCsv(text);
+                importMut.mutate(text);
+              });
             e.target.value = "";
           }}
           data-testid="input-csv-file"
         />
         <Button
           type="button"
-          variant="outline"
-          className="w-full border-dashed font-bold"
+          variant="brand"
+          size="lg"
+          className="w-full font-bold"
+          disabled={importMut.isPending}
           onClick={() => fileRef.current?.click()}
           data-testid="btn-csv-choose-file"
         >
           <Upload className="mr-2 h-4 w-4" />
-          Choose CSV file from your computer
+          {importMut.isPending
+            ? "Uploading your schedule…"
+            : "Upload schedule file"}
         </Button>
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-            or paste the CSV below
-          </p>
+        <p className="text-center text-xs text-muted-foreground">
+          Pick the CSV your scheduling tool exported — we'll read it and set up
+          the games automatically.
+        </p>
+        {!pasteOpen ? (
+          <div className="flex items-center justify-center gap-3">
+            <button
+              type="button"
+              className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
+              onClick={() => setPasteOpen(true)}
+              data-testid="btn-csv-paste-toggle"
+            >
+              Or paste the CSV text instead
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-full font-bold text-muted-foreground"
+                onClick={() => setCsv(SAMPLE)}
+                data-testid="btn-csv-sample"
+              >
+                Insert sample
+              </Button>
+            </div>
+            <textarea
+              value={csv}
+              onChange={(e) => setCsv(e.target.value)}
+              rows={8}
+              spellCheck={false}
+              placeholder={CSV_HEADER}
+              className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs"
+              data-testid="input-csv"
+            />
+          </>
+        )}
+        {pasteOpen ? (
           <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="rounded-full font-bold text-muted-foreground"
-            onClick={() => setCsv(SAMPLE)}
-            data-testid="btn-csv-sample"
+            variant="brand"
+            onClick={() => importMut.mutate(csv)}
+            disabled={!pasteOpen || !csv.trim() || importMut.isPending}
+            data-testid="btn-upload-schedule"
           >
-            Insert sample
+            <Upload className="w-3.5 h-3.5 mr-1.5" />
+            {importMut.isPending ? "Uploading…" : "Upload pasted CSV"}
           </Button>
-        </div>
-        <textarea
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-          rows={8}
-          spellCheck={false}
-          placeholder={CSV_HEADER}
-          className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs"
-          data-testid="input-csv"
-        />
-        <Button
-          variant="brand"
-          onClick={() => importMut.mutate()}
-          disabled={!csv.trim() || importMut.isPending}
-          data-testid="btn-upload-schedule"
-        >
-          <Upload className="w-3.5 h-3.5 mr-1.5" />
-          {importMut.isPending ? "Uploading…" : "Upload schedule"}
-        </Button>
+        ) : null}
       </CardContent>
     </Card>
   );

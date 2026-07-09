@@ -111,8 +111,11 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-// The expected CSV columns (lowercased header match). Order in the file does
-// not matter — each row is resolved by header position.
+// Canonical CSV columns. Header matching is forgiving so organizers can
+// upload scheduling-tool exports (GotSport etc.) as-is: headers are
+// lowercased, punctuation-stripped, and matched against a per-column alias
+// list. Only match #, date, and the two team columns are REQUIRED — every
+// other column is optional and simply lands as null/"" when absent.
 const CSV_COLUMNS = [
   "match #",
   "date",
@@ -129,6 +132,64 @@ const CSV_COLUMNS = [
   "away team",
   "away score",
 ] as const;
+
+type CsvColumn = (typeof CSV_COLUMNS)[number];
+
+const REQUIRED_CSV_COLUMNS: CsvColumn[] = [
+  "match #",
+  "date",
+  "home team",
+  "away team",
+];
+
+// Normalize a header cell for matching: lowercase, strip everything that
+// isn't a letter, digit, or '#'. "Start Time" / "start_time" / "Start-Time"
+// all become "starttime".
+function normalizeHeaderCell(h: string): string {
+  return h.toLowerCase().replace(/[^a-z0-9#]/g, "");
+}
+
+// Alias list per canonical column, in normalized form. First header cell
+// that matches wins; each header cell binds to at most one column.
+const CSV_HEADER_ALIASES: Record<CsvColumn, string[]> = {
+  "match #": ["match#", "match", "matchno", "matchnumber", "game#", "game", "gameno", "gamenumber", "#"],
+  date: ["date", "gamedate", "matchdate", "day"],
+  "start time": ["starttime", "time", "start", "kickoff", "gametime"],
+  age: ["age", "agegroup", "ageband"],
+  gender: ["gender", "sex", "boysgirls"],
+  division: ["division", "div", "flight", "group", "pool"],
+  bracket: ["bracket", "round", "pod"],
+  venue: ["venue", "location", "park", "complex", "site"],
+  "venue state": ["venuestate", "state", "st"],
+  field: ["field", "fieldno", "field#", "pitch", "court", "surface"],
+  "home team": ["hometeam", "home", "team1", "teama", "homeclub"],
+  "home score": ["homescore", "homegoals", "score1", "hscore"],
+  "away team": ["awayteam", "away", "visitor", "visitorteam", "team2", "teamb", "awayclub"],
+  "away score": ["awayscore", "awaygoals", "score2", "ascore", "visitorscore"],
+};
+
+// Resolve the header row to a canonical-column → index map. Returns the
+// map plus any REQUIRED columns that couldn't be found.
+function resolveCsvHeader(headerRow: string[]): {
+  index: Partial<Record<CsvColumn, number>>;
+  missing: CsvColumn[];
+} {
+  const normalized = headerRow.map(normalizeHeaderCell);
+  const used = new Set<number>();
+  const index: Partial<Record<CsvColumn, number>> = {};
+  for (const colName of CSV_COLUMNS) {
+    for (const alias of CSV_HEADER_ALIASES[colName]) {
+      const i = normalized.findIndex((h, idx) => h === alias && !used.has(idx));
+      if (i !== -1) {
+        index[colName] = i;
+        used.add(i);
+        break;
+      }
+    }
+  }
+  const missing = REQUIRED_CSV_COLUMNS.filter((c) => index[c] === undefined);
+  return { index, missing };
+}
 
 const MAX_IMPORT_ROWS = 1000;
 
@@ -753,10 +814,14 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
     );
     if (grid.length === 0) return apiError(res, 400, "CSV is empty");
 
-    const header = grid[0].map((h) => h.trim().toLowerCase());
-    const missing = CSV_COLUMNS.filter((c) => !header.includes(c));
+    const { index: headerIndex, missing } = resolveCsvHeader(grid[0]);
     if (missing.length > 0) {
-      return apiError(res, 400, `CSV is missing columns: ${missing.join(", ")}`);
+      return apiError(
+        res,
+        400,
+        `Couldn't find these columns in your file: ${missing.join(", ")}. ` +
+          "Make sure the first row has headers like: match #, date, home team, away team.",
+      );
     }
     const dataRows = grid.slice(1);
     if (dataRows.length > MAX_IMPORT_ROWS) {
@@ -767,8 +832,10 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       );
     }
 
-    const col = (rec: string[], name: (typeof CSV_COLUMNS)[number]): string =>
-      (rec[header.indexOf(name)] ?? "").trim();
+    const col = (rec: string[], name: CsvColumn): string => {
+      const i = headerIndex[name];
+      return i === undefined ? "" : (rec[i] ?? "").trim();
+    };
 
     interface MatchRec {
       matchNumber: string;

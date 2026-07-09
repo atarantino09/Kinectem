@@ -33,4 +33,5 @@
 - [Email links need /app prefix](email-app-link-prefix.md) — web-app deep-links in emails must be `${appBaseUrl()}/app/...` or the path-based proxy serves the marketing homepage instead; `/api/...` links stay unprefixed.
 - [Pinned-teams per-org cap](pinned-teams-per-org-cap.md) — team pins are 5 PER org (not 5 total); bucket key `orgId ?? "__independent__"` must match client & server; FeedPage orphan group must bucket by real orgId.
 - [Photo album permissions](album-permissions.md) — album upload is team-community only (never followers); view follows post visibility; server returns canUpload/canDelete flags beyond locked spec.
+- [Competition CSV import header aliasing](csv-import-header-aliasing.md) — schedule import must accept scheduling-tool exports as-is; only 4 required columns, never re-tighten.
 - [First-run onboarding](first-run-onboarding.md) — onboarding "seen" flag is per-browser localStorage (openapi locked, no server field); reusable SpotlightTour gated on canManage; don't open route-based composers mid-tour.

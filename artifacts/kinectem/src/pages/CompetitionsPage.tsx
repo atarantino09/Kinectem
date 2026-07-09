@@ -66,6 +66,7 @@ function CreateCompetitionCard() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   // Step 3 — schedule
   const [csv, setCsv] = useState("");
+  const [pasteOpen, setPasteOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const finish = (id: string) => {
@@ -144,13 +145,13 @@ function CreateCompetitionCard() {
   });
 
   const importMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (csvText: string) =>
       customFetch<{ matchesUpserted: number; participantCount: number }>(
         `/api/v1/competitions/${createdId}/import`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ csv }),
+          body: JSON.stringify({ csv: csvText }),
         },
       ),
     onSuccess: (r) => {
@@ -422,41 +423,64 @@ function CreateCompetitionCard() {
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) void f.text().then(setCsv);
+                if (f)
+                  void f.text().then((text) => {
+                    setCsv(text);
+                    importMut.mutate(text);
+                  });
                 e.target.value = "";
               }}
               data-testid="input-wizard-csv-file"
             />
             <Button
               type="button"
-              variant="outline"
-              className="w-full border-dashed font-bold"
+              variant="brand"
+              size="lg"
+              className="w-full font-bold"
+              disabled={importMut.isPending}
               onClick={() => fileRef.current?.click()}
               data-testid="btn-wizard-csv-choose-file"
             >
               <Upload className="mr-2 h-4 w-4" />
-              Choose CSV file from your computer
+              {importMut.isPending
+                ? "Uploading your schedule…"
+                : "Upload schedule file"}
             </Button>
-            <p className="text-center text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-              or paste the CSV below
+            <p className="text-center text-xs text-muted-foreground">
+              Pick the CSV your scheduling tool exported — we'll read it and
+              set up the games automatically.
             </p>
-            <textarea
-              value={csv}
-              onChange={(e) => setCsv(e.target.value)}
-              rows={6}
-              placeholder="match #,date,start time,age,gender,division,bracket,venue,venue state,field,home team,home score,away team,away score"
-              className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs"
-              data-testid="input-wizard-csv"
-            />
-            <div className="flex gap-2">
-              <Button
-                variant="brand"
-                disabled={!csv.trim() || importMut.isPending}
-                onClick={() => importMut.mutate()}
-                data-testid="btn-wizard-import"
+            {!pasteOpen ? (
+              <button
+                type="button"
+                className="mx-auto block text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
+                onClick={() => setPasteOpen(true)}
+                data-testid="btn-wizard-csv-paste-toggle"
               >
-                {importMut.isPending ? "Uploading…" : "Upload & finish"}
-              </Button>
+                Or paste the CSV text instead
+              </button>
+            ) : (
+              <>
+                <textarea
+                  value={csv}
+                  onChange={(e) => setCsv(e.target.value)}
+                  rows={6}
+                  placeholder="match #,date,start time,age,gender,division,bracket,venue,venue state,field,home team,home score,away team,away score"
+                  className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs"
+                  data-testid="input-wizard-csv"
+                />
+                <Button
+                  variant="outline"
+                  className="font-bold"
+                  disabled={!csv.trim() || importMut.isPending}
+                  onClick={() => importMut.mutate(csv)}
+                  data-testid="btn-wizard-import"
+                >
+                  {importMut.isPending ? "Uploading…" : "Upload pasted CSV"}
+                </Button>
+              </>
+            )}
+            <div className="flex gap-2">
               <Button
                 variant="ghost"
                 className="font-bold text-muted-foreground"
