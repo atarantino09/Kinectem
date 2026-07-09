@@ -697,7 +697,9 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       tournament: competitionMeta,
       competition: competitionMeta,
       featuredRecaps: featuredRows.map(({ article: a, teamName }) => ({
-        id: a.id,
+        // Post ids are prefixed ("article-<uuid>") — the client links to
+        // /posts/:id which 404s on a raw uuid.
+        id: `article-${a.id}`,
         title: a.title,
         summary: a.summary,
         coverImageUrl: a.coverImageUrl,
