@@ -28,7 +28,7 @@ const STEPS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: Sparkles,
     title: "Watch the story grow",
-    body: "Every recap becomes part of your team's — and each player's — permanent highlight reel that families follow all season.",
+    body: "Every recap becomes part of your team's — and each player's — permanent digital storybook that families follow all season.",
   },
 ];
 
