@@ -57,11 +57,13 @@ export function BrandColorField({
   onChange,
   logoUrl,
   idPrefix = "brand",
+  label = "Brand color",
 }: {
   value: string;
   onChange: (hex: string) => void;
   logoUrl?: string | null;
   idPrefix?: string;
+  label?: string;
 }) {
   const [swatches, setSwatches] = useState<string[]>([]);
   const trimmedLogo = (logoUrl ?? "").trim();
@@ -92,7 +94,7 @@ export function BrandColorField({
   return (
     <div className="space-y-1.5">
       <Label htmlFor={`${idPrefix}-color`} className="text-xs font-bold">
-        Brand color
+        {label}
       </Label>
       <div className="flex items-center gap-2">
         <Input

@@ -325,6 +325,8 @@ async function competitionListRow(t: typeof tournaments.$inferSelect) {
     autoApproveClaims: t.autoApproveClaims,
     logoUrl: t.logoUrl,
     brandColor: t.brandColor,
+    secondaryColor: t.secondaryColor,
+    tertiaryColor: t.tertiaryColor,
     matchCount,
     participantCount,
     claimedCount,
@@ -369,6 +371,8 @@ const UpdateCompetitionBody = z.object({
   autoApproveClaims: z.boolean().optional(),
   logoUrl: ImageUrl.nullable().optional(),
   brandColor: BrandColor.nullable().optional(),
+  secondaryColor: BrandColor.nullable().optional(),
+  tertiaryColor: BrandColor.nullable().optional(),
   bannerUrl: ImageUrl.nullable().optional(),
   websiteUrl: HttpUrl.nullable().optional(),
 });
@@ -439,6 +443,12 @@ router.patch(
           : {}),
         ...(body.logoUrl !== undefined ? { logoUrl: body.logoUrl } : {}),
         ...(body.brandColor !== undefined ? { brandColor: body.brandColor } : {}),
+        ...(body.secondaryColor !== undefined
+          ? { secondaryColor: body.secondaryColor }
+          : {}),
+        ...(body.tertiaryColor !== undefined
+          ? { tertiaryColor: body.tertiaryColor }
+          : {}),
         ...(body.bannerUrl !== undefined ? { bannerUrl: body.bannerUrl } : {}),
         ...(body.websiteUrl !== undefined ? { websiteUrl: body.websiteUrl } : {}),
         updatedAt: new Date(),
@@ -458,6 +468,8 @@ router.patch(
       autoApproveClaims: row.autoApproveClaims,
       logoUrl: row.logoUrl,
       brandColor: row.brandColor,
+      secondaryColor: row.secondaryColor,
+      tertiaryColor: row.tertiaryColor,
       bannerUrl: row.bannerUrl,
       websiteUrl: row.websiteUrl,
     });
@@ -507,6 +519,8 @@ router.get(
           location: t.location,
           ownerUserId: t.ownerUserId ?? t.createdById ?? null,
           brandColor: t.brandColor,
+          secondaryColor: t.secondaryColor,
+          tertiaryColor: t.tertiaryColor,
           logoUrl: t.logoUrl,
           bannerUrl: t.bannerUrl,
           websiteUrl: t.websiteUrl,
@@ -608,6 +622,8 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       autoApproveClaims: tournament.autoApproveClaims,
       logoUrl: tournament.logoUrl,
       brandColor: tournament.brandColor,
+      secondaryColor: tournament.secondaryColor,
+      tertiaryColor: tournament.tertiaryColor,
       bannerUrl: tournament.bannerUrl,
       websiteUrl: tournament.websiteUrl,
       claimedCount,

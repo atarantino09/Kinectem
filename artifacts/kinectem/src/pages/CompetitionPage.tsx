@@ -67,6 +67,8 @@ export type CompetitionMeta = {
   autoApproveClaims: boolean;
   logoUrl: string | null;
   brandColor: string | null;
+  secondaryColor: string | null;
+  tertiaryColor: string | null;
   bannerUrl: string | null;
   websiteUrl: string | null;
   claimedCount: number;
@@ -300,6 +302,12 @@ export default function CompetitionPage() {
   const { competition: c, participants } = q.data;
   const brand = c.brandColor ?? DEFAULT_BRAND;
   const heroText = contrastText(brand);
+  // Secondary tints the hero as a subtle gradient; tertiary accents the
+  // status badge. Both degrade to primary-only when unset.
+  const heroBackground = c.secondaryColor
+    ? `linear-gradient(135deg, ${brand} 0%, ${brand} 55%, ${c.secondaryColor} 100%)`
+    : brand;
+  const accent = c.tertiaryColor ?? null;
   const dateRange =
     c.startDate === c.endDate ? c.startDate : `${c.startDate} – ${c.endDate}`;
   const typeLabel = c.type === "league" ? "League" : "Tournament";
@@ -322,7 +330,7 @@ export default function CompetitionPage() {
     <div className="min-h-screen">
       {/* Branded hero (§9a/§10) — brand_color band, logo-forward */}
       <div
-        style={{ backgroundColor: brand, color: heroText }}
+        style={{ background: heroBackground, color: heroText }}
         data-testid="hero-competition"
       >
         {c.bannerUrl ? (
@@ -353,7 +361,18 @@ export default function CompetitionPage() {
                 >
                   {typeLabel}
                 </span>
-                <span className="text-xs font-bold opacity-90">
+                <span
+                  className="rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-widest"
+                  style={
+                    accent
+                      ? {
+                          backgroundColor: accent,
+                          color: contrastText(accent),
+                        }
+                      : undefined
+                  }
+                  data-testid="badge-competition-status"
+                >
                   {statusLabel}
                 </span>
                 <span className="text-xs opacity-80">{dateRange}</span>

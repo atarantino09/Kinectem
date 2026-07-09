@@ -59,6 +59,8 @@ function CreateCompetitionCard() {
   const [description, setDescription] = useState("");
   // Step 2 — branding
   const [brandColor, setBrandColor] = useState("");
+  const [secondaryColor, setSecondaryColor] = useState("");
+  const [tertiaryColor, setTertiaryColor] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [bannerUrl, setBannerUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -100,10 +102,17 @@ function CreateCompetitionCard() {
       }),
   });
 
+  const hexOk = (v: string) =>
+    v.trim() === "" || /^#[0-9a-fA-F]{6}$/.test(v.trim());
   const colorOk =
-    brandColor.trim() === "" || /^#[0-9a-fA-F]{6}$/.test(brandColor.trim());
+    hexOk(brandColor) && hexOk(secondaryColor) && hexOk(tertiaryColor);
   const brandingDirty = !!(
-    brandColor.trim() || logoUrl.trim() || bannerUrl.trim() || websiteUrl.trim()
+    brandColor.trim() ||
+    secondaryColor.trim() ||
+    tertiaryColor.trim() ||
+    logoUrl.trim() ||
+    bannerUrl.trim() ||
+    websiteUrl.trim()
   );
 
   const saveBranding = useMutation({
@@ -113,6 +122,8 @@ function CreateCompetitionCard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandColor: brandColor.trim() || null,
+          secondaryColor: secondaryColor.trim() || null,
+          tertiaryColor: tertiaryColor.trim() || null,
           logoUrl: logoUrl.trim() || null,
           bannerUrl: bannerUrl.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
@@ -337,10 +348,25 @@ function CreateCompetitionCard() {
                 idPrefix="wizard-logo"
               />
               <BrandColorField
+                label="Primary color"
                 value={brandColor}
                 onChange={setBrandColor}
                 logoUrl={logoUrl}
                 idPrefix="wizard-brand"
+              />
+              <BrandColorField
+                label="Secondary color"
+                value={secondaryColor}
+                onChange={setSecondaryColor}
+                logoUrl={logoUrl}
+                idPrefix="wizard-brand-secondary"
+              />
+              <BrandColorField
+                label="Third color"
+                value={tertiaryColor}
+                onChange={setTertiaryColor}
+                logoUrl={logoUrl}
+                idPrefix="wizard-brand-tertiary"
               />
               <BrandImageField
                 label="Banner"

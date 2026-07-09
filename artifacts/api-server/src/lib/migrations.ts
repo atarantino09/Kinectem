@@ -1426,6 +1426,13 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     name: "2026-07-09-competitions-step1",
     sql: COMPETITIONS_STEP1,
   },
+  {
+    name: "2026-07-09-competition-secondary-colors",
+    sql: `
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS secondary_color text;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tertiary_color text;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

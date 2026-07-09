@@ -53,6 +53,8 @@ interface CompetitionDetail {
     autoApproveClaims: boolean;
     logoUrl: string | null;
     brandColor: string | null;
+    secondaryColor: string | null;
+    tertiaryColor: string | null;
     bannerUrl: string | null;
     websiteUrl: string | null;
   };
@@ -85,16 +87,29 @@ function BrandingPanel({
   const qc = useQueryClient();
   const { toast } = useToast();
   const [brandColor, setBrandColor] = useState(detail.brandColor ?? "");
+  const [secondaryColor, setSecondaryColor] = useState(
+    detail.secondaryColor ?? "",
+  );
+  const [tertiaryColor, setTertiaryColor] = useState(detail.tertiaryColor ?? "");
   const [logoUrl, setLogoUrl] = useState(detail.logoUrl ?? "");
   const [bannerUrl, setBannerUrl] = useState(detail.bannerUrl ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(detail.websiteUrl ?? "");
 
   useEffect(() => {
     setBrandColor(detail.brandColor ?? "");
+    setSecondaryColor(detail.secondaryColor ?? "");
+    setTertiaryColor(detail.tertiaryColor ?? "");
     setLogoUrl(detail.logoUrl ?? "");
     setBannerUrl(detail.bannerUrl ?? "");
     setWebsiteUrl(detail.websiteUrl ?? "");
-  }, [detail.brandColor, detail.logoUrl, detail.bannerUrl, detail.websiteUrl]);
+  }, [
+    detail.brandColor,
+    detail.secondaryColor,
+    detail.tertiaryColor,
+    detail.logoUrl,
+    detail.bannerUrl,
+    detail.websiteUrl,
+  ]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -103,6 +118,8 @@ function BrandingPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandColor: brandColor.trim() || null,
+          secondaryColor: secondaryColor.trim() || null,
+          tertiaryColor: tertiaryColor.trim() || null,
           logoUrl: logoUrl.trim() || null,
           bannerUrl: bannerUrl.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
@@ -122,7 +139,10 @@ function BrandingPanel({
       }),
   });
 
-  const colorOk = brandColor.trim() === "" || /^#[0-9a-fA-F]{6}$/.test(brandColor.trim());
+  const hexOk = (v: string) =>
+    v.trim() === "" || /^#[0-9a-fA-F]{6}$/.test(v.trim());
+  const colorOk =
+    hexOk(brandColor) && hexOk(secondaryColor) && hexOk(tertiaryColor);
 
   return (
     <Card>
@@ -135,10 +155,25 @@ function BrandingPanel({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BrandColorField
+            label="Primary color"
             value={brandColor}
             onChange={setBrandColor}
             logoUrl={logoUrl}
             idPrefix="brand"
+          />
+          <BrandColorField
+            label="Secondary color"
+            value={secondaryColor}
+            onChange={setSecondaryColor}
+            logoUrl={logoUrl}
+            idPrefix="brand-secondary"
+          />
+          <BrandColorField
+            label="Third color"
+            value={tertiaryColor}
+            onChange={setTertiaryColor}
+            logoUrl={logoUrl}
+            idPrefix="brand-tertiary"
           />
           <BrandImageField
             label="Logo"

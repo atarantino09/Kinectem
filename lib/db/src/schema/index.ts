@@ -1473,6 +1473,8 @@ export const tournaments = pgTable("tournaments", {
   // small competition badge.
   logoUrl: text("logo_url"),
   brandColor: text("brand_color"),
+  secondaryColor: text("secondary_color"),
+  tertiaryColor: text("tertiary_color"),
   bannerUrl: text("banner_url"),
   websiteUrl: text("website_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
