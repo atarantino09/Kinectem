@@ -2113,6 +2113,15 @@ router.get(
       .where(eq(tournamentParticipants.teamId, teamId));
     if (myParts.length === 0) return res.json({ data: [] });
 
+    // Org-backed teams have normal recap rights — the free-window notice is
+    // only meaningful for org-less solo teams, so we null it out for them.
+    const [teamRow] = await db
+      .select({ organizationId: teams.organizationId })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    const isOrgBacked = !!teamRow?.organizationId;
+
     const myPartIds = myParts.map((p) => p.id);
     const myPartIdSet = new Set(myPartIds);
     const tournamentIds = Array.from(new Set(myParts.map((p) => p.tournamentId)));
@@ -2174,7 +2183,10 @@ router.get(
         tournamentName: string;
         startDate: string;
         endDate: string;
-        recapFreeUntil: string;
+        recapFreeUntil: string | null;
+        logoUrl: string | null;
+        brandColor: string | null;
+        secondaryColor: string | null;
         matches: OutMatch[];
       }
     >();
@@ -2193,7 +2205,10 @@ router.get(
           tournamentName: t.name,
           startDate: t.startDate,
           endDate: t.endDate,
-          recapFreeUntil: recapFreeUntil(t.startDate),
+          recapFreeUntil: isOrgBacked ? null : recapFreeUntil(t.startDate),
+          logoUrl: t.logoUrl ?? null,
+          brandColor: t.brandColor ?? null,
+          secondaryColor: t.secondaryColor ?? null,
           matches: [],
         };
         groups.set(m.tournamentId, g);

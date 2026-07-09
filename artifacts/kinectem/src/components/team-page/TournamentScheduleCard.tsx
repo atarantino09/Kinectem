@@ -34,8 +34,12 @@ interface TournamentGroup {
   startDate: string;
   endDate: string;
   // Last calendar day (YYYY-MM-DD) free game recaps are available for this
-  // team — one week after the tournament starts.
-  recapFreeUntil: string;
+  // team — one week after the tournament starts. Null for org-backed teams,
+  // which have normal recap rights (no free-window notice).
+  recapFreeUntil: string | null;
+  logoUrl: string | null;
+  brandColor: string | null;
+  secondaryColor: string | null;
   matches: TournamentMatch[];
 }
 
@@ -108,7 +112,7 @@ function recapHrefFor(teamId: string, m: TournamentMatch): string {
 // server-side gate (which compares UTC calendar dates) regardless of viewer TZ.
 function windowBounds(g: TournamentGroup): { start: number; end: number } {
   const start = Date.parse(`${g.startDate}T00:00:00Z`);
-  const end = Date.parse(`${g.recapFreeUntil}T00:00:00Z`) + 86_400_000;
+  const end = Date.parse(`${g.recapFreeUntil!}T00:00:00Z`) + 86_400_000;
   return { start, end };
 }
 
@@ -140,7 +144,9 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     return () => clearInterval(id);
   }, []);
 
-  const wins = groups.map(windowBounds);
+  // Org-backed teams come back with recapFreeUntil = null (normal recap
+  // rights) — no free-window notice for them.
+  const wins = groups.filter((g) => g.recapFreeUntil != null).map(windowBounds);
   if (wins.length === 0) return null;
 
   const active = wins.filter((w) => now >= w.start && now < w.end);
@@ -254,14 +260,34 @@ export function TournamentScheduleCard({
         <FreeRecapNotice groups={groups} />
         {groups.map((g) => (
           <div key={g.tournamentId} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Link href={`/t/${g.tournamentSlug}`}>
-                <span className="text-sm font-black tracking-tight hover:underline cursor-pointer inline-flex items-center gap-1">
-                  {g.tournamentName}
-                  <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                </span>
-              </Link>
-            </div>
+            {/* Branded competition strip — same look as the banner on a
+                published game recap (PostCard). */}
+            <Link
+              href={`/competitions/c/${encodeURIComponent(g.tournamentSlug)}`}
+              className="flex items-center gap-2.5 rounded-lg px-4 py-2"
+              style={{
+                background: g.brandColor
+                  ? g.secondaryColor
+                    ? `linear-gradient(135deg, ${g.brandColor} 0%, ${g.brandColor} 60%, ${g.secondaryColor} 100%)`
+                    : g.brandColor
+                  : "hsl(var(--primary))",
+              }}
+              data-testid={`banner-tournament-${g.tournamentId}`}
+            >
+              {g.logoUrl ? (
+                <img
+                  src={g.logoUrl}
+                  alt=""
+                  className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
+                />
+              ) : (
+                <Trophy className="h-4 w-4 shrink-0 text-white/90" />
+              )}
+              <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
+                {g.tournamentName}
+              </span>
+              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-white/80" />
+            </Link>
             <ul className="space-y-1.5">
               {g.matches.map((m) => (
                 <li
