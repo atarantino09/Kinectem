@@ -828,6 +828,22 @@ interface PostExtras {
   // post kinds leave this undefined and the response ships
   // `approvalStatus: null`.
   approvalStatus?: "pending" | "approved" | "declined";
+  // Competition branding for competition-linked recaps; null/undefined
+  // for everything else. See PostCompetitionBrand.
+  competition?: PostCompetitionBrand | null;
+}
+
+// Competition branding block attached to competition-linked recaps
+// (extra field beyond the locked spec — same precedent as `recapKind`).
+// Drives the branded strip at the top of the post card plus the link to
+// the in-app competition page.
+export interface PostCompetitionBrand {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+  brandColor: string | null;
+  secondaryColor: string | null;
 }
 
 export interface PostTaggedUserView {
@@ -1028,6 +1044,7 @@ function basePost(p: {
     updatedAt: p.updatedAt,
     gameDate: p.gameDate ?? null,
     recapKind: p.recapKind ?? null,
+    competition: p.extras.competition ?? null,
     author,
     context,
     assets: p.assets,

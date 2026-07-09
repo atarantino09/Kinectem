@@ -150,6 +150,9 @@ function Router() {
               component={OrgSubscribePage}
             />
             <Route path="/organizations/:orgId" component={OrganizationPage} />
+            {/* In-app competition view (AppShell chrome) — must precede
+                the console's `/competitions/:id` so "c" isn't read as an id. */}
+            <Route path="/competitions/c/:slug" component={CompetitionPage} />
             <Route path="/competitions/:id" component={CompetitionConsolePage} />
             <Route path="/competitions" component={CompetitionsPage} />
             <Route path="/teams" component={MyTeamsPage} />

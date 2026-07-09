@@ -56,6 +56,7 @@ import {
 } from "../lib/notifications";
 import { notifyNewlyTaggedInHighlight } from "../lib/article-tagging";
 import { maskedDisplayName } from "../lib/spec-helpers";
+import { loadCompetitionBrandMap } from "../lib/competition-brand";
 import {
   createSession,
   destroySession,
@@ -1300,11 +1301,16 @@ router.get(
       teamPostsMinorCtx,
     );
 
+    const teamPostsBrandMap = await loadCompetitionBrandMap(
+      rows.map((r) => r.a.competitionId),
+    );
     const articleData = rows.map((r) =>
       articleToPost(r.a, {
         team: r.team,
         org: r.org,
         author: r.author,
+        competition:
+          teamPostsBrandMap.get(r.a.competitionId ?? "") ?? null,
         canEdit: canEditMap.get(r.a.id) ?? false,
         authorRole: authorRoleMap.get(r.a.id) ?? null,
         ...shareStatsFor(shareStats, "article", r.a.id),
@@ -1417,12 +1423,17 @@ router.get(
       orgPostsMinorIds,
     );
 
+    const orgPostsBrandMap = await loadCompetitionBrandMap(
+      articleRows.map((r) => r.a.competitionId),
+    );
     const data = [
       ...articleRows.map((r) =>
         articleToPost(r.a, {
           team: r.team,
           org: r.org,
           author: r.author,
+          competition:
+            orgPostsBrandMap.get(r.a.competitionId ?? "") ?? null,
           canEdit: canEditMap.get(r.a.id) ?? false,
           authorRole: authorRoleMap.get(r.a.id) ?? null,
           ...statsFor(stats, "article", r.a.id),

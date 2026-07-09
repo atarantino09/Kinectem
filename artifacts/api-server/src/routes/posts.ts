@@ -86,6 +86,7 @@ import {
   TRUSTED_MINOR_NAME_CONTEXT,
   type MinorNameViewerContext,
 } from "../lib/spec-helpers";
+import { loadCompetitionBrandMap } from "../lib/competition-brand";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import { deriveCompetitionLink } from "../lib/competition-link";
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
@@ -336,12 +337,16 @@ router.get(
           ]);
       const ownArtsVisible = ownArts.filter((r) => !pendingArtIds.has(r.a.id));
       const ownHlsVisible = ownHls.filter((r) => !pendingHlIds.has(r.h.id));
+      const ownBrandMap = await loadCompetitionBrandMap(
+        ownArtsVisible.map((r) => r.a.competitionId),
+      );
       const items = [
         ...ownArtsVisible.map((r) =>
           articleToPost(r.a, {
             team: r.team,
             org: r.org,
             author: r.author,
+            competition: ownBrandMap.get(r.a.competitionId ?? "") ?? null,
             canEdit: canEditMap.get(r.a.id) ?? false,
             authorRole: authorRoleMap.get(r.a.id) ?? null,
             ...statsFor(stats, "article", r.a.id),
@@ -675,12 +680,17 @@ router.get(
         .map((r) => `highlight-${r.h.id}`),
     ]);
 
+    const feedBrandMap = await loadCompetitionBrandMap([
+      ...arts.map((r) => r.a.competitionId),
+      ...sharedArticleRows.map((r) => r.a.competitionId),
+    ]);
     const items: ReturnType<typeof articleToPost>[] = [
       ...arts.filter((r) => !feedPendingArtIds.has(r.a.id)).map((r) =>
         articleToPost(r.a, {
           team: r.team,
           org: r.org,
           author: r.author,
+          competition: feedBrandMap.get(r.a.competitionId ?? "") ?? null,
           canEdit: canEditMap.get(r.a.id) ?? false,
           authorRole: authorRoleMap.get(r.a.id) ?? null,
           ...statsFor(stats, "article", r.a.id),
@@ -737,6 +747,7 @@ router.get(
             team: row.team,
             org: row.org,
             author: row.author,
+            competition: feedBrandMap.get(row.a.competitionId ?? "") ?? null,
             canEdit: canEditMap.get(row.a.id) ?? false,
             authorRole: authorRoleMap.get(row.a.id) ?? null,
             ...statsFor(stats, "article", row.a.id),
@@ -962,7 +973,9 @@ router.get(
         .select({ a: articles, team: teams, org: organizations, author: users })
         .from(articles)
         .innerJoin(teams, eq(articles.teamId, teams.id))
-        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        // Independent / tournament temp teams have no parent org — a
+        // leftJoin keeps their recaps reachable instead of 404ing.
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(articles.authorId, users.id))
         .where(eq(articles.id, parsed.id))
         .limit(1);
@@ -970,7 +983,7 @@ router.get(
       if (row.a.hiddenAt && !isAdmin) return notFound(res);
       const isAuthor = !!me && row.a.authorId === me.id;
       const isOrgAdmin =
-        !!me && (await canManageOrganization(me.id, row.org.id));
+        !!me && !!row.org && (await canManageOrganization(me.id, row.org.id));
       if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
         return notFound(res);
       }
@@ -1021,7 +1034,7 @@ router.get(
             articleId: row.a.id,
             authorId: row.a.authorId,
             teamId: row.team.id,
-            orgId: row.org.id,
+            orgId: row.org?.id ?? null,
           },
         ]),
         loadCurrentUserTags(me?.id ?? null, {
@@ -1034,11 +1047,16 @@ router.get(
         { id: me?.id ?? null, role: req.realUser?.role ?? null },
         row.author?.id ? [row.author.id] : [],
       );
+      const detailBrandMap = await loadCompetitionBrandMap([
+        row.a.competitionId,
+      ]);
       res.json(
         articleToPost(row.a, {
           team: row.team,
           org: row.org,
           author: row.author,
+          competition:
+            detailBrandMap.get(row.a.competitionId ?? "") ?? null,
           canEdit,
           canDelete,
           authorRole: authorRoleMap.get(row.a.id) ?? null,
@@ -1457,14 +1475,14 @@ async function loadShareableTarget(
       })
       .from(articles)
       .innerJoin(teams, eq(articles.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!row) return { ok: false };
     if (row.a.hiddenAt && !isAdmin) return { ok: false };
     const isAuthor = !!meId && row.a.authorId === meId;
     const isOrgAdmin =
-      !!meId && (await canManageOrganization(meId, row.org.id));
+      !!meId && !!row.org && (await canManageOrganization(meId, row.org.id));
     if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
       return { ok: false };
     }

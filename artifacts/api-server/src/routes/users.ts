@@ -65,6 +65,7 @@ import {
   displayNameForViewer,
   maskedDisplayName,
 } from "../lib/spec-helpers";
+import { loadCompetitionBrandMap } from "../lib/competition-brand";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import {
@@ -1169,6 +1170,9 @@ router.get(
         }),
       ]);
 
+    const profileBrandMap = await loadCompetitionBrandMap(
+      articleRows.map((row) => row.a.competitionId),
+    );
     const posts = limited.map((row) => {
       const sharedBy = row.sharedAt
         ? toPostAuthor(u, { minorNameCtx: profileMinorCtxWithOwner })
@@ -1179,6 +1183,8 @@ router.get(
           team: row.team,
           org: row.org,
           author: row.author,
+          competition:
+            profileBrandMap.get(row.a.competitionId ?? "") ?? null,
           canEdit: canEditMap.get(row.a.id) ?? false,
           authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),

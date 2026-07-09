@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight } from "lucide-react";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
   customFetch,
@@ -164,6 +164,22 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   // cast (Newsletter/org-claim precedent) to show a distinct pill.
   const isCombinedRecap =
     (post as { recapKind?: string | null }).recapKind === "combined";
+  // Competition-linked recaps carry a branding block the server
+  // serializes outside the openapi PostResponse (recapKind precedent).
+  // Drives the branded strip at the top of the card + the link to the
+  // in-app competition page.
+  const competition = (
+    post as {
+      competition?: {
+        id: string;
+        slug: string;
+        name: string;
+        logoUrl: string | null;
+        brandColor: string | null;
+        secondaryColor: string | null;
+      } | null;
+    }
+  ).competition;
   const label =
     reportTarget.contentType === "highlight"
       ? "Highlight"
@@ -325,6 +341,34 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           >
             <Repeat2 className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
             Shared by {sharedBy.displayName}
+          </Link>
+        )}
+        {competition && (
+          <Link
+            href={`/competitions/c/${encodeURIComponent(competition.slug)}`}
+            className="flex items-center gap-2.5 px-5 py-2"
+            style={{
+              background: competition.brandColor
+                ? competition.secondaryColor
+                  ? `linear-gradient(135deg, ${competition.brandColor} 0%, ${competition.brandColor} 60%, ${competition.secondaryColor} 100%)`
+                  : competition.brandColor
+                : "hsl(var(--primary))",
+            }}
+            data-testid={`banner-post-competition-${post.id}`}
+          >
+            {competition.logoUrl ? (
+              <img
+                src={competition.logoUrl}
+                alt=""
+                className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
+              />
+            ) : (
+              <Trophy className="h-4 w-4 shrink-0 text-white/90" />
+            )}
+            <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
+              {competition.name}
+            </span>
+            <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-white/80" />
           </Link>
         )}
         <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">

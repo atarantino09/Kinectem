@@ -221,8 +221,12 @@ function ReportScoreControl({
 }
 
 export default function CompetitionPage() {
-  const [, params] = useRoute("/c/:slug");
-  const slug = params?.slug ?? "";
+  // Matched both as the standalone public page (`/c/<slug>`) and as the
+  // in-app view inside the AppShell (`/competitions/c/<slug>`), so
+  // logged-in users can browse a competition without leaving the app.
+  const [, publicParams] = useRoute("/c/:slug");
+  const [, appParams] = useRoute("/competitions/c/:slug");
+  const slug = publicParams?.slug ?? appParams?.slug ?? "";
   const { data: me } = useGetLoggedInUser();
 
   // §6 — teams I coach/manage, used only to decide whether to show the
