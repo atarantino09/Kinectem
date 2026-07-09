@@ -32,4 +32,5 @@
 - [Invite delivery tracking + copy link](invite-delivery-tracking.md) — pending invites carry SendGrid delivery_status via Event Webhook (custom_args match, out-of-order guard, 503 if key unset); roster token plaintext (build link client-side) vs org token hashed (rotate via /link endpoint).
 - [Email links need /app prefix](email-app-link-prefix.md) — web-app deep-links in emails must be `${appBaseUrl()}/app/...` or the path-based proxy serves the marketing homepage instead; `/api/...` links stay unprefixed.
 - [Pinned-teams per-org cap](pinned-teams-per-org-cap.md) — team pins are 5 PER org (not 5 total); bucket key `orgId ?? "__independent__"` must match client & server; FeedPage orphan group must bucket by real orgId.
+- [Photo album permissions](album-permissions.md) — album upload is team-community only (never followers); view follows post visibility; server returns canUpload/canDelete flags beyond locked spec.
 - [First-run onboarding](first-run-onboarding.md) — onboarding "seen" flag is per-browser localStorage (openapi locked, no server field); reusable SpotlightTour gated on canManage; don't open route-based composers mid-tour.

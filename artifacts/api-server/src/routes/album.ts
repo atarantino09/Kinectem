@@ -17,6 +17,8 @@ import {
   articles,
   highlights,
   orgPosts,
+  organizationAdmins,
+  teams,
   users,
   takedownRequests,
 } from "@workspace/db";
@@ -29,6 +31,11 @@ import {
   safeAvatarUrl,
   type PostKind,
 } from "../lib/spec-helpers";
+import {
+  canManageTeam,
+  canManageOrganization,
+  canViewTeamSchedule,
+} from "../lib/permissions";
 
 const router: IRouter = Router();
 
@@ -45,14 +52,21 @@ function pathParam(value: string | string[] | undefined): string {
 // articles we also require `status='published'` and `hidden_at IS NULL`
 // so unpublished drafts and admin-hidden posts don't accept new album
 // entries through the fan-album flow.
+type VisiblePost = {
+  authorId: string | null;
+  teamId: string | null;
+  organizationId: string | null;
+};
+
 async function loadVisiblePost(
   kind: PostKind,
   refId: string,
-): Promise<{ authorId: string | null } | null> {
+): Promise<VisiblePost | null> {
   if (kind === "article") {
     const [a] = await db
       .select({
         authorId: articles.authorId,
+        teamId: articles.teamId,
         status: articles.status,
         hiddenAt: articles.hiddenAt,
       })
@@ -62,27 +76,98 @@ async function loadVisiblePost(
     if (!a) return null;
     if (a.status !== "published") return null;
     if (a.hiddenAt) return null;
-    return { authorId: a.authorId ?? null };
+    return { authorId: a.authorId ?? null, teamId: a.teamId ?? null, organizationId: null };
   }
   if (kind === "highlight") {
     const [h] = await db
-      .select({ uploaderId: highlights.uploaderId, hiddenAt: highlights.hiddenAt })
+      .select({
+        uploaderId: highlights.uploaderId,
+        teamId: highlights.teamId,
+        hiddenAt: highlights.hiddenAt,
+      })
       .from(highlights)
       .where(eq(highlights.id, refId))
       .limit(1);
     if (!h) return null;
     if (h.hiddenAt) return null;
-    return { authorId: h.uploaderId ?? null };
+    return { authorId: h.uploaderId ?? null, teamId: h.teamId ?? null, organizationId: null };
   }
   // org_post
   const [op] = await db
-    .select({ authorId: orgPosts.authorId, hiddenAt: orgPosts.hiddenAt })
+    .select({
+      authorId: orgPosts.authorId,
+      organizationId: orgPosts.organizationId,
+      hiddenAt: orgPosts.hiddenAt,
+    })
     .from(orgPosts)
     .where(eq(orgPosts.id, refId))
     .limit(1);
   if (!op) return null;
   if (op.hiddenAt) return null;
-  return { authorId: op.authorId ?? null };
+  return { authorId: op.authorId ?? null, teamId: null, organizationId: op.organizationId ?? null };
+}
+
+// Task #660 — album uploads are restricted to the post's team community:
+// accepted roster members (players, coaches, managers, authors, ...),
+// parents of active roster members, and org owners/admins. Followers can
+// view the album (same as the recap) but cannot contribute. Org posts
+// restrict uploads to anyone with an org membership row; posts with no
+// team/org (profile-only highlights) accept uploads from the author only.
+async function canContributeToAlbum(
+  userId: string,
+  isPlatformAdmin: boolean,
+  post: VisiblePost,
+): Promise<boolean> {
+  if (isPlatformAdmin) return true;
+  if (post.authorId === userId) return true;
+  if (post.teamId) {
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, post.teamId))
+      .limit(1);
+    if (!team) return false;
+    // canViewTeamSchedule = org managers + accepted roster members +
+    // parents of active members; canManageTeam adds the solo-team creator.
+    if (await canViewTeamSchedule(userId, team)) return true;
+    return canManageTeam(userId, team);
+  }
+  if (post.organizationId) {
+    const [row] = await db
+      .select({ id: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, post.organizationId),
+          eq(organizationAdmins.userId, userId),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+  return false;
+}
+
+// Moderation rights over album photos beyond "it's my photo": the post's
+// author, team managers (org owner/admin, coach, solo creator), and org
+// managers for org posts. Platform admins are handled by callers.
+async function canModerateAlbum(
+  userId: string,
+  post: VisiblePost,
+): Promise<boolean> {
+  if (post.authorId === userId) return true;
+  if (post.teamId) {
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, post.teamId))
+      .limit(1);
+    if (team && (await canManageTeam(userId, team))) return true;
+  }
+  if (post.organizationId) {
+    return canManageOrganization(userId, post.organizationId);
+  }
+  return false;
 }
 
 // Mirrors the helper in `posts.ts`: a post with a pending takedown is
@@ -170,8 +255,16 @@ router.get(
         ),
       )
       .orderBy(desc(albumPhotos.createdAt));
+    // Viewer capabilities so the client can hide the upload button for
+    // followers and the delete button for photos the viewer can't remove.
+    const canUpload = await canContributeToAlbum(me.id, isAdmin, post);
+    const canModerate = isAdmin || (await canModerateAlbum(me.id, post));
     res.json({
-      data: rows.map((r) => toAlbumPhotoResponse(r.p, rawPostId, r.url ?? null)),
+      data: rows.map((r) => ({
+        ...toAlbumPhotoResponse(r.p, rawPostId, r.url ?? null),
+        canDelete: canModerate || r.p.uploaderUserId === me.id,
+      })),
+      canUpload,
     });
   }),
 );
@@ -218,6 +311,14 @@ router.post(
     }
     if (await isPendingTakedown(parsed.kind, parsed.id, me.id, isAdmin)) {
       notFound(res);
+      return;
+    }
+    // Uploads are restricted to the team community (roster members,
+    // parents of active members, org managers). Followers get 403.
+    if (!(await canContributeToAlbum(me.id, isAdmin, post))) {
+      apiError(res, 403, "Only team members can add photos to this album", {
+        code: "ALBUM_MEMBERS_ONLY",
+      });
       return;
     }
 
@@ -289,10 +390,12 @@ router.delete(
       return;
     }
 
+    // Uploader may delete their own photo; the post's author and team/org
+    // managers may delete any photo; platform admins always can.
     let allowed = row.uploaderUserId === me.id;
     if (!allowed) {
       const post = await loadVisiblePost(parsed.kind, parsed.id);
-      if (post && post.authorId === me.id) allowed = true;
+      if (post && (await canModerateAlbum(me.id, post))) allowed = true;
     }
     if (!allowed) {
       const [u] = await db

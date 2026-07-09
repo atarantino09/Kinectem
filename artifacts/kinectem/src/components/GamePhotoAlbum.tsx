@@ -85,12 +85,22 @@ async function uploadFanPhoto(blob: Blob, fileName: string): Promise<string> {
   return upload.assetId;
 }
 
+// Task #660 — the album list response carries viewer capabilities beyond the
+// generated spec types (openapi.yaml is locked): `canUpload` marks team
+// members (roster, parents of active members, org managers) who may add
+// photos, and each photo's `canDelete` marks the uploader / post author /
+// team managers / platform admins.
+type AlbumPhotoWithCaps = AlbumPhotoResponse & { canDelete?: boolean };
+type AlbumListWithCaps = { data?: AlbumPhotoWithCaps[]; canUpload?: boolean };
+
 export function GamePhotoAlbum({ postId }: { postId: string }) {
   const { data: me } = useGetLoggedInUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data, refetch } = useListAlbumPhotos(postId);
-  const photos = data?.data ?? [];
+  const album = data as AlbumListWithCaps | undefined;
+  const photos: AlbumPhotoWithCaps[] = album?.data ?? [];
+  const canUpload = album?.canUpload === true;
 
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -98,7 +108,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   const [uploaderName, setUploaderName] = useState("");
   const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
-  const [lightbox, setLightbox] = useState<AlbumPhotoResponse | null>(null);
+  const [lightbox, setLightbox] = useState<AlbumPhotoWithCaps | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const defaultName =
@@ -289,13 +299,16 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Camera className="w-5 h-5 text-primary" />
-            Fan Photo Album
+            Photo Album
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Open album — anyone at the game can add their photos.
+            {canUpload
+              ? "Team members can add photos from the game."
+              : "Photos from the team community."}
           </p>
         </div>
 
+        {canUpload && (
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
           <DialogTrigger asChild>
             <Button
@@ -390,6 +403,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       {photos.length === 0 ? (
@@ -398,7 +412,9 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
             <Camera className="w-8 h-8 text-muted-foreground mx-auto" />
             <p className="text-sm font-bold">No photos yet</p>
             <p className="text-xs text-muted-foreground">
-              Be the first to share a shot from the game.
+              {canUpload
+                ? "Be the first to share a shot from the game."
+                : "Team members haven't added any photos yet."}
             </p>
           </CardContent>
         </Card>
@@ -426,7 +442,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            {photos.length} photo{photos.length === 1 ? "" : "s"} from the community
+            {photos.length} photo{photos.length === 1 ? "" : "s"} from the team
           </p>
         </>
       )}
@@ -455,16 +471,18 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
                     {lightbox.caption && ` • ${lightbox.caption}`}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="font-bold gap-1 text-destructive hover:text-destructive"
-                  onClick={() => onRemove(lightbox.id)}
-                  data-testid={`button-remove-photo-${lightbox.id}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Remove
-                </Button>
+                {lightbox.canDelete && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="font-bold gap-1 text-destructive hover:text-destructive"
+                    onClick={() => onRemove(lightbox.id)}
+                    data-testid={`button-remove-photo-${lightbox.id}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remove
+                  </Button>
+                )}
               </div>
             </>
           )}
