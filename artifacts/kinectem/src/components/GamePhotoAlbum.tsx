@@ -24,6 +24,7 @@ import {
   type AlbumPhotoResponse,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { timeAgo } from "@/lib/format";
 import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
 
@@ -110,6 +111,22 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   const [saving, setSaving] = useState(false);
   const [lightbox, setLightbox] = useState<AlbumPhotoWithCaps | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // The feed card's "Photos" button links here with `?album=1` — scroll
+  // the album into view and, if the viewer can upload, open the Add
+  // Photos dialog right away. Runs once per mount after the list loads
+  // (we need `canUpload` from the response before deciding to open).
+  const search = useSearch();
+  const wantsAlbum = new URLSearchParams(search).get("album") === "1";
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!wantsAlbum || autoOpenedRef.current) return;
+    if (!album) return;
+    autoOpenedRef.current = true;
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (album.canUpload === true) setOpen(true);
+  }, [wantsAlbum, album]);
 
   const defaultName =
     me && "firstName" in me && "lastName" in me
@@ -294,7 +311,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   };
 
   return (
-    <section className="space-y-4" data-testid="section-photo-album">
+    <section ref={sectionRef} className="space-y-4 scroll-mt-20" data-testid="section-photo-album">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">

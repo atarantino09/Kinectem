@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera } from "lucide-react";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
   customFetch,
@@ -724,6 +724,20 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               />
               {post.shareCount ?? 0}
             </Button>
+          )}
+          {!isShort && (
+            <Link href={`/posts/${post.id}?album=1`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold gap-1.5 h-8"
+                data-testid={`button-album-${post.id}`}
+                aria-label="Open photo album"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Photos
+              </Button>
+            </Link>
           )}
           {post.recentReactorName && post.reactionCount > 0 && (
             <span className="text-xs text-muted-foreground ml-1 truncate">
