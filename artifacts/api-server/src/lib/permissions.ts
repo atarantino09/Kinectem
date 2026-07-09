@@ -298,14 +298,18 @@ export async function loadAdminOrgIds(
 // null viewerId (anonymous request) always resolves to false.
 export async function computeArticleCanEditMap(
   viewerId: string | null,
-  rows: Array<{ articleId: string; authorId: string | null; orgId: string }>,
+  // Task #628-style solo/independent teams have no parent org; pass
+  // orgId: null for them — the org-admin branch is simply skipped.
+  rows: Array<{ articleId: string; authorId: string | null; orgId: string | null }>,
 ): Promise<Map<string, boolean>> {
   const result = new Map<string, boolean>();
   for (const r of rows) result.set(r.articleId, false);
   if (!viewerId || rows.length === 0) return result;
 
   const articleIds = Array.from(new Set(rows.map((r) => r.articleId)));
-  const orgIds = Array.from(new Set(rows.map((r) => r.orgId)));
+  const orgIds = Array.from(
+    new Set(rows.map((r) => r.orgId).filter((x): x is string => x !== null)),
+  );
 
   const [coAuthorRows, adminRows] = await Promise.all([
     db
@@ -317,16 +321,18 @@ export async function computeArticleCanEditMap(
           inArray(articleAuthors.articleId, articleIds),
         ),
       ),
-    db
-      .select({ orgId: organizationAdmins.organizationId })
-      .from(organizationAdmins)
-      .where(
-        and(
-          eq(organizationAdmins.userId, viewerId),
-          inArray(organizationAdmins.organizationId, orgIds),
-          inArray(organizationAdmins.role, [...MANAGE_ROLES]),
-        ),
-      ),
+    orgIds.length === 0
+      ? Promise.resolve([] as Array<{ orgId: string }>)
+      : db
+          .select({ orgId: organizationAdmins.organizationId })
+          .from(organizationAdmins)
+          .where(
+            and(
+              eq(organizationAdmins.userId, viewerId),
+              inArray(organizationAdmins.organizationId, orgIds),
+              inArray(organizationAdmins.role, [...MANAGE_ROLES]),
+            ),
+          ),
   ]);
   const coAuthorSet = new Set(coAuthorRows.map((r) => r.articleId));
   const adminOrgSet = new Set(adminRows.map((r) => r.orgId));
@@ -334,7 +340,7 @@ export async function computeArticleCanEditMap(
   for (const r of rows) {
     const isAuthor = r.authorId === viewerId;
     const isCoAuthor = coAuthorSet.has(r.articleId);
-    const isOrgAdmin = adminOrgSet.has(r.orgId);
+    const isOrgAdmin = r.orgId !== null && adminOrgSet.has(r.orgId);
     if (isAuthor || isCoAuthor || isOrgAdmin) {
       result.set(r.articleId, true);
     }

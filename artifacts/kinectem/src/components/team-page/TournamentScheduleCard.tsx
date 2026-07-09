@@ -51,10 +51,17 @@ function fmtDate(d: string | null): string {
 
 function fmtTime(t: string | null): string {
   if (!t) return "";
-  const [h, min] = t.split(":").map(Number);
-  if (Number.isNaN(h)) return t;
+  // Accept both 24-hour ("17:30") and scheduling-tool exports ("5:30 PM").
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/);
+  if (!m) return t;
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const meridiem = m[3]?.toUpperCase();
+  if (meridiem === "PM" && h < 12) h += 12;
+  if (meridiem === "AM" && h === 12) h = 0;
+  if (Number.isNaN(h) || Number.isNaN(min)) return t;
   const d = new Date();
-  d.setHours(h, min ?? 0, 0, 0);
+  d.setHours(h, min, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 

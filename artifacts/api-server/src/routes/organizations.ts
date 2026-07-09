@@ -1202,7 +1202,10 @@ router.get(
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
       .innerJoin(teams, eq(articles.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Independent / tournament temp teams have no parent org — a
+      // leftJoin keeps their recaps on the team page instead of
+      // silently dropping every post.
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
       .where(
         and(
@@ -1221,7 +1224,7 @@ router.get(
       .select({ h: highlights, team: teams, org: organizations, author: users })
       .from(highlights)
       .innerJoin(teams, eq(highlights.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(highlights.uploaderId, users.id))
       // Task #559 — pending highlights (player/parent uploads
       // awaiting staff approval) never surface on the public
@@ -1248,7 +1251,7 @@ router.get(
           rows.map((r) => ({
             articleId: r.a.id,
             authorId: r.a.authorId,
-            orgId: r.org.id,
+            orgId: r.org?.id ?? null,
           })),
         ),
         computeArticleAuthorRoleMap(
@@ -1256,7 +1259,7 @@ router.get(
             articleId: r.a.id,
             authorId: r.a.authorId,
             teamId: r.team.id,
-            orgId: r.org.id,
+            orgId: r.org?.id ?? null,
           })),
         ),
         // Task #414 — first call is used only to mine the set of
