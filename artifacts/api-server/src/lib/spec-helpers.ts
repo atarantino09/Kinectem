@@ -781,6 +781,10 @@ interface PostExtras {
   hasReacted?: boolean;
   commentCount?: number;
   recentReactorName?: string | null;
+  // Number of photos in the post's team photo album (extra field beyond
+  // the locked spec — same precedent as `recapKind`). Drives the count
+  // badge on the feed card's "Photos" button.
+  albumPhotoCount?: number;
   // Set per-viewer by GET /posts/:postId and the post-list endpoints
   // (feed, team posts, profile posts, org posts) so the 3-dot menu's
   // "Edit post" item can be rendered everywhere a post card appears.
@@ -1031,6 +1035,7 @@ function basePost(p: {
     hasReacted: p.extras.hasReacted ?? false,
     commentCount: p.extras.commentCount ?? 0,
     recentReactorName: p.extras.recentReactorName ?? null,
+    albumPhotoCount: p.extras.albumPhotoCount ?? 0,
     // Default false. GET /posts/:postId and the post-list endpoints
     // (feed, team posts, profile posts, org posts) compute this
     // per-viewer so the 3-dot menu's "Edit post" item can be

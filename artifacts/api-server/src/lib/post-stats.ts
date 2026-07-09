@@ -1,4 +1,4 @@
-import { db, articles, highlights, orgPosts, postReactions, postComments, postShares, users } from "@workspace/db";
+import { db, albumPhotos, articles, highlights, orgPosts, postReactions, postComments, postShares, users } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 
@@ -7,6 +7,9 @@ export interface PostStats {
   hasReacted: boolean;
   commentCount: number;
   recentReactorName: string | null;
+  // Number of photos in the post's fan/team photo album, shown as a
+  // badge on the feed card's "Photos" button.
+  albumPhotoCount: number;
 }
 
 export interface PostShareStats {
@@ -48,6 +51,7 @@ export async function loadPostStats(
       hasReacted: false,
       commentCount: 0,
       recentReactorName: null,
+      albumPhotoCount: 0,
     });
   }
   const articleIds = capBatch(items.filter((i) => i.kind === "article").map((i) => i.refId));
@@ -258,6 +262,28 @@ export async function loadPostStats(
       })(),
     );
   }
+  // Album photo counts — `album_photos` is polymorphic over
+  // (postKind, postRefId), so one grouped query covers all kinds.
+  const allIds = [...articleIds, ...highlightIds, ...orgPostIds];
+  if (allIds.length > 0) {
+    tasks.push(
+      (async () => {
+        const rows = await db
+          .select({
+            postKind: albumPhotos.postKind,
+            postRefId: albumPhotos.postRefId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(albumPhotos)
+          .where(inArray(albumPhotos.postRefId, allIds))
+          .groupBy(albumPhotos.postKind, albumPhotos.postRefId);
+        for (const r of rows) {
+          const s = map.get(statsKey(r.postKind as StatsKind, r.postRefId));
+          if (s) s.albumPhotoCount = Number(r.count);
+        }
+      })(),
+    );
+  }
   await Promise.all(tasks);
   return map;
 }
@@ -273,6 +299,7 @@ export function statsFor(
       hasReacted: false,
       commentCount: 0,
       recentReactorName: null,
+      albumPhotoCount: 0,
     }
   );
 }

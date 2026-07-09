@@ -134,6 +134,10 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   const [untagOpen, setUntagOpen] = useState(false);
   const [untagging, setUntagging] = useState(false);
   const isShort = post.postType === "short";
+  // Extra server field beyond the locked spec (same precedent as
+  // `recapKind`): number of photos in the post's team photo album.
+  const albumPhotoCount =
+    (post as PostResponse & { albumPhotoCount?: number }).albumPhotoCount ?? 0;
   const Icon = isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
   // Task #524 — only surface the takedown affordance on posts where the
@@ -727,16 +731,26 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           )}
           {!isShort && (
             <Link href={`/posts/${post.id}?album=1`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="font-bold gap-1.5 h-8"
-                data-testid={`button-album-${post.id}`}
-                aria-label="Open photo album"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                Photos
-              </Button>
+              <div className="relative inline-flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="font-bold gap-1.5 h-8"
+                  data-testid={`button-album-${post.id}`}
+                  aria-label="Open photo album"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Photos
+                </Button>
+                {albumPhotoCount > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center leading-none pointer-events-none"
+                    data-testid={`badge-album-count-${post.id}`}
+                  >
+                    {albumPhotoCount > 99 ? "99+" : albumPhotoCount}
+                  </span>
+                )}
+              </div>
             </Link>
           )}
           {post.recentReactorName && post.reactionCount > 0 && (
