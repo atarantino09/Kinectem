@@ -424,10 +424,10 @@ export default function OrganizerPage() {
         <Card className="rounded-xl border-border">
           <CardContent className="p-6 text-center space-y-2">
             <h1 className="text-xl font-black tracking-tight">
-              Organizer unavailable
+              Competition hub unavailable
             </h1>
             <p className="text-sm text-muted-foreground">
-              This organizer link is invalid or no longer available.
+              This competition hub link is invalid or no longer available.
             </p>
             <Link href="/">
               <Button variant="outline" className="font-bold mt-2">
@@ -480,7 +480,7 @@ export default function OrganizerPage() {
                 className="inline-block rounded-full border px-2 py-0.5 text-[11px] font-black uppercase tracking-widest"
                 style={{ borderColor: heroText, opacity: 0.9 }}
               >
-                Organizer
+                Competition hub
               </span>
               <h1
                 className="text-2xl sm:text-3xl font-black tracking-tight"

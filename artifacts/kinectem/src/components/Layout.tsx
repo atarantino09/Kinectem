@@ -400,7 +400,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   onSelect={() => setLocation("/competitions?hubs=1")}
                   data-testid="menu-organizer-hubs"
                 >
-                  <Building2 className="w-4 h-4 mr-2" /> Organizer Hubs
+                  <Building2 className="w-4 h-4 mr-2" /> Competition Hubs
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => setLocation("/settings")}

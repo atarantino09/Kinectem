@@ -291,7 +291,7 @@ function CreateCompetitionCard({
             {organizers.length > 0 && (
               <div className="space-y-1.5">
                 <Label htmlFor="c-organizer" className="text-xs font-bold">
-                  Organizer hub{" "}
+                  Competition hub{" "}
                   <span className="text-muted-foreground">(optional)</span>
                 </Label>
                 <select
@@ -588,7 +588,7 @@ function OrganizerHubCard({ organizers }: { organizers: OrganizerRow[] }) {
       }),
     onSuccess: (row) => {
       qc.invalidateQueries({ queryKey: ["my", "organizers"] });
-      toast({ title: "Organizer hub created" });
+      toast({ title: "Competition hub created" });
       navigate(`/competitions/o/${row.slug}`);
     },
     onError: (err) =>
@@ -605,7 +605,7 @@ function OrganizerHubCard({ organizers }: { organizers: OrganizerRow[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Building2 className="w-4 h-4" />
-          Organizer hubs
+          Competition hubs
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           A home base for your company — group all your competitions under one
@@ -715,7 +715,7 @@ function OrganizerHubCard({ organizers }: { organizers: OrganizerRow[] }) {
             data-testid="btn-new-organizer"
           >
             <Building2 className="w-3.5 h-3.5 mr-1.5" />
-            New organizer hub
+            New competition hub
           </Button>
         )}
       </CardContent>

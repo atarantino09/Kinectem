@@ -417,7 +417,7 @@ export default function FeedPage() {
           <Card className="rounded-xl border border-border shadow-sm">
             <CardContent className="p-4">
               <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
-                Organizers You Follow
+                Hubs You Follow
               </h4>
               <div className="space-y-0.5">
                 {followedHubs.map((hub) => (
@@ -443,7 +443,7 @@ export default function FeedPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-bold truncate">{hub.name}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                          Organizer
+                          Competition hub
                         </p>
                       </div>
                     </div>
