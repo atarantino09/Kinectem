@@ -397,6 +397,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Trophy className="w-4 h-4 mr-2" /> My Competitions
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  onSelect={() => setLocation("/competitions?hubs=1")}
+                  data-testid="menu-organizer-hubs"
+                >
+                  <Building2 className="w-4 h-4 mr-2" /> Organizer Hubs
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onSelect={() => setLocation("/settings")}
                   data-testid="menu-settings"
                 >

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -747,6 +747,17 @@ export default function CompetitionsPage() {
   const initialOrganizerId =
     new URLSearchParams(window.location.search).get("organizer") ?? null;
 
+  // Top-bar "Organizer Hubs" deep link: /competitions?hubs=1 scrolls to the
+  // hub card once it has rendered.
+  const wantHubs =
+    new URLSearchParams(window.location.search).get("hubs") === "1";
+  const hubCardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (wantHubs && !organizersQ.isLoading && hubCardRef.current) {
+      hubCardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [wantHubs, organizersQ.isLoading]);
+
   const competitions = data?.data ?? [];
 
   // Group my competitions by organizer hub; standalone ones last.
@@ -776,7 +787,9 @@ export default function CompetitionsPage() {
         initialOrganizerId={initialOrganizerId}
       />
 
-      <OrganizerHubCard organizers={organizers} />
+      <div ref={hubCardRef} className="scroll-mt-20">
+        <OrganizerHubCard organizers={organizers} />
+      </div>
 
       <div className="space-y-3">
         <h2 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
