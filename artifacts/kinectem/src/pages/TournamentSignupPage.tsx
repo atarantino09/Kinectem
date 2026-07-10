@@ -1,4 +1,4 @@
-import { useRoute, useLocation, Link } from "wouter";
+import { useRoute, useLocation, useSearch, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { useEffect, useMemo, useState } from "react";
@@ -53,6 +53,13 @@ export default function TournamentSignupPage() {
   const [, params] = useRoute("/c/:slug/signup");
   const slug = params?.slug ?? "";
   const [, navigate] = useLocation();
+  // Deep-linked slot from the competition page's "Claim" button — when
+  // present, the pick-a-slot step is skipped entirely.
+  const search = useSearch();
+  const preselectedId = useMemo(
+    () => new URLSearchParams(search).get("participant"),
+    [search],
+  );
   const { toast } = useToast();
   const { data: me, isLoading: meLoading } = useGetLoggedInUser();
 
@@ -93,19 +100,41 @@ export default function TournamentSignupPage() {
     if (myTeams.length > 0) setMode("existing");
   }, [myTeams.length]);
 
-  // Redirect anonymous visitors to signup/login, returning here afterward.
+  // Redirect anonymous visitors to signup/login, returning here afterward
+  // (keeping the deep-linked slot, if any).
   useEffect(() => {
     if (!meLoading && !me) {
-      navigate(
-        `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup`)}`,
-      );
+      const returnTo = preselectedId
+        ? `/c/${slug}/signup?participant=${preselectedId}`
+        : `/c/${slug}/signup`;
+      navigate(`/login?signup=1&returnTo=${encodeURIComponent(returnTo)}`);
     }
-  }, [meLoading, me, navigate, slug]);
+  }, [meLoading, me, navigate, slug, preselectedId]);
 
   const unclaimed = useMemo(
     () => (q.data?.participants ?? []).filter((p) => !p.claimed),
     [q.data],
   );
+
+  // Apply the deep-linked slot once participants load. A stale link to an
+  // already-claimed slot falls back to the manual picker with a notice.
+  const preselectedTaken = useMemo(() => {
+    if (!preselectedId || !q.data) return false;
+    const row = q.data.participants.find((p) => p.id === preselectedId);
+    return !!row && row.claimed;
+  }, [preselectedId, q.data]);
+  const preselectedSlot = useMemo(
+    () => unclaimed.find((p) => p.id === preselectedId) ?? null,
+    [unclaimed, preselectedId],
+  );
+  useEffect(() => {
+    if (!preselectedId || !q.data) return;
+    const row = unclaimed.find((p) => p.id === preselectedId);
+    if (row) {
+      setSelectedId(row.id);
+      setTeamName((prev) => (prev ? prev : row.name));
+    }
+  }, [preselectedId, q.data, unclaimed]);
 
   const selectedSlot = useMemo(
     () => unclaimed.find((p) => p.id === selectedId) ?? null,
@@ -243,47 +272,86 @@ export default function TournamentSignupPage() {
         </p>
       </div>
 
-      <Card className="rounded-xl border-border" data-testid="card-pick-slot">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="text-lg font-black tracking-tight">
-            1. Pick your team name
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Click your team's name in this list — or scroll all the way down
-            and write it in if you don't see it.
-          </p>
-          {unclaimed.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Every team name in this tournament has already been claimed.
-            </p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {unclaimed.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => pick(p)}
-                  className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-                    selectedId === p.id
-                      ? "border-primary ring-2 ring-primary/30"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                  data-testid={`btn-pick-${p.id}`}
-                >
-                  <p className="text-sm font-bold truncate">{p.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {groupLabel(p.division, p.bracket)}
-                  </p>
-                </button>
-              ))}
+      {/* Deep-linked claim from the competition page — show WHICH slot is
+          being claimed up top instead of making the coach re-pick it. */}
+      {preselectedSlot ? (
+        <Card
+          className="rounded-xl border-primary/40 bg-primary/5"
+          data-testid="card-claiming-slot"
+        >
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                You're claiming
+              </p>
+              <p className="text-lg font-black tracking-tight break-words">
+                {preselectedSlot.name}
+              </p>
+              <p className="text-xs text-muted-foreground break-words">
+                {groupLabel(preselectedSlot.division, preselectedSlot.bracket)}
+              </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <Link href={`/c/${slug}`}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold shrink-0"
+                data-testid="btn-change-slot"
+              >
+                Not your team?
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="rounded-xl border-border" data-testid="card-pick-slot">
+          <CardContent className="p-6 space-y-3">
+            <h2 className="text-lg font-black tracking-tight">
+              Pick your team name
+            </h2>
+            {preselectedTaken ? (
+              <p className="text-sm font-bold text-destructive">
+                The team you clicked has already been claimed — pick another
+                name below.
+              </p>
+            ) : null}
+            <p className="text-sm text-muted-foreground">
+              Click your team's name in this list — or write it in below if you
+              don't see it.
+            </p>
+            {unclaimed.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Every team name in this tournament has already been claimed.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {unclaimed.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => pick(p)}
+                    className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                      selectedId === p.id
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    data-testid={`btn-pick-${p.id}`}
+                  >
+                    <p className="text-sm font-bold truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {groupLabel(p.division, p.bracket)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="rounded-xl border-border" data-testid="card-team-details">
         <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-black tracking-tight">2. Your team</h2>
+          <h2 className="text-lg font-black tracking-tight">Your team</h2>
 
           {myTeams.length > 0 && (
             <div className="grid gap-2 sm:grid-cols-2">

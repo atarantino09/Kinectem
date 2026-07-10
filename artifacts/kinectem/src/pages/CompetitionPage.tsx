@@ -642,7 +642,13 @@ export default function CompetitionPage() {
                           Taken
                         </Badge>
                       ) : (
-                        <Link href={signupHref}>
+                        <Link
+                          href={
+                            me
+                              ? `/c/${encodeURIComponent(slug)}/signup?participant=${p.id}`
+                              : `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup?participant=${p.id}`)}`
+                          }
+                        >
                           <Button
                             size="sm"
                             variant="outline"
