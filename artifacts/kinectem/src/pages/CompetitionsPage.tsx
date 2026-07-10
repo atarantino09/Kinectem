@@ -605,7 +605,7 @@ function OrganizerHubCard({ organizers }: { organizers: OrganizerRow[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Building2 className="w-4 h-4" />
-          Competition hubs
+          Competition hub
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           A home base for your company — group all your competitions under one
