@@ -66,7 +66,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [currentUserError, location, setLocation]);
   const [query, setQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -242,35 +241,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
             />
           </Link>
 
-          {/* The header is packed, so growing via flex has no free space to
-              claim. Instead, on focus the input breaks out of flow and
-              overlays the nav (z-20) at a comfortable width; the form keeps
-              its flex slot so the layout doesn't jump. */}
-          <form
-            onSubmit={onSearchSubmit}
-            className="relative flex-1 max-w-md min-w-0 h-10"
-          >
-            <div
-              className={`transition-all duration-200 ease-out ${
-                searchFocused
-                  ? "absolute left-0 top-0 z-20 w-[clamp(14rem,calc(100vw-32rem),36rem)]"
-                  : "absolute inset-0"
-              }`}
-            >
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
-              <Input
-                type="search"
-                placeholder="Search athletes, teams, organizations..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                className={`pl-9 border-transparent ${
-                  searchFocused ? "bg-card shadow-md" : "bg-muted"
-                }`}
-                data-testid="input-header-search"
-              />
-            </div>
+          <form onSubmit={onSearchSubmit} className="flex-1 max-w-md relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search athletes, teams, organizations..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9 bg-muted border-transparent focus-visible:bg-card"
+              data-testid="input-header-search"
+            />
           </form>
 
           <nav className="hidden md:flex items-center gap-1">
