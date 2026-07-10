@@ -11,6 +11,7 @@
 - [Dialog grid overflow](dialog-grid-overflow.md) — long URLs/tokens blow out grid DialogContent width; `break-words` doesn't shrink min-content, use `[overflow-wrap:anywhere]`/`break-all`/`truncate`.
 - [Runtime-error overlay "(unknown runtime error)"](runtime-error-overlay-resizeobserver.md) — empty/dismissable dev overlay = benign ResizeObserver loop (null evt.error); suppressed via inline head guard in index.html.
 - [Tailwind v4 bare CSS-var](tailwind-v4-bare-var.md) — `max-h-[--foo]` silently breaks in v4 (no var()) → no max-height → dropdowns don't scroll; use `[var(--foo)]`.
+- [Radix popper max-height on mobile](radix-popper-max-height.md) — never override Select/Dropdown max-h with fixed caps; use min(var(--radix-…-available-height), cap) or mobile clips off-screen.
 - [Team banner blur-fill display](team-banner-blur-fill.md) — team hero photos use BlurFillImage (contain over blurred cover), NOT object-cover crop; team upload flows have no crop step.
 - [Inline image upload body limit](inline-image-body-limit.md) — banners/logos are inline base64 data: URLs; global express.json is 1MB, so image PATCH routes need a dedicated 21MB parser + 20MB cap kept in lockstep client/server.
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.

@@ -621,7 +621,7 @@ export function EditProfileDialog({
                 </SelectTrigger>
                 <SelectContent
                   position="popper"
-                  className="max-h-[min(60vh,24rem)]"
+                  className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
                 >
                   {DOB_MONTHS.map((m) => (
                     <SelectItem
@@ -643,7 +643,7 @@ export function EditProfileDialog({
                 </SelectTrigger>
                 <SelectContent
                   position="popper"
-                  className="max-h-[min(60vh,24rem)]"
+                  className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
                 >
                   {DOB_DAYS.map((d) => (
                     <SelectItem
@@ -665,7 +665,7 @@ export function EditProfileDialog({
                 </SelectTrigger>
                 <SelectContent
                   position="popper"
-                  className="max-h-[min(60vh,24rem)]"
+                  className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
                 >
                   {DOB_YEARS.map((y) => (
                     <SelectItem
@@ -813,7 +813,7 @@ export function EditProfileDialog({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="max-h-72 w-72 overflow-y-auto"
+                  className="max-h-[min(var(--radix-dropdown-menu-content-available-height),18rem)] w-72 overflow-y-auto"
                 >
                   <DropdownMenuLabel className="text-xs font-bold">
                     Pick up to {MAX_USER_SPORTS}
@@ -910,7 +910,7 @@ export function EditProfileDialog({
                 >
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
-                <SelectContent className="max-h-72">
+                <SelectContent className="max-h-[min(var(--radix-select-content-available-height),18rem)]">
                   <SelectItem
                     value="__clear__"
                     data-testid="option-profile-state-clear"

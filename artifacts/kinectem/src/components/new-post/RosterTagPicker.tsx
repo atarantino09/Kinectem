@@ -142,7 +142,7 @@ export function RosterTagPicker({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72 p-0"
+          className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-[min(var(--radix-dropdown-menu-content-available-height),18rem)] p-0"
         >
           {loading ? (
             <div

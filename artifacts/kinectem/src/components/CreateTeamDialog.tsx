@@ -281,7 +281,7 @@ export function CreateTeamDialog({
                       shadcn's SelectContent caps at, so the full ~41-
                       entry SPORTS list scrolls inside the viewport on
                       both desktop and mobile instead of overflowing. */}
-                  <SelectContent position="popper" className="max-h-[min(60vh,24rem)]">
+                  <SelectContent position="popper" className="max-h-[min(var(--radix-select-content-available-height),24rem)]">
                     {SPORTS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}

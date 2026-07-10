@@ -202,7 +202,7 @@ export function SignUpForm({
               </SelectTrigger>
               <SelectContent
                 position="popper"
-                className="max-h-[min(60vh,24rem)]"
+                className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
               >
                 {DOB_MONTHS.map((m) => (
                   <SelectItem
@@ -225,7 +225,7 @@ export function SignUpForm({
               </SelectTrigger>
               <SelectContent
                 position="popper"
-                className="max-h-[min(60vh,24rem)]"
+                className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
               >
                 {DOB_DAYS.map((d) => (
                   <SelectItem
@@ -248,7 +248,7 @@ export function SignUpForm({
               </SelectTrigger>
               <SelectContent
                 position="popper"
-                className="max-h-[min(60vh,24rem)]"
+                className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
               >
                 {DOB_YEARS.map((y) => (
                   <SelectItem

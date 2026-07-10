@@ -403,7 +403,7 @@ export function NotificationsBell() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-80 p-0 max-h-[480px] overflow-hidden flex flex-col"
+        className="w-80 p-0 max-h-[min(var(--radix-dropdown-menu-content-available-height),480px)] overflow-hidden flex flex-col"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h4 className="font-black tracking-tight text-sm">Notifications</h4>

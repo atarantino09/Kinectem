@@ -381,7 +381,7 @@ export function CreateOrgDialog({
                   >
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-72">
+                  <SelectContent className="max-h-[min(var(--radix-select-content-available-height),18rem)]">
                     {US_STATES.map((s) => (
                       <SelectItem
                         key={s.code}
