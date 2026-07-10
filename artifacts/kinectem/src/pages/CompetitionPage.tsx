@@ -17,7 +17,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, Star } from "lucide-react";
+import { ChevronDown, Pencil, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
@@ -80,6 +80,7 @@ export type CompetitionMeta = {
   websiteUrl: string | null;
   claimedCount: number;
   participantCount: number;
+  canManage?: boolean;
   // Viewer follow state (quick-access follows; false when logged out).
   isFollowing?: boolean;
   // Parent-company hub (Task #723) — null when standalone.
@@ -369,8 +370,11 @@ export default function CompetitionPage() {
         style={{ background: heroBackground, color: heroText }}
         data-testid="hero-competition"
       >
+        {/* Banner ≈2/3 of the hero, branded strip ≈1/3 — strip content is
+            compacted (smaller logo/title, tighter spacing) so nothing gets
+            cut off. */}
         {c.bannerUrl ? (
-          <div className="h-40 sm:h-56 w-full overflow-hidden">
+          <div className="h-64 sm:h-96 w-full overflow-hidden">
             <img
               src={c.bannerUrl}
               alt=""
@@ -378,13 +382,13 @@ export default function CompetitionPage() {
             />
           </div>
         ) : null}
-        <div className="max-w-4xl mx-auto px-6 py-8 space-y-3">
+        <div className="max-w-4xl mx-auto px-6 py-5 space-y-2.5">
           <div className="flex items-start gap-4">
             {c.logoUrl ? (
               <img
                 src={c.logoUrl}
                 alt={`${c.name} logo`}
-                className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl object-contain bg-white/90 p-1.5 shrink-0"
+                className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl object-contain bg-white/90 p-1.5 shrink-0"
                 data-testid="img-competition-logo"
               />
             ) : null}
@@ -438,7 +442,7 @@ export default function CompetitionPage() {
                 </Link>
               ) : null}
               <h1
-                className="text-3xl sm:text-4xl font-black tracking-tight"
+                className="text-2xl sm:text-3xl font-black tracking-tight"
                 data-testid="text-competition-name"
               >
                 {c.name}
@@ -474,6 +478,19 @@ export default function CompetitionPage() {
                 />
                 {c.isFollowing ? "Following" : "Follow"}
               </Button>
+            ) : null}
+            {c.canManage ? (
+              <Link href={`/competitions/${c.id}`}>
+                <Button
+                  variant="outline"
+                  className="font-bold border-white/70 bg-transparent hover:bg-white/10"
+                  style={{ color: heroText }}
+                  data-testid="btn-edit-competition"
+                >
+                  <Pencil className="w-4 h-4 mr-1.5" />
+                  Edit competition
+                </Button>
+              </Link>
             ) : null}
             <span className="text-xs font-bold opacity-90">
               {c.claimedCount} / {c.participantCount} teams telling their story

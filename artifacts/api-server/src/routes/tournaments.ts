@@ -811,6 +811,11 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       // Viewer follow state (quick-access follows; NOT a feed source).
       // False for logged-out viewers.
       isFollowing,
+      // True only for the competition operator (owner/creator or platform
+      // admin) — drives the "Edit competition" button on the public page.
+      canManage: req.sessionUser
+        ? canOperateCompetition(req.sessionUser, tournament)
+        : false,
       // Parent-company hub (null when the competition is standalone).
       organizer: organizerRow ?? null,
     };
