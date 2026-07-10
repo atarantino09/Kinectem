@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronRight, ChevronDown, Pin, PinOff } from "lucide-react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { ChevronRight, ChevronDown, Pin, PinOff, Medal } from "lucide-react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
+  customFetch,
   useGetLoggedInUser,
   listFeed,
   useListUserOrganizations,
@@ -57,6 +58,25 @@ export default function FeedPage() {
     isPinned: isTeamPinned,
     togglePin: toggleTeamPin,
   } = usePinnedTeams();
+
+  // Followed competitions — quick-access sidebar links only. Intentionally
+  // NOT a feed source (the home feed stays teams/orgs). Hand-written
+  // customFetch route (openapi.yaml is locked).
+  const followedCompsQ = useQuery({
+    queryKey: ["my-followed-competitions"],
+    queryFn: () =>
+      customFetch<{
+        data: Array<{
+          id: string;
+          slug: string;
+          name: string;
+          type: string;
+          logoUrl: string | null;
+        }>;
+      }>("/api/v1/my/followed-competitions", { method: "GET" }),
+    enabled: !!me?.id,
+  });
+  const followedComps = followedCompsQ.data?.data ?? [];
 
   const { orgGroups, orphanTeams } = useMemo(() => {
     const byName = (a: { name: string }, b: { name: string }) =>
@@ -331,6 +351,47 @@ export default function FeedPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {followedComps.length > 0 && (
+          <Card className="rounded-xl border border-border shadow-sm">
+            <CardContent className="p-4">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+                Competitions You Follow
+              </h4>
+              <div className="space-y-0.5">
+                {followedComps.map((comp) => (
+                  <Link
+                    key={comp.id}
+                    href={`/competitions/c/${encodeURIComponent(comp.slug)}`}
+                  >
+                    <div
+                      className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/60 cursor-pointer"
+                      data-testid={`link-sidebar-competition-${comp.id}`}
+                    >
+                      {comp.logoUrl ? (
+                        <img
+                          src={comp.logoUrl}
+                          alt=""
+                          className="w-7 h-7 rounded-md object-contain bg-muted shrink-0"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                          <Medal className="w-4 h-4" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold truncate">{comp.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          {comp.type === "league" ? "League" : "Tournament"}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </CardContent>
           </Card>

@@ -21,6 +21,7 @@ import {
   articles,
   gameScoreReports,
   organizationAdmins,
+  competitionFollowers,
 } from "@workspace/db";
 import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
@@ -667,6 +668,23 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .limit(1);
     if (!tournament) return apiError(res, 404, "Competition not found");
 
+    // Viewer follow state for the Follow button. Logged-out → false.
+    const viewerId = req.sessionUser?.id ?? null;
+    const isFollowing = viewerId
+      ? (
+          await db
+            .select({ userId: competitionFollowers.userId })
+            .from(competitionFollowers)
+            .where(
+              and(
+                eq(competitionFollowers.competitionId, tournament.id),
+                eq(competitionFollowers.userId, viewerId),
+              ),
+            )
+            .limit(1)
+        ).length > 0
+      : false;
+
     const partRows = await db
       .select()
       .from(tournamentParticipants)
@@ -745,6 +763,9 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       websiteUrl: tournament.websiteUrl,
       claimedCount,
       participantCount: partRows.length,
+      // Viewer follow state (quick-access follows; NOT a feed source).
+      // False for logged-out viewers.
+      isFollowing,
     };
 
     res.json({
@@ -827,6 +848,84 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
 
 router.get("/tournaments/:slug", publicCompetitionRead);
 router.get("/competitions/:slug", publicCompetitionRead);
+
+// ---------------------------------------------------------------------------
+// Competition follows — quick access only, intentionally NOT a feed source.
+// Mirrors team_followers but never enters the home-feed fan-in.
+// ---------------------------------------------------------------------------
+
+// POST /competitions/:slug/follow — idempotent (conflict → no-op).
+router.post(
+  "/competitions/:slug/follow",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [tournament] = await db
+      .select({ id: tournaments.id })
+      .from(tournaments)
+      .where(eq(tournaments.slug, req.params.slug))
+      .limit(1);
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    await db
+      .insert(competitionFollowers)
+      .values({ competitionId: tournament.id, userId: me.id })
+      .onConflictDoNothing();
+    res.json({ ok: true, isFollowing: true });
+  }),
+);
+
+// DELETE /competitions/:slug/follow — idempotent.
+router.delete(
+  "/competitions/:slug/follow",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [tournament] = await db
+      .select({ id: tournaments.id })
+      .from(tournaments)
+      .where(eq(tournaments.slug, req.params.slug))
+      .limit(1);
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    await db
+      .delete(competitionFollowers)
+      .where(
+        and(
+          eq(competitionFollowers.competitionId, tournament.id),
+          eq(competitionFollowers.userId, me.id),
+        ),
+      );
+    res.json({ ok: true, isFollowing: false });
+  }),
+);
+
+// GET /my/followed-competitions — quick-access list for the feed sidebar.
+router.get(
+  "/my/followed-competitions",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const rows = await db
+      .select({
+        id: tournaments.id,
+        slug: tournaments.slug,
+        name: tournaments.name,
+        type: tournaments.type,
+        logoUrl: tournaments.logoUrl,
+        brandColor: tournaments.brandColor,
+        startDate: tournaments.startDate,
+        endDate: tournaments.endDate,
+        followedAt: competitionFollowers.createdAt,
+      })
+      .from(competitionFollowers)
+      .innerJoin(tournaments, eq(tournaments.id, competitionFollowers.competitionId))
+      .where(eq(competitionFollowers.userId, me.id))
+      .orderBy(desc(competitionFollowers.createdAt));
+    res.json({ data: rows });
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // POST /tournaments/:id/import — operator uploads the match-slot CSV.

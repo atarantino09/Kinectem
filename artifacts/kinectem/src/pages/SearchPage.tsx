@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Trophy, User as UserIcon } from "lucide-react";
+import { Building2, Medal, Trophy, User as UserIcon } from "lucide-react";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 
 export default function SearchPage() {
@@ -41,6 +41,27 @@ export default function SearchPage() {
   const users = data?.users?.data ?? [];
   const orgs = data?.organizations?.data ?? [];
   const teams = data?.teams?.data ?? [];
+  // Competitions ride on the same response as an extra key beyond the
+  // locked openapi spec (recapKind precedent) — read via a narrow cast.
+  const competitions =
+    (
+      data as
+        | {
+            competitions?: {
+              data: Array<{
+                id: string;
+                slug: string;
+                name: string;
+                type: string;
+                location: string | null;
+                logoUrl: string | null;
+                startDate: string;
+                endDate: string;
+              }>;
+            };
+          }
+        | undefined
+    )?.competitions?.data ?? [];
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 py-4">
@@ -129,6 +150,41 @@ export default function SearchPage() {
                     <p className="font-bold text-sm truncate">{t.name}</p>
                     <p className="text-xs text-muted-foreground truncate">
                       {formatOrgName(t.organizationName)}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </Section>
+
+          <Section
+            title="Competitions"
+            icon={<Medal className="w-4 h-4" />}
+            empty="No competitions found."
+            count={competitions.length}
+          >
+            {competitions.map((c) => (
+              <Link key={c.id} href={`/competitions/c/${encodeURIComponent(c.slug)}`}>
+                <div
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer"
+                  data-testid={`link-search-competition-${c.id}`}
+                >
+                  {c.logoUrl ? (
+                    <img
+                      src={c.logoUrl}
+                      alt=""
+                      className="w-10 h-10 rounded-lg object-contain bg-muted shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center shrink-0">
+                      <Medal className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm truncate">{c.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {c.type === "league" ? "League" : "Tournament"}
+                      {c.location ? ` · ${c.location}` : ""} · {c.startDate}
                     </p>
                   </div>
                 </div>

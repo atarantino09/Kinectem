@@ -1427,6 +1427,19 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     sql: COMPETITIONS_STEP1,
   },
   {
+    name: "2026-07-10-competition-followers",
+    sql: `
+      CREATE TABLE IF NOT EXISTS competition_followers (
+        competition_id uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at timestamp DEFAULT now() NOT NULL,
+        PRIMARY KEY (competition_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS competition_followers_user_id_idx
+        ON competition_followers (user_id);
+    `,
+  },
+  {
     name: "2026-07-09-competition-secondary-colors",
     sql: `
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS secondary_color text;

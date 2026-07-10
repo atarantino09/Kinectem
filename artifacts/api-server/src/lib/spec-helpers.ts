@@ -891,6 +891,8 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     updatedAt: a.updatedAt.toISOString(),
     gameDate: a.gameDate ? a.gameDate.toISOString() : null,
     recapKind: a.recapKind ?? null,
+    // Medal marker: operator-featured competition recap.
+    competitionFeatured: a.featured === true && a.competitionId != null,
     extras,
   });
 }
@@ -979,6 +981,10 @@ function basePost(p: {
   // Only combined season/tournament recaps set this ("combined"); all
   // other posts omit it and the response serializes null.
   recapKind?: string | null;
+  // True when this recap was featured by a competition operator on the
+  // competition's public rail. Drives the medal marker on the post card.
+  // Extra field beyond the locked spec — recapKind precedent.
+  competitionFeatured?: boolean;
   extras: PostExtras;
 }) {
   const author = p.extras.author
@@ -1045,6 +1051,7 @@ function basePost(p: {
     gameDate: p.gameDate ?? null,
     recapKind: p.recapKind ?? null,
     competition: p.extras.competition ?? null,
+    competitionFeatured: p.competitionFeatured ?? false,
     author,
     context,
     assets: p.assets,

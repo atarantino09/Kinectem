@@ -16,7 +16,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
@@ -79,6 +79,8 @@ export type CompetitionMeta = {
   websiteUrl: string | null;
   claimedCount: number;
   participantCount: number;
+  // Viewer follow state (quick-access follows; false when logged out).
+  isFollowing?: boolean;
 };
 
 type FeaturedRecap = {
@@ -268,6 +270,20 @@ export default function CompetitionPage() {
     retry: false,
   });
 
+  // Follow / unfollow — quick-access only (does NOT change the home feed).
+  const qcTop = useQueryClient();
+  const followMutation = useMutation({
+    mutationFn: (follow: boolean) =>
+      customFetch<{ ok: true; isFollowing: boolean }>(
+        `/api/v1/competitions/${encodeURIComponent(slug)}/follow`,
+        { method: follow ? "POST" : "DELETE" },
+      ),
+    onSuccess: () => {
+      qcTop.invalidateQueries({ queryKey: ["competition", slug] });
+      qcTop.invalidateQueries({ queryKey: ["my-followed-competitions"] });
+    },
+  });
+
   const matchGroups = useMemo(() => {
     const map = new Map<string, Match[]>();
     for (const m of q.data?.matches ?? []) {
@@ -412,6 +428,21 @@ export default function CompetitionPage() {
                 Sign up your team
               </Button>
             </Link>
+            {me ? (
+              <Button
+                variant="outline"
+                className="font-bold border-white/70 bg-transparent hover:bg-white/10"
+                style={{ color: heroText }}
+                disabled={followMutation.isPending}
+                onClick={() => followMutation.mutate(!c.isFollowing)}
+                data-testid="btn-follow-competition"
+              >
+                <Star
+                  className={`w-4 h-4 mr-1.5 ${c.isFollowing ? "fill-current" : ""}`}
+                />
+                {c.isFollowing ? "Following" : "Follow"}
+              </Button>
+            ) : null}
             <span className="text-xs font-bold opacity-90">
               {c.claimedCount} / {c.participantCount} teams telling their story
             </span>

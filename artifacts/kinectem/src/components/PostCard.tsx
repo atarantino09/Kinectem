@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight, Medal } from "lucide-react";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
   customFetch,
@@ -180,6 +180,10 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
       } | null;
     }
   ).competition;
+  // Medal marker for recaps a competition operator featured on the
+  // competition's public rail (extra field beyond the locked spec).
+  const competitionFeatured =
+    (post as { competitionFeatured?: boolean }).competitionFeatured === true;
   const label =
     reportTarget.contentType === "highlight"
       ? "Highlight"
@@ -459,6 +463,15 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {competitionFeatured && (
+              <span
+                className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
+                title="Featured by the competition"
+                data-testid={`icon-featured-medal-${post.id}`}
+              >
+                <Medal className="w-3.5 h-3.5" />
+              </span>
+            )}
             <Badge
               className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest`}
             >

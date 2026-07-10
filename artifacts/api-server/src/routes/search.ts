@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, users, organizations, teams } from "@workspace/db";
+import { db, users, organizations, teams, tournaments } from "@workspace/db";
 import { and, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { filterOutMinors } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -44,9 +44,10 @@ router.get(
         users: { data: [], pagination: emptyPagination() },
         organizations: { data: [], pagination: emptyPagination() },
         teams: { data: [], pagination: emptyPagination() },
+        competitions: { data: [], pagination: emptyPagination() },
       });
     }
-    const [userRowsRaw, orgRows, teamRows] = await Promise.all([
+    const [userRowsRaw, orgRows, teamRows, competitionRows] = await Promise.all([
       // Task #676 — deactivated/frozen and soft-deleted accounts must not
       // surface in cross-entity search for non-admin viewers. Admins keep
       // their existing visibility (they don't hit this endpoint for that).
@@ -67,6 +68,24 @@ router.get(
         .select()
         .from(teams)
         .where(and(ilike(teams.name, `%${q}%`), isNull(teams.archivedAt)))
+        .limit(10),
+      // Competitions (tournaments/leagues) surface in cross-entity search
+      // as an extra response key beyond the locked spec (recapKind
+      // precedent). Public entities — no visibility filtering needed.
+      db
+        .select({
+          id: tournaments.id,
+          slug: tournaments.slug,
+          name: tournaments.name,
+          type: tournaments.type,
+          location: tournaments.location,
+          logoUrl: tournaments.logoUrl,
+          brandColor: tournaments.brandColor,
+          startDate: tournaments.startDate,
+          endDate: tournaments.endDate,
+        })
+        .from(tournaments)
+        .where(ilike(tournaments.name, `%${q}%`))
         .limit(10),
     ]);
     // Task #359 — minor accounts must not be discoverable via cross-
@@ -134,6 +153,21 @@ router.get(
             organizationSlug: org ? org.name.toLowerCase().replace(/\s+/g, "-") : null,
           };
         }),
+        pagination: emptyPagination(),
+      },
+      competitions: {
+        data: competitionRows.map((c) => ({
+          entityType: "competition" as const,
+          id: c.id,
+          slug: c.slug,
+          name: c.name,
+          type: c.type,
+          location: c.location ?? null,
+          logoUrl: c.logoUrl ?? null,
+          brandColor: c.brandColor ?? null,
+          startDate: c.startDate,
+          endDate: c.endDate,
+        })),
         pagination: emptyPagination(),
       },
     });

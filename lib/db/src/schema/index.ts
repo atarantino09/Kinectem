@@ -1481,6 +1481,19 @@ export const tournaments = pgTable("tournaments", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Users following a competition for quick access (mirrors team_followers).
+// Follow does NOT feed the home feed — it only powers the sidebar quick
+// links + the follow state on the competition page.
+export const competitionFollowers = pgTable("competition_followers", {
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.competitionId, t.userId] }),
+  // "competitions this user follows" needs its own index on user_id.
+  userIdIdx: index("competition_followers_user_id_idx").on(t.userId),
+}));
+
 // One row per unique team-name in a tournament, scoped by division + bracket
 // (derived from the Home Team / Away Team CSV columns). Unclaimed until a
 // visiting coach claims it, at which point `teamId` links their solo team and
