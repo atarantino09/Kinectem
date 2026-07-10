@@ -441,6 +441,20 @@ router.get(
         competitionName: competitionId
           ? (compById.get(competitionId)?.name ?? null)
           : null,
+        // Mini competition brand strip on the recap card (mirrors the
+        // PostCard competition banner, just compact).
+        competition: (() => {
+          const comp = competitionId ? compById.get(competitionId) : undefined;
+          return comp
+            ? {
+                slug: comp.slug,
+                name: comp.name,
+                logoUrl: comp.logoUrl,
+                brandColor: comp.brandColor,
+                secondaryColor: comp.secondaryColor,
+              }
+            : null;
+        })(),
       })),
     });
   }),

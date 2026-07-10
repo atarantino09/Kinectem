@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -516,9 +517,14 @@ export default function CompetitionPage() {
                 <Link key={r.id} href={`/posts/${r.id}`}>
                   <Card
                     className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
-                    style={{ borderTopColor: brand, borderTopWidth: 3 }}
                     data-testid={`card-featured-recap-${r.id}`}
                   >
+                    <CompetitionBrandStrip
+                      name={c.name}
+                      logoUrl={c.logoUrl}
+                      brandColor={c.brandColor}
+                      secondaryColor={c.secondaryColor}
+                    />
                     {r.coverImageUrl ? (
                       <div className="h-32 w-full overflow-hidden">
                         <img

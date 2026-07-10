@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
+import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +73,13 @@ type OrganizerFeaturedRecap = {
   gameDate: string | null;
   teamName: string;
   competitionName: string | null;
+  competition: {
+    slug: string;
+    name: string;
+    logoUrl: string | null;
+    brandColor: string | null;
+    secondaryColor: string | null;
+  } | null;
 };
 
 type OrganizerResponse = {
@@ -585,9 +593,21 @@ export default function OrganizerPage() {
                 <Link key={r.id} href={`/posts/${r.id}`}>
                   <Card
                     className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
-                    style={{ borderTopColor: brand, borderTopWidth: 3 }}
+                    style={
+                      r.competition
+                        ? undefined
+                        : { borderTopColor: brand, borderTopWidth: 3 }
+                    }
                     data-testid={`card-organizer-recap-${r.id}`}
                   >
+                    {r.competition ? (
+                      <CompetitionBrandStrip
+                        name={r.competition.name}
+                        logoUrl={r.competition.logoUrl}
+                        brandColor={r.competition.brandColor}
+                        secondaryColor={r.competition.secondaryColor}
+                      />
+                    ) : null}
                     {r.coverImageUrl ? (
                       <div className="h-32 w-full overflow-hidden">
                         <img
