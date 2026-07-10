@@ -1443,6 +1443,34 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
 // game recaps WHILE the tournament is active. After `end_date` recap creation
 // is locked until they create / get adopted by a real organization.
 // ---------------------------------------------------------------------------
+// Task #723 — Competition Organizer hub ("parent company"). A tournament
+// company gets ONE durable branded page listing all of its competitions;
+// competitions can be created from the hub (brand-inherit) or attached
+// retroactively. Owned by a single user, like competitions — organizers are
+// event companies, deliberately separate from Organizations (clubs).
+export const competitionOrganizers = pgTable("competition_organizers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Public hub URL (`/organizers/<slug>`).
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  ownerUserId: uuid("owner_user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  // Branding — mirrors the competition branding block so a new competition
+  // created from the hub can inherit it wholesale.
+  logoUrl: text("logo_url"),
+  brandColor: text("brand_color"),
+  secondaryColor: text("secondary_color"),
+  tertiaryColor: text("tertiary_color"),
+  bannerUrl: text("banner_url"),
+  websiteUrl: text("website_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  byOwner: index("competition_organizers_owner_user_id_idx").on(t.ownerUserId),
+}));
+
 export const tournaments = pgTable("tournaments", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Unguessable-ish public slug used in the funnel URL (`/t/<slug>`).
@@ -1465,6 +1493,9 @@ export const tournaments = pgTable("tournaments", {
   // Self-serve owner/operator. Backfilled from createdById for legacy rows;
   // scopes the operator console (branding, imports, curation, claims).
   ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Task #723 — optional parent-company hub this competition belongs to.
+  // Detaching/deleting the organizer never deletes the competition.
+  organizerId: uuid("organizer_id").references(() => competitionOrganizers.id, { onDelete: "set null" }),
   // When false, slot claims land as pending and the operator approves each
   // one in the console before the team links to its games.
   autoApproveClaims: boolean("auto_approve_claims").notNull().default(true),

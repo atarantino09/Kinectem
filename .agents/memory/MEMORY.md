@@ -37,4 +37,5 @@
 - [Competition branding on posts](post-competition-branding.md) — recap PostResponse carries a `competition` brand block (extra beyond locked spec); in-app page at /competitions/c/:slug must precede console route.
 - [Independent teams & org joins](independent-team-org-joins.md) — org-less teams: innerJoin organizations silently drops all their posts; always leftJoin + nullable org.
 - [Competition existing-team claim](competition-existing-team-claim.md) — one-slot-per-team needs advisory-lock tx (TOCTOU); name mismatch is a coach-confirmed UI gate, not server-enforced.
+- [Competition organizer hub](organizer-hub.md) — hub branding is copied onto competitions at creation (never referenced); attach body is `{competitionId, attach:boolean}`.
 - [First-run onboarding](first-run-onboarding.md) — onboarding "seen" flag is per-browser localStorage (openapi locked, no server field); reusable SpotlightTour gated on canManage; don't open route-based composers mid-tour.

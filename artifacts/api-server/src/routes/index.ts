@@ -32,6 +32,7 @@ import emailProvidersRouter from "./email-providers";
 import subscriptionsRouter from "./subscriptions";
 import announcementsRouter from "./announcements";
 import tournamentsRouter from "./tournaments";
+import organizersRouter from "./organizers";
 import broadcastsRouter from "./broadcasts";
 import dailyAdminDigestRouter from "./daily-admin-digest";
 
@@ -76,6 +77,7 @@ router.use(emailProvidersRouter);
 router.use(subscriptionsRouter);
 router.use(announcementsRouter);
 router.use(tournamentsRouter);
+router.use(organizersRouter);
 router.use(broadcastsRouter);
 router.use(dailyAdminDigestRouter);
 

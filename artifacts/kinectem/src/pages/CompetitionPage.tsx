@@ -81,6 +81,13 @@ export type CompetitionMeta = {
   participantCount: number;
   // Viewer follow state (quick-access follows; false when logged out).
   isFollowing?: boolean;
+  // Parent-company hub (Task #723) — null when standalone.
+  organizer?: {
+    id: string;
+    slug: string;
+    name: string;
+    logoUrl: string | null;
+  } | null;
 };
 
 type FeaturedRecap = {
@@ -405,6 +412,30 @@ export default function CompetitionPage() {
                 </span>
                 <span className="text-xs opacity-80">{dateRange}</span>
               </div>
+              {c.organizer ? (
+                <Link
+                  href={
+                    appParams
+                      ? `/competitions/o/${c.organizer.slug}`
+                      : `/organizers/${c.organizer.slug}`
+                  }
+                >
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-widest cursor-pointer hover:opacity-100"
+                    style={{ borderColor: heroText, opacity: 0.9 }}
+                    data-testid="chip-presented-by"
+                  >
+                    {c.organizer.logoUrl ? (
+                      <img
+                        src={c.organizer.logoUrl}
+                        alt=""
+                        className="h-4 w-4 rounded object-contain bg-white/90"
+                      />
+                    ) : null}
+                    Presented by {c.organizer.name}
+                  </span>
+                </Link>
+              ) : null}
               <h1
                 className="text-3xl sm:text-4xl font-black tracking-tight"
                 data-testid="text-competition-name"

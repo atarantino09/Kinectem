@@ -1446,6 +1446,32 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tertiary_color text;
     `,
   },
+  {
+    name: "2026-07-10-task-723-competition-organizers",
+    sql: `
+      CREATE TABLE IF NOT EXISTS competition_organizers (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        slug text NOT NULL UNIQUE,
+        name text NOT NULL,
+        description text,
+        owner_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        logo_url text,
+        brand_color text,
+        secondary_color text,
+        tertiary_color text,
+        banner_url text,
+        website_url text,
+        created_at timestamp DEFAULT now() NOT NULL,
+        updated_at timestamp DEFAULT now() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS competition_organizers_owner_user_id_idx
+        ON competition_organizers (owner_user_id);
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS organizer_id uuid
+        REFERENCES competition_organizers(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS tournaments_organizer_id_idx
+        ON tournaments (organizer_id);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

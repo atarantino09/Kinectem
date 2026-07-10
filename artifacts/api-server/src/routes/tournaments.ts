@@ -22,6 +22,7 @@ import {
   gameScoreReports,
   organizationAdmins,
   competitionFollowers,
+  competitionOrganizers,
 } from "@workspace/db";
 import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
@@ -283,6 +284,9 @@ const CreateCompetitionBody = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD"),
   location: z.string().trim().max(200).optional().nullable(),
   description: z.string().trim().max(2000).optional().nullable(),
+  // Task #723 — create-from-hub: link to an organizer the caller owns and
+  // inherit its branding (colors/logo/banner/website) at creation time.
+  organizerId: z.string().uuid().optional().nullable(),
 });
 
 const createCompetitionHandler = asyncHandler(async (req, res) => {
@@ -301,6 +305,23 @@ const createCompetitionHandler = asyncHandler(async (req, res) => {
     return apiError(res, 400, "endDate must be on or after startDate");
   }
 
+  // Create-from-hub (Task #723): the organizer must exist and belong to the
+  // caller (platform admins can create under any organizer). Branding is
+  // inherited as a starting point — the wizard's branding step can override.
+  let organizer: typeof competitionOrganizers.$inferSelect | null = null;
+  if (body.organizerId) {
+    const [o] = await db
+      .select()
+      .from(competitionOrganizers)
+      .where(eq(competitionOrganizers.id, body.organizerId))
+      .limit(1);
+    if (!o) return apiError(res, 404, "Organizer not found");
+    if (me.role !== "admin" && o.ownerUserId !== me.id) {
+      return apiError(res, 403, "You can only create competitions under your own organizer");
+    }
+    organizer = o;
+  }
+
   const [row] = await db
     .insert(tournaments)
     .values({
@@ -313,6 +334,15 @@ const createCompetitionHandler = asyncHandler(async (req, res) => {
       description: body.description ?? null,
       createdById: me.id,
       ownerUserId: me.id,
+      organizerId: organizer?.id ?? null,
+      // Brand inheritance — copied (not referenced) so later organizer
+      // rebrands never silently restyle past competitions.
+      logoUrl: organizer?.logoUrl ?? null,
+      brandColor: organizer?.brandColor ?? null,
+      secondaryColor: organizer?.secondaryColor ?? null,
+      tertiaryColor: organizer?.tertiaryColor ?? null,
+      bannerUrl: organizer?.bannerUrl ?? null,
+      websiteUrl: organizer?.websiteUrl ?? null,
     })
     .returning();
 
@@ -385,6 +415,7 @@ async function competitionListRow(t: typeof tournaments.$inferSelect) {
     startDate: t.startDate,
     endDate: t.endDate,
     location: t.location,
+    organizerId: t.organizerId ?? null,
     autoApproveClaims: t.autoApproveClaims,
     logoUrl: t.logoUrl,
     brandColor: t.brandColor,
@@ -668,6 +699,20 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .limit(1);
     if (!tournament) return apiError(res, 404, "Competition not found");
 
+    // Task #723 — "Presented by <Organizer>" chip linking back to the hub.
+    const [organizerRow] = tournament.organizerId
+      ? await db
+          .select({
+            id: competitionOrganizers.id,
+            slug: competitionOrganizers.slug,
+            name: competitionOrganizers.name,
+            logoUrl: competitionOrganizers.logoUrl,
+          })
+          .from(competitionOrganizers)
+          .where(eq(competitionOrganizers.id, tournament.organizerId))
+          .limit(1)
+      : [];
+
     // Viewer follow state for the Follow button. Logged-out → false.
     const viewerId = req.sessionUser?.id ?? null;
     const isFollowing = viewerId
@@ -766,6 +811,8 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       // Viewer follow state (quick-access follows; NOT a feed source).
       // False for logged-out viewers.
       isFollowing,
+      // Parent-company hub (null when the competition is standalone).
+      organizer: organizerRow ?? null,
     };
 
     res.json({

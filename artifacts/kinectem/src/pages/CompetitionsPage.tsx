@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, CalendarDays, MapPin, ExternalLink, Settings2, Upload } from "lucide-react";
+import { Trophy, CalendarDays, MapPin, ExternalLink, Settings2, Upload, Building2 } from "lucide-react";
 
 // Competitions §4 — self-serve competition creation + "my competitions" list.
 // Any signed-in user can create a tournament or league they operate; the
@@ -25,11 +25,22 @@ interface CompetitionRow {
   startDate: string;
   endDate: string;
   location: string | null;
+  organizerId: string | null;
   matchCount: number;
   participantCount: number;
   claimedCount: number;
   pendingClaimCount: number;
   createdAt: string;
+}
+
+// Task #723 — organizer hub ("parent company") rows from GET /my/organizers.
+interface OrganizerRow {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+  brandColor: string | null;
+  competitionCount: number;
 }
 
 function fmtDate(d: string): string {
@@ -44,12 +55,23 @@ function fmtDate(d: string): string {
 // Competitions §9c — 3-step self-serve create wizard:
 // 1. Details (creates the competition) → 2. Branding (skippable PATCH) →
 // 3. Upload schedule (skippable import). Finish lands in the operator console.
-function CreateCompetitionCard() {
+function CreateCompetitionCard({
+  organizers,
+  initialOrganizerId,
+}: {
+  organizers: OrganizerRow[];
+  initialOrganizerId: string | null;
+}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  // Task #723 — create-from-hub: preselected via ?organizer=<id> from the
+  // hub page; branding is inherited server-side at creation time.
+  const [organizerId, setOrganizerId] = useState<string>(
+    initialOrganizerId ?? "",
+  );
   // Step 1 — details
   const [name, setName] = useState("");
   const [type, setType] = useState<"tournament" | "league">("tournament");
@@ -86,6 +108,7 @@ function CreateCompetitionCard() {
           endDate,
           location: location.trim() || null,
           description: description.trim() || null,
+          organizerId: organizerId || null,
         }),
       }),
     onSuccess: (row) => {
@@ -247,6 +270,34 @@ function CreateCompetitionCard() {
                 </button>
               ))}
             </div>
+            {organizers.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="c-organizer" className="text-xs font-bold">
+                  Organizer hub{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <select
+                  id="c-organizer"
+                  value={organizerId}
+                  onChange={(e) => setOrganizerId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  data-testid="select-competition-organizer"
+                >
+                  <option value="">Standalone (no hub)</option>
+                  {organizers.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                {organizerId ? (
+                  <p className="text-xs text-muted-foreground">
+                    Starts with your hub's branding — you can still customize
+                    it in the next step.
+                  </p>
+                ) : null}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="c-name" className="text-xs font-bold">
                 Name
@@ -497,6 +548,163 @@ function CreateCompetitionCard() {
   );
 }
 
+// Task #723 — organizer hub section: list my hubs + create a new one.
+// A hub is the "parent company" that groups competitions under one brand.
+function OrganizerHubCard({ organizers }: { organizers: OrganizerRow[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [formOpen, setFormOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  const create = useMutation({
+    mutationFn: () =>
+      customFetch<OrganizerRow>(`/api/v1/organizers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+        }),
+      }),
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
+      toast({ title: "Organizer hub created" });
+      navigate(`/competitions/o/${row.slug}`);
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't create the hub",
+        description:
+          err instanceof Error ? err.message : "Check the details and try again.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Building2 className="w-4 h-4" />
+          Organizer hubs
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          A home base for your company — group all your competitions under one
+          brand with a shareable public page.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {organizers.map((o) => (
+          <div
+            key={o.id}
+            className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
+            data-testid={`row-organizer-${o.id}`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {o.logoUrl ? (
+                <img
+                  src={o.logoUrl}
+                  alt=""
+                  className="h-8 w-8 rounded-lg object-contain bg-white shrink-0"
+                />
+              ) : (
+                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="font-black tracking-tight truncate">{o.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {o.competitionCount} competition
+                  {o.competitionCount === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link href={`/competitions/o/${o.slug}`}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="font-bold rounded-full"
+                  data-testid={`btn-open-hub-${o.id}`}
+                >
+                  Open hub
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ))}
+        {formOpen ? (
+          <form
+            className="space-y-3 rounded-lg border border-dashed border-border p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (name.trim() && !create.isPending) create.mutate();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="o-name" className="text-xs font-bold">
+                Company name
+              </Label>
+              <Input
+                id="o-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Apex Events Co"
+                maxLength={200}
+                data-testid="input-organizer-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="o-desc" className="text-xs font-bold">
+                About <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="o-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What your company runs and where."
+                maxLength={2000}
+                data-testid="input-organizer-description"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="submit"
+                size="sm"
+                variant="brand"
+                disabled={!name.trim() || create.isPending}
+                data-testid="btn-create-organizer"
+              >
+                {create.isPending ? "Creating…" : "Create hub"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setFormOpen(false)}
+                data-testid="btn-cancel-organizer"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="font-bold rounded-full"
+            onClick={() => setFormOpen(true)}
+            data-testid="btn-new-organizer"
+          >
+            <Building2 className="w-3.5 h-3.5 mr-1.5" />
+            New organizer hub
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CompetitionsPage() {
   const { data, isLoading, isError, refetch } = useQuery<{
     data: CompetitionRow[];
@@ -508,7 +716,32 @@ export default function CompetitionsPage() {
       }),
   });
 
+  const organizersQ = useQuery<{ data: OrganizerRow[] }>({
+    queryKey: ["my", "organizers"],
+    queryFn: () =>
+      customFetch<{ data: OrganizerRow[] }>(`/api/v1/my/organizers`, {
+        method: "GET",
+      }),
+  });
+  const organizers = organizersQ.data?.data ?? [];
+
+  // Create-from-hub deep link: /competitions?organizer=<id>
+  const initialOrganizerId =
+    new URLSearchParams(window.location.search).get("organizer") ?? null;
+
   const competitions = data?.data ?? [];
+
+  // Group my competitions by organizer hub; standalone ones last.
+  const grouped = organizers
+    .map((o) => ({
+      organizer: o,
+      comps: competitions.filter((c) => c.organizerId === o.id),
+    }))
+    .filter((g) => g.comps.length > 0);
+  const knownOrganizerIds = new Set(organizers.map((o) => o.id));
+  const standalone = competitions.filter(
+    (c) => !c.organizerId || !knownOrganizerIds.has(c.organizerId),
+  );
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -520,7 +753,12 @@ export default function CompetitionsPage() {
         </p>
       </div>
 
-      <CreateCompetitionCard />
+      <CreateCompetitionCard
+        organizers={organizers}
+        initialOrganizerId={initialOrganizerId}
+      />
+
+      <OrganizerHubCard organizers={organizers} />
 
       <div className="space-y-3">
         <h2 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
@@ -555,9 +793,140 @@ export default function CompetitionsPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {competitions.map((c) => (
-              <Card key={c.id} data-testid={`card-competition-${c.id}`}>
+          <div className="space-y-5">
+            {/* Grouped by organizer hub first, then standalone. */}
+            {grouped.map(({ organizer: o, comps }) => (
+              <div key={o.id} className="space-y-3" data-testid={`group-hub-${o.id}`}>
+                <Link href={`/competitions/o/${o.slug}`}>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground cursor-pointer">
+                    <Building2 className="w-3.5 h-3.5" />
+                    {o.name}
+                  </span>
+                </Link>
+                {comps.map((c) => (
+                  <MyCompetitionCard key={c.id} c={c} organizers={organizers} />
+                ))}
+              </div>
+            ))}
+            {standalone.length > 0 && (
+              <div className="space-y-3" data-testid="group-standalone">
+                {grouped.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Standalone
+                  </span>
+                )}
+                {standalone.map((c) => (
+                  <MyCompetitionCard key={c.id} c={c} organizers={organizers} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// One row in "My competitions" — includes attach/detach to an organizer hub
+// (retroactive grouping, Task #723).
+function MyCompetitionCard({
+  c,
+  organizers,
+}: {
+  c: CompetitionRow;
+  organizers: OrganizerRow[];
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const link = useMutation({
+    mutationFn: (vars: { organizerId: string; action: "attach" | "detach" }) =>
+      customFetch(`/api/v1/organizers/${vars.organizerId}/competitions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competitionId: c.id,
+          attach: vars.action === "attach",
+        }),
+      }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
+      qc.invalidateQueries({ queryKey: ["organizer"] });
+      toast({
+        title:
+          vars.action === "attach" ? "Added to your hub" : "Removed from hub",
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't update the hub link",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <UngroupedCompetitionCard c={c}>
+      {organizers.length > 0 &&
+        (c.organizerId ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground"
+            disabled={link.isPending}
+            onClick={() =>
+              link.mutate({ organizerId: c.organizerId!, action: "detach" })
+            }
+            data-testid={`btn-detach-hub-${c.id}`}
+          >
+            Remove from hub
+          </Button>
+        ) : organizers.length === 1 ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={link.isPending}
+            onClick={() =>
+              link.mutate({ organizerId: organizers[0].id, action: "attach" })
+            }
+            data-testid={`btn-attach-hub-${c.id}`}
+          >
+            <Building2 className="w-3.5 h-3.5 mr-1.5" />
+            Add to {organizers[0].name}
+          </Button>
+        ) : (
+          <select
+            className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-bold"
+            value=""
+            disabled={link.isPending}
+            onChange={(e) => {
+              if (e.target.value)
+                link.mutate({ organizerId: e.target.value, action: "attach" });
+            }}
+            data-testid={`select-attach-hub-${c.id}`}
+          >
+            <option value="">Add to hub…</option>
+            {organizers.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        ))}
+    </UngroupedCompetitionCard>
+  );
+}
+
+function UngroupedCompetitionCard({
+  c,
+  children,
+}: {
+  c: CompetitionRow;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Card data-testid={`card-competition-${c.id}`}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="min-w-0">
@@ -621,13 +990,9 @@ export default function CompetitionsPage() {
                         View public page
                       </Button>
                     </a>
+                    {children}
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }

@@ -34,6 +34,7 @@ const TeamAdoptPage = lazy(() => import("@/pages/TeamAdoptPage"));
 const CompetitionPage = lazy(() => import("@/pages/CompetitionPage"));
 const TournamentSignupPage = lazy(() => import("@/pages/TournamentSignupPage"));
 const CompetitionsPage = lazy(() => import("@/pages/CompetitionsPage"));
+const OrganizerPage = lazy(() => import("@/pages/OrganizerPage"));
 const CompetitionConsolePage = lazy(
   () => import("@/pages/CompetitionConsolePage"),
 );
@@ -109,6 +110,8 @@ function Router() {
       <Route path="/adopt-team/:token" component={TeamAdoptPage} />
       <Route path="/c/:slug/signup" component={TournamentSignupPage} />
       <Route path="/c/:slug" component={CompetitionPage} />
+      {/* Public organizer hub (parent company) page — Task #723 */}
+      <Route path="/organizers/:slug" component={OrganizerPage} />
       {/* Legacy tournament links — redirect /t/* to /c/* */}
       <Route path="/t/:slug/signup">
         {(p) => <Redirect to={`/c/${p.slug}/signup`} replace />}
@@ -153,6 +156,9 @@ function Router() {
             {/* In-app competition view (AppShell chrome) — must precede
                 the console's `/competitions/:id` so "c" isn't read as an id. */}
             <Route path="/competitions/c/:slug" component={CompetitionPage} />
+            {/* In-app organizer hub view — precedes `/competitions/:id`
+                so "o" isn't read as an id. */}
+            <Route path="/competitions/o/:slug" component={OrganizerPage} />
             <Route path="/competitions/:id" component={CompetitionConsolePage} />
             <Route path="/competitions" component={CompetitionsPage} />
             <Route path="/teams" component={MyTeamsPage} />
