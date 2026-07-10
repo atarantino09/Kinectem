@@ -232,26 +232,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
             />
           </Link>
 
-          {/* Search grows on focus so long queries stay readable even when
-              the nav squeezes it at rest. flex-[3] beats the nav's implicit
-              shrink; transition keeps the expand/collapse smooth. */}
+          {/* The header is packed, so growing via flex has no free space to
+              claim. Instead, on focus the input breaks out of flow and
+              overlays the nav (z-20) at a comfortable width; the form keeps
+              its flex slot so the layout doesn't jump. */}
           <form
             onSubmit={onSearchSubmit}
-            className={`relative min-w-0 transition-all duration-200 ease-out ${
-              searchFocused ? "flex-[3] max-w-xl" : "flex-1 max-w-md"
-            }`}
+            className="relative flex-1 max-w-md min-w-0 h-10"
           >
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search athletes, teams, organizations..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              className="pl-9 bg-muted border-transparent focus-visible:bg-card"
-              data-testid="input-header-search"
-            />
+            <div
+              className={`transition-all duration-200 ease-out ${
+                searchFocused
+                  ? "absolute left-0 top-0 z-20 w-[min(36rem,calc(100vw-14rem))]"
+                  : "absolute inset-0"
+              }`}
+            >
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+              <Input
+                type="search"
+                placeholder="Search athletes, teams, organizations..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                className={`pl-9 border-transparent ${
+                  searchFocused ? "bg-card shadow-md" : "bg-muted"
+                }`}
+                data-testid="input-header-search"
+              />
+            </div>
           </form>
 
           <nav className="hidden md:flex items-center gap-1">
