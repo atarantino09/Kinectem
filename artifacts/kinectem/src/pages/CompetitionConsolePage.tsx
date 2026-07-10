@@ -558,6 +558,15 @@ function CurationPanel({ competitionId }: { competitionId: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  // Deep-link target from the public page's "Feature recaps" / "Manage"
+  // buttons — scroll this panel into view when arriving via #recaps.
+  const anchorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (window.location.hash === "#recaps") {
+      anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
   const recapsQ = useQuery<{ data: CurationRecap[] }>({
     queryKey: ["competition", competitionId, "recaps"],
     queryFn: () =>
@@ -595,7 +604,7 @@ function CurationPanel({ competitionId }: { competitionId: string }) {
   const recaps = recapsQ.data?.data ?? [];
 
   return (
-    <Card>
+    <Card id="recaps" ref={anchorRef} className="scroll-mt-6">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Newspaper className="w-4 h-4" />

@@ -518,16 +518,31 @@ export default function CompetitionPage() {
             competition-branded page. */}
         {(q.data.featuredRecaps?.length ?? 0) > 0 && (
           <section className="space-y-3" data-testid="rail-featured-recaps">
-            <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-lg font-black tracking-tight">
                 Featured game recaps
               </h2>
-              <span
-                className="text-[11px] font-black uppercase tracking-widest"
-                style={{ color: brand }}
-              >
-                Curated by {c.name}
-              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className="text-[11px] font-black uppercase tracking-widest"
+                  style={{ color: brand }}
+                >
+                  Curated by {c.name}
+                </span>
+                {c.canManage ? (
+                  <Link href={`/competitions/${c.id}#recaps`}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="font-bold"
+                      data-testid="btn-manage-featured-recaps"
+                    >
+                      <Star className="w-3.5 h-3.5 mr-1.5" />
+                      Manage
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {q.data.featuredRecaps!.map((r) => (
@@ -574,6 +589,38 @@ export default function CompetitionPage() {
             </div>
           </section>
         )}
+
+        {/* Organizer-only empty state — a clear path to the curation panel
+            even before anything has been featured. Hidden from the public. */}
+        {(q.data.featuredRecaps?.length ?? 0) === 0 && c.canManage ? (
+          <Card
+            className="rounded-xl border-dashed border-border"
+            data-testid="card-featured-recaps-empty"
+          >
+            <CardContent className="p-5 flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <h2 className="text-base font-black tracking-tight">
+                  Featured game recaps
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Nothing featured yet — review recaps from claimed teams and
+                  feature the best ones here on your public page. Only you can
+                  see this.
+                </p>
+              </div>
+              <Link href={`/competitions/${c.id}#recaps`}>
+                <Button
+                  variant="outline"
+                  className="font-bold shrink-0"
+                  data-testid="btn-feature-recaps"
+                >
+                  <Star className="w-4 h-4 mr-1.5" />
+                  View &amp; feature recaps
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Teams / claim list — collapsible, one team per line so the full
             name is readable and nobody claims the wrong slot. */}
