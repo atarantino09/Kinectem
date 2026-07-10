@@ -823,13 +823,16 @@ function TeamsRail({
   atLimit = false,
   onAddTeam,
   onBulkAddTeams,
+  defaultOpen = true,
 }: {
   teams: TeamRailItem[];
   canManage: boolean;
   atLimit?: boolean;
   onAddTeam: () => void;
   onBulkAddTeams: () => void;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
   const {
     pinnedSet,
@@ -864,8 +867,16 @@ function TeamsRail({
       className="rounded-xl border border-border shadow-sm overflow-hidden"
       data-testid="rail-teams"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2 min-w-0">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${open ? "border-b border-border" : ""}`}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 min-w-0 text-left"
+          aria-expanded={open}
+          data-testid="btn-toggle-teams"
+        >
           <Shield className="w-5 h-5 text-primary shrink-0" />
           <h2 className="text-base font-black tracking-tight truncate">
             Teams
@@ -877,7 +888,10 @@ function TeamsRail({
           >
             {teams.length}
           </Badge>
-        </div>
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
         {canManage && (
           <div className="flex items-center gap-2 shrink-0">
             <Button
@@ -913,7 +927,7 @@ function TeamsRail({
         )}
       </div>
 
-      {teams.length === 0 ? (
+      {!open ? null : teams.length === 0 ? (
         <div className="p-8 text-center">
           <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No teams yet.</p>
@@ -1035,14 +1049,29 @@ function TeamsRail({
   );
 }
 
-function ArchivedTeamsCard({ teams }: { teams: TeamRailItem[] }) {
+function ArchivedTeamsCard({
+  teams,
+  defaultOpen = true,
+}: {
+  teams: TeamRailItem[];
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <Card
       className="rounded-xl border border-border shadow-sm overflow-hidden"
       data-testid="section-archived-teams"
     >
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2 min-w-0">
+      <div
+        className={`flex items-center justify-between gap-2 px-4 py-3 ${open ? "border-b border-border" : ""}`}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 min-w-0 text-left"
+          aria-expanded={open}
+          data-testid="btn-toggle-archived-teams"
+        >
           <Archive className="w-5 h-5 text-muted-foreground shrink-0" />
           <h2 className="text-base font-black tracking-tight truncate">
             Archived teams
@@ -1053,8 +1082,12 @@ function ArchivedTeamsCard({ teams }: { teams: TeamRailItem[] }) {
           >
             {teams.length}
           </Badge>
-        </div>
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
       </div>
+      {open && (
       <CardContent className="p-2">
         <div className="flex flex-col divide-y divide-border">
           {teams.map((t) => (
