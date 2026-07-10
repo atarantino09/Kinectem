@@ -23,6 +23,7 @@ import {
   Link2,
   MapPin,
   Pencil,
+  Star,
   Trophy,
 } from "lucide-react";
 
@@ -44,6 +45,7 @@ type OrganizerMeta = {
   tertiaryColor: string | null;
   bannerUrl: string | null;
   websiteUrl: string | null;
+  isFollowing?: boolean;
 };
 
 type OrganizerCompetition = {
@@ -363,6 +365,20 @@ export default function OrganizerPage() {
     }
   };
 
+  // Follow / unfollow — quick-access only (mirrors the competition page).
+  const qcTop = useQueryClient();
+  const followMutation = useMutation({
+    mutationFn: (follow: boolean) =>
+      customFetch<{ ok: true; isFollowing: boolean }>(
+        `/api/v1/organizers/${encodeURIComponent(slug)}/follow`,
+        { method: follow ? "POST" : "DELETE" },
+      ),
+    onSuccess: () => {
+      qcTop.invalidateQueries({ queryKey: ["organizer", slug] });
+      qcTop.invalidateQueries({ queryKey: ["my-followed-organizers"] });
+    },
+  });
+
   const q = useQuery<OrganizerResponse>({
     queryKey: ["organizer", slug],
     queryFn: () =>
@@ -435,21 +451,23 @@ export default function OrganizerPage() {
         data-testid="hero-organizer"
       >
         {o.bannerUrl ? (
-          <div className="h-40 sm:h-56 w-full overflow-hidden">
+          // Banner gets the majority of the hero; the branded strip below is
+          // deliberately compact so the artwork isn't crowded out.
+          <div className="h-56 sm:h-80 w-full overflow-hidden">
             <img src={o.bannerUrl} alt="" className="h-full w-full object-cover" />
           </div>
         ) : null}
-        <div className="max-w-4xl mx-auto px-6 py-8 space-y-3">
+        <div className="max-w-4xl mx-auto px-6 pt-5 pb-4 space-y-2">
           <div className="flex items-start gap-4">
             {o.logoUrl ? (
               <img
                 src={o.logoUrl}
                 alt={`${o.name} logo`}
-                className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl object-contain bg-white/90 p-1.5 shrink-0"
+                className="h-14 w-14 sm:h-16 sm:w-16 rounded-xl object-contain bg-white/90 p-1.5 shrink-0"
                 data-testid="img-organizer-logo"
               />
             ) : null}
-            <div className="min-w-0 space-y-2">
+            <div className="min-w-0 space-y-1.5">
               <span
                 className="inline-block rounded-full border px-2 py-0.5 text-[11px] font-black uppercase tracking-widest"
                 style={{ borderColor: heroText, opacity: 0.9 }}
@@ -457,7 +475,7 @@ export default function OrganizerPage() {
                 Organizer
               </span>
               <h1
-                className="text-3xl sm:text-4xl font-black tracking-tight"
+                className="text-2xl sm:text-3xl font-black tracking-tight"
                 data-testid="text-organizer-name"
               >
                 {o.name}
@@ -498,8 +516,24 @@ export default function OrganizerPage() {
               )}
               {copied ? "Link copied" : "Share hub"}
             </Button>
+            {me ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold border-white/70 bg-transparent hover:bg-white/10 rounded-full"
+                style={{ color: heroText, borderColor: heroText }}
+                onClick={() => followMutation.mutate(!o.isFollowing)}
+                disabled={followMutation.isPending}
+                data-testid="btn-follow-organizer"
+              >
+                <Star
+                  className={`w-3.5 h-3.5 mr-1.5 ${o.isFollowing ? "fill-current" : ""}`}
+                />
+                {o.isFollowing ? "Following" : "Follow"}
+              </Button>
+            ) : null}
           </div>
-          <p className="text-[11px] opacity-70 pt-2">Powered by Kinectem</p>
+          <p className="text-[11px] opacity-70 pt-1">Powered by Kinectem</p>
         </div>
       </div>
 

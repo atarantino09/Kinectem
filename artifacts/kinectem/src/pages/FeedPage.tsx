@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronRight, ChevronDown, Pin, PinOff, Medal } from "lucide-react";
+import { ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2 } from "lucide-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -77,6 +77,22 @@ export default function FeedPage() {
     enabled: !!me?.id,
   });
   const followedComps = followedCompsQ.data?.data ?? [];
+
+  // Followed organizer hubs — same quick-access-only semantics.
+  const followedHubsQ = useQuery({
+    queryKey: ["my-followed-organizers"],
+    queryFn: () =>
+      customFetch<{
+        data: Array<{
+          id: string;
+          slug: string;
+          name: string;
+          logoUrl: string | null;
+        }>;
+      }>("/api/v1/my/followed-organizers", { method: "GET" }),
+    enabled: !!me?.id,
+  });
+  const followedHubs = followedHubsQ.data?.data ?? [];
 
   const { orgGroups, orphanTeams } = useMemo(() => {
     const byName = (a: { name: string }, b: { name: string }) =>
@@ -387,6 +403,47 @@ export default function FeedPage() {
                         <p className="text-sm font-bold truncate">{comp.name}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                           {comp.type === "league" ? "League" : "Tournament"}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {followedHubs.length > 0 && (
+          <Card className="rounded-xl border border-border shadow-sm">
+            <CardContent className="p-4">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+                Organizers You Follow
+              </h4>
+              <div className="space-y-0.5">
+                {followedHubs.map((hub) => (
+                  <Link
+                    key={hub.id}
+                    href={`/competitions/o/${encodeURIComponent(hub.slug)}`}
+                  >
+                    <div
+                      className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/60 cursor-pointer"
+                      data-testid={`link-sidebar-organizer-${hub.id}`}
+                    >
+                      {hub.logoUrl ? (
+                        <img
+                          src={hub.logoUrl}
+                          alt=""
+                          className="w-7 h-7 rounded-md object-contain bg-muted shrink-0"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                          <Building2 className="w-4 h-4" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold truncate">{hub.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          Organizer
                         </p>
                       </div>
                     </div>

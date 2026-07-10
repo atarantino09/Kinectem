@@ -1472,6 +1472,19 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON tournaments (organizer_id);
     `,
   },
+  {
+    name: "2026-07-10-task-723-organizer-followers",
+    sql: `
+      CREATE TABLE IF NOT EXISTS organizer_followers (
+        organizer_id uuid NOT NULL REFERENCES competition_organizers(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at timestamp DEFAULT now() NOT NULL,
+        PRIMARY KEY (organizer_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS organizer_followers_user_id_idx
+        ON organizer_followers (user_id);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

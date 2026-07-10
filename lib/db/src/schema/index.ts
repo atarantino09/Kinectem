@@ -1471,6 +1471,18 @@ export const competitionOrganizers = pgTable("competition_organizers", {
   byOwner: index("competition_organizers_owner_user_id_idx").on(t.ownerUserId),
 }));
 
+// Users following an organizer hub for quick access (mirrors
+// competition_followers). Follow does NOT feed the home feed — it only powers
+// the sidebar quick links + the follow state on the organizer page.
+export const organizerFollowers = pgTable("organizer_followers", {
+  organizerId: uuid("organizer_id").references(() => competitionOrganizers.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.organizerId, t.userId] }),
+  userIdIdx: index("organizer_followers_user_id_idx").on(t.userId),
+}));
+
 export const tournaments = pgTable("tournaments", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Unguessable-ish public slug used in the funnel URL (`/t/<slug>`).

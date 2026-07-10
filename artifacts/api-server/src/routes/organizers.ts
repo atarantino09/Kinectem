@@ -9,6 +9,7 @@ import { Router, type IRouter } from "express";
 import {
   db,
   competitionOrganizers,
+  organizerFollowers,
   tournaments,
   tournamentMatches,
   tournamentParticipants,
@@ -332,6 +333,23 @@ router.get(
       .limit(1);
     if (!organizer) return apiError(res, 404, "Organizer not found");
 
+    // Viewer follow state for the Follow button. Logged-out → false.
+    const viewerId = req.sessionUser?.id ?? null;
+    const isFollowing = viewerId
+      ? (
+          await db
+            .select({ userId: organizerFollowers.userId })
+            .from(organizerFollowers)
+            .where(
+              and(
+                eq(organizerFollowers.organizerId, organizer.id),
+                eq(organizerFollowers.userId, viewerId),
+              ),
+            )
+            .limit(1)
+        ).length > 0
+      : false;
+
     const comps = await db
       .select()
       .from(tournaments)
@@ -391,7 +409,7 @@ router.get(
     const compById = new Map(comps.map((c) => [c.id, c]));
 
     res.json({
-      organizer: organizerToJson(organizer),
+      organizer: { ...organizerToJson(organizer), isFollowing },
       competitions: comps.map((c) => ({
         id: c.id,
         slug: c.slug,
@@ -425,6 +443,84 @@ router.get(
           : null,
       })),
     });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Organizer follows — quick access only, intentionally NOT a feed source.
+// Mirrors competition follows (tournaments.ts).
+// ---------------------------------------------------------------------------
+
+// POST /organizers/:slug/follow — idempotent (conflict → no-op).
+router.post(
+  "/organizers/:slug/follow",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [organizer] = await db
+      .select({ id: competitionOrganizers.id })
+      .from(competitionOrganizers)
+      .where(eq(competitionOrganizers.slug, req.params.slug))
+      .limit(1);
+    if (!organizer) return apiError(res, 404, "Organizer not found");
+    await db
+      .insert(organizerFollowers)
+      .values({ organizerId: organizer.id, userId: me.id })
+      .onConflictDoNothing();
+    res.json({ ok: true, isFollowing: true });
+  }),
+);
+
+// DELETE /organizers/:slug/follow — idempotent.
+router.delete(
+  "/organizers/:slug/follow",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [organizer] = await db
+      .select({ id: competitionOrganizers.id })
+      .from(competitionOrganizers)
+      .where(eq(competitionOrganizers.slug, req.params.slug))
+      .limit(1);
+    if (!organizer) return apiError(res, 404, "Organizer not found");
+    await db
+      .delete(organizerFollowers)
+      .where(
+        and(
+          eq(organizerFollowers.organizerId, organizer.id),
+          eq(organizerFollowers.userId, me.id),
+        ),
+      );
+    res.json({ ok: true, isFollowing: false });
+  }),
+);
+
+// GET /my/followed-organizers — quick-access list for the feed sidebar.
+router.get(
+  "/my/followed-organizers",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const rows = await db
+      .select({
+        id: competitionOrganizers.id,
+        slug: competitionOrganizers.slug,
+        name: competitionOrganizers.name,
+        logoUrl: competitionOrganizers.logoUrl,
+        brandColor: competitionOrganizers.brandColor,
+        followedAt: organizerFollowers.createdAt,
+      })
+      .from(organizerFollowers)
+      .innerJoin(
+        competitionOrganizers,
+        eq(competitionOrganizers.id, organizerFollowers.organizerId),
+      )
+      .where(eq(organizerFollowers.userId, me.id))
+      .orderBy(desc(organizerFollowers.createdAt));
+    res.json({ data: rows });
   }),
 );
 
