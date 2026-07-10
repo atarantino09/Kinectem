@@ -66,6 +66,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [currentUserError, location, setLocation]);
   const [query, setQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -231,14 +232,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
             />
           </Link>
 
-          <form onSubmit={onSearchSubmit} className="flex-1 max-w-md relative">
+          {/* Search grows on focus so long queries stay readable even when
+              the nav squeezes it at rest. flex-[3] beats the nav's implicit
+              shrink; transition keeps the expand/collapse smooth. */}
+          <form
+            onSubmit={onSearchSubmit}
+            className={`relative min-w-0 transition-all duration-200 ease-out ${
+              searchFocused ? "flex-[3] max-w-xl" : "flex-1 max-w-md"
+            }`}
+          >
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search athletes, teams, organizations..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               className="pl-9 bg-muted border-transparent focus-visible:bg-card"
+              data-testid="input-header-search"
             />
           </form>
 
