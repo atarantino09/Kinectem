@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Users, UserPlus } from "lucide-react";
+import { Users, UserPlus, ChevronDown } from "lucide-react";
 import type { RosterMember } from "./TeamRosterTabs";
 
 type RailTab = "players" | "staff";
@@ -14,6 +14,7 @@ interface TeamRosterRailProps {
   staff: RosterMember[];
   canManage?: boolean;
   onOpenInvite?: () => void;
+  defaultOpen?: boolean;
 }
 
 export function TeamRosterRail({
@@ -21,7 +22,9 @@ export function TeamRosterRail({
   staff,
   canManage = false,
   onOpenInvite,
+  defaultOpen = true,
 }: TeamRosterRailProps) {
+  const [open, setOpen] = useState(defaultOpen);
   const [tab, setTab] = useState<RailTab>("players");
   const list = tab === "players" ? players : staff;
   const emptyMessage =
@@ -32,8 +35,16 @@ export function TeamRosterRail({
       className="rounded-xl border border-border shadow-sm overflow-hidden"
       data-testid="rail-roster"
     >
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div
+        className={`px-4 py-3 flex items-center justify-between gap-2 ${open ? "border-b border-border" : ""}`}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 min-w-0 text-left"
+          aria-expanded={open}
+          data-testid="btn-toggle-roster"
+        >
           <Users className="w-5 h-5 text-primary shrink-0" />
           <h2 className="text-base font-black tracking-tight truncate">
             Roster
@@ -45,7 +56,10 @@ export function TeamRosterRail({
           >
             {list.length}
           </Badge>
-        </div>
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
         {canManage && onOpenInvite && (
           <Button
             type="button"
@@ -59,6 +73,8 @@ export function TeamRosterRail({
         )}
       </div>
 
+      {open && (
+      <>
       <div
         className="grid grid-cols-2 gap-1 p-1 bg-muted/40 border-b border-border"
         role="tablist"
@@ -131,6 +147,8 @@ export function TeamRosterRail({
             </li>
           ))}
         </ul>
+      )}
+      </>
       )}
     </Card>
   );

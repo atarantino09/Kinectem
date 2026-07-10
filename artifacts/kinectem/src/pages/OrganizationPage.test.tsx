@@ -101,6 +101,9 @@ vi.mock("@workspace/api-client-react", () => ({
   useListOrgPostApprovals: () => ({ data: { data: [] } }),
   useFollowOrg: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUnfollowOrg: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useGetMyPinnedTeams: () => ({ data: { teamIds: [] } }),
+  useUpdateMyPinnedTeams: () => ({ mutate: vi.fn(), isPending: false }),
+  getGetMyPinnedTeamsQueryKey: () => ["/api/v1/users/me/pinned-teams"],
   queryOpts: <T,>(opts: T) => opts,
   getGetOrganizationByIdQueryKey: (orgId: string) => [
     `/api/v1/organizations/${orgId}`,

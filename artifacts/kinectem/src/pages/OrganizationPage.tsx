@@ -710,7 +710,12 @@ export default function OrganizationPage() {
                 onManageMembers: () => setManageMembersOpen(true),
                 onPromoteAdmin: () => setManageMembersOpen(true),
                 onGoToTeams: () => {
-                  // Scroll the teams rail / inline teams section into view.
+                  // Scroll the teams rail / inline teams section into view,
+                  // expanding it first if it's collapsed (mobile default).
+                  const toggle = document.querySelector<HTMLButtonElement>(
+                    '[data-testid="btn-toggle-teams"][aria-expanded="false"]',
+                  );
+                  if (toggle) toggle.click();
                   const el = document.querySelector(
                     '[data-testid="rail-teams"]',
                   );
@@ -731,9 +736,10 @@ export default function OrganizationPage() {
                 atLimit={atTeamLimit}
                 onAddTeam={() => setCreateTeamOpen(true)}
                 onBulkAddTeams={() => setBulkTeamsOpen(true)}
+                defaultOpen={false}
               />
               {isOrgManager && archivedTeams.length > 0 && (
-                <ArchivedTeamsCard teams={archivedTeams} />
+                <ArchivedTeamsCard teams={archivedTeams} defaultOpen={false} />
               )}
             </div>
           )}
@@ -1115,6 +1121,7 @@ function ArchivedTeamsCard({
           ))}
         </div>
       </CardContent>
+      )}
     </Card>
   );
 }

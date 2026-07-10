@@ -495,6 +495,7 @@ export default function TeamPage() {
               staff={staff}
               canManage={canManage}
               onOpenInvite={() => setInviteOpen(true)}
+              defaultOpen={false}
             />
             {canViewSchedule && (
               <ScheduleUpNext
