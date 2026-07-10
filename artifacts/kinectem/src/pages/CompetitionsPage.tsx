@@ -40,6 +40,10 @@ interface OrganizerRow {
   name: string;
   logoUrl: string | null;
   brandColor: string | null;
+  secondaryColor: string | null;
+  tertiaryColor: string | null;
+  bannerUrl: string | null;
+  websiteUrl: string | null;
   competitionCount: number;
 }
 
@@ -114,6 +118,20 @@ function CreateCompetitionCard({
     onSuccess: (row) => {
       qc.invalidateQueries({ queryKey: ["my", "competitions"] });
       setCreatedId(row.id);
+      // Create-from-hub: the server copied the hub's branding onto the new
+      // competition. Hydrate step 2 with the same values so a partial edit
+      // + save doesn't wipe the inherited fields back to null.
+      const hub = organizerId
+        ? organizers.find((o) => o.id === organizerId)
+        : undefined;
+      if (hub) {
+        setBrandColor(hub.brandColor ?? "");
+        setSecondaryColor(hub.secondaryColor ?? "");
+        setTertiaryColor(hub.tertiaryColor ?? "");
+        setLogoUrl(hub.logoUrl ?? "");
+        setBannerUrl(hub.bannerUrl ?? "");
+        setWebsiteUrl(hub.websiteUrl ?? "");
+      }
       setStep(2);
       toast({ title: `${type === "league" ? "League" : "Tournament"} created` });
     },

@@ -16,7 +16,15 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, ChevronDown, MapPin, Pencil, Trophy } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  Link2,
+  MapPin,
+  Pencil,
+  Trophy,
+} from "lucide-react";
 
 // Task #723 — PUBLIC organizer hub page: the parent company's home base.
 // Branded hero (mirrors CompetitionPage), its competitions grouped by
@@ -336,6 +344,24 @@ export default function OrganizerPage() {
   const inApp = !!appParams;
   const { data: me } = useGetLoggedInUser();
   const [editOpen, setEditOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
+
+  // Follow-style share link — the public hub URL is always /organizers/<slug>
+  // (never the in-app /app/competitions/o/... path).
+  const shareUrl = `${window.location.origin}/app/organizers/${slug}`;
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Couldn't copy the link",
+        description: shareUrl,
+      });
+    }
+  };
 
   const q = useQuery<OrganizerResponse>({
     queryKey: ["organizer", slug],
@@ -457,6 +483,21 @@ export default function OrganizerPage() {
                 Official website
               </a>
             ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold border-white/70 bg-transparent hover:bg-white/10 rounded-full"
+              style={{ color: heroText, borderColor: heroText }}
+              onClick={copyShareLink}
+              data-testid="btn-share-organizer"
+            >
+              {copied ? (
+                <Check className="w-3.5 h-3.5 mr-1.5" />
+              ) : (
+                <Link2 className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              {copied ? "Link copied" : "Share hub"}
+            </Button>
           </div>
           <p className="text-[11px] opacity-70 pt-2">Powered by Kinectem</p>
         </div>
