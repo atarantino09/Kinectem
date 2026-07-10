@@ -237,7 +237,15 @@ export function ClaimCompetitionDialog({
               <p>
                 You're claiming{" "}
                 <span className="font-bold">{selectedSlot.name}</span> as{" "}
-                <span className="font-bold">{teamName}</span> — confirm below.
+                <span className="font-bold">{teamName}</span> — that means
+                claiming their schedule: these competition games are added to
+                your team's schedule.
+              </p>
+              <p>
+                Your current team page <span className="font-bold">won&apos;t
+                change</span> — you're just getting these specific games added
+                in competition form. Game recaps you write for them may be
+                shared and featured on the competition page.
               </p>
               {nameMismatch && (
                 <label

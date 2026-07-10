@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
@@ -228,6 +234,8 @@ export default function CompetitionPage() {
   const [, appParams] = useRoute("/competitions/c/:slug");
   const slug = publicParams?.slug ?? appParams?.slug ?? "";
   const { data: me } = useGetLoggedInUser();
+  const [teamsOpen, setTeamsOpen] = useState(true);
+  const [scheduleOpen, setScheduleOpen] = useState(true);
 
   // §6 — teams I coach/manage, used only to decide whether to show the
   // "Report score" entry point on a claimed game (server re-checks).
@@ -482,59 +490,118 @@ export default function CompetitionPage() {
           </section>
         )}
 
-        {/* Teams / claim grid */}
+        {/* Teams / claim list — collapsible, one team per line so the full
+            name is readable and nobody claims the wrong slot. */}
         <Card className="rounded-xl border-border" data-testid="card-participants">
-          <CardContent className="p-6 space-y-3">
-            <h2 className="text-lg font-black tracking-tight">Teams</h2>
-            <p className="text-xs text-muted-foreground">
-              Unclaimed names are open — sign up to claim yours and start
-              telling your team&apos;s story with game recaps.
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {participants.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
-                  data-testid={`row-participant-${p.id}`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold truncate">{p.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {groupLabel(p.division, p.bracket)}
-                    </p>
-                  </div>
-                  {p.claimed ? (
-                    <Badge variant="secondary" className="shrink-0">
-                      Taken
-                    </Badge>
-                  ) : (
-                    <Link href={signupHref}>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="font-bold shrink-0"
-                        data-testid={`btn-claim-${p.id}`}
-                      >
-                        Claim
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              ))}
-              {participants.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No teams have been added to this {typeLabel.toLowerCase()}{" "}
-                  yet.
+          <CardContent className="p-6">
+            <Collapsible
+              open={teamsOpen}
+              onOpenChange={setTeamsOpen}
+              className="space-y-3"
+            >
+              <CollapsibleTrigger
+                className="flex w-full items-center justify-between gap-2 text-left"
+                data-testid="btn-toggle-participants"
+              >
+                <h2 className="text-lg font-black tracking-tight">
+                  Teams{" "}
+                  <span className="text-sm font-bold text-muted-foreground">
+                    ({participants.length})
+                  </span>
+                </h2>
+                <ChevronDown
+                  className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                    teamsOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Unclaimed names are open — sign up to claim yours and start
+                  telling your team&apos;s story with game recaps.
                 </p>
-              ) : null}
-            </div>
+                <div
+                  className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1"
+                  data-testid="text-claim-explainer"
+                >
+                  <p>
+                    <span className="font-bold text-foreground">
+                      Claiming a team claims its schedule.
+                    </span>{" "}
+                    Your {typeLabel.toLowerCase()} games are added to your
+                    Kinectem team page, where you can edit all of your team&apos;s
+                    info.
+                  </p>
+                  <p>
+                    Already have a team on Kinectem? Claiming won&apos;t change
+                    your existing team page — these games are simply added to
+                    your schedule under this competition, and your game recaps
+                    may be shared and featured on this competition page.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {participants.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                      data-testid={`row-participant-${p.id}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold break-words">{p.name}</p>
+                        <p className="text-xs text-muted-foreground break-words">
+                          {groupLabel(p.division, p.bracket)}
+                        </p>
+                      </div>
+                      {p.claimed ? (
+                        <Badge variant="secondary" className="shrink-0">
+                          Taken
+                        </Badge>
+                      ) : (
+                        <Link href={signupHref}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="font-bold shrink-0"
+                            data-testid={`btn-claim-${p.id}`}
+                          >
+                            Claim
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  ))}
+                  {participants.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No teams have been added to this {typeLabel.toLowerCase()}{" "}
+                      yet.
+                    </p>
+                  ) : null}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
 
         {/* Schedule */}
         <Card className="rounded-xl border-border" data-testid="card-schedule">
-          <CardContent className="p-6 space-y-4">
-            <h2 className="text-lg font-black tracking-tight">Schedule</h2>
+          <CardContent className="p-6">
+            <Collapsible
+              open={scheduleOpen}
+              onOpenChange={setScheduleOpen}
+              className="space-y-4"
+            >
+              <CollapsibleTrigger
+                className="flex w-full items-center justify-between gap-2 text-left"
+                data-testid="btn-toggle-schedule"
+              >
+                <h2 className="text-lg font-black tracking-tight">Schedule</h2>
+                <ChevronDown
+                  className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                    scheduleOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4">
             {matchGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No games have been scheduled yet.
@@ -587,6 +654,8 @@ export default function CompetitionPage() {
                 </div>
               ))
             )}
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
 

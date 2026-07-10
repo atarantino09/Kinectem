@@ -353,8 +353,17 @@ export default function TournamentSignupPage() {
                   <p>
                     You're claiming{" "}
                     <span className="font-bold">{selectedSlot.name}</span> as{" "}
-                    <span className="font-bold">{chosenTeam.name}</span>. The
-                    competition's games will show on your team page.
+                    <span className="font-bold">{chosenTeam.name}</span> — that
+                    means claiming their schedule: these competition games are
+                    added to your team's schedule.
+                  </p>
+                  <p>
+                    Your existing team page{" "}
+                    <span className="font-bold">won&apos;t change</span> — you're
+                    just getting these specific games added in competition form.
+                    Game recaps you write for them may be shared and featured on
+                    the competition page. You can edit everything from your team
+                    page once you're in.
                   </p>
                   {nameMismatch && (
                     <label
@@ -417,11 +426,19 @@ export default function TournamentSignupPage() {
                   data-testid="input-sport"
                 />
               </div>
-              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-                This is a <span className="font-bold">temporary team</span> with no
-                organization. You can write recaps while the tournament is active.
-                After it ends, create or join a real organization to keep full
-                access.
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+                <p>
+                  Claiming this slot claims its{" "}
+                  <span className="font-bold">schedule</span> — the competition's
+                  games appear on your new Kinectem team page, where you can
+                  edit all of your team's info once inside.
+                </p>
+                <p>
+                  This is a <span className="font-bold">temporary team</span> with
+                  no organization. You can write recaps while the tournament is
+                  active. After it ends, create or join a real organization to
+                  keep full access.
+                </p>
               </div>
               <Button
                 className="font-bold w-full"
