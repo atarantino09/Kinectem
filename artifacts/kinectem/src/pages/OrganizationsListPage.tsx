@@ -1,10 +1,11 @@
 import { Link } from "wouter";
 import { formatOrgName } from "@/lib/format";
 import { useListOrganizations } from "@workspace/api-client-react";
+import type { OrganizationResponse } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, Compass, Star } from "lucide-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 
 function OrgLogoTile({
@@ -24,8 +25,68 @@ function OrgLogoTile({
   );
 }
 
+type OrgListItem = OrganizationResponse;
+
+function OrgCard({ org }: { org: OrgListItem }) {
+  return (
+    <Link href={`/organizations/${org.id}`}>
+      <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <OrgLogoTile name={org.name} logoUrl={org.logoUrl ?? null} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-black text-base sm:text-lg leading-tight tracking-tight group-hover:text-primary transition-colors break-words min-w-0">
+                  {formatOrgName(org.name)}
+                </h3>
+                <ChevronRight className="w-5 h-5 text-primary shrink-0" />
+              </div>
+              {org.description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                  {org.description}
+                </p>
+              )}
+              <div className="flex items-center gap-2 mt-3">
+                {org.isMember && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-bold uppercase tracking-wider"
+                  >
+                    Member
+                  </Badge>
+                )}
+                {org.role && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] font-bold uppercase tracking-wider"
+                  >
+                    {org.role}
+                  </Badge>
+                )}
+                {!org.isMember && org.isFollowing && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-bold uppercase tracking-wider"
+                  >
+                    Following
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
 export default function OrganizationsListPage() {
   const { data, isLoading } = useListOrganizations();
+
+  const orgs = data?.data ?? [];
+  // "Yours" = member of the org or following it; everything else is discover.
+  const yourOrgs = orgs.filter((o) => o.isMember || o.isFollowing);
+  const discoverOrgs = orgs.filter((o) => !o.isMember && !o.isFollowing);
 
   return (
     <div className="space-y-6">
@@ -44,7 +105,7 @@ export default function OrganizationsListPage() {
             <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
-      ) : !data || data.data.length === 0 ? (
+      ) : orgs.length === 0 ? (
         <Card className="rounded-xl border border-border">
           <CardContent className="p-8 text-center">
             <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
@@ -52,49 +113,40 @@ export default function OrganizationsListPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {data.data.map((org) => (
-            <Link key={org.id} href={`/organizations/${org.id}`}>
-              <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
-                <CardContent className="p-4 sm:p-5">
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <OrgLogoTile name={org.name} logoUrl={org.logoUrl ?? null} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-black text-base sm:text-lg leading-tight tracking-tight group-hover:text-primary transition-colors break-words min-w-0">
-                          {formatOrgName(org.name)}
-                        </h3>
-                        <ChevronRight className="w-5 h-5 text-primary shrink-0" />
-                      </div>
-                      {org.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                          {org.description}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 mt-3">
-                        {org.isMember && (
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] font-bold uppercase tracking-wider"
-                          >
-                            Member
-                          </Badge>
-                        )}
-                        {org.role && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] font-bold uppercase tracking-wider"
-                          >
-                            {org.role}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+        <div className="space-y-8">
+          {yourOrgs.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-muted-foreground">
+                <Star className="w-4 h-4" /> Your organizations
+              </h2>
+              <div
+                className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                data-testid="section-your-orgs"
+              >
+                {yourOrgs.map((org) => (
+                  <OrgCard key={org.id} org={org} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {discoverOrgs.length > 0 && (
+            <section className="space-y-3">
+              {yourOrgs.length > 0 && (
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-muted-foreground">
+                  <Compass className="w-4 h-4" /> Discover
+                </h2>
+              )}
+              <div
+                className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                data-testid="section-discover-orgs"
+              >
+                {discoverOrgs.map((org) => (
+                  <OrgCard key={org.id} org={org} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>

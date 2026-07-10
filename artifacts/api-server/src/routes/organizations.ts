@@ -147,7 +147,52 @@ router.get(
       .from(organizations)
       .where(inArray(organizations.id, ownedOrgIds))
       .limit(50);
-    const data = rows.map((o) => toOrganization(o));
+    // Session-aware flags so the client can group "yours" vs "discover":
+    // membership/role from org admin rows, isFollowing from follower rows.
+    const me = _req.sessionUser;
+    let roleByOrg = new Map<string, "owner" | "admin" | "member">();
+    let followedOrgIds = new Set<string>();
+    if (me && rows.length > 0) {
+      const orgIds = rows.map((o) => o.id);
+      const [adminRows, followRows] = await Promise.all([
+        db
+          .select({
+            organizationId: organizationAdmins.organizationId,
+            role: organizationAdmins.role,
+          })
+          .from(organizationAdmins)
+          .where(
+            and(
+              eq(organizationAdmins.userId, me.id),
+              inArray(organizationAdmins.organizationId, orgIds),
+            ),
+          ),
+        db
+          .select({ organizationId: organizationFollowers.organizationId })
+          .from(organizationFollowers)
+          .where(
+            and(
+              eq(organizationFollowers.userId, me.id),
+              inArray(organizationFollowers.organizationId, orgIds),
+            ),
+          ),
+      ]);
+      roleByOrg = new Map(
+        adminRows.map((r) => [
+          r.organizationId,
+          r.role as "owner" | "admin" | "member",
+        ]),
+      );
+      followedOrgIds = new Set(followRows.map((r) => r.organizationId));
+    }
+    const data = rows.map((o) => {
+      const role = roleByOrg.get(o.id) ?? null;
+      return toOrganization(o, {
+        isMember: role != null,
+        role,
+        isFollowing: followedOrgIds.has(o.id),
+      });
+    });
     res.json(paginate(data));
   }),
 );
