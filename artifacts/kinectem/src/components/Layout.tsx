@@ -120,17 +120,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
     badge?: number;
   };
 
+  // Inbox + Announcements moved into the avatar dropdown on desktop to
+  // de-crowd the top bar; they stay as full entries in the mobile drawer.
+  const menuBadgeTotal = unreadCount + announcementsUnread;
+
   const navItems: NavItem[] = [
     { href: "/", label: "Feed", icon: Home },
     { href: "/organizations", label: "Orgs", icon: Building2 },
-    { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
-    { href: "/announcements", label: "Announcements", icon: Megaphone, testId: "link-announcements", badge: announcementsUnread },
     ...(whoami?.isGuardian || whoami?.realUser?.role === "parent"
       ? [{ href: "/family", label: "Family", icon: Users, testId: "link-family" } satisfies NavItem]
       : []),
     ...(isAdmin
       ? [{ href: "/admin", label: "Admin", icon: Shield, testId: "link-admin" } satisfies NavItem]
       : []),
+  ];
+
+  const drawerNavItems: NavItem[] = [
+    { href: "/", label: "Feed", icon: Home },
+    { href: "/organizations", label: "Orgs", icon: Building2 },
+    { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
+    { href: "/announcements", label: "Announcements", icon: Megaphone, testId: "link-announcements", badge: announcementsUnread },
+    ...navItems.slice(2),
   ];
 
   const displayName = currentUser
@@ -162,7 +172,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             />
           </Link>
           <nav className="flex flex-col gap-1 p-3">
-            {navItems.map((item) => {
+            {drawerNavItems.map((item) => {
               const active = isNavActive(item.href);
               const Icon = item.icon;
               return (
@@ -243,7 +253,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div
               className={`transition-all duration-200 ease-out ${
                 searchFocused
-                  ? "absolute left-0 top-0 z-20 w-[min(36rem,calc(100vw-14rem))]"
+                  ? "absolute left-0 top-0 z-20 w-[clamp(14rem,calc(100vw-32rem),36rem)]"
                   : "absolute inset-0"
               }`}
             >
@@ -319,7 +329,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   data-testid="btn-user-menu"
                 >
                   <UserAvatar
@@ -329,6 +339,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     className="border border-border hover:ring-2 hover:ring-primary transition-all"
                     fallbackClassName="bg-slate-900 text-primary-foreground"
                   />
+                  {menuBadgeTotal > 0 && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center ring-2 ring-card"
+                      data-testid="badge-user-menu"
+                    >
+                      {menuBadgeTotal > 9 ? "9+" : menuBadgeTotal}
+                    </span>
+                  )}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
@@ -341,6 +359,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setLocation(`/users/${currentUser.id}`)}>
                   <UserCircle className="w-4 h-4 mr-2" /> View profile
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/messages")}
+                  data-testid="menu-messages"
+                >
+                  <Mail className="w-4 h-4 mr-2" /> Inbox
+                  {unreadCount > 0 && (
+                    <span
+                      className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                      data-testid="badge-menu-messages"
+                    >
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/announcements")}
+                  data-testid="menu-announcements"
+                >
+                  <Megaphone className="w-4 h-4 mr-2" /> Announcements
+                  {announcementsUnread > 0 && (
+                    <span
+                      className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                      data-testid="badge-menu-announcements"
+                    >
+                      {announcementsUnread > 9 ? "9+" : announcementsUnread}
+                    </span>
+                  )}
                 </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem
