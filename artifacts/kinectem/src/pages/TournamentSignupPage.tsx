@@ -33,6 +33,7 @@ type TournamentResponse = {
     startDate: string;
     endDate: string;
     isActive: boolean;
+    autoApproveClaims: boolean;
   };
   participants: Participant[];
 };
@@ -268,7 +269,12 @@ export default function TournamentSignupPage() {
         </Link>
         <h1 className="text-2xl font-black tracking-tight">Sign up your team</h1>
         <p className="text-sm text-muted-foreground">
-          Claim your team name so your games and recaps live on Kinectem.
+          Claim your team name so your games and recaps live on Kinectem.{" "}
+          <span data-testid="text-signup-approval-mode">
+            {t.autoApproveClaims
+              ? "Claims are instant — your spot is locked in as soon as you claim it."
+              : "The organizer reviews each claim before your spot is locked in."}
+          </span>
         </p>
       </div>
 
@@ -433,6 +439,11 @@ export default function TournamentSignupPage() {
                     the competition page. You can edit everything from your team
                     page once you're in.
                   </p>
+                  <p data-testid="text-existing-approval-mode">
+                    {t.autoApproveClaims
+                      ? "Your claim is instant — this slot is yours the moment you claim it."
+                      : "The organizer will review your claim — your spot is locked in once they approve it."}
+                  </p>
                   {nameMismatch && (
                     <label
                       className="flex items-start gap-2 text-foreground cursor-pointer"
@@ -464,7 +475,11 @@ export default function TournamentSignupPage() {
                 onClick={submit}
                 data-testid="btn-submit-signup"
               >
-                {submitting ? "Claiming…" : "Claim slot for my team"}
+                {submitting
+                  ? "Claiming…"
+                  : t.autoApproveClaims
+                    ? "Claim slot for my team"
+                    : "Submit claim for approval"}
               </Button>
             </div>
           ) : (
@@ -507,6 +522,11 @@ export default function TournamentSignupPage() {
                   active. After it ends, create or join a real organization to
                   keep full access.
                 </p>
+                <p data-testid="text-new-approval-mode">
+                  {t.autoApproveClaims
+                    ? "Your claim is instant — this slot is yours the moment you claim it."
+                    : "The organizer will review your claim — your spot is locked in once they approve it."}
+                </p>
               </div>
               <Button
                 className="font-bold w-full"
@@ -514,7 +534,11 @@ export default function TournamentSignupPage() {
                 onClick={submit}
                 data-testid="btn-submit-signup"
               >
-                {submitting ? "Setting up your team…" : "Create team & claim slot"}
+                {submitting
+                  ? "Setting up your team…"
+                  : t.autoApproveClaims
+                    ? "Create team & claim slot"
+                    : "Create team & submit claim"}
               </Button>
             </div>
           )}

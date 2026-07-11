@@ -531,8 +531,9 @@ export default function CompetitionPage() {
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Unclaimed names are open — sign up to claim yours and start
-                  telling your team&apos;s story with game recaps.
+                  Spot your team below? Claim it yourself — no invite needed.
+                  Sign up, claim your name, and start telling your team&apos;s
+                  story with game recaps.
                 </p>
                 <div
                   className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1"
@@ -551,6 +552,24 @@ export default function CompetitionPage() {
                     your existing team page — these games are simply added to
                     your schedule under this competition, and your game recaps
                     may be shared and featured on this competition page.
+                  </p>
+                  <p data-testid="text-claim-approval-mode">
+                    {c.autoApproveClaims ? (
+                      <>
+                        <span className="font-bold text-foreground">
+                          Claims are instant
+                        </span>{" "}
+                        — click Claim and your spot is locked in right away.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold text-foreground">
+                          Claims are reviewed
+                        </span>{" "}
+                        — the organizer approves each claim before your spot is
+                        locked in.
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-col gap-2">
