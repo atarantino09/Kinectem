@@ -45,7 +45,7 @@ const STEPS = [
   {
     icon: CalendarCheck,
     title: "Schedules land automatically",
-    body: "The moment a team claims, their competition schedule appears on their Kinectem team page. Nobody types anything twice.",
+    body: "The moment a team is claimed, their competition schedule appears on their Kinectem team page. Nobody types anything twice.",
   },
 ] as const;
 
