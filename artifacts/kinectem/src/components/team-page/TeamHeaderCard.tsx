@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { TeamDescription } from "./TeamDescription";
+import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import { useToast } from "@/hooks/use-toast";
 import { PersonaPill } from "@/components/PersonaPill";
 import {
@@ -165,8 +166,21 @@ export function TeamHeaderCard({
     }
   };
 
+  // Task #733 — parent-org brand colors ride on the org embed as extra
+  // fields beyond the locked spec; when set, a thin gradient strip renders
+  // at the very top of the card, above the hero photo. Independent teams
+  // (no org) never have one.
+  const orgBrand = hasOrg ? readOrgBrandColors(org) : null;
+
   return (
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+      {orgBrand && (
+        <div
+          className="h-1.5"
+          style={{ background: orgStripGradient(orgBrand) }}
+          data-testid="strip-org-brand"
+        />
+      )}
       {/* Hero background: team-specific photo if set, otherwise the
           existing brand gradient as the empty-state. */}
       <div className="relative aspect-[16/5] overflow-hidden bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">

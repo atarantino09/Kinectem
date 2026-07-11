@@ -1485,6 +1485,15 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON organizer_followers (user_id);
     `,
   },
+  {
+    // Task #733 — org brand colors for the org-page hero gradient +
+    // team-page brand strip. Nullable hex strings, no backfill.
+    name: "2026-07-11-task-733-org-brand-colors",
+    sql: `
+      ALTER TABLE organizations ADD COLUMN IF NOT EXISTS brand_primary_color text;
+      ALTER TABLE organizations ADD COLUMN IF NOT EXISTS brand_secondary_color text;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

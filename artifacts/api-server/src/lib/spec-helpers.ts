@@ -608,13 +608,28 @@ export function toOrganization(
     // `myClaimStatus` reflects the viewer's own latest claim (null if none).
     hasOwner: opts.hasOwner ?? true,
     myClaimStatus: opts.myClaimStatus ?? null,
+    // Task #733 — org brand colors (hex). Extra fields beyond the locked
+    // spec (same precedent as recapKind / competition branding); the client
+    // reads them via a narrow cast. NULL = default generic gradient.
+    brandPrimaryColor: o.brandPrimaryColor ?? null,
+    brandSecondaryColor: o.brandSecondaryColor ?? null,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.createdAt.toISOString(),
   };
 }
 
 export function toOrganizationEmbed(o: OrgRow) {
-  return { id: o.id, name: o.name, slug: slugify(o.name), avatarUrl: o.logoUrl ?? null };
+  return {
+    id: o.id,
+    name: o.name,
+    slug: slugify(o.name),
+    avatarUrl: o.logoUrl ?? null,
+    // Task #733 — parent-org brand colors ride on the team's org embed so
+    // team pages can render the org brand strip without an extra fetch.
+    // Extra fields beyond the locked spec (recapKind precedent).
+    brandPrimaryColor: o.brandPrimaryColor ?? null,
+    brandSecondaryColor: o.brandSecondaryColor ?? null,
+  };
 }
 
 export function toMember(u: UserRow, role: "owner" | "admin" | "member", joinedAt: Date) {

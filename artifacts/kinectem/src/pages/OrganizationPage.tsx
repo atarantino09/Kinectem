@@ -81,6 +81,7 @@ import {
 } from "@/components/team-page/SpotlightTour";
 import { OrganizationDescription } from "@/components/organization-page/OrganizationDescription";
 import { formatOrgName } from "@/lib/format";
+import { readOrgBrandColors, orgHeroGradient } from "@/lib/orgBrand";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 
 type TeamRailItem = {
@@ -471,7 +472,21 @@ export default function OrganizationPage() {
               size="sm"
               className="!absolute top-3 right-3 z-20 shadow-sm"
             />
-            <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
+            {/* Task #733 — when the org has brand colors set, the hero
+                renders a soft gradient of the pair; otherwise the default
+                generic gradient. */}
+            {(() => {
+              const brand = readOrgBrandColors(organization);
+              return brand ? (
+                <div
+                  className="h-32 relative"
+                  style={{ background: orgHeroGradient(brand) }}
+                  data-testid="org-hero-brand-gradient"
+                />
+              ) : (
+                <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
+              );
+            })()}
             <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-16 sm:-mt-20 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 sm:flex-wrap relative z-10">
               <div className="flex items-end gap-3 sm:gap-4 min-w-0">
                 <div className="shrink-0">

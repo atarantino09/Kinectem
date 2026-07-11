@@ -33,6 +33,17 @@ import {
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { apiErrorMessage } from "@/lib/api-errors";
+import {
+  readOrgBrandColors,
+  orgHeroGradient,
+  orgStripGradient,
+} from "@/lib/orgBrand";
+
+// Task #733 — starting swatches shown when an org has no branding yet and
+// the admin clicks a picker for the first time. Deliberately generic; they
+// are only persisted if the admin actually saves them.
+const DEFAULT_BRAND_PRIMARY = "#1d4ed8";
+const DEFAULT_BRAND_SECONDARY = "#9333ea";
 
 type OrgLike = {
   id: string;
@@ -44,6 +55,9 @@ type OrgLike = {
   zipCode?: string | null;
   logoUrl?: string | null;
   role?: string | null;
+  // Task #733 — extra fields beyond the locked spec (recapKind precedent).
+  brandPrimaryColor?: string | null;
+  brandSecondaryColor?: string | null;
 };
 
 export function EditOrgDialog({
@@ -63,6 +77,14 @@ export function EditOrgDialog({
   const [city, setCity] = useState(organization.city ?? "");
   const [state, setState] = useState(organization.state ?? "");
   const [zipCode, setZipCode] = useState(organization.zipCode ?? "");
+  // Task #733 — brand colors. null = not set (default gradient, no team
+  // strip). Both are sent on save so clearing works.
+  const [brandPrimary, setBrandPrimary] = useState<string | null>(
+    organization.brandPrimaryColor ?? null,
+  );
+  const [brandSecondary, setBrandSecondary] = useState<string | null>(
+    organization.brandSecondaryColor ?? null,
+  );
   const [errors, setErrors] = useState<{
     name?: string;
     city?: string;
@@ -85,6 +107,8 @@ export function EditOrgDialog({
       setCity(organization.city ?? "");
       setState(organization.state ?? "");
       setZipCode(organization.zipCode ?? "");
+      setBrandPrimary(organization.brandPrimaryColor ?? null);
+      setBrandSecondary(organization.brandSecondaryColor ?? null);
       setErrors({});
     }
     // Only re-seed the form when the dialog transitions to open, or when
@@ -186,7 +210,7 @@ export function EditOrgDialog({
     }
     setSaving(true);
     try {
-      const payload: Record<string, string> = {
+      const payload: Record<string, string | null> = {
         name: trimmedName,
         description,
         city: trimmedCity,
@@ -196,6 +220,10 @@ export function EditOrgDialog({
       // Always include website so the user can clear a previously-set
       // value by emptying the field (server treats "" as "set to null").
       payload.website = normalizedWebsite;
+      // Task #733 — always include both brand colors so "Reset to default"
+      // (null) actually clears a previously-saved pair.
+      payload.brandPrimaryColor = brandPrimary;
+      payload.brandSecondaryColor = brandSecondary;
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -311,6 +339,88 @@ export function EditOrgDialog({
                 rows={3}
                 data-testid="input-edit-org-description"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-bold">Brand colors</Label>
+              <p className="text-xs text-muted-foreground">
+                Two colors that blend into a gradient on your organization
+                page and appear as a strip on each team page.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={brandPrimary ?? DEFAULT_BRAND_PRIMARY}
+                    onChange={(e) => {
+                      setBrandPrimary(e.target.value);
+                      // Picking one color implicitly activates the pair so
+                      // the preview + save reflect what the page will show.
+                      setBrandSecondary(
+                        (prev) => prev ?? DEFAULT_BRAND_SECONDARY,
+                      );
+                    }}
+                    className="h-9 w-9 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+                    aria-label="Primary brand color"
+                    data-testid="input-org-brand-primary"
+                  />
+                  <span className="text-xs font-bold text-muted-foreground">
+                    Primary
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={brandSecondary ?? DEFAULT_BRAND_SECONDARY}
+                    onChange={(e) => {
+                      setBrandSecondary(e.target.value);
+                      setBrandPrimary((prev) => prev ?? DEFAULT_BRAND_PRIMARY);
+                    }}
+                    className="h-9 w-9 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+                    aria-label="Secondary brand color"
+                    data-testid="input-org-brand-secondary"
+                  />
+                  <span className="text-xs font-bold text-muted-foreground">
+                    Secondary
+                  </span>
+                </div>
+                {(brandPrimary || brandSecondary) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    onClick={() => {
+                      setBrandPrimary(null);
+                      setBrandSecondary(null);
+                    }}
+                    data-testid="btn-clear-org-brand-colors"
+                  >
+                    Reset to default
+                  </Button>
+                )}
+              </div>
+              {(() => {
+                const colors = readOrgBrandColors({
+                  brandPrimaryColor: brandPrimary,
+                  brandSecondaryColor: brandSecondary,
+                });
+                if (!colors) return null;
+                return (
+                  <div
+                    className="overflow-hidden rounded-lg border border-border"
+                    data-testid="preview-org-brand-gradient"
+                  >
+                    <div
+                      className="h-1.5"
+                      style={{ background: orgStripGradient(colors) }}
+                    />
+                    <div
+                      className="h-10"
+                      style={{ background: orgHeroGradient(colors) }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-org-website" className="font-bold">

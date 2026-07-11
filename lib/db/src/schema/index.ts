@@ -365,6 +365,12 @@ export const organizations = pgTable("organizations", {
   // not yet added. Operator bookkeeping only; not exposed on any public org
   // payload. Independent from outreachMessagedAt.
   outreachFacebookAddedAt: timestamp("outreach_facebook_added_at"),
+  // Task #733 — Optional org brand colors (hex like #1a2b3c). When set,
+  // the org page hero renders a gradient of the two colors and each of the
+  // org's team pages shows a thin brand strip. Both nullable; NULL = the
+  // default generic gradient and no team-page strip.
+  brandPrimaryColor: text("brand_primary_color"),
+  brandSecondaryColor: text("brand_secondary_color"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.

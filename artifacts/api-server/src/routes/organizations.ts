@@ -623,6 +623,31 @@ router.patch(
     } else if (body.logoUrl === null) {
       patch.logoUrl = null;
     }
+    // Task #733 — org brand colors. Each field is independently settable
+    // (hex string) or clearable (null / empty string). Extra fields beyond
+    // the locked spec (recapKind precedent), so validation lives here.
+    const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    for (const key of ["brandPrimaryColor", "brandSecondaryColor"] as const) {
+      const value = body[key];
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed === "") {
+          patch[key] = null;
+        } else if (!HEX_COLOR_PATTERN.test(trimmed)) {
+          return apiError(
+            res,
+            400,
+            `${key} must be a hex color like #1a2b3c`,
+          );
+        } else {
+          patch[key] = trimmed.toLowerCase();
+        }
+      } else if (value === null) {
+        patch[key] = null;
+      } else if (value !== undefined) {
+        return apiError(res, 400, `${key} must be a string or null`);
+      }
+    }
     if (Object.keys(patch).length === 0) {
       return res.json(toOrganization(existing));
     }
