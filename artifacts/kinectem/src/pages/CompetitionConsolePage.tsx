@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { buildCompetitionInviteMessage } from "@/lib/competition-invite-message";
 import {
   Upload,
   ExternalLink,
@@ -22,6 +23,8 @@ import {
   ArrowLeft,
   Newspaper,
   Star,
+  Copy,
+  Megaphone,
 } from "lucide-react";
 
 // Competitions §9b — operator console for one competition: branding panel,
@@ -385,6 +388,83 @@ function BrandingPanel({
           data-testid="btn-save-branding"
         >
           {save.isPending ? "Saving…" : "Save branding"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Task #727 — ready-made copy/paste invite message so the organizer can tell
+// participating teams to come claim their slots without writing anything.
+function InviteTeamsPanel({
+  name,
+  type,
+  startDate,
+  endDate,
+  location,
+  autoApproveClaims,
+  slug,
+}: {
+  name: string;
+  type: "tournament" | "league";
+  startDate: string;
+  endDate: string;
+  location: string | null;
+  autoApproveClaims: boolean;
+  slug: string;
+}) {
+  const { toast } = useToast();
+
+  // Absolute public link (with the /app prefix) so it works when pasted
+  // outside the app — same pattern as the roster invite links.
+  const publicUrl = `${window.location.origin}${import.meta.env.BASE_URL}c/${encodeURIComponent(slug)}`;
+
+  const message = buildCompetitionInviteMessage({
+    name,
+    type,
+    startDate,
+    endDate,
+    location,
+    autoApproveClaims,
+    url: publicUrl,
+  });
+
+  const copyMessage = () =>
+    navigator.clipboard
+      .writeText(message)
+      .then(() => toast({ title: "Message copied" }))
+      .catch(() =>
+        toast({ title: "Couldn't copy message", variant: "destructive" }),
+      );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Megaphone className="w-4 h-4" />
+          Invite your teams
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Copy this ready-made message and paste it into an email, group chat,
+          or league bulletin — it walks every team through claiming their spot,
+          step by step. It always uses your latest name, dates, and public
+          link.
+        </p>
+        <pre
+          className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-sans text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]"
+          data-testid="text-invite-message"
+        >
+          {message}
+        </pre>
+        <Button
+          variant="brand"
+          onClick={copyMessage}
+          data-testid="btn-copy-invite-message"
+        >
+          <Copy className="w-3.5 h-3.5 mr-1.5" />
+          Copy message
         </Button>
       </CardContent>
     </Card>
@@ -947,6 +1027,15 @@ export default function CompetitionConsolePage() {
       ) : (
         <Skeleton className="h-48 rounded-xl" />
       )}
+      <InviteTeamsPanel
+        name={detail?.name ?? row.name}
+        type={detail?.type ?? row.type}
+        startDate={detail?.startDate ?? row.startDate}
+        endDate={detail?.endDate ?? row.endDate}
+        location={detail ? detail.location : row.location}
+        autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
+        slug={row.slug}
+      />
       <ClaimsPanel
         competitionId={row.id}
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
