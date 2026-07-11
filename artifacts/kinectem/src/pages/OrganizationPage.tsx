@@ -482,7 +482,12 @@ export default function OrganizationPage() {
                   className="h-32 relative"
                   style={{ background: orgHeroGradient(brand) }}
                   data-testid="org-hero-brand-gradient"
-                />
+                >
+                  {/* Fade the lower edge into the card so the org name /
+                      buttons that overlap the hero stay readable on any
+                      brand color pair. */}
+                  <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-card" />
+                </div>
               ) : (
                 <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
               );

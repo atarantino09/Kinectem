@@ -41,11 +41,12 @@ function withAlpha(hex: string, alphaHex: string): string {
   return `${expandHex(hex)}${alphaHex}`;
 }
 
-// Soft hero gradient for the org page header. Mirrors the opacity ramp of
-// the default `from-primary/30 via-primary/10 to-primary/5` gradient so the
-// overlapping name text / buttons stay readable on any color pair.
+// Hero gradient for the org page header. Full-strength brand colors (same
+// visual language as the team-page strip); the org page layers a
+// bottom-fade-to-card overlay on top so overlapping name text stays
+// readable on any color pair.
 export function orgHeroGradient(colors: OrgBrandColors): string {
-  return `linear-gradient(135deg, ${withAlpha(colors.primary, "4d")} 0%, ${withAlpha(colors.primary, "1a")} 45%, ${withAlpha(colors.secondary, "4d")} 100%)`;
+  return `linear-gradient(135deg, ${expandHex(colors.primary)} 0%, ${withAlpha(colors.primary, "d9")} 45%, ${expandHex(colors.secondary)} 100%)`;
 }
 
 // Full-strength thin strip gradient (team pages + Edit-dialog preview).
