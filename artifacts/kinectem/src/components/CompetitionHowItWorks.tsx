@@ -144,7 +144,7 @@ export function CompetitionHowItWorks({
                 </p>
               </div>
               <p className="mt-1.5 text-base font-black tracking-tight drop-shadow-sm">
-                Your brand on every game story.
+                Your brand on every game recap.
               </p>
               <p className="mt-1 text-sm opacity-95 drop-shadow-sm">
                 After the games are played, teams write game recaps — and every
