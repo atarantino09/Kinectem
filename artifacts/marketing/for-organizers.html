@@ -117,6 +117,37 @@
       margin: 0 0 10px;
     }
     .fo-payoff__body { font-size: 15px; line-height: 1.65; margin: 0; opacity: 0.95; }
+    .fo-extras {
+      max-width: 820px;
+      margin: 24px auto 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .fo-extra {
+      padding: 28px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #f8fafc;
+    }
+    .fo-extra__eyebrow {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--purple, #7c3aed);
+      margin: 0 0 8px;
+    }
+    .fo-extra__title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 20px;
+      margin: 0 0 8px;
+      color: #0f172a;
+    }
+    .fo-extra__body { font-size: 15px; color: #475569; line-height: 1.6; margin: 0; }
     .fo-cta {
       max-width: 820px;
       margin: 48px auto 0;
@@ -136,6 +167,7 @@
     @media (max-width: 640px) {
       .fo-step { grid-template-columns: 1fr; }
       .fo-step__num { width: 40px; height: 40px; font-size: 16px; }
+      .fo-extras { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -245,9 +277,26 @@
           </p>
         </div>
 
+        <div class="fo-extras">
+          <div class="fo-extra">
+            <p class="fo-extra__eyebrow">Run more than one?</p>
+            <p class="fo-extra__title">Create a competition hub.</p>
+            <p class="fo-extra__body">
+              If you run multiple leagues and tournaments, create a competition hub — one branded home where all of your competitions live. Your logo, your colors, every event in one place, and teams always know where to find you.
+            </p>
+          </div>
+          <div class="fo-extra">
+            <p class="fo-extra__eyebrow">What it costs</p>
+            <p class="fo-extra__title">100% free for organizers.</p>
+            <p class="fo-extra__body">
+              Everything on this page — your branded competition page, schedule uploads, team claims, and featured recaps — is completely free for organizers. No fees, no card, no catch.
+            </p>
+          </div>
+        </div>
+
         <div class="fo-cta">
           <p class="fo-cta__title">Ready to put your competition on Kinectem?</p>
-          <p class="fo-cta__body">Create your account, set up your competition, and upload your first schedule in minutes.</p>
+          <p class="fo-cta__body">Create your account, set up your competition, and upload your first schedule in minutes — free, start to finish.</p>
           <a href="/app/login?signup=1" class="btn btn-primary">Get Started</a>
         </div>
       </div>
