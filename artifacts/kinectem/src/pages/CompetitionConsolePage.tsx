@@ -545,11 +545,18 @@ function ClaimsPanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Coaches find their team on your competition page and claim their spot
+          — no invites or spreadsheets needed. You decide how hands-on to be
+          with the toggle below.
+        </p>
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
           <div>
             <p className="text-sm font-bold">Auto-approve claims</p>
             <p className="text-xs text-muted-foreground">
-              When off, coaches&apos; claims wait here for your approval.
+              {autoApproveClaims
+                ? "Teams claim their spot instantly — perfect for a hands-off setup."
+                : "You personally review and approve every claim before a team is locked in."}
             </p>
           </div>
           <Switch
@@ -564,7 +571,8 @@ function ClaimsPanel({
           <Skeleton className="h-16 rounded-lg" />
         ) : pending.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No claims waiting for review.
+            No claims waiting for review — when approval is required, new
+            claims will appear right here for your sign-off.
           </p>
         ) : (
           <div className="space-y-2">
