@@ -1,17 +1,12 @@
 import { useRoute, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  customFetch,
-  useGetLoggedInUser,
-  listUserTeams,
-} from "@workspace/api-client-react";
+import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import {
   Collapsible,
   CollapsibleContent,
@@ -53,9 +48,6 @@ type Match = {
   awayName: string | null;
   homeParticipantId: string | null;
   awayParticipantId: string | null;
-  homeScore: number | null;
-  awayScore: number | null;
-  scoreState?: "official" | "confirmed" | "disputed" | "reported" | "none";
   homeTeamId?: string | null;
   awayTeamId?: string | null;
 };
@@ -132,111 +124,6 @@ function contrastText(hex: string): string {
 
 const DEFAULT_BRAND = "#1e293b";
 
-// §6 — inline self-report control shown to a coach/manager of a claimed team
-// in this game while no public (official/confirmed) score exists. The server
-// enforces permissions; this is just the entry point.
-function ReportScoreControl({
-  match,
-  slug,
-}: {
-  match: Match;
-  slug: string;
-}) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [home, setHome] = useState("");
-  const [away, setAway] = useState("");
-
-  const report = useMutation({
-    mutationFn: () =>
-      customFetch<{ ok: true; scoreState: string }>(
-        `/api/v1/competitions/games/${match.id}/report-score`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            homeScore: Number(home),
-            awayScore: Number(away),
-          }),
-        },
-      ),
-    onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["competition", slug] });
-      setOpen(false);
-      toast({
-        title:
-          r.scoreState === "confirmed"
-            ? "Score confirmed — both teams agree"
-            : r.scoreState === "disputed"
-              ? "Score recorded — the other team reported a different result"
-              : "Score reported",
-      });
-    },
-    onError: (err) =>
-      toast({
-        title: "Couldn't report that score",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "destructive",
-      }),
-  });
-
-  const valid =
-    /^\d{1,3}$/.test(home.trim()) && /^\d{1,3}$/.test(away.trim());
-
-  if (!open) {
-    return (
-      <Button
-        size="sm"
-        variant="ghost"
-        className="shrink-0 font-bold text-muted-foreground"
-        onClick={() => setOpen(true)}
-        data-testid={`btn-report-score-${match.id}`}
-      >
-        Report score
-      </Button>
-    );
-  }
-  return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <Input
-        value={home}
-        onChange={(e) => setHome(e.target.value)}
-        placeholder="H"
-        inputMode="numeric"
-        className="h-8 w-12 text-center"
-        data-testid={`input-report-home-${match.id}`}
-      />
-      <span className="text-xs text-muted-foreground">–</span>
-      <Input
-        value={away}
-        onChange={(e) => setAway(e.target.value)}
-        placeholder="A"
-        inputMode="numeric"
-        className="h-8 w-12 text-center"
-        data-testid={`input-report-away-${match.id}`}
-      />
-      <Button
-        size="sm"
-        className="font-bold"
-        disabled={!valid || report.isPending}
-        onClick={() => report.mutate()}
-        data-testid={`btn-report-submit-${match.id}`}
-      >
-        Save
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="text-muted-foreground"
-        onClick={() => setOpen(false)}
-      >
-        Cancel
-      </Button>
-    </div>
-  );
-}
-
 export default function CompetitionPage() {
   // Matched both as the standalone public page (`/c/<slug>`) and as the
   // in-app view inside the AppShell (`/competitions/c/<slug>`), so
@@ -247,26 +134,6 @@ export default function CompetitionPage() {
   const { data: me } = useGetLoggedInUser();
   const [teamsOpen, setTeamsOpen] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(true);
-
-  // §6 — teams I coach/manage, used only to decide whether to show the
-  // "Report score" entry point on a claimed game (server re-checks).
-  const myTeamsQ = useQuery({
-    queryKey: ["users", me?.id, "teams"],
-    queryFn: () => listUserTeams(me?.id ?? ""),
-    enabled: !!me?.id,
-  });
-  const myManagedTeamIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const m of myTeamsQ.data?.data ?? []) {
-      // Mirror the server's canManageTeam gate: this endpoint only ever emits
-      // position "coach" (roster role coach), "admin" (org owner/admin),
-      // "player", or the synthetic "parent" — only the first two can report.
-      if (m.position === "coach" || m.position === "admin") {
-        ids.add(m.teamId);
-      }
-    }
-    return ids;
-  }, [myTeamsQ.data]);
 
   const q = useQuery<CompetitionResponse>({
     queryKey: ["competition", slug],
@@ -770,22 +637,6 @@ export default function CompetitionPage() {
                             {m.awayName ?? "TBD"}
                           </div>
                         </div>
-                        {m.homeScore != null && m.awayScore != null ? (
-                          <span
-                            className="shrink-0 font-bold tabular-nums flex items-center gap-1.5"
-                            data-testid={`score-${m.id}`}
-                          >
-                            {m.homeScore}–{m.awayScore}
-                            {m.scoreState === "confirmed" ? (
-                              <Badge variant="secondary" className="text-[10px]">
-                                Confirmed
-                              </Badge>
-                            ) : null}
-                          </span>
-                        ) : (m.homeTeamId && myManagedTeamIds.has(m.homeTeamId)) ||
-                          (m.awayTeamId && myManagedTeamIds.has(m.awayTeamId)) ? (
-                          <ReportScoreControl match={m} slug={slug} />
-                        ) : null}
                       </div>
                     ))}
                   </div>

@@ -8,7 +8,7 @@ import { Trophy, MapPin, ExternalLink, Sparkles, Clock, FileText } from "lucide-
 
 // Surfaces the imported tournament schedule for a team that claimed a
 // participant slot. Source of truth is the tournament import, so re-imported
-// score / slot fixes appear here automatically. Renders nothing when the team
+// slot fixes appear here automatically. Renders nothing when the team
 // isn't linked to any tournament.
 
 interface TournamentMatch {
@@ -23,8 +23,6 @@ interface TournamentMatch {
   field: string | null;
   isHome: boolean;
   opponentName: string | null;
-  teamScore: number | null;
-  opponentScore: number | null;
 }
 
 interface TournamentGroup {
@@ -84,12 +82,11 @@ function todayKey(): string {
   return `${y}-${m}-${d}`;
 }
 
-// A match is worth recapping once it's actually been played: either it has a
-// recorded score, or its date is in the past. Same-day (no score yet), future,
-// and TBD matches don't get the "Write recap" affordance.
+// A match is worth recapping once it's actually been played: its date is in
+// the past. Same-day, future, and TBD matches don't get the "Write recap"
+// affordance.
 function isRecappable(m: TournamentMatch): boolean {
   if (!m.opponentName) return false;
-  if (m.teamScore != null && m.opponentScore != null) return true;
   return !!m.matchDate && m.matchDate < todayKey();
 }
 
@@ -208,24 +205,6 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
   );
 }
 
-function ScoreBadge({ m }: { m: TournamentMatch }) {
-  if (m.teamScore == null || m.opponentScore == null) return null;
-  const result =
-    m.teamScore > m.opponentScore
-      ? { label: "W", cls: "bg-emerald-100 text-emerald-800" }
-      : m.teamScore < m.opponentScore
-        ? { label: "L", cls: "bg-red-100 text-red-800" }
-        : { label: "T", cls: "bg-muted text-muted-foreground" };
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-black ${result.cls}`}
-      data-testid={`tournament-score-${m.id}`}
-    >
-      {result.label} {m.teamScore}–{m.opponentScore}
-    </span>
-  );
-}
-
 export function TournamentScheduleCard({
   teamId,
   canPostRecap = false,
@@ -314,7 +293,6 @@ export function TournamentScheduleCard({
                     )}
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
-                    <ScoreBadge m={m} />
                     {(m.division || m.bracket) && (
                       <Badge variant="outline" className="text-[10px]">
                         {[m.division, m.bracket].filter(Boolean).join(" · ")}

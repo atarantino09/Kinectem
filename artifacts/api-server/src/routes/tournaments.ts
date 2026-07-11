@@ -19,7 +19,6 @@ import {
   teams,
   rosterEntries,
   articles,
-  gameScoreReports,
   organizationAdmins,
   competitionFollowers,
   competitionOrganizers,
@@ -31,7 +30,6 @@ import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
-import { resolveScore } from "../lib/score-resolve";
 import {
   canManageOrganization,
   canManageTeam,
@@ -131,9 +129,7 @@ const CSV_COLUMNS = [
   "venue state",
   "field",
   "home team",
-  "home score",
   "away team",
-  "away score",
 ] as const;
 
 type CsvColumn = (typeof CSV_COLUMNS)[number];
@@ -166,9 +162,7 @@ const CSV_HEADER_ALIASES: Record<CsvColumn, string[]> = {
   "venue state": ["venuestate", "state", "st"],
   field: ["field", "fieldno", "field#", "pitch", "court", "surface"],
   "home team": ["hometeam", "home", "team1", "teama", "homeclub"],
-  "home score": ["homescore", "homegoals", "score1", "hscore"],
   "away team": ["awayteam", "away", "visitor", "visitorteam", "team2", "teamb", "awayclub"],
-  "away score": ["awayscore", "awaygoals", "score2", "ascore", "visitorscore"],
 };
 
 // Resolve the header row to a canonical-column → index map. Returns the
@@ -195,14 +189,6 @@ function resolveCsvHeader(headerRow: string[]): {
 }
 
 const MAX_IMPORT_ROWS = 1000;
-
-// Parse a score cell into an integer or null (empty / non-numeric → null).
-function parseScore(v: string): number | null {
-  const t = v.trim();
-  if (t === "") return null;
-  const n = Number.parseInt(t, 10);
-  return Number.isFinite(n) ? n : null;
-}
 
 // Normalize a CSV date cell to a YYYY-MM-DD string for the `date` column, or
 // null when it isn't a parseable date.
@@ -687,8 +673,9 @@ router.get(
 // ---------------------------------------------------------------------------
 // GET /tournaments/:slug — PUBLIC funnel read. Returns tournament meta, the
 // participant list with claimed/unclaimed state, and the full match schedule
-// with resolved home/away names + imported scores. The client groups by
-// division / bracket / field / time for display.
+// with resolved home/away names. The client groups by division / bracket /
+// field / time for display. Scores are intentionally not part of
+// competitions — the content model is game recaps only.
 // ---------------------------------------------------------------------------
 
 const publicCompetitionRead = asyncHandler(async (req, res) => {
@@ -741,27 +728,6 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .select()
       .from(tournamentMatches)
       .where(eq(tournamentMatches.tournamentId, tournament.id));
-
-    // Score ladder (§6) — load self-reports for every game in one query and
-    // resolve each game to its highest tier. Only official/confirmed scores
-    // are public on this page; reported/disputed stay hidden here.
-    const reportRows = matchRows.length
-      ? await db
-          .select()
-          .from(gameScoreReports)
-          .where(
-            inArray(
-              gameScoreReports.competitionGameId,
-              matchRows.map((m) => m.id),
-            ),
-          )
-      : [];
-    const reportsByGame = new Map<string, typeof reportRows>();
-    for (const r of reportRows) {
-      const arr = reportsByGame.get(r.competitionGameId) ?? [];
-      arr.push(r);
-      reportsByGame.set(r.competitionGameId, arr);
-    }
 
     // Active window: today's date (UTC calendar) within [startDate, endDate]
     // inclusive — same comparison the recap gate uses.
@@ -854,10 +820,6 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         .map((m) => {
           const home = m.homeParticipantId ? partById.get(m.homeParticipantId) : null;
           const away = m.awayParticipantId ? partById.get(m.awayParticipantId) : null;
-          const resolved = resolveScore(m, reportsByGame.get(m.id) ?? [], [
-            home?.teamId,
-            away?.teamId,
-          ]);
           return {
             id: m.id,
             matchNumber: m.matchNumber,
@@ -874,11 +836,6 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
             awayName: away?.name ?? null,
             homeParticipantId: m.homeParticipantId,
             awayParticipantId: m.awayParticipantId,
-            // Public score = official or confirmed only (§6). Reported /
-            // disputed scores never leak onto the shareable page.
-            homeScore: resolved.public ? resolved.homeScore : null,
-            awayScore: resolved.public ? resolved.awayScore : null,
-            scoreState: resolved.state,
             homeTeamId: home?.teamId ?? null,
             awayTeamId: away?.teamId ?? null,
           };
@@ -1061,8 +1018,6 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       homeKey: string;
       awayName: string;
       awayKey: string;
-      homeScore: number | null;
-      awayScore: number | null;
     }
 
     // First pass: parse rows + collect unique participant slots.
@@ -1110,8 +1065,6 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         homeKey,
         awayName,
         awayKey,
-        homeScore: parseScore(col(r, "home score")),
-        awayScore: parseScore(col(r, "away score")),
       });
     }
 
@@ -1170,12 +1123,6 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
             field: m.field,
             homeParticipantId,
             awayParticipantId,
-            homeScore: m.homeScore,
-            awayScore: m.awayScore,
-            // Competitions §6/§8 — CSV scores are OPERATOR data, so they land
-            // straight in the official tier.
-            homeScoreOfficial: m.homeScore,
-            awayScoreOfficial: m.awayScore,
           })
           .onConflictDoUpdate({
             target: [tournamentMatches.tournamentId, tournamentMatches.matchNumber],
@@ -1191,13 +1138,6 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
               field: m.field,
               homeParticipantId,
               awayParticipantId,
-              homeScore: m.homeScore,
-              awayScore: m.awayScore,
-              // Append-friendly re-import: a CSV row WITH scores corrects the
-              // official score; a blank-score row keeps whatever official
-              // score already exists (e.g. one the operator entered in-app).
-              homeScoreOfficial: sql`COALESCE(${m.homeScore ?? null}::int, ${tournamentMatches.homeScoreOfficial})`,
-              awayScoreOfficial: sql`COALESCE(${m.awayScore ?? null}::int, ${tournamentMatches.awayScoreOfficial})`,
               updatedAt: new Date(),
             },
           });
@@ -1737,261 +1677,6 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Score ladder (§6) — team self-report, dispute queue, operator official score.
-// ---------------------------------------------------------------------------
-
-const ScoreReportBody = z.object({
-  homeScore: z.number().int().min(0).max(999),
-  awayScore: z.number().int().min(0).max(999),
-});
-
-// POST /competitions/games/:gameId/report-score — a manager of a CLAIMED team
-// on either side of the game reports the final score (home/away oriented).
-// One report per (game, team); re-reporting updates in place.
-router.post(
-  "/competitions/games/:gameId/report-score",
-  requireAuth,
-  tournamentWriteLimiter,
-  asyncHandler(async (req, res) => {
-    const me = req.sessionUser;
-    if (!me) return apiError(res, 401, "Not authenticated");
-    const parsed = ScoreReportBody.safeParse(req.body);
-    if (!parsed.success) {
-      return apiError(res, 400, "Invalid request.", { code: "VALIDATION_FAILED" });
-    }
-
-    // Pre-transaction permission work (reads only) — the official-score
-    // guard is re-checked inside the transaction under a row lock so a
-    // concurrent operator write can't race a report in after the fact.
-    const [game] = await db
-      .select()
-      .from(tournamentMatches)
-      .where(eq(tournamentMatches.id, String(req.params.gameId)))
-      .limit(1);
-    if (!game) return apiError(res, 404, "Game not found");
-
-    // Which claimed side (if any) does the caller manage?
-    const sideIds = [game.homeParticipantId, game.awayParticipantId].filter(
-      (x): x is string => x != null,
-    );
-    if (sideIds.length === 0) return apiError(res, 404, "Game not found");
-    const sides = await db
-      .select()
-      .from(tournamentParticipants)
-      .where(inArray(tournamentParticipants.id, sideIds));
-    const sideTeamIds = sides.map((s) => s.teamId);
-    let myTeamId: string | null = null;
-    for (const side of sides) {
-      if (!side.teamId) continue;
-      const [team] = await db.select().from(teams).where(eq(teams.id, side.teamId)).limit(1);
-      if (team && (await canManageTeam(me.id, team))) {
-        myTeamId = team.id;
-        break;
-      }
-    }
-    if (!myTeamId) {
-      return apiError(
-        res,
-        403,
-        "Only a coach or manager of a claimed team in this game can report its score.",
-        { code: "COMPETITION_FORBIDDEN" },
-      );
-    }
-    const reportingTeamId = myTeamId;
-
-    const outcome = await db.transaction(async (tx) => {
-      // Lock the match row, then re-check the official-score guard.
-      const [locked] = await tx
-        .select()
-        .from(tournamentMatches)
-        .where(eq(tournamentMatches.id, game.id))
-        .for("update")
-        .limit(1);
-      if (!locked) return { kind: "gone" as const };
-      if (locked.homeScoreOfficial != null && locked.awayScoreOfficial != null) {
-        return { kind: "official" as const };
-      }
-
-      await tx
-        .insert(gameScoreReports)
-        .values({
-          competitionGameId: game.id,
-          teamId: reportingTeamId,
-          reportedByUserId: me.id,
-          homeScore: parsed.data.homeScore,
-          awayScore: parsed.data.awayScore,
-        })
-        .onConflictDoUpdate({
-          target: [gameScoreReports.competitionGameId, gameScoreReports.teamId],
-          set: {
-            homeScore: parsed.data.homeScore,
-            awayScore: parsed.data.awayScore,
-            reportedByUserId: me.id,
-            updatedAt: new Date(),
-          },
-        });
-
-      const reports = await tx
-        .select()
-        .from(gameScoreReports)
-        .where(eq(gameScoreReports.competitionGameId, game.id));
-      return {
-        kind: "ok" as const,
-        resolved: resolveScore(locked, reports, sideTeamIds),
-      };
-    });
-
-    if (outcome.kind === "gone") return apiError(res, 404, "Game not found");
-    if (outcome.kind === "official") {
-      return apiError(res, 409, "This game already has an official score.", {
-        code: "SCORE_OFFICIAL",
-      });
-    }
-    res.json({
-      ok: true,
-      gameId: game.id,
-      teamId: reportingTeamId,
-      scoreState: outcome.resolved.state,
-    });
-  }),
-);
-
-// GET /competitions/:id/disputes — operator queue of games where the two
-// teams' reports disagree and no official score exists yet.
-router.get(
-  "/competitions/:id/disputes",
-  requireAuth,
-  asyncHandler(async (req, res) => {
-    const me = req.sessionUser;
-    if (!me) return apiError(res, 401, "Not authenticated");
-    const [competition] = await db
-      .select()
-      .from(tournaments)
-      .where(eq(tournaments.id, req.params.id))
-      .limit(1);
-    if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
-      return apiError(res, 403, "Only the competition operator can review disputes.", {
-        code: "COMPETITION_FORBIDDEN",
-      });
-    }
-
-    const games = await db
-      .select()
-      .from(tournamentMatches)
-      .where(eq(tournamentMatches.tournamentId, competition.id));
-    const gameIds = games.map((g) => g.id);
-    const reports = gameIds.length
-      ? await db
-          .select({ report: gameScoreReports, teamName: teams.name })
-          .from(gameScoreReports)
-          .innerJoin(teams, eq(teams.id, gameScoreReports.teamId))
-          .where(inArray(gameScoreReports.competitionGameId, gameIds))
-      : [];
-    const byGame = new Map<string, typeof reports>();
-    for (const r of reports) {
-      const arr = byGame.get(r.report.competitionGameId) ?? [];
-      arr.push(r);
-      byGame.set(r.report.competitionGameId, arr);
-    }
-
-    const partIds = games
-      .flatMap((g) => [g.homeParticipantId, g.awayParticipantId])
-      .filter((x): x is string => x != null);
-    const parts = partIds.length
-      ? await db
-          .select()
-          .from(tournamentParticipants)
-          .where(inArray(tournamentParticipants.id, partIds))
-      : [];
-    const partById = new Map(parts.map((p) => [p.id, p]));
-
-    const disputes = games
-      .filter((g) => {
-        const rs = byGame.get(g.id) ?? [];
-        const sideTeamIds = [
-          g.homeParticipantId ? partById.get(g.homeParticipantId)?.teamId : null,
-          g.awayParticipantId ? partById.get(g.awayParticipantId)?.teamId : null,
-        ];
-        return (
-          resolveScore(g, rs.map((r) => r.report), sideTeamIds).state ===
-          "disputed"
-        );
-      })
-      .map((g) => ({
-        gameId: g.id,
-        matchNumber: g.matchNumber,
-        matchDate: g.matchDate,
-        division: g.division,
-        bracket: g.bracket,
-        homeName: g.homeParticipantId
-          ? (partById.get(g.homeParticipantId)?.name ?? null)
-          : null,
-        awayName: g.awayParticipantId
-          ? (partById.get(g.awayParticipantId)?.name ?? null)
-          : null,
-        reports: (byGame.get(g.id) ?? []).map((r) => ({
-          teamId: r.report.teamId,
-          teamName: r.teamName,
-          homeScore: r.report.homeScore,
-          awayScore: r.report.awayScore,
-          updatedAt: r.report.updatedAt.toISOString(),
-        })),
-      }));
-
-    res.json({ data: disputes });
-  }),
-);
-
-// POST /competitions/:id/games/:gameId/official-score — operator enters the
-// official score in one action; promotes the game to the Official tier
-// (resolves any dispute).
-router.post(
-  "/competitions/:id/games/:gameId/official-score",
-  requireAuth,
-  tournamentWriteLimiter,
-  asyncHandler(async (req, res) => {
-    const me = req.sessionUser;
-    if (!me) return apiError(res, 401, "Not authenticated");
-    const [competition] = await db
-      .select()
-      .from(tournaments)
-      .where(eq(tournaments.id, req.params.id))
-      .limit(1);
-    if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
-      return apiError(res, 403, "Only the competition operator can set official scores.", {
-        code: "COMPETITION_FORBIDDEN",
-      });
-    }
-    const parsed = ScoreReportBody.safeParse(req.body);
-    if (!parsed.success) {
-      return apiError(res, 400, "Invalid request.", { code: "VALIDATION_FAILED" });
-    }
-
-    const updated = await db
-      .update(tournamentMatches)
-      .set({
-        homeScoreOfficial: parsed.data.homeScore,
-        awayScoreOfficial: parsed.data.awayScore,
-        status: "completed",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(tournamentMatches.id, String(req.params.gameId)),
-          eq(tournamentMatches.tournamentId, competition.id),
-        ),
-      )
-      .returning({ id: tournamentMatches.id });
-    if (updated.length === 0) {
-      return apiError(res, 404, "Game not found in this competition.");
-    }
-    res.json({ ok: true, gameId: updated[0].id, scoreState: "official" });
-  }),
-);
-
-// ---------------------------------------------------------------------------
 // Org-claims-team (continuation path)
 // ---------------------------------------------------------------------------
 //
@@ -2247,10 +1932,10 @@ router.post(
 // ---------------------------------------------------------------------------
 // GET /teams/:teamId/tournament-schedule — PUBLIC. The tournament match
 // schedule for a team that claimed a participant slot, oriented to THAT team
-// (opponent name + this-team/opponent scores), grouped by tournament. The
-// imported tournament schedule stays the source of truth, so score / slot
-// corrections on re-import flow through here automatically. Returns an empty
-// `data` array when the team isn't linked to any tournament.
+// (opponent name), grouped by tournament. The imported tournament schedule
+// stays the source of truth, so slot corrections on re-import flow through
+// here automatically. Returns an empty `data` array when the team isn't
+// linked to any tournament.
 // ---------------------------------------------------------------------------
 
 router.get(
@@ -2323,8 +2008,6 @@ router.get(
       field: string | null;
       isHome: boolean;
       opponentName: string | null;
-      teamScore: number | null;
-      opponentScore: number | null;
     }
     const groups = new Map<
       string,
@@ -2376,8 +2059,6 @@ router.get(
         field: m.field,
         isHome,
         opponentName: oppId ? nameById.get(oppId) ?? null : null,
-        teamScore: isHome ? m.homeScore : m.awayScore,
-        opponentScore: isHome ? m.awayScore : m.homeScore,
       });
     }
 

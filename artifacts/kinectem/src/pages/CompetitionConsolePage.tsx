@@ -21,7 +21,6 @@ import {
   ArrowLeft,
   Newspaper,
   Star,
-  Scale,
 } from "lucide-react";
 
 // Competitions §9b — operator console for one competition: branding panel,
@@ -76,11 +75,11 @@ interface PendingClaim {
 }
 
 const CSV_HEADER =
-  "match #,date,start time,age,gender,division,bracket,venue,venue state,field,home team,home score,away team,away score";
+  "match #,date,start time,age,gender,division,bracket,venue,venue state,field,home team,away team";
 
 const SAMPLE = `${CSV_HEADER}
-1,2026-07-11,09:00,U12,boys,Gold,A,Riverside Park,CA,Field 2,Thunder FC,2,Lightning SC,1
-2,2026-07-11,10:30,U12,boys,Gold,A,Riverside Park,CA,Field 2,Strikers,,Comets,`;
+1,2026-07-11,09:00,U12,boys,Gold,A,Riverside Park,CA,Field 2,Thunder FC,Lightning SC
+2,2026-07-11,10:30,U12,boys,Gold,A,Riverside Park,CA,Field 2,Strikers,Comets`;
 
 function DetailsPanel({
   detail,
@@ -692,178 +691,6 @@ function CurationPanel({ competitionId }: { competitionId: string }) {
   );
 }
 
-// §6 — disputed scores queue: games where the two claimed teams reported
-// different results and no official score exists. Operator settles each one
-// by entering the official score inline.
-interface DisputeRow {
-  gameId: string;
-  matchNumber: number | null;
-  matchDate: string | null;
-  division: string | null;
-  bracket: string | null;
-  homeName: string | null;
-  awayName: string | null;
-  reports: {
-    teamId: string;
-    teamName: string;
-    homeScore: number;
-    awayScore: number;
-    updatedAt: string;
-  }[];
-}
-
-function DisputeRowItem({
-  competitionId,
-  d,
-}: {
-  competitionId: string;
-  d: DisputeRow;
-}) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [home, setHome] = useState("");
-  const [away, setAway] = useState("");
-
-  const settle = useMutation({
-    mutationFn: () =>
-      customFetch(
-        `/api/v1/competitions/${competitionId}/games/${d.gameId}/official-score`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            homeScore: Number(home),
-            awayScore: Number(away),
-          }),
-        },
-      ),
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: ["competition", competitionId, "disputes"],
-      });
-      qc.invalidateQueries({ queryKey: ["competition"] });
-      toast({ title: "Official score set" });
-    },
-    onError: (err) =>
-      toast({
-        title: "Couldn't set the official score",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "destructive",
-      }),
-  });
-
-  const valid = /^\d{1,3}$/.test(home.trim()) && /^\d{1,3}$/.test(away.trim());
-
-  return (
-    <div
-      className="rounded-lg border border-border px-3 py-2 space-y-2"
-      data-testid={`row-dispute-${d.gameId}`}
-    >
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {d.matchNumber != null ? <span>#{d.matchNumber}</span> : null}
-        {d.matchDate ? <span>{d.matchDate}</span> : null}
-        {d.division ? <span>{d.division}</span> : null}
-        {d.bracket ? <span>{d.bracket}</span> : null}
-      </div>
-      <p className="text-sm font-bold">
-        {d.homeName ?? "TBD"}{" "}
-        <span className="text-muted-foreground font-medium">vs</span>{" "}
-        {d.awayName ?? "TBD"}
-      </p>
-      <div className="space-y-0.5">
-        {d.reports.map((r) => (
-          <p key={r.teamId} className="text-xs text-muted-foreground">
-            {r.teamName} reported{" "}
-            <span className="font-bold tabular-nums text-foreground">
-              {r.homeScore}–{r.awayScore}
-            </span>
-          </p>
-        ))}
-      </div>
-      <div className="flex items-center gap-1.5">
-        <Input
-          value={home}
-          onChange={(e) => setHome(e.target.value)}
-          placeholder="Home"
-          inputMode="numeric"
-          className="h-8 w-16 text-center"
-          data-testid={`input-official-home-${d.gameId}`}
-        />
-        <span className="text-xs text-muted-foreground">–</span>
-        <Input
-          value={away}
-          onChange={(e) => setAway(e.target.value)}
-          placeholder="Away"
-          inputMode="numeric"
-          className="h-8 w-16 text-center"
-          data-testid={`input-official-away-${d.gameId}`}
-        />
-        <Button
-          size="sm"
-          variant="brand"
-          className="font-bold"
-          disabled={!valid || settle.isPending}
-          onClick={() => settle.mutate()}
-          data-testid={`btn-official-${d.gameId}`}
-        >
-          Set official score
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function DisputesPanel({ competitionId }: { competitionId: string }) {
-  const disputesQ = useQuery<{ data: DisputeRow[] }>({
-    queryKey: ["competition", competitionId, "disputes"],
-    queryFn: () =>
-      customFetch<{ data: DisputeRow[] }>(
-        `/api/v1/competitions/${competitionId}/disputes`,
-        { method: "GET" },
-      ),
-  });
-  const disputes = disputesQ.data?.data ?? [];
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Scale className="w-4 h-4" />
-          Disputed scores
-          {disputes.length > 0 && (
-            <Badge variant="destructive" className="ml-1">
-              {disputes.length}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          When both teams report different results, the score is hidden
-          publicly until you set the official one.
-        </p>
-        {disputesQ.isLoading ? (
-          <Skeleton className="h-16 rounded-lg" />
-        ) : disputes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No disputes — nice and quiet.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {disputes.map((d) => (
-              <DisputeRowItem
-                key={d.gameId}
-                competitionId={competitionId}
-                d={d}
-              />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function SchedulePanel({
   competitionId,
   matchCount,
@@ -1116,7 +943,6 @@ export default function CompetitionConsolePage() {
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
       />
       <CurationPanel competitionId={row.id} />
-      <DisputesPanel competitionId={row.id} />
       <SchedulePanel
         competitionId={row.id}
         matchCount={row.matchCount}
