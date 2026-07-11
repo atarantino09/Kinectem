@@ -4,6 +4,7 @@ import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
+import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -379,6 +380,20 @@ export default function CompetitionPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-6">
+        {/* Organizer-only lifecycle explainer — prominent (expanded) while
+            the competition is still in the setup/early-claim phase, collapsed
+            once teams have claimed so it doesn't crowd the live page. */}
+        {c.canManage ? (
+          <CompetitionHowItWorks
+            brandColor={c.brandColor}
+            secondaryColor={c.secondaryColor}
+            defaultOpen={
+              c.claimedCount === 0 &&
+              (q.data.featuredRecaps?.length ?? 0) === 0
+            }
+          />
+        ) : null}
+
         {/* Featured game recaps rail (§7) — the visual centerpiece; hidden
             entirely until the operator features at least one recap. Each
             card carries the authoring team's identity inside the

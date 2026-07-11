@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
+import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -932,6 +933,14 @@ export default function CompetitionConsolePage() {
           </a>
         </div>
       </div>
+
+      {/* Compact lifecycle guide right where the organizer does the work —
+          collapsed entry point unless nothing has been set up yet. */}
+      <CompetitionHowItWorks
+        brandColor={detail?.brandColor}
+        secondaryColor={detail?.secondaryColor}
+        defaultOpen={row.matchCount === 0}
+      />
 
       {detail ? (
         <DetailsPanel detail={detail} competitionId={row.id} />
