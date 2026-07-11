@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   ChevronDown,
   Megaphone,
+  Send,
   Trophy,
   Upload,
   Users,
@@ -17,7 +18,7 @@ import {
 // Organizer-only walkthrough of the competition lifecycle. Rendered on the
 // public competition page (canManage only) and in the operator console —
 // never shown to public visitors. Opens with the zero-disruption reassurance,
-// walks the four setup steps, and lands on the branding payoff as the
+// walks the five setup steps, and lands on the branding payoff as the
 // emphasized climax (themed with the competition's brand colors).
 
 const STEPS = [
@@ -30,6 +31,11 @@ const STEPS = [
     icon: Upload,
     title: "Upload your schedule",
     body: "One CSV from whatever tool you already use. We pull every team out of it automatically — no manual entry.",
+  },
+  {
+    icon: Send,
+    title: "Send the public link to your teams",
+    body: "Share your competition page link with your teams — one message, one link. That's all the outreach it takes.",
   },
   {
     icon: Users,
@@ -134,7 +140,7 @@ export function CompetitionHowItWorks({
               <div className="flex items-center gap-2">
                 <Megaphone className="w-4 h-4 shrink-0 drop-shadow-sm" />
                 <p className="text-[11px] font-black uppercase tracking-widest opacity-90 drop-shadow-sm">
-                  Step 5 · The payoff
+                  Step 6 · The payoff
                 </p>
               </div>
               <p className="mt-1.5 text-base font-black tracking-tight drop-shadow-sm">
