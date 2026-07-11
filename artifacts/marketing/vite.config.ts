@@ -39,6 +39,10 @@ export default defineConfig({
           import.meta.dirname,
           "getting-started.html",
         ),
+        forOrganizers: path.resolve(
+          import.meta.dirname,
+          "for-organizers.html",
+        ),
       },
     },
   },
