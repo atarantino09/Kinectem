@@ -7,7 +7,11 @@ import {
 } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/UserAvatar";
-import { buildMentionToken } from "@/lib/mentions";
+import {
+  displayToMentionTokens,
+  mentionTokensToDisplay,
+  sanitizeMentionName,
+} from "@/lib/mentions";
 import type { RosterPickerMember } from "./RosterTagPicker";
 
 interface MentionTextareaProps {
@@ -23,9 +27,12 @@ interface MentionTextareaProps {
 
 // Recap-body textarea with an @-mention picker (task #739). Typing
 // "@" at the start of a line/word opens a dropdown of the team's
-// roster players; picking one inserts an inline mention token
-// (`@[Name](user:id)`) at the caret. Everything else behaves like the
-// plain Textarea it wraps.
+// roster players; picking one inserts "@Name" at the caret. The
+// author only ever sees the friendly "@Name" form — the canonical
+// `value` handed to/from the parent keeps the full
+// `@[Name](user:id)` token, converted both ways on every change
+// (mentionTokensToDisplay / displayToMentionTokens). Everything else
+// behaves like the plain Textarea it wraps.
 //
 // The dropdown is anchored under the textarea rather than at the
 // caret — caret-positioning inside a <textarea> needs a mirror-div
@@ -34,14 +41,14 @@ interface MentionTextareaProps {
 // Active-query detection: from the caret, walk back to the nearest
 // "@" that is at position 0 or preceded by whitespace. The text
 // between that "@" and the caret is the filter query. We bail when
-// the span contains a newline or "]" (the "]" check means the "@" of
-// an already-inserted token can never re-trigger the picker) or runs
-// past 40 chars.
+// the span contains a newline or "]", runs past 40 chars, or starts
+// with a completed roster-name mention (see below).
 const MAX_QUERY_LEN = 40;
 
 function findActiveMention(
   text: string,
   caret: number,
+  completedNames: readonly string[],
 ): { start: number; query: string } | null {
   const upto = text.slice(0, caret);
   const at = upto.lastIndexOf("@");
@@ -50,6 +57,26 @@ function findActiveMention(
   const query = upto.slice(at + 1);
   if (query.length > MAX_QUERY_LEN) return null;
   if (/[\n\]]/.test(query)) return null;
+  // The display text keeps completed mentions as plain "@Name", so a
+  // caret sitting after one would otherwise re-open the picker (and a
+  // stray Enter would insert a duplicate). If the text right after
+  // this "@" is exactly a roster name (followed by a non-word char or
+  // the caret), treat the mention as completed and stay closed —
+  // UNLESS the query is still a prefix of a longer roster name (e.g.
+  // "Avery Tarantino" typed while "Avery Tarantino Jr" also exists),
+  // in which case keep the picker open so the longer name stays
+  // reachable.
+  for (const name of completedNames) {
+    if (
+      query.startsWith(name) &&
+      (query.length === name.length || /\W/.test(query[name.length]))
+    ) {
+      const stillExtending = completedNames.some(
+        (other) => other.length > query.length && other.startsWith(query),
+      );
+      if (!stillExtending) return null;
+    }
+  }
   return { start: at, query };
 }
 
@@ -72,6 +99,20 @@ export function MentionTextarea({
   // Caret position to restore after an insert (set → applied in the
   // effect below once the new value has rendered).
   const pendingCaret = useRef<number | null>(null);
+  // What the textarea shows: tokens collapsed to "@Name".
+  const display = useMemo(() => mentionTokensToDisplay(value), [value]);
+  // Sanitized roster names — used to keep the picker closed when the
+  // caret sits after an already-completed "@Name" mention.
+  const completedNames = useMemo(
+    () =>
+      members
+        .map((m) => sanitizeMentionName(m.displayName))
+        .filter((n) => n.length > 0),
+    [members],
+  );
+  // Re-tokenize the display text before handing it up to the parent.
+  const emit = (nextDisplay: string) =>
+    onChange(displayToMentionTokens(nextDisplay, members));
 
   const matches = useMemo(() => {
     if (!active) return [];
@@ -92,7 +133,7 @@ export function MentionTextarea({
       textareaRef.current.focus();
       textareaRef.current.setSelectionRange(pos, pos);
     }
-  }, [value]);
+  }, [display]);
 
   const syncActive = () => {
     const el = textareaRef.current;
@@ -102,18 +143,20 @@ export function MentionTextarea({
       setActive(null);
       return;
     }
-    setActive(findActiveMention(el.value, el.selectionStart));
+    setActive(findActiveMention(el.value, el.selectionStart, completedNames));
   };
 
   const insertMention = (member: RosterPickerMember) => {
     const el = textareaRef.current;
     if (!el || !active) return;
     const caret = el.selectionStart;
-    const token = buildMentionToken(member.displayName, member.userId);
-    const next = value.slice(0, active.start) + token + " " + value.slice(caret);
-    pendingCaret.current = active.start + token.length + 1;
+    // Insert the friendly "@Name" form — emit() re-tokenizes it.
+    const inserted = `@${sanitizeMentionName(member.displayName) || "player"}`;
+    const next =
+      display.slice(0, active.start) + inserted + " " + display.slice(caret);
+    pendingCaret.current = active.start + inserted.length + 1;
     setActive(null);
-    onChange(next);
+    emit(next);
   };
 
   const open = !!active && (membersLoading || matches.length > 0);
@@ -140,14 +183,16 @@ export function MentionTextarea({
       <Textarea
         ref={textareaRef}
         id={id}
-        value={value}
+        value={display}
         onChange={(e) => {
-          onChange(e.target.value);
+          emit(e.target.value);
           // Recompute against the fresh DOM state (selectionStart is
           // already updated inside the change event).
           const el = e.target;
           if (el.selectionStart === el.selectionEnd) {
-            setActive(findActiveMention(el.value, el.selectionStart));
+            setActive(
+              findActiveMention(el.value, el.selectionStart, completedNames),
+            );
           } else {
             setActive(null);
           }

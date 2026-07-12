@@ -14,14 +14,56 @@ import { linkify } from "./linkify";
 export const MENTION_TOKEN_RE =
   /@\[([^\]\n]{1,80})\]\(user:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
 
-// Build a token from a picked roster member. Strips the characters
-// that would break the token grammar out of the display name.
-export function buildMentionToken(name: string, userId: string): string {
-  const safe = name
+// Strip the characters that would break the token grammar out of a
+// display name (brackets / parens / newlines).
+export function sanitizeMentionName(name: string): string {
+  return name
     .replace(/[[\]()\n]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return `@[${safe || "player"}](user:${userId})`;
+}
+
+// Build a token from a picked roster member.
+export function buildMentionToken(name: string, userId: string): string {
+  return `@[${sanitizeMentionName(name) || "player"}](user:${userId})`;
+}
+
+// Composer display form: the author never sees raw tokens. The
+// textarea shows "@Avery Tarantino" while the canonical body (what
+// gets saved) keeps the full "@[Avery Tarantino](user:<uuid>)" token.
+// These two functions convert between the forms.
+export function mentionTokensToDisplay(text: string): string {
+  if (!text) return text;
+  return text.replace(new RegExp(MENTION_TOKEN_RE.source, "gi"), "@$1");
+}
+
+// Rebuild tokens from display text by matching "@<roster name>"
+// (exact case — the picker inserts roster casing, and case-sensitive
+// matching means we never rewrite text under the author's caret).
+// Longest names first so "Avery Tarantino Jr" wins over "Avery
+// Tarantino". A "@Name" the author typed by hand with matching
+// casing converts too — same length either way, so the textarea
+// never visibly changes. Anything unmatched stays plain text and the
+// server simply won't tag it.
+export function displayToMentionTokens(
+  text: string,
+  members: readonly { displayName: string; userId: string }[],
+): string {
+  if (!text || members.length === 0) return text;
+  const sorted = members
+    .map((m) => ({ userId: m.userId, safe: sanitizeMentionName(m.displayName) }))
+    .filter((m) => m.safe.length > 0)
+    .sort((a, b) => b.safe.length - a.safe.length);
+  let out = text;
+  for (const m of sorted) {
+    const esc = m.safe.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // "@" must start the mention (not be inside an already-built
+    // token, whose name sits behind "@[") and the name can't run on
+    // into more word characters.
+    const re = new RegExp(`@${esc}(?![\\w])`, "g");
+    out = out.replace(re, buildMentionToken(m.safe, m.userId));
+  }
+  return out;
 }
 
 // Render a body string: mention tokens become profile links, and the

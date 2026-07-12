@@ -14,5 +14,6 @@ The OpenAPI spec is locked, so recap mentions live INSIDE the existing `body` st
 - Any new body-preview surface must use `truncateMentionSafe` or raw half-tokens leak into the UI.
 - The composer picker needs a team selected (`composerTeamId`) — no team, no roster, no dropdown.
 - Draft PATCHes skip mention processing; sanitization + tag upsert happen at publish. Callers must echo `sanitizedBody` into the response object when non-null so the client sees what was persisted.
+- **Authors never see raw tokens in the composer.** The textarea shows "@Name"; the canonical value round-trips display↔token on every change (exact-case roster-name match, longest first). Editing a mention's name breaks the tag on purpose; the picker guard must stay prefix-collision-aware (a shorter roster name that is a prefix of a longer one must not close the dropdown early).
 
 **Why:** spec locked (no schema field for mentions); notify bug found live in e2e when draft→publish produced zero notifications.
