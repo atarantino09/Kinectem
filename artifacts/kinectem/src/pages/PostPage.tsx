@@ -304,6 +304,16 @@ export default function PostPage() {
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const label = isShort ? "Highlight" : "Game Recap";
+  // Task #739 — the detail response carries the viewer-visible tag
+  // list for recaps; @-mention tokens only render as live profile
+  // links for users in it. Tokens for anyone else (deleted account,
+  // removed tag, pending consent hidden from this viewer) fall back
+  // to plain text. Plain computation (not a hook) because it sits
+  // below the loading/error early-returns.
+  const mentionableUserIds: ReadonlySet<string> | undefined =
+    !isShort && "taggedUsers" in post && Array.isArray(post.taggedUsers)
+      ? new Set(post.taggedUsers.map((u) => u.id.toLowerCase()))
+      : undefined;
   // Competition-linked recaps carry a branding block the server
   // serializes outside the openapi PostResponse (recapKind precedent
   // — same block PostCard reads). Renders a branded strip above the
@@ -867,7 +877,9 @@ export default function PostPage() {
                 <div className="prose prose-slate max-w-none">
                   {post.body.split("\n").map((para, i) => (
                     <p key={i} className="text-base leading-relaxed">
-                      {renderBodyWithMentions(para)}
+                      {renderBodyWithMentions(para, {
+                        validUserIds: mentionableUserIds,
+                      })}
                     </p>
                   ))}
                 </div>

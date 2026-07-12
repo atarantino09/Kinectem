@@ -428,6 +428,12 @@ router.patch(
         taggerUserId: updated.authorId ?? me.id,
         body: updated.body,
       });
+      // Echo the sanitized body (forged / non-roster mention tokens
+      // collapsed to plain names) so the PATCH response matches what
+      // was persisted.
+      if (mentionResult.sanitizedBody !== null) {
+        updated.body = mentionResult.sanitizedBody;
+      }
       if (a.status === "published" && mentionResult.inserted.length > 0) {
         await notifyNewlyTaggedInRecap({
           userIds: mentionResult.inserted,
@@ -607,6 +613,12 @@ router.post(
       taggerUserId: updated.authorId ?? me.id,
       body: updated.body,
     });
+    // Drafts skip mention validation on PATCH, so publish is where a
+    // forged / non-roster token typed into a draft gets collapsed to
+    // plain text — echo the sanitized body in the publish response.
+    if (mentionResult.sanitizedBody !== null) {
+      updated.body = mentionResult.sanitizedBody;
+    }
     // Re-run the auto-tag fan-out at publish time so drafts that
     // had a game date added later (via PATCH) still tag the roster.
     // The helper itself does per-user dedupe, so this is safe to call

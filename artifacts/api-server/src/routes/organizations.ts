@@ -2114,6 +2114,11 @@ async function transitionApproval(
       taggerUserId,
       body: a.body,
     });
+    // Keep the in-memory article in sync when sanitization stripped
+    // forged / non-roster tokens out of the persisted body.
+    if (mentionResult.sanitizedBody !== null) {
+      a.body = mentionResult.sanitizedBody;
+    }
     const fanoutTagged = a.gameDate
       ? await applyArticleTagFanout({
           articleId: a.id,

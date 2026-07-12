@@ -100,6 +100,7 @@ const UUID_RE =
 import {
   applyArticleTagFanout,
   applyMentionTags,
+  loadArticleTagViews,
   notifyNewlyTaggedInRecap,
 } from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
@@ -1054,14 +1055,42 @@ router.get(
           highlightIds: [],
         }),
       ]);
+      // Task #739 — tagged minors join the masking context so the
+      // detail page's tagged-user views mask under-13 last names the
+      // same way the author chip does.
+      const articleTaggedMinorIds = (
+        await db
+          .selectDistinct({ id: articleTags.userId })
+          .from(articleTags)
+          .innerJoin(users, eq(users.id, articleTags.userId))
+          .where(
+            and(
+              eq(articleTags.articleId, row.a.id),
+              eq(users.isMinor, true),
+            ),
+          )
+      ).map((r) => r.id);
       // Task #414 — single-post detail; mask author chip on minor recap.
       const detailMinorCtx = await buildMinorNameContext(
         { id: me?.id ?? null, role: req.realUser?.role ?? null },
-        row.author?.id ? [row.author.id] : [],
+        [
+          ...(row.author?.id ? [row.author.id] : []),
+          ...articleTaggedMinorIds,
+        ],
       );
       const detailBrandMap = await loadCompetitionBrandMap([
         row.a.competitionId,
       ]);
+      // Task #739 — surface the viewer-visible tag list on the recap
+      // detail response so the client can render @-mention tokens as
+      // live links only for users who still hold a visible tag row;
+      // everything else falls back to plain text (deleted accounts,
+      // removed tags, pending consent hidden from this viewer).
+      const articleTagViews = await loadArticleTagViews(
+        me?.id ?? null,
+        [{ id: row.a.id, authorId: row.a.authorId }],
+        detailMinorCtx,
+      );
       res.json(
         articleToPost(row.a, {
           team: row.team,
@@ -1074,6 +1103,7 @@ router.get(
           authorRole: authorRoleMap.get(row.a.id) ?? null,
           ...statsFor(stats, "article", row.a.id),
           ...shareStatsFor(shareStats, "article", row.a.id),
+          taggedUsers: articleTagViews.get(row.a.id) ?? [],
           currentUserTag:
             currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
           minorNameCtx: detailMinorCtx,
@@ -2016,6 +2046,12 @@ router.post(
         taggerUserId: me.id,
         body: a.body,
       });
+      // Echo the sanitized body (forged / non-roster mention tokens
+      // collapsed to plain names) so the create response matches what
+      // was persisted.
+      if (mentionResult.sanitizedBody !== null) {
+        a.body = mentionResult.sanitizedBody;
+      }
       const fanoutTagged = await applyArticleTagFanout({
         articleId: a.id,
         teamId,

@@ -1,6 +1,7 @@
 import { db, articleTags, articles, notifications, rosterEntries, users } from "@workspace/db";
-import { and, eq, gt, inArray } from "drizzle-orm";
-import { articlePostId, highlightPostId } from "./spec-helpers";
+import { and, asc, eq, gt, inArray } from "drizzle-orm";
+import { articlePostId, displayNameForViewer, highlightPostId } from "./spec-helpers";
+import type { MinorNameViewerContext, PostTaggedUserView } from "./spec-helpers";
 import { buildPostUrl, buildTagEmail, isEmailConfiguredAsync } from "./email";
 import { dispatchNotificationEmailToMany } from "./notification-email";
 import { notifyGuardianOfPendingItem } from "./coppa";
@@ -143,6 +144,26 @@ export function extractMentionUserIds(
   return Array.from(ids);
 }
 
+// Rewrite `body` so that every mention token whose user id is NOT in
+// `validIds` collapses to the plain display name it carried (the
+// "@[Jane Doe](user:...)" grammar disappears; "Jane Doe" stays in the
+// prose). Forged or stale tokens therefore never persist — the client
+// renderer only ever sees tokens the server validated against the
+// roster at write time. Pure function, exported for tests.
+const MENTION_TOKEN_WITH_NAME_RE =
+  /@\[([^\]\n]{1,80})\]\(user:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+
+export function sanitizeMentionBody(
+  body: string,
+  validIds: ReadonlySet<string>,
+): string {
+  return body.replace(
+    new RegExp(MENTION_TOKEN_WITH_NAME_RE.source, "gi"),
+    (token, name: string, userId: string) =>
+      validIds.has(userId.toLowerCase()) ? token : name,
+  );
+}
+
 // Parse mention tokens out of `body`, validate each mentioned user is
 // an accepted player on the team's roster (invalid tokens are ignored),
 // and upsert a manual tag row per valid mention. Consent-requiring
@@ -158,14 +179,25 @@ export function extractMentionUserIds(
 //     after the call, whether or not this call inserted it. Used by
 //     the deferred-notify paths (pending_approval → published) where
 //     the row was created earlier but nobody was pinged yet.
+//   * `sanitizedBody` — non-null when the body contained tokens for
+//     users NOT on the accepted roster: those tokens are collapsed to
+//     their plain name, the cleaned body is persisted to
+//     `articles.body`, and the caller must echo it in the response so
+//     the client never sees (or re-saves) a forged token.
 export async function applyMentionTags(args: {
   articleId: string;
   teamId: string;
   taggerUserId: string;
   body: string | null | undefined;
-}): Promise<{ inserted: string[]; mentioned: string[] }> {
+}): Promise<{
+  inserted: string[];
+  mentioned: string[];
+  sanitizedBody: string | null;
+}> {
   const mentionIds = extractMentionUserIds(args.body);
-  if (mentionIds.length === 0) return { inserted: [], mentioned: [] };
+  if (mentionIds.length === 0) {
+    return { inserted: [], mentioned: [], sanitizedBody: null };
+  }
   const players = await db
     .select({
       userId: rosterEntries.userId,
@@ -182,7 +214,20 @@ export async function applyMentionTags(args: {
         inArray(rosterEntries.userId, mentionIds),
       ),
     );
-  if (players.length === 0) return { inserted: [], mentioned: [] };
+  // Strip every token that didn't validate against the roster (forged
+  // ids, ex-players, non-player roles) and persist the cleaned body.
+  const validIdSet = new Set(players.map((p) => p.userId.toLowerCase()));
+  let sanitizedBody: string | null = null;
+  if (args.body && mentionIds.some((id) => !validIdSet.has(id))) {
+    sanitizedBody = sanitizeMentionBody(args.body, validIdSet);
+    await db
+      .update(articles)
+      .set({ body: sanitizedBody })
+      .where(eq(articles.id, args.articleId));
+  }
+  if (players.length === 0) {
+    return { inserted: [], mentioned: [], sanitizedBody };
+  }
   const parentIds = Array.from(
     new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
   );
@@ -207,7 +252,7 @@ export async function applyMentionTags(args: {
   const existingIds = new Set(existing.map((r) => r.userId));
   const toInsert = players.filter((p) => !existingIds.has(p.userId));
   if (toInsert.length === 0) {
-    return { inserted: [], mentioned: validIds };
+    return { inserted: [], mentioned: validIds, sanitizedBody };
   }
   const inserted = await db
     .insert(articleTags)
@@ -230,7 +275,71 @@ export async function applyMentionTags(args: {
     )
     .onConflictDoNothing()
     .returning({ userId: articleTags.userId });
-  return { inserted: inserted.map((r) => r.userId), mentioned: validIds };
+  return {
+    inserted: inserted.map((r) => r.userId),
+    mentioned: validIds,
+    sanitizedBody,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Article tag views (task #739 follow-through)
+// ---------------------------------------------------------------------------
+// Mirrors `loadHighlightTagViews` for recap articles: loads the
+// tagged-user list the requesting viewer is allowed to see, in tag
+// creation order. Approved tags are visible to everyone; pending tags
+// only to the article's author and the tagged player themselves —
+// the same visibility rule the recap consent flow already enforces
+// elsewhere. The post detail page uses this list to decide which
+// mention tokens render as live profile links: a token whose user no
+// longer holds a visible tag row (deleted account, removed tag,
+// pending consent hidden from this viewer) falls back to plain text.
+export async function loadArticleTagViews(
+  viewerId: string | null,
+  articleList: { id: string; authorId: string | null }[],
+  minorNameCtx?: MinorNameViewerContext,
+): Promise<Map<string, PostTaggedUserView[]>> {
+  const result = new Map<string, PostTaggedUserView[]>();
+  for (const a of articleList) result.set(a.id, []);
+  if (articleList.length === 0) return result;
+  const ids = articleList.map((a) => a.id);
+  const authorById = new Map(articleList.map((a) => [a.id, a.authorId]));
+
+  const rows = await db
+    .select({
+      articleId: articleTags.articleId,
+      userId: articleTags.userId,
+      status: articleTags.status,
+      createdAt: articleTags.createdAt,
+      user: users,
+    })
+    .from(articleTags)
+    .innerJoin(users, eq(articleTags.userId, users.id))
+    .where(
+      and(
+        inArray(articleTags.articleId, ids),
+        inArray(articleTags.status, ["approved", "pending"] as const),
+      ),
+    )
+    .orderBy(asc(articleTags.createdAt));
+
+  for (const r of rows) {
+    if (r.status === "pending") {
+      const authorId = authorById.get(r.articleId) ?? null;
+      const isAuthor = !!viewerId && authorId === viewerId;
+      const isSelf = !!viewerId && r.userId === viewerId;
+      if (!isAuthor && !isSelf) continue;
+    }
+    const arr = result.get(r.articleId);
+    if (!arr) continue;
+    arr.push({
+      id: r.userId,
+      displayName: displayNameForViewer(r.user, minorNameCtx),
+      avatarUrl: r.user.avatarUrl ?? null,
+      tagStatus: r.status as "approved" | "pending",
+    });
+  }
+  return result;
 }
 
 // Throttle window for "you were tagged in <recap>" notifications.

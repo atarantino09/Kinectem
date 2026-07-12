@@ -25,12 +25,23 @@ export function buildMentionToken(name: string, userId: string): string {
 }
 
 // Render a body string: mention tokens become profile links, and the
-// plain-text segments in between still get URL linkification. Mention
-// links render unconditionally — the profile page enforces COPPA
-// visibility server-side, so a viewer who can't see a minor's profile
-// gets exactly the same wall they'd hit navigating there by hand.
-export function renderBodyWithMentions(text: string): ReactNode[] {
+// plain-text segments in between still get URL linkification.
+//
+// When `opts.validUserIds` is provided (the post detail page passes the
+// ids from the server's viewer-visible `taggedUsers` list), only tokens
+// whose user is in that set render as links; everything else — deleted
+// accounts, removed tags, tokens the server hasn't validated for this
+// viewer — degrades to plain "@Name" text so there are never broken
+// links. When the caller has no tag data (feed cards), tokens render as
+// links unconditionally: bodies are sanitized server-side at write time,
+// so any token that persisted was roster-validated, and the profile
+// page enforces COPPA visibility server-side regardless.
+export function renderBodyWithMentions(
+  text: string,
+  opts?: { validUserIds?: ReadonlySet<string> },
+): ReactNode[] {
   if (!text) return [];
+  const validUserIds = opts?.validUserIds;
   const nodes: ReactNode[] = [];
   const re = new RegExp(MENTION_TOKEN_RE.source, "gi");
   let lastIndex = 0;
@@ -42,16 +53,27 @@ export function renderBodyWithMentions(text: string): ReactNode[] {
     }
     const name = match[1];
     const userId = match[2];
+    const resolvable =
+      !validUserIds || validUserIds.has(userId.toLowerCase());
     nodes.push(
-      <Link
-        key={`mention-${key++}-${match.index}`}
-        href={`/users/${userId}`}
-        onClick={(e) => e.stopPropagation()}
-        className="font-semibold text-primary hover:underline underline-offset-2"
-        data-testid={`link-mention-${userId}`}
-      >
-        @{name}
-      </Link>,
+      resolvable ? (
+        <Link
+          key={`mention-${key++}-${match.index}`}
+          href={`/users/${userId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-semibold text-primary hover:underline underline-offset-2"
+          data-testid={`link-mention-${userId}`}
+        >
+          @{name}
+        </Link>
+      ) : (
+        <span
+          key={`mention-${key++}-${match.index}`}
+          data-testid={`text-mention-${userId}`}
+        >
+          @{name}
+        </span>
+      ),
     );
     lastIndex = match.index + match[0].length;
   }
