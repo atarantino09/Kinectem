@@ -4,7 +4,20 @@ import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, MapPin, ExternalLink, Sparkles, Clock, FileText } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import {
+  Trophy,
+  MapPin,
+  ExternalLink,
+  Sparkles,
+  Clock,
+  FileText,
+  ChevronDown,
+} from "lucide-react";
 
 // Surfaces the imported tournament schedule for a team that claimed a
 // participant slot. Source of truth is the tournament import, so re-imported
@@ -232,17 +245,18 @@ export function TournamentScheduleCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Trophy className="w-4 h-4" />
-          Tournament schedule
+          Competition
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <FreeRecapNotice groups={groups} />
         {groups.map((g) => (
-          <div key={g.tournamentId} className="space-y-2">
+          <Collapsible key={g.tournamentId} className="space-y-2">
             {/* Branded competition strip — same look as the banner on a
-                published game recap (PostCard). */}
-            <Link
-              href={`/competitions/c/${encodeURIComponent(g.tournamentSlug)}`}
+                published game recap (PostCard). The strip toggles the
+                schedule; the external-link icon navigates to the
+                competition's public page. */}
+            <div
               className="flex items-center gap-2.5 rounded-lg px-4 py-2"
               style={{
                 background: g.brandColor
@@ -253,67 +267,82 @@ export function TournamentScheduleCard({
               }}
               data-testid={`banner-tournament-${g.tournamentId}`}
             >
-              {g.logoUrl ? (
-                <img
-                  src={g.logoUrl}
-                  alt=""
-                  className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
-                />
-              ) : (
-                <Trophy className="h-4 w-4 shrink-0 text-white/90" />
-              )}
-              <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
-                {g.tournamentName}
-              </span>
-              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-white/80" />
-            </Link>
-            <ul className="space-y-1.5">
-              {g.matches.map((m) => (
-                <li
-                  key={m.id}
-                  className="rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3"
-                  data-testid={`tournament-match-${m.id}`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold truncate">
-                      <span className="text-muted-foreground font-semibold">
-                        {m.isHome ? "vs" : "@"}
-                      </span>{" "}
-                      {m.opponentName ?? "TBD"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {fmtDate(m.matchDate)}
-                      {m.startTime ? ` · ${fmtTime(m.startTime)}` : ""}
-                    </p>
-                    {venueLine(m) && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 shrink-0" />
-                        <span className="truncate">{venueLine(m)}</span>
+              <CollapsibleTrigger
+                className="group flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                data-testid={`toggle-tournament-${g.tournamentId}`}
+              >
+                {g.logoUrl ? (
+                  <img
+                    src={g.logoUrl}
+                    alt=""
+                    className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
+                  />
+                ) : (
+                  <Trophy className="h-4 w-4 shrink-0 text-white/90" />
+                )}
+                <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
+                  {g.tournamentName}
+                </span>
+                <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-white/80 transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <Link
+                href={`/competitions/c/${encodeURIComponent(g.tournamentSlug)}`}
+                aria-label={`View ${g.tournamentName} page`}
+                className="shrink-0 rounded p-1 hover:bg-white/15"
+                data-testid={`link-tournament-${g.tournamentId}`}
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-white/80" />
+              </Link>
+            </div>
+            <CollapsibleContent>
+              <ul className="space-y-1.5">
+                {g.matches.map((m) => (
+                  <li
+                    key={m.id}
+                    className="rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3"
+                    data-testid={`tournament-match-${m.id}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate">
+                        <span className="text-muted-foreground font-semibold">
+                          {m.isHome ? "vs" : "@"}
+                        </span>{" "}
+                        {m.opponentName ?? "TBD"}
                       </p>
-                    )}
-                  </div>
-                  <div className="shrink-0 flex flex-col items-end gap-1">
-                    {(m.division || m.bracket) && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {[m.division, m.bracket].filter(Boolean).join(" · ")}
-                      </Badge>
-                    )}
-                    {canPostRecap && isRecappable(m) && (
-                      <Link href={recapHrefFor(teamId, m)}>
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
-                          data-testid={`btn-write-recap-${m.id}`}
-                        >
-                          <FileText className="w-3 h-3" />
-                          Write recap
-                        </span>
-                      </Link>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
+                      <p className="text-xs text-muted-foreground">
+                        {fmtDate(m.matchDate)}
+                        {m.startTime ? ` · ${fmtTime(m.startTime)}` : ""}
+                      </p>
+                      {venueLine(m) && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{venueLine(m)}</span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      {(m.division || m.bracket) && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {[m.division, m.bracket].filter(Boolean).join(" · ")}
+                        </Badge>
+                      )}
+                      {canPostRecap && isRecappable(m) && (
+                        <Link href={recapHrefFor(teamId, m)}>
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                            data-testid={`btn-write-recap-${m.id}`}
+                          >
+                            <FileText className="w-3 h-3" />
+                            Write recap
+                          </span>
+                        </Link>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleContent>
+          </Collapsible>
         ))}
       </CardContent>
     </Card>
