@@ -133,8 +133,8 @@ export default function CompetitionPage() {
   const [, appParams] = useRoute("/competitions/c/:slug");
   const slug = publicParams?.slug ?? appParams?.slug ?? "";
   const { data: me } = useGetLoggedInUser();
-  const [teamsOpen, setTeamsOpen] = useState(true);
-  const [scheduleOpen, setScheduleOpen] = useState(true);
+  const [teamsOpen, setTeamsOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const q = useQuery<CompetitionResponse>({
     queryKey: ["competition", slug],
@@ -380,17 +380,13 @@ export default function CompetitionPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-6">
-        {/* Organizer-only lifecycle explainer — prominent (expanded) while
-            the competition is still in the setup/early-claim phase, collapsed
-            once teams have claimed so it doesn't crowd the live page. */}
+        {/* Organizer-only lifecycle explainer — starts collapsed (like the
+            Teams and Schedule sections below); the organizer expands it via
+            the chevron when they want the walkthrough. */}
         {c.canManage ? (
           <CompetitionHowItWorks
             brandColor={c.brandColor}
             secondaryColor={c.secondaryColor}
-            defaultOpen={
-              c.claimedCount === 0 &&
-              (q.data.featuredRecaps?.length ?? 0) === 0
-            }
           />
         ) : null}
 
