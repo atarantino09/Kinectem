@@ -909,6 +909,49 @@ router.delete(
   }),
 );
 
+// GET /teams/:teamId/claimed-competitions — competitions this team holds a
+// CLAIMED slot in (pending claims excluded — `teamId` only gets stamped once
+// a claim is approved). Powers the recap composer's competition picker, which
+// is why only claimed competitions appear: the recap → competition link
+// requires a claimed slot, so listing anything else would just produce a 403
+// at publish time. Extra-spec route (same precedent as the rest of this file).
+router.get(
+  "/teams/:teamId/claimed-competitions",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamIdParse = z.string().uuid().safeParse(req.params.teamId);
+    if (!teamIdParse.success) return apiError(res, 400, "Invalid team id");
+    const rows = await db
+      .select({
+        id: tournaments.id,
+        slug: tournaments.slug,
+        name: tournaments.name,
+        type: tournaments.type,
+        logoUrl: tournaments.logoUrl,
+        brandColor: tournaments.brandColor,
+        secondaryColor: tournaments.secondaryColor,
+        startDate: tournaments.startDate,
+        endDate: tournaments.endDate,
+      })
+      .from(tournamentParticipants)
+      .innerJoin(
+        tournaments,
+        eq(tournaments.id, tournamentParticipants.tournamentId),
+      )
+      .where(eq(tournamentParticipants.teamId, teamIdParse.data))
+      .orderBy(desc(tournaments.startDate));
+    // A team can hold multiple slots (divisions/brackets) in the same
+    // competition — dedupe so the picker lists each competition once.
+    const seen = new Set<string>();
+    const competitions = rows.filter((r) =>
+      seen.has(r.id) ? false : (seen.add(r.id), true),
+    );
+    res.json({ competitions });
+  }),
+);
+
 // GET /my/followed-competitions — quick-access list for the feed sidebar.
 router.get(
   "/my/followed-competitions",

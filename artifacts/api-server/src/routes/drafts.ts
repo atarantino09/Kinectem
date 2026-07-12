@@ -51,8 +51,14 @@ import {
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 import { notifyAdminsOfPendingPostApproval } from "../lib/notifications";
 import { displayName, maskedDisplayName } from "../lib/spec-helpers";
+import { deriveExplicitCompetitionLink } from "../lib/competition-link";
 
 const router: IRouter = Router();
+
+// Loose UUID shape check for extra-spec body fields (avoids handing a
+// malformed id straight to Postgres, which would 500 on the cast).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
 // Drafts & co-authors
@@ -360,6 +366,40 @@ router.patch(
           nextGameDate = parsedDate;
           updates["gameDate"] = parsedDate;
         }
+      }
+    }
+    // Explicit competition pick from the composer (extra-spec field —
+    // same precedent as the create path in posts.ts). Sent by draft
+    // composer sessions so the pick chosen after the draft was created
+    // still lands before publish. `null`/"" clears the link; a UUID is
+    // only honored when the team holds a CLAIMED slot in that
+    // competition. Absent → link unchanged.
+    if ("competitionId" in body) {
+      if (body.competitionId === null || body.competitionId === "") {
+        updates["competitionId"] = null;
+        updates["competitionGameId"] = null;
+      } else if (typeof body.competitionId === "string") {
+        if (!UUID_RE.test(body.competitionId))
+          return apiError(res, 400, "Invalid competitionId");
+        const dateForLink =
+          nextGameDate !== undefined ? nextGameDate : a.gameDate;
+        const explicit = await deriveExplicitCompetitionLink(
+          a.teamId,
+          body.competitionId,
+          dateForLink,
+        );
+        if (explicit === "not_claimed") {
+          return apiError(
+            res,
+            403,
+            "Your team hasn't claimed its spot in that competition yet. Claim the spot from the competition page, then pick it here.",
+            { code: "competition_not_claimed" },
+          );
+        }
+        updates["competitionId"] = explicit.competitionId;
+        // Combined recaps span many games — competition-level link only.
+        updates["competitionGameId"] =
+          a.recapKind === "combined" ? null : explicit.competitionGameId;
       }
     }
     if (Object.keys(updates).length === 0)

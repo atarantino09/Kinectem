@@ -63,6 +63,23 @@ type DraftPayload = {
   // requester is the original author. Drives the in-editor Delete
   // affordance (co-authors / coaches / org admins do not get it).
   canDelete?: boolean;
+  // Competition branding block (extra-spec field, recapKind precedent).
+  // Only the id is read here — it pre-fills the composer's competition
+  // picker when a draft is re-opened so auto-saves don't clear the link.
+  competition?: { id?: string | null } | null;
+};
+
+// One row from GET /teams/:teamId/claimed-competitions — competitions
+// the team holds a CLAIMED slot in. Powers the recap composer's
+// competition picker (extra-spec endpoint, called via customFetch).
+export type ClaimedCompetition = {
+  id: string;
+  slug: string;
+  name: string;
+  type?: string | null;
+  logoUrl?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 // Today's local calendar date in YYYY-MM-DD form, the shape an
@@ -229,6 +246,20 @@ export function useNewPostForm({
   // still tags every rostered player. Unchecking sends `gameDate:
   // null` and skips the fan-out.
   const [tagRoster, setTagRoster] = useState<boolean>(true);
+  // Explicit competition pick for the recap (empty = none / let the
+  // server auto-derive). Reset whenever the team changes — a pick only
+  // makes sense for the team whose claimed slots produced the list.
+  const [competitionId, setCompetitionId] = useState<string>("");
+  // True only after the coach has actually interacted with the
+  // competition picker. Draft PATCHes omit `competitionId` while this
+  // is false so an autosave never clobbers a link the server derived
+  // automatically at create time (PATCH absent = unchanged).
+  const [competitionTouched, setCompetitionTouched] = useState(false);
+  const [claimedCompetitions, setClaimedCompetitions] = useState<
+    ClaimedCompetition[]
+  >([]);
+  const [claimedCompetitionsLoading, setClaimedCompetitionsLoading] =
+    useState(false);
   // Highlight composer (and edit-post path) — list of roster userIds
   // the author hand-picks via the Tag Players dropdown. For new
   // highlights this is submitted as manual tags after the highlight
@@ -256,6 +287,43 @@ export function useNewPostForm({
   const editId = initialEditId;
   const isEditingPublished = !!editId;
   const lockedToTeam = !!initialTeamId;
+  // The team the recap composer is effectively scoped to: a URL-locked
+  // team, the picker selection, or (draft sessions re-opened from
+  // /drafts) the loaded draft's team. Drives the claimed-competitions
+  // fetch below and the picker's visibility.
+  const composerTeamId =
+    initialTeamId ||
+    (teamId && teamId !== "__profile__" ? teamId : "") ||
+    loadedTeamId ||
+    "";
+
+  // Fetch the competitions this team holds a CLAIMED slot in — the
+  // only ones a recap may be explicitly linked to. Recap composer
+  // only; the edit-published path keeps the existing link untouched.
+  useEffect(() => {
+    if (postType === "short" || isEditingPublished || !composerTeamId) {
+      setClaimedCompetitions([]);
+      return;
+    }
+    let cancelled = false;
+    setClaimedCompetitionsLoading(true);
+    customFetch<{ competitions?: ClaimedCompetition[] }>(
+      `/api/v1/teams/${composerTeamId}/claimed-competitions`,
+      { method: "GET" },
+    )
+      .then((r) => {
+        if (!cancelled) setClaimedCompetitions(r.competitions ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setClaimedCompetitions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setClaimedCompetitionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [postType, isEditingPublished, composerTeamId]);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   // Per-viewer flag captured from the post we loaded into the editor.
@@ -422,6 +490,16 @@ export function useNewPostForm({
       videoUrl: videoUrl || null,
       photoUrls: photos,
       gameDate: gameDateForApi(),
+      // Draft sessions carry the composer's competition pick (extra-spec
+      // field) so a selection made after the draft was created still
+      // lands before publish — but ONLY once the coach has actually
+      // touched the picker. An untouched picker must stay absent from
+      // the PATCH (absent = unchanged) or the first autosave would
+      // clear a link the server auto-derived at create time. Published
+      // edits never send it — the existing link stays untouched.
+      ...(!isEditingPublished && competitionTouched
+        ? ({ competitionId: competitionId || null } as object)
+        : {}),
     });
   };
 
@@ -582,6 +660,14 @@ export function useNewPostForm({
         // the editId path (already-published article). Drafts won't
         // surface canDelete.
         setCanDelete(!!d.canDelete);
+        // Pre-fill the competition picker from the loaded draft so
+        // the subsequent auto-save PATCHes (which always carry
+        // `competitionId` for draft sessions) don't clear a link the
+        // draft already had. Edit-published sessions never send the
+        // field, so no pre-fill is needed there.
+        if (kind === "article" && !initialEditId) {
+          setCompetitionId(d.competition?.id ?? "");
+        }
         // Pre-populate the per-player tag picker (task #322). Only
         // meaningful when editing an already-published recap or
         // highlight — drafts use the create flow and brand-new posts
@@ -664,6 +750,7 @@ export function useNewPostForm({
     photos,
     gameDate,
     tagRoster,
+    competitionId,
     draftId,
     isEditingPublished,
   ]);
@@ -699,6 +786,12 @@ export function useNewPostForm({
       ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
       ...(!isShort && initialOpponent && initialOpponent.trim()
         ? ({ opponentName: initialOpponent.trim() } as object)
+        : {}),
+      // Explicit competition pick (extra-spec field, recapKind
+      // precedent). Only sent when the coach actually picked one —
+      // absent lets the server keep its automatic best-effort derive.
+      ...(!isShort && competitionId
+        ? ({ competitionId } as object)
         : {}),
       ...(status ? ({ status } as object) : {}),
     };
@@ -1090,6 +1183,14 @@ export function useNewPostForm({
     videoUrl,
     gameDate,
     tagRoster,
+    // Competition picker surface — the recap composer's explicit
+    // competition pick plus the claimed-competitions list it chooses
+    // from. `composerTeamId` gates the picker's visibility (no team,
+    // no picker).
+    competitionId,
+    claimedCompetitions,
+    claimedCompetitionsLoading,
+    composerTeamId,
     draftId,
     editId,
     isEditingPublished,
@@ -1139,7 +1240,22 @@ export function useNewPostForm({
     setPostType,
     setTitle,
     setBody,
-    setTeamId,
+    // Changing the team invalidates any competition pick — the list
+    // of claimed competitions is per-team, so a stale selection could
+    // point at a competition the new team never claimed (the server
+    // would 403 it, but clearing here keeps the UI honest). Also
+    // clears the touched flag: the reset isn't an explicit "no
+    // competition" choice, so it shouldn't force `competitionId: null`
+    // into subsequent draft PATCHes.
+    setTeamId: (v: string) => {
+      setTeamId(v);
+      setCompetitionId("");
+      setCompetitionTouched(false);
+    },
+    setCompetitionId: (v: string) => {
+      setCompetitionId(v);
+      setCompetitionTouched(true);
+    },
     setPhotos,
     setVideoUrl,
     setGameDate,

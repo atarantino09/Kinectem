@@ -21,6 +21,7 @@ import {
   RosterTagPicker,
   type RosterPickerMember,
 } from "./RosterTagPicker";
+import type { ClaimedCompetition } from "./useNewPostForm";
 
 interface PostFormFieldsProps {
   postType: "short" | "long";
@@ -73,6 +74,15 @@ interface PostFormFieldsProps {
   loadedOrgAvatarUrl?: string | null;
   taggedUserIds?: string[];
   onTaggedUserIdsChange?: (next: string[]) => void;
+  // Competition picker (recap composer only). `competitionTeamId` is
+  // the team whose claimed competitions populate the list — the picker
+  // hides itself when there's no team scope or when editing a
+  // published post (the existing link stays untouched there).
+  competitionTeamId?: string | null;
+  claimedCompetitions?: ClaimedCompetition[];
+  competitionsLoading?: boolean;
+  competitionId?: string;
+  onCompetitionIdChange?: (v: string) => void;
   saving: boolean;
   publishing: boolean;
   // True when the form should refuse submission because the user has
@@ -120,6 +130,11 @@ export function PostFormFields({
   loadedOrgAvatarUrl = null,
   taggedUserIds = [],
   onTaggedUserIdsChange,
+  competitionTeamId = null,
+  claimedCompetitions = [],
+  competitionsLoading = false,
+  competitionId = "",
+  onCompetitionIdChange,
   saving,
   publishing,
   publishDisabled = false,
@@ -391,6 +406,98 @@ export function PostFormFields({
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {/* Competition picker — recap composer only (create + draft
+          sessions). Lists ONLY the competitions this team holds a
+          CLAIMED slot in, because a recap can only carry a
+          competition's branding once the spot is claimed. Editing a
+          published post keeps its existing link untouched, so the
+          picker is hidden there. */}
+      {!isShort && !isOrgPost && !isEditingPublished && competitionTeamId && (
+        <div data-testid="section-competition-picker">
+          <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+            Competition{" "}
+            <span className="normal-case font-semibold tracking-normal">
+              (optional)
+            </span>
+          </Label>
+          {claimedCompetitions.length > 0 ? (
+            <>
+              <Select
+                value={competitionId || "__none__"}
+                onValueChange={(v) =>
+                  onCompetitionIdChange?.(v === "__none__" ? "" : v)
+                }
+              >
+                <SelectTrigger
+                  className="mt-2"
+                  data-testid="select-competition"
+                >
+                  <SelectValue placeholder="No competition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    value="__none__"
+                    data-testid="option-competition-none"
+                  >
+                    No competition
+                  </SelectItem>
+                  {claimedCompetitions.map((c) => (
+                    <SelectItem
+                      key={c.id}
+                      value={c.id}
+                      data-testid={`option-competition-${c.id}`}
+                    >
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-2 text-[12px] text-muted-foreground font-semibold">
+                Only competitions where this team has claimed its spot are
+                listed. Picking one adds the competition's branding to the
+                published recap.
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground font-semibold">
+                Don't see yours?{" "}
+                <Link
+                  href="/competitions"
+                  className="text-primary hover:underline"
+                  data-testid="link-claim-competition-spot"
+                >
+                  Find the competition and claim your team's spot
+                </Link>{" "}
+                first, then pick it here.
+              </p>
+            </>
+          ) : (
+            <div
+              className="mt-2 flex items-start gap-2 rounded-lg bg-muted/60 border border-border px-3 py-2"
+              data-testid="empty-state-no-claimed-competitions"
+            >
+              <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground font-medium">
+                {competitionsLoading
+                  ? "Checking this team's competitions…"
+                  : (
+                    <>
+                      This team hasn't claimed a spot in any competition
+                      yet, so there's nothing to link this recap to.{" "}
+                      <Link
+                        href="/competitions"
+                        className="text-primary hover:underline"
+                        data-testid="link-claim-competition-spot"
+                      >
+                        Find your competition and claim your team's spot
+                      </Link>{" "}
+                      to add its branding to future recaps.
+                    </>
+                  )}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

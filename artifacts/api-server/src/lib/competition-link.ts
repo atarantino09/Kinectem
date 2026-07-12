@@ -41,32 +41,89 @@ export async function deriveCompetitionLink(
 
   let windowOnly: CompetitionLink | null = null;
   for (const { participant, competition } of slots) {
-    const games = await db
-      .select({ id: tournamentMatches.id })
-      .from(tournamentMatches)
-      .where(
-        and(
-          eq(tournamentMatches.tournamentId, competition.id),
-          eq(tournamentMatches.matchDate, day),
-          or(
-            eq(tournamentMatches.homeParticipantId, participant.id),
-            eq(tournamentMatches.awayParticipantId, participant.id),
-          ),
-        ),
-      );
-    if (games.length === 1) {
-      return { competitionId: competition.id, competitionGameId: games[0].id };
-    }
-    if (games.length > 1) {
-      return { competitionId: competition.id, competitionGameId: null };
-    }
-    if (
-      windowOnly === null &&
-      day >= competition.startDate &&
-      day <= competition.endDate
-    ) {
-      windowOnly = { competitionId: competition.id, competitionGameId: null };
+    const linked = await linkForSlot(participant.id, competition, day);
+    if (linked) {
+      if (linked.competitionGameId) return linked;
+      if (windowOnly === null && linked.competitionId) windowOnly = linked;
     }
   }
   return windowOnly ?? NO_LINK;
+}
+
+// Composer's explicit competition pick. Returns "not_claimed" when the
+// team holds no CLAIMED slot in the chosen competition (the caller
+// rejects the request), otherwise stamps the competition and, when the
+// game is unambiguous on the recap's date, the specific game.
+export async function deriveExplicitCompetitionLink(
+  teamId: string,
+  competitionId: string,
+  gameDate: Date | null,
+): Promise<CompetitionLink | "not_claimed"> {
+  const [slot] = await db
+    .select({ participant: tournamentParticipants, competition: tournaments })
+    .from(tournamentParticipants)
+    .innerJoin(tournaments, eq(tournaments.id, tournamentParticipants.tournamentId))
+    .where(
+      and(
+        eq(tournamentParticipants.teamId, teamId),
+        eq(tournamentParticipants.tournamentId, competitionId),
+      ),
+    )
+    .limit(1);
+  if (!slot) return "not_claimed";
+  if (!gameDate) {
+    return { competitionId, competitionGameId: null };
+  }
+  const day = gameDate.toISOString().slice(0, 10);
+  const games = await db
+    .select({ id: tournamentMatches.id })
+    .from(tournamentMatches)
+    .where(
+      and(
+        eq(tournamentMatches.tournamentId, competitionId),
+        eq(tournamentMatches.matchDate, day),
+        or(
+          eq(tournamentMatches.homeParticipantId, slot.participant.id),
+          eq(tournamentMatches.awayParticipantId, slot.participant.id),
+        ),
+      ),
+    );
+  return {
+    competitionId,
+    competitionGameId: games.length === 1 ? games[0].id : null,
+  };
+}
+
+// Shared per-slot resolution used by the auto-derive loop above.
+// Returns a full link when exactly one of the slot's games lands on
+// the day, a competition-only link when the day is ambiguous (many
+// games) or merely inside the competition window, and null otherwise.
+async function linkForSlot(
+  participantId: string,
+  competition: typeof tournaments.$inferSelect,
+  day: string,
+): Promise<CompetitionLink | null> {
+  const games = await db
+    .select({ id: tournamentMatches.id })
+    .from(tournamentMatches)
+    .where(
+      and(
+        eq(tournamentMatches.tournamentId, competition.id),
+        eq(tournamentMatches.matchDate, day),
+        or(
+          eq(tournamentMatches.homeParticipantId, participantId),
+          eq(tournamentMatches.awayParticipantId, participantId),
+        ),
+      ),
+    );
+  if (games.length === 1) {
+    return { competitionId: competition.id, competitionGameId: games[0].id };
+  }
+  if (games.length > 1) {
+    return { competitionId: competition.id, competitionGameId: null };
+  }
+  if (day >= competition.startDate && day <= competition.endDate) {
+    return { competitionId: competition.id, competitionGameId: null };
+  }
+  return null;
 }

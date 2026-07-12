@@ -40,3 +40,4 @@
 - [Competition existing-team claim](competition-existing-team-claim.md) — one-slot-per-team needs advisory-lock tx (TOCTOU); name mismatch is a coach-confirmed UI gate, not server-enforced.
 - [Competition organizer hub](organizer-hub.md) — hub branding is COPIED onto competitions at creation, never referenced; wizard must hydrate inherited branding or partial saves null it.
 - [First-run onboarding](first-run-onboarding.md) — onboarding "seen" flag is per-browser localStorage (openapi locked, no server field); reusable SpotlightTour gated on canManage; don't open route-based composers mid-tour.
+- [Draft autosave field clobber](draft-autosave-field-clobber.md) — new draft-PATCH fields must be touch-gated or the first autosave nulls server-derived values (absent=unchanged, null=clear).

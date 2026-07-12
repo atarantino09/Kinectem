@@ -88,7 +88,15 @@ import {
 } from "../lib/spec-helpers";
 import { loadCompetitionBrandMap } from "../lib/competition-brand";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
-import { deriveCompetitionLink } from "../lib/competition-link";
+import {
+  deriveCompetitionLink,
+  deriveExplicitCompetitionLink,
+} from "../lib/competition-link";
+
+// Loose UUID shape check for extra-spec body fields (avoids handing a
+// malformed id straight to Postgres, which would 500 on the cast).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
@@ -1935,7 +1943,37 @@ router.post(
       // unambiguous, the specific game) if this team has a claimed slot.
       // Best-effort; never blocks publishing. Combined recaps span many
       // games so they only get the competition-level link.
-      const rawLink = await deriveCompetitionLink(teamId, gameDate);
+      //
+      // The composer can also pick the competition explicitly (extra-spec
+      // body field, same precedent as opponentName/recapKind). An explicit
+      // pick is only honored when the team holds a CLAIMED slot in that
+      // competition — otherwise the request is rejected so the coach goes
+      // and claims the team's spot first. Absent/empty → automatic derive.
+      const requestedCompetitionId =
+        typeof body.competitionId === "string" && body.competitionId.length > 0
+          ? body.competitionId
+          : null;
+      let rawLink: { competitionId: string | null; competitionGameId: string | null };
+      if (requestedCompetitionId) {
+        if (!UUID_RE.test(requestedCompetitionId))
+          return apiError(res, 400, "Invalid competitionId");
+        const explicit = await deriveExplicitCompetitionLink(
+          teamId,
+          requestedCompetitionId,
+          gameDate,
+        );
+        if (explicit === "not_claimed") {
+          return apiError(
+            res,
+            403,
+            "Your team hasn't claimed its spot in that competition yet. Claim the spot from the competition page, then pick it here.",
+            { code: "competition_not_claimed" },
+          );
+        }
+        rawLink = explicit;
+      } else {
+        rawLink = await deriveCompetitionLink(teamId, gameDate);
+      }
       const competitionLink =
         recapKind === "combined"
           ? { competitionId: rawLink.competitionId, competitionGameId: null }

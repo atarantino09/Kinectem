@@ -271,6 +271,11 @@ export default function NewPostPage() {
               loadedOrgAvatarUrl={form.loadedOrgAvatarUrl}
               taggedUserIds={form.taggedUserIds}
               onTaggedUserIdsChange={form.setTaggedUserIds}
+              competitionTeamId={form.composerTeamId || null}
+              claimedCompetitions={form.claimedCompetitions}
+              competitionsLoading={form.claimedCompetitionsLoading}
+              competitionId={form.competitionId}
+              onCompetitionIdChange={form.setCompetitionId}
               saving={form.saving}
               publishing={form.publishing}
               publishDisabled={publishDisabled}
