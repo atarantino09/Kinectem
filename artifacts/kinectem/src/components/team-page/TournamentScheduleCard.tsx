@@ -221,6 +221,49 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
 // How many competitions show before the "Show more" toggle appears.
 const VISIBLE_COMPETITIONS = 3;
 
+// Lifecycle label derived from the competition's own dates, computed at
+// render time against today's date so it advances on its own as time
+// passes: before startDate → Future, after endDate → Complete, otherwise
+// (including open-ended/missing endDate) → Active. A months-long league
+// stays Active for its entire date range.
+type CompetitionStatus = "active" | "complete" | "future";
+
+function competitionStatus(g: TournamentGroup): CompetitionStatus {
+  const today = todayKey();
+  if (g.startDate && g.startDate > today) return "future";
+  if (g.endDate && g.endDate < today) return "complete";
+  return "active";
+}
+
+const STATUS_STYLES: Record<CompetitionStatus, { label: string; cls: string }> =
+  {
+    active: {
+      label: "Active",
+      cls: "bg-emerald-400/90 text-emerald-950",
+    },
+    complete: {
+      label: "Complete",
+      cls: "bg-white/25 text-white",
+    },
+    future: {
+      label: "Future",
+      cls: "bg-sky-300/90 text-sky-950",
+    },
+  };
+
+function StatusPill({ group }: { group: TournamentGroup }) {
+  const status = competitionStatus(group);
+  const s = STATUS_STYLES[status];
+  return (
+    <span
+      className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${s.cls}`}
+      data-testid={`status-tournament-${group.tournamentId}`}
+    >
+      {s.label}
+    </span>
+  );
+}
+
 // A competition counts as active while today is on or before its end
 // date — length doesn't matter, so a months-long league stays "active"
 // for its whole season. Finished competitions sink below active ones
@@ -311,6 +354,7 @@ export function TournamentScheduleCard({
                 <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
                   {g.tournamentName}
                 </span>
+                <StatusPill group={g} />
                 <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-white/80 transition-transform group-data-[state=open]:rotate-180" />
               </CollapsibleTrigger>
               <Link
