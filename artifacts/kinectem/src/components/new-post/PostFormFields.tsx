@@ -409,13 +409,15 @@ export function PostFormFields({
         </div>
       )}
 
-      {/* Competition picker — recap composer only (create + draft
-          sessions). Lists ONLY the competitions this team holds a
-          CLAIMED slot in, because a recap can only carry a
-          competition's branding once the spot is claimed. Editing a
-          published post keeps its existing link untouched, so the
-          picker is hidden there. */}
-      {!isShort && !isOrgPost && !isEditingPublished && competitionTeamId && (
+      {/* Competition picker — recap composer (create + draft sessions)
+          AND edit-published sessions, so a coach can fix or add the
+          link after publish. Lists ONLY the competitions this team
+          holds a CLAIMED slot in, because a recap can only carry a
+          competition's branding once the spot is claimed. On the edit
+          path the picker pre-fills with the post's current link and
+          the PATCH only carries the field once it's actually
+          changed. */}
+      {!isShort && !isOrgPost && competitionTeamId && (
         <div data-testid="section-competition-picker">
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
             Competition{" "}

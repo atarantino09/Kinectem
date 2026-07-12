@@ -298,10 +298,11 @@ export function useNewPostForm({
     "";
 
   // Fetch the competitions this team holds a CLAIMED slot in — the
-  // only ones a recap may be explicitly linked to. Recap composer
-  // only; the edit-published path keeps the existing link untouched.
+  // only ones a recap may be explicitly linked to. Runs for both the
+  // recap composer and the edit-published path (the picker is shown
+  // there too so a coach can fix or add the link after publish).
   useEffect(() => {
-    if (postType === "short" || isEditingPublished || !composerTeamId) {
+    if (postType === "short" || !composerTeamId) {
       setClaimedCompetitions([]);
       return;
     }
@@ -323,7 +324,7 @@ export function useNewPostForm({
     return () => {
       cancelled = true;
     };
-  }, [postType, isEditingPublished, composerTeamId]);
+  }, [postType, composerTeamId]);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   // Per-viewer flag captured from the post we loaded into the editor.
@@ -359,6 +360,7 @@ export function useNewPostForm({
     photos: string[];
     videoUrl: string;
     taggedUserIds: string[];
+    competitionId: string;
   }) => JSON.stringify(v);
   const initialSnapshot = buildSnapshot({
     title: "",
@@ -368,6 +370,7 @@ export function useNewPostForm({
     photos: [],
     videoUrl: "",
     taggedUserIds: [],
+    competitionId: "",
   });
   const [baseline, setBaseline] = useState<string>(initialSnapshot);
   const currentSnapshot = buildSnapshot({
@@ -378,6 +381,7 @@ export function useNewPostForm({
     photos,
     videoUrl,
     taggedUserIds,
+    competitionId,
   });
   const isDirty = currentSnapshot !== baseline;
   const dirtyRef = useRef(isDirty);
@@ -490,14 +494,13 @@ export function useNewPostForm({
       videoUrl: videoUrl || null,
       photoUrls: photos,
       gameDate: gameDateForApi(),
-      // Draft sessions carry the composer's competition pick (extra-spec
-      // field) so a selection made after the draft was created still
-      // lands before publish — but ONLY once the coach has actually
-      // touched the picker. An untouched picker must stay absent from
-      // the PATCH (absent = unchanged) or the first autosave would
-      // clear a link the server auto-derived at create time. Published
-      // edits never send it — the existing link stays untouched.
-      ...(!isEditingPublished && competitionTouched
+      // The composer's competition pick (extra-spec field) rides on
+      // both draft-session and edit-published PATCHes — but ONLY once
+      // the coach has actually touched the picker. An untouched picker
+      // must stay absent from the PATCH (absent = unchanged) or the
+      // first autosave would clear a link the server auto-derived at
+      // create time.
+      ...(competitionTouched
         ? ({ competitionId: competitionId || null } as object)
         : {}),
     });
@@ -660,12 +663,12 @@ export function useNewPostForm({
         // the editId path (already-published article). Drafts won't
         // surface canDelete.
         setCanDelete(!!d.canDelete);
-        // Pre-fill the competition picker from the loaded draft so
-        // the subsequent auto-save PATCHes (which always carry
-        // `competitionId` for draft sessions) don't clear a link the
-        // draft already had. Edit-published sessions never send the
-        // field, so no pre-fill is needed there.
-        if (kind === "article" && !initialEditId) {
+        // Pre-fill the competition picker from the loaded post — both
+        // re-opened drafts and edit-published sessions — so the picker
+        // reflects the current link. This uses the raw setter, so the
+        // picker stays "untouched" and PATCHes omit `competitionId`
+        // until the coach actually changes it.
+        if (kind === "article") {
           setCompetitionId(d.competition?.id ?? "");
         }
         // Pre-populate the per-player tag picker (task #322). Only
@@ -699,6 +702,8 @@ export function useNewPostForm({
           videoUrl:
             d.videoUrl ?? (videoAsset?.url ? String(videoAsset.url) : ""),
           taggedUserIds: [],
+          competitionId:
+            kind === "article" ? (d.competition?.id ?? "") : "",
         });
         setBaseline(loadedSnapshot);
       })

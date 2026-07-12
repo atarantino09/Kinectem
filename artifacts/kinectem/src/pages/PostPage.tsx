@@ -32,7 +32,9 @@ import {
   ArrowLeft,
   Eye,
   ChevronDown,
+  ChevronRight,
   Trash2,
+  Trophy,
 } from "lucide-react";
 import { timeAgo, formatOrgName } from "@/lib/format";
 import { linkify } from "@/lib/linkify";
@@ -301,6 +303,22 @@ export default function PostPage() {
   const isShort = post.postType === "short";
   const Icon = isShort ? Play : FileText;
   const label = isShort ? "Highlight" : "Game Recap";
+  // Competition-linked recaps carry a branding block the server
+  // serializes outside the openapi PostResponse (recapKind precedent
+  // — same block PostCard reads). Renders a branded strip above the
+  // title linking to the in-app competition page.
+  const competition = (
+    post as {
+      competition?: {
+        id: string;
+        slug: string;
+        name: string;
+        logoUrl: string | null;
+        brandColor: string | null;
+        secondaryColor: string | null;
+      } | null;
+    }
+  ).competition;
   const images = post.assets?.filter((a) => a.fileType?.startsWith("image/")) ?? [];
   const videoAsset = post.assets?.find((a) => a.fileType?.startsWith("video/"));
 
@@ -468,6 +486,35 @@ export default function PostPage() {
           </Link>
         )}
       </div>
+
+      {competition && (
+        <Link
+          href={`/competitions/c/${encodeURIComponent(competition.slug)}`}
+          className="flex items-center gap-2.5 rounded-xl px-5 py-2"
+          style={{
+            background: competition.brandColor
+              ? competition.secondaryColor
+                ? `linear-gradient(135deg, ${competition.brandColor} 0%, ${competition.brandColor} 60%, ${competition.secondaryColor} 100%)`
+                : competition.brandColor
+              : "hsl(var(--primary))",
+          }}
+          data-testid={`banner-post-competition-${post.id}`}
+        >
+          {competition.logoUrl ? (
+            <img
+              src={competition.logoUrl}
+              alt=""
+              className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
+            />
+          ) : (
+            <Trophy className="h-4 w-4 shrink-0 text-white/90" />
+          )}
+          <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
+            {competition.name}
+          </span>
+          <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-white/80" />
+        </Link>
+      )}
 
       {isAdminOnPending && (
         <div
