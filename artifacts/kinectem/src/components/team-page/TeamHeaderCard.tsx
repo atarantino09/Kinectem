@@ -38,6 +38,7 @@ import {
   Trash2,
   CalendarDays,
   Compass,
+  Megaphone,
 } from "lucide-react";
 
 export type TeamPanel = "posts" | "roster" | "schedule" | "admin";
@@ -74,6 +75,10 @@ interface TeamHeaderCardProps {
   onToggleFollow: () => void;
   onEdit: () => void;
   onOpenFollowers: () => void;
+  /** When provided (manager), shows the "Claim competition games" pill. */
+  onClaimCompetition?: () => void;
+  /** When provided (broadcaster), shows the "Message team" pill. */
+  onMessageTeam?: () => void;
   /** When provided, shows a "Show me around" control that replays the tour. */
   onReplayTour?: () => void;
 }
@@ -90,6 +95,8 @@ export function TeamHeaderCard({
   onToggleFollow,
   onEdit,
   onOpenFollowers,
+  onClaimCompetition,
+  onMessageTeam,
   onReplayTour,
 }: TeamHeaderCardProps) {
   // The foreground square ALWAYS shows the org's logo so every team in
@@ -446,6 +453,30 @@ export function TeamHeaderCard({
               <Users className="w-4 h-4 mr-1.5" />
               {team.followerCount} Followers
             </Button>
+            {onClaimCompetition && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold rounded-full"
+                onClick={onClaimCompetition}
+                data-testid="btn-claim-competition"
+              >
+                <Trophy className="w-3.5 h-3.5 mr-1.5" />
+                Claim competition games
+              </Button>
+            )}
+            {onMessageTeam && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold rounded-full"
+                onClick={onMessageTeam}
+                data-testid="btn-team-broadcast"
+              >
+                <Megaphone className="w-3.5 h-3.5 mr-1.5" />
+                Message team
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>

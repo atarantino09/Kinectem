@@ -218,6 +218,29 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
   );
 }
 
+// How many competitions show before the "Show more" toggle appears.
+const VISIBLE_COMPETITIONS = 3;
+
+// A competition counts as active while today is on or before its end
+// date — length doesn't matter, so a months-long league stays "active"
+// for its whole season. Finished competitions sink below active ones
+// and age down the list as newer ones wrap up above them.
+function sortCompetitions(groups: TournamentGroup[]): TournamentGroup[] {
+  const today = todayKey();
+  const isActive = (g: TournamentGroup) => !g.endDate || g.endDate >= today;
+  return [...groups].sort((a, b) => {
+    const aActive = isActive(a);
+    const bActive = isActive(b);
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    if (aActive) {
+      // Active: most recently started first.
+      return b.startDate.localeCompare(a.startDate);
+    }
+    // Finished: most recently ended first.
+    return b.endDate.localeCompare(a.endDate);
+  });
+}
+
 export function TournamentScheduleCard({
   teamId,
   canPostRecap = false,
@@ -227,6 +250,7 @@ export function TournamentScheduleCard({
   // expose a "Write recap" link into the prefilled composer.
   canPostRecap?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const { data } = useQuery<{ data: TournamentGroup[] }>({
     queryKey: ["team", teamId, "tournament-schedule"],
     queryFn: () =>
@@ -240,17 +264,21 @@ export function TournamentScheduleCard({
   const groups = data?.data ?? [];
   if (groups.length === 0) return null;
 
+  const sorted = sortCompetitions(groups);
+  const visible = showAll ? sorted : sorted.slice(0, VISIBLE_COMPETITIONS);
+  const hiddenCount = sorted.length - VISIBLE_COMPETITIONS;
+
   return (
     <Card data-testid="card-tournament-schedule">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Trophy className="w-4 h-4" />
-          Competition
+          Competitions
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <FreeRecapNotice groups={groups} />
-        {groups.map((g) => (
+        {visible.map((g) => (
           <Collapsible key={g.tournamentId} className="space-y-2">
             {/* Branded competition strip — same look as the banner on a
                 published game recap (PostCard). The strip toggles the
@@ -344,6 +372,19 @@ export function TournamentScheduleCard({
             </CollapsibleContent>
           </Collapsible>
         ))}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-muted"
+            data-testid="btn-toggle-more-competitions"
+          >
+            {showAll ? "Show less" : `Show ${hiddenCount} more`}
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${showAll ? "rotate-180" : ""}`}
+            />
+          </button>
+        )}
       </CardContent>
     </Card>
   );
