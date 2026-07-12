@@ -74,6 +74,8 @@ Password-gated page at `https://kinectem.com/api/founding-admin` (gated by `FOUN
 - **Seed org pages & download CSV** — creates the written-in org pages, mints fresh prod tokens, backfills any missing, downloads the claim-links CSV. The seed list is **embedded** at `artifacts/api-server/src/data/written-in-orgs.ts` (generated snapshot, not read at runtime). To refresh before publishing: run `export-org-names` in dev → regenerate that module from the CSV → commit → republish → click Seed.
 - **Set the platform admin** — promotes one existing live account to `role === "admin"` and demotes all others (platform admin is just `users.role === "admin"`). Sign up live with the target email first, then set it here.
 - **Delete a specific organization** — deletes ONE org by id (cascades its teams + dependent content); requires typing the org's exact name. Scoped to one org on purpose — never reintroduce a delete-all (would wipe the seeded claim pages).
+- **Delete a specific competition** — deletes ONE tournament by id (cascades followers, team slots, matches, score reports; recap posts survive with their competition badge cleared); requires typing the competition's exact name.
+- **Delete a specific competition hub** — deletes ONE organizer hub by id (cascades hub followers); its competitions are **detached, not deleted** (`organizer_id` SET NULL by design) — delete them individually first if they should go too; requires typing the hub's exact name.
 
 ### SendGrid Event Webhook (per-env, optional)
 

@@ -1,5 +1,14 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, foundingSignups, organizations, organizationAdmins, teams, users } from "@workspace/db";
+import {
+  db,
+  competitionOrganizers,
+  foundingSignups,
+  organizations,
+  organizationAdmins,
+  teams,
+  tournaments,
+  users,
+} from "@workspace/db";
 import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -579,6 +588,144 @@ router.post(
       organizationId,
       name: result.name,
       deletedTeams: result.deletedTeams,
+    });
+  }),
+);
+
+// Targeted, destructive "delete one competition" action, mirroring
+// delete-organization. Deleting the tournament row cascades its followers,
+// participant slots, matches (and their score reports); recap posts survive
+// with their competition link cleared (articles.competition_id SET NULL).
+// Confirmation requires typing the competition's exact name.
+const deleteCompetitionLimiter = rateLimit({
+  name: "founding-admin-delete-competition",
+  windowMs: ONE_HOUR,
+  max: 30,
+  keys: (req) => [ipKey(req)],
+  message: "Too many attempts. Please wait a while before trying again.",
+});
+
+const DeleteCompetitionBody = z.object({
+  competitionId: z.string().uuid(),
+  confirm: z.string(),
+});
+
+router.post(
+  "/founding-admin/delete-competition",
+  requireFoundingAdmin,
+  deleteCompetitionLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = DeleteCompetitionBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, "A valid competition ID is required.", { code: "INVALID_REQUEST" });
+      return;
+    }
+    const { competitionId, confirm } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:delete-competition'))`);
+      const [comp] = await tx
+        .select({ id: tournaments.id, name: tournaments.name })
+        .from(tournaments)
+        .where(eq(tournaments.id, competitionId))
+        .limit(1);
+      if (!comp) return { notFound: true as const };
+      if (normalizeName(confirm) !== normalizeName(comp.name)) {
+        return { mismatch: true as const, name: comp.name };
+      }
+      await tx.delete(tournaments).where(eq(tournaments.id, competitionId));
+      return { ok: true as const, name: comp.name };
+    });
+
+    if ("notFound" in result) {
+      apiError(res, 404, "No competition found with that ID.", { code: "COMPETITION_NOT_FOUND" });
+      return;
+    }
+    if ("mismatch" in result) {
+      apiError(res, 400, `Type the competition's exact name ("${result.name}") to confirm.`, {
+        code: "CONFIRMATION_REQUIRED",
+      });
+      return;
+    }
+
+    req.log.info({ competitionId }, "founding-admin delete competition");
+
+    res.json({ ok: true, competitionId, name: result.name });
+  }),
+);
+
+// Targeted, destructive "delete one competition hub" action. Deleting the hub
+// cascades its followers only; its competitions are DETACHED, not deleted
+// (tournaments.organizer_id SET NULL — the schema's deliberate rule that
+// removing an organizer never removes its competitions). Delete the
+// competitions individually first if they should go too. Confirmation
+// requires typing the hub's exact name.
+const deleteOrganizerLimiter = rateLimit({
+  name: "founding-admin-delete-organizer",
+  windowMs: ONE_HOUR,
+  max: 30,
+  keys: (req) => [ipKey(req)],
+  message: "Too many attempts. Please wait a while before trying again.",
+});
+
+const DeleteOrganizerBody = z.object({
+  organizerId: z.string().uuid(),
+  confirm: z.string(),
+});
+
+router.post(
+  "/founding-admin/delete-organizer",
+  requireFoundingAdmin,
+  deleteOrganizerLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = DeleteOrganizerBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, "A valid hub ID is required.", { code: "INVALID_REQUEST" });
+      return;
+    }
+    const { organizerId, confirm } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:delete-organizer'))`);
+      const [hub] = await tx
+        .select({ id: competitionOrganizers.id, name: competitionOrganizers.name })
+        .from(competitionOrganizers)
+        .where(eq(competitionOrganizers.id, organizerId))
+        .limit(1);
+      if (!hub) return { notFound: true as const };
+      if (normalizeName(confirm) !== normalizeName(hub.name)) {
+        return { mismatch: true as const, name: hub.name };
+      }
+      // Count how many competitions get detached so we can report it.
+      const detached = await tx
+        .select({ id: tournaments.id })
+        .from(tournaments)
+        .where(eq(tournaments.organizerId, organizerId));
+      await tx.delete(competitionOrganizers).where(eq(competitionOrganizers.id, organizerId));
+      return { ok: true as const, name: hub.name, detachedCompetitions: detached.length };
+    });
+
+    if ("notFound" in result) {
+      apiError(res, 404, "No competition hub found with that ID.", { code: "ORGANIZER_NOT_FOUND" });
+      return;
+    }
+    if ("mismatch" in result) {
+      apiError(res, 400, `Type the hub's exact name ("${result.name}") to confirm.`, {
+        code: "CONFIRMATION_REQUIRED",
+      });
+      return;
+    }
+
+    req.log.info(
+      { organizerId, detachedCompetitions: result.detachedCompetitions },
+      "founding-admin delete organizer",
+    );
+
+    res.json({
+      ok: true,
+      organizerId,
+      name: result.name,
+      detachedCompetitions: result.detachedCompetitions,
     });
   }),
 );

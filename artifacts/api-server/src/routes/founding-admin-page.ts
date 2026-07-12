@@ -156,6 +156,28 @@ const PAGE = String.raw`<!doctype html>
       <div id="delOrgStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
     </div>
 
+    <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
+      <div style="font-weight:700; color:var(--danger);">Delete a specific competition</div>
+      <div class="sub">Permanently deletes <strong>one</strong> competition by ID, plus its schedule, matches, team slots, score reports, and followers. Recap posts are kept but lose their competition badge. This cannot be undone. Type the competition's exact name to confirm.</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+        <input id="delCompId" type="text" placeholder="Competition ID (UUID)" style="min-width:320px;" />
+        <input id="delCompName" type="text" placeholder="Type exact competition name to confirm" style="min-width:260px;" />
+        <button id="delCompBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete competition</button>
+      </div>
+      <div id="delCompStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
+    </div>
+
+    <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
+      <div style="font-weight:700; color:var(--danger);">Delete a specific competition hub</div>
+      <div class="sub">Permanently deletes <strong>one</strong> organizer hub by ID, plus its followers. Its competitions are <strong>not</strong> deleted — they are detached from the hub and keep working on their own (delete them individually first if they should go too). This cannot be undone. Type the hub's exact name to confirm.</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+        <input id="delHubId" type="text" placeholder="Hub ID (UUID)" style="min-width:320px;" />
+        <input id="delHubName" type="text" placeholder="Type exact hub name to confirm" style="min-width:260px;" />
+        <button id="delHubBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete hub</button>
+      </div>
+      <div id="delHubStatus" class="sub" style="margin-top:10px; min-height:16px;"></div>
+    </div>
+
     <div class="card">
       <table>
         <thead>
@@ -421,7 +443,49 @@ const PAGE = String.raw`<!doctype html>
   $("adminEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") onSetAdmin(); });
   $("addAdminBtn").addEventListener("click", onAddAdmin);
   $("addAdminEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") onAddAdmin(); });
+  async function onDeleteCompetition() {
+    var s = $("delCompStatus");
+    var id = ($("delCompId").value || "").trim();
+    var name = ($("delCompName").value || "").trim();
+    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Enter the competition ID."; return; }
+    if (!name) { s.style.color = "var(--danger)"; s.textContent = "Type the competition's exact name to confirm."; return; }
+    if (!confirm('Permanently delete this competition and all its schedule, matches, and team slots? This cannot be undone.')) return;
+    var btn = $("delCompBtn"); btn.disabled = true;
+    s.style.color = "var(--muted)"; s.textContent = "Deleting…";
+    try {
+      var data = await api("/delete-competition", { method: "POST", body: JSON.stringify({ competitionId: id, confirm: name }) });
+      s.style.color = "var(--muted)";
+      s.textContent = 'Deleted "' + data.name + '".';
+      toast("Competition deleted");
+      $("delCompId").value = ""; $("delCompName").value = "";
+    } catch (e) {
+      s.style.color = "var(--danger)"; s.textContent = e.message;
+    } finally { btn.disabled = false; }
+  }
+
+  async function onDeleteHub() {
+    var s = $("delHubStatus");
+    var id = ($("delHubId").value || "").trim();
+    var name = ($("delHubName").value || "").trim();
+    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Enter the hub ID."; return; }
+    if (!name) { s.style.color = "var(--danger)"; s.textContent = "Type the hub's exact name to confirm."; return; }
+    if (!confirm('Permanently delete this hub? Its competitions are detached (kept), not deleted. This cannot be undone.')) return;
+    var btn = $("delHubBtn"); btn.disabled = true;
+    s.style.color = "var(--muted)"; s.textContent = "Deleting…";
+    try {
+      var data = await api("/delete-organizer", { method: "POST", body: JSON.stringify({ organizerId: id, confirm: name }) });
+      s.style.color = "var(--muted)";
+      s.textContent = 'Deleted "' + data.name + '" · ' + data.detachedCompetitions + ' competition(s) detached.';
+      toast("Hub deleted");
+      $("delHubId").value = ""; $("delHubName").value = "";
+    } catch (e) {
+      s.style.color = "var(--danger)"; s.textContent = e.message;
+    } finally { btn.disabled = false; }
+  }
+
   $("delOrgBtn").addEventListener("click", onDeleteOrg);
+  $("delCompBtn").addEventListener("click", onDeleteCompetition);
+  $("delHubBtn").addEventListener("click", onDeleteHub);
   $("search").addEventListener("input", renderRows);
 
   $("rows").addEventListener("click", function (e) {

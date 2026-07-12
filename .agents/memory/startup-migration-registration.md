@@ -16,7 +16,7 @@ a new idempotent SQL const + appended to the `MIGRATIONS` array. `pnpm db push`
 or a one-off raw SQL applied to the dev DB only mutates the *dev* database —
 production and fresh test DBs get their schema **exclusively** from this list.
 
-**Why:** Task #628 nearly shipped tournament tables that existed only in the dev
+**Why:** the tournament-tables feature nearly shipped tables that existed only in the dev
 DB. The Drizzle schema (`lib/db/src/schema/index.ts`) had the tables, dev had
 them applied, typecheck passed, the live app worked — but there was no
 `MIGRATIONS` entry, so a production deploy would have had no tournament tables
