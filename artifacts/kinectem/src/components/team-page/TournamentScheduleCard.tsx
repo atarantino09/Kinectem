@@ -246,7 +246,7 @@ const STATUS_STYLES: Record<CompetitionStatus, { label: string; cls: string }> =
       cls: "bg-white/25 text-white",
     },
     future: {
-      label: "Future",
+      label: "Upcoming",
       cls: "bg-sky-300/90 text-sky-950",
     },
   };
