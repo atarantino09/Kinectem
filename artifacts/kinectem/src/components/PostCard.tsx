@@ -20,6 +20,7 @@ import {
   type FeedPost,
 } from "@workspace/api-client-react";
 import { timeAgo, formatOrgName } from "@/lib/format";
+import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import { linkify } from "@/lib/linkify";
 import {
   DropdownMenu,
@@ -328,6 +329,26 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
 
   const sharedBy = "sharedBy" in post ? post.sharedBy : null;
 
+  // Org brand strip for game recap cards — same thin full-strength strip
+  // as team pages. The colors ride on the post context as extra fields
+  // beyond the locked spec (`orgBrandPrimaryColor` / `orgBrandSecondaryColor`,
+  // recapKind precedent). Only article-backed recap posts get the strip;
+  // solo teams / unbranded orgs have no colors and render nothing.
+  const isRecapArticle =
+    reportTarget.contentType === "article" &&
+    post.postType === "long" &&
+    (!!post.gameDate || isCombinedRecap);
+  const recapOrgBrand = isRecapArticle
+    ? readOrgBrandColors({
+        brandPrimaryColor: (
+          post.context as { orgBrandPrimaryColor?: string | null }
+        ).orgBrandPrimaryColor,
+        brandSecondaryColor: (
+          post.context as { orgBrandSecondaryColor?: string | null }
+        ).orgBrandSecondaryColor,
+      })
+    : null;
+
   return (
     <Card
       className={cn(
@@ -337,6 +358,13 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
       )}
     >
       <CardContent className="p-0">
+        {recapOrgBrand && (
+          <div
+            className="h-1.5"
+            style={{ background: orgStripGradient(recapOrgBrand) }}
+            data-testid={`strip-post-org-brand-${post.id}`}
+          />
+        )}
         {sharedBy && (
           <Link
             href={`/users/${sharedBy.id}`}

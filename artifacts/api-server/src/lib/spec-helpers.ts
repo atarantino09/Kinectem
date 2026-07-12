@@ -1026,6 +1026,11 @@ function basePost(p: {
         // the org logo as the team's avatar. Null when the parent org
         // also has no logo set (or there is no parent org).
         orgAvatarUrl: org?.logoUrl ?? null,
+        // Org brand colors ride on the post context so recap cards can
+        // render the thin org brand strip (same as team pages). Extra
+        // fields beyond the locked spec (recapKind precedent).
+        orgBrandPrimaryColor: org?.brandPrimaryColor ?? null,
+        orgBrandSecondaryColor: org?.brandSecondaryColor ?? null,
       }
     : org
       ? {
@@ -1038,6 +1043,8 @@ function basePost(p: {
           orgName: null,
           avatarUrl: org.logoUrl ?? null,
           orgAvatarUrl: null,
+          orgBrandPrimaryColor: org.brandPrimaryColor ?? null,
+          orgBrandSecondaryColor: org.brandSecondaryColor ?? null,
         }
       : {
           // Task #510 — profile-only highlights live on the uploader's
