@@ -17,6 +17,7 @@ import { Link } from "wouter";
 import { TeamAvatar, UserAvatar } from "@/components/UserAvatar";
 import { MediaSection } from "./MediaSection";
 import { AiAssistButton } from "./AiAssistButton";
+import { MentionTextarea } from "./MentionTextarea";
 import {
   RosterTagPicker,
   type RosterPickerMember,
@@ -322,20 +323,35 @@ export function PostFormFields({
             onInsert={onBodyChange}
           />
         </div>
-        <Textarea
-          id="body"
-          value={body}
-          onChange={(e) => onBodyChange(e.target.value)}
-          placeholder={
-            isShort
-              ? "Add a caption for this clip…"
-              : isOrgPost
-                ? "Share an update with the organization…"
-                : "Tell the story of the game…"
-          }
-          className={`mt-2 ${isShort ? "min-h-[120px]" : "min-h-[260px]"}`}
-          data-testid="input-body"
-        />
+        {!isShort && !isOrgPost ? (
+          // Recap bodies get the @-mention picker (task #739): typing
+          // "@" opens the team's roster so the author can link a
+          // player straight into the story. Shorts and org Updates
+          // keep the plain textarea — mentions are recap-only.
+          <MentionTextarea
+            id="body"
+            value={body}
+            onChange={onBodyChange}
+            placeholder="Tell the story of the game… Type @ to mention a player"
+            className="mt-2 min-h-[260px]"
+            members={rosterMembers}
+            membersLoading={rosterLoading}
+            data-testid="input-body"
+          />
+        ) : (
+          <Textarea
+            id="body"
+            value={body}
+            onChange={(e) => onBodyChange(e.target.value)}
+            placeholder={
+              isShort
+                ? "Add a caption for this clip…"
+                : "Share an update with the organization…"
+            }
+            className={`mt-2 ${isShort ? "min-h-[120px]" : "min-h-[260px]"}`}
+            data-testid="input-body"
+          />
+        )}
         {!isShort && !isOrgPost && (
           // Point coaches at AI Assist (the button above) so they know
           // writing a recap doesn't have to start from a blank page.

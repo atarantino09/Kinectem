@@ -119,6 +119,120 @@ export async function applyArticleTagFanout(args: {
   return inserted.map((r) => r.userId);
 }
 
+// ---------------------------------------------------------------------------
+// @-mention tags (task #739)
+// ---------------------------------------------------------------------------
+// Recap bodies may carry inline mention tokens of the form
+//   @[Display Name](user:<uuid>)
+// The token lives inside the existing `body` string (the OpenAPI spec
+// is locked, so no schema change). The server treats each token as an
+// explicit manual tag request: the mentioned user must be an accepted
+// player on the recap's team roster, and consent-requiring minors get
+// a `pending` tag so the existing guardian-approval flow kicks in.
+const MENTION_TOKEN_RE =
+  /@\[[^\]\n]{1,80}\]\(user:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+
+export function extractMentionUserIds(
+  body: string | null | undefined,
+): string[] {
+  if (!body) return [];
+  const ids = new Set<string>();
+  const re = new RegExp(MENTION_TOKEN_RE.source, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) ids.add(m[1].toLowerCase());
+  return Array.from(ids);
+}
+
+// Parse mention tokens out of `body`, validate each mentioned user is
+// an accepted player on the team's roster (invalid tokens are ignored),
+// and upsert a manual tag row per valid mention. Consent-requiring
+// players (their own `requireTagConsent`, or a linked guardian who
+// gates consent) get `status: "pending"` so the existing approval flow
+// runs; everyone else is `approved` immediately. `source: "manual"`
+// keeps mention tags safe from the auto-fanout OFF-toggle cleanup.
+//
+// Returns:
+//   * `inserted` — user ids whose tag row was created by THIS call
+//     (the "notify these" set for paths that notify immediately).
+//   * `mentioned` — all valid roster-mention ids that hold a tag row
+//     after the call, whether or not this call inserted it. Used by
+//     the deferred-notify paths (pending_approval → published) where
+//     the row was created earlier but nobody was pinged yet.
+export async function applyMentionTags(args: {
+  articleId: string;
+  teamId: string;
+  taggerUserId: string;
+  body: string | null | undefined;
+}): Promise<{ inserted: string[]; mentioned: string[] }> {
+  const mentionIds = extractMentionUserIds(args.body);
+  if (mentionIds.length === 0) return { inserted: [], mentioned: [] };
+  const players = await db
+    .select({
+      userId: rosterEntries.userId,
+      requireTagConsent: users.requireTagConsent,
+      parentId: users.parentId,
+    })
+    .from(rosterEntries)
+    .innerJoin(users, eq(rosterEntries.userId, users.id))
+    .where(
+      and(
+        eq(rosterEntries.teamId, args.teamId),
+        eq(rosterEntries.role, "player"),
+        eq(rosterEntries.status, "accepted"),
+        inArray(rosterEntries.userId, mentionIds),
+      ),
+    );
+  if (players.length === 0) return { inserted: [], mentioned: [] };
+  const parentIds = Array.from(
+    new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
+  );
+  const parentConsent = new Map<string, boolean>();
+  if (parentIds.length > 0) {
+    const parents = await db
+      .select({ id: users.id, flag: users.requireTagConsent })
+      .from(users)
+      .where(inArray(users.id, parentIds));
+    for (const p of parents) parentConsent.set(p.id, !!p.flag);
+  }
+  const validIds = players.map((p) => p.userId);
+  const existing = await db
+    .select({ userId: articleTags.userId })
+    .from(articleTags)
+    .where(
+      and(
+        eq(articleTags.articleId, args.articleId),
+        inArray(articleTags.userId, validIds),
+      ),
+    );
+  const existingIds = new Set(existing.map((r) => r.userId));
+  const toInsert = players.filter((p) => !existingIds.has(p.userId));
+  if (toInsert.length === 0) {
+    return { inserted: [], mentioned: validIds };
+  }
+  const inserted = await db
+    .insert(articleTags)
+    .values(
+      toInsert.map((p) => {
+        const parentRequires = p.parentId
+          ? !!parentConsent.get(p.parentId)
+          : false;
+        const requires = !!p.requireTagConsent || parentRequires;
+        return {
+          articleId: args.articleId,
+          userId: p.userId,
+          taggerUserId: args.taggerUserId,
+          status: (requires ? "pending" : "approved") as
+            | "pending"
+            | "approved",
+          source: "manual" as const,
+        };
+      }),
+    )
+    .onConflictDoNothing()
+    .returning({ userId: articleTags.userId });
+  return { inserted: inserted.map((r) => r.userId), mentioned: validIds };
+}
+
 // Throttle window for "you were tagged in <recap>" notifications.
 export const TAG_NOTIF_THROTTLE_MS = 10 * 60 * 1000;
 

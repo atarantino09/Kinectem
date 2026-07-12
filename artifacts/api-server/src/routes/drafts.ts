@@ -48,7 +48,11 @@ import {
   type PostStats,
   type StatsKind,
 } from "../lib/post-stats";
-import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import {
+  applyArticleTagFanout,
+  applyMentionTags,
+  notifyNewlyTaggedInRecap,
+} from "../lib/article-tagging";
 import { notifyAdminsOfPendingPostApproval } from "../lib/notifications";
 import { displayName, maskedDisplayName } from "../lib/spec-helpers";
 import { deriveExplicitCompetitionLink } from "../lib/competition-link";
@@ -409,6 +413,30 @@ router.patch(
       .set(updates)
       .where(eq(articles.id, a.id))
       .returning();
+    // Task #739 — @-mention tags for body edits. Drafts defer to the
+    // publish handler (which re-parses the whole body then); published
+    // and pending-approval articles upsert here so a mention added on
+    // the edit screen takes effect immediately. Runs BEFORE the fan-out
+    // maintenance below so a mention row lands as `source: "manual"`
+    // and survives the tagging-OFF cleanup. Notify only when the recap
+    // is actually live — pending_approval defers to the admin approval
+    // handler like every other tag path.
+    if (typeof body.body === "string" && a.status !== "draft") {
+      const mentionResult = await applyMentionTags({
+        articleId: updated.id,
+        teamId: updated.teamId,
+        taggerUserId: updated.authorId ?? me.id,
+        body: updated.body,
+      });
+      if (a.status === "published" && mentionResult.inserted.length > 0) {
+        await notifyNewlyTaggedInRecap({
+          userIds: mentionResult.inserted,
+          articleId: updated.id,
+          articleTitle: updated.title,
+          actorUserId: me.id,
+        });
+      }
+    }
     // Auto-tag fan-out maintenance for already-published recaps.
     // Drafts skip this — the publish handler runs the fan-out then.
     if (a.status === "published" && nextGameDate !== undefined) {
@@ -569,14 +597,25 @@ router.post(
       })
       .where(eq(articles.id, a.id))
       .returning();
+    // Task #739 — upsert @-mention tags from the draft's body before
+    // the roster fan-out so mention rows land as `source: "manual"`
+    // (drafts skip mention tagging on PATCH; publish is where the
+    // body's mentions become tags).
+    const mentionResult = await applyMentionTags({
+      articleId: updated.id,
+      teamId: updated.teamId,
+      taggerUserId: updated.authorId ?? me.id,
+      body: updated.body,
+    });
     // Re-run the auto-tag fan-out at publish time so drafts that
     // had a game date added later (via PATCH) still tag the roster.
     // The helper itself does per-user dedupe, so this is safe to call
     // even if some players are already tagged — only missing roster
     // members get inserted, and existing tag statuses (approved /
     // pending / declined) are preserved untouched.
+    let fanoutTagged: string[] = [];
     if (updated.gameDate) {
-      const newlyTagged = await applyArticleTagFanout({
+      fanoutTagged = await applyArticleTagFanout({
         articleId: updated.id,
         teamId: updated.teamId,
         // Tag attribution stays with the original author so the
@@ -587,23 +626,32 @@ router.post(
         explicitUserIds: [],
         gameDate: updated.gameDate,
       });
-      // Notify the players this fan-out actually inserted (the helper's
-      // return value is the dedupe-aware "newly tagged" set, so manual
-      // pre-tags from the draft don't get pinged twice). Only fires when
-      // the draft is going live for real — pending_approval defers the
-      // notify to the admin approval handler so players don't get
-      // pinged about a recap that may still be rejected. The bell row's
-      // actor is the user who pressed Publish (per task #249's "acting
-      // user as the actor"), which is also what a co-author publishing
-      // someone else's draft would expect to see. (task #249)
-      if (newStatus === "published" && newlyTagged.length > 0) {
-        await notifyNewlyTaggedInRecap({
-          userIds: newlyTagged,
-          articleId: updated.id,
-          articleTitle: updated.title,
-          actorUserId: me.id,
-        });
-      }
+    }
+    // Notify the players this publish tagged. For mentions we use the
+    // full `mentioned` set — NOT just `inserted` — because a mention
+    // typed while the post was still a draft already has its tag row
+    // (inserted silently at draft create/PATCH), so at publish time
+    // `inserted` would be empty and the player would never hear about
+    // it. Publish is the moment the article becomes visible, so it is
+    // the right moment to ping every mentioned player; the 10-minute
+    // per-user/per-link throttle inside `notifyNewlyTaggedInRecap`
+    // keeps a create-then-quick-publish from double-pinging. (task #739)
+    // Only fires when the draft is going live for real —
+    // pending_approval defers the notify to the admin approval handler
+    // so players don't get pinged about a recap that may still be
+    // rejected. The bell row's actor is the user who pressed Publish
+    // (per task #249's "acting user as the actor"), which is also what
+    // a co-author publishing someone else's draft would expect to see.
+    const newlyTagged = Array.from(
+      new Set([...mentionResult.mentioned, ...fanoutTagged]),
+    );
+    if (newStatus === "published" && newlyTagged.length > 0) {
+      await notifyNewlyTaggedInRecap({
+        userIds: newlyTagged,
+        articleId: updated.id,
+        articleTitle: updated.title,
+        actorUserId: me.id,
+      });
     }
     const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
     const [org] = team

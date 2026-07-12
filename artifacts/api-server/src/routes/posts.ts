@@ -97,7 +97,11 @@ import {
 // malformed id straight to Postgres, which would 500 on the cast).
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import {
+  applyArticleTagFanout,
+  applyMentionTags,
+  notifyNewlyTaggedInRecap,
+} from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import {
@@ -2001,7 +2005,18 @@ router.post(
         })
         .returning();
 
-      const newlyTagged = await applyArticleTagFanout({
+      // @-mention tags run BEFORE the roster fan-out so a mentioned
+      // player's row lands with `source: "manual"` — the fan-out's
+      // dedupe then skips them, and the "turn tagging OFF" cleanup
+      // (which deletes only `source: "auto"` rows) can never remove a
+      // mention tag. (task #739)
+      const mentionResult = await applyMentionTags({
+        articleId: a.id,
+        teamId,
+        taggerUserId: me.id,
+        body: a.body,
+      });
+      const fanoutTagged = await applyArticleTagFanout({
         articleId: a.id,
         teamId,
         taggerUserId: me.id,
@@ -2010,6 +2025,9 @@ router.post(
           : [],
         gameDate,
       });
+      const newlyTagged = Array.from(
+        new Set([...mentionResult.inserted, ...fanoutTagged]),
+      );
       // Bell-notify each newly-tagged player. Drafts skip this — there
       // is no published article to link to yet, and the publish handler
       // re-runs the fan-out + notify when the draft goes live. Pending-

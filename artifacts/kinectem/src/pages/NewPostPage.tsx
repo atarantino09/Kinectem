@@ -116,8 +116,18 @@ export default function NewPostPage() {
   const isEditingTaggablePost =
     form.isEditingPublished &&
     (form.loadedKind === "article" || form.loadedKind === "highlight");
+  // Task #739 — recap create/draft sessions now ALSO need the roster,
+  // to power the body's @-mention picker. `composerTeamId` is the
+  // team the recap composer is scoped to (URL-locked, picker
+  // selection, or the re-opened draft's team). The per-player tag
+  // picker stays hidden on recap create (PostFormFields gates it on
+  // isShort/editing), so this only feeds mentions there.
   const rosterTeamId =
-    form.isShort || isEditingTaggablePost ? (form.highlightTeamId ?? "") : "";
+    form.isShort || isEditingTaggablePost
+      ? (form.highlightTeamId ?? "")
+      : form.loadedKind !== "org_post"
+        ? form.composerTeamId
+        : "";
   const rosterEnabled = !!rosterTeamId;
   const { data: rosterData, isLoading: rosterLoading } = useListTeamMembers(
     rosterTeamId,

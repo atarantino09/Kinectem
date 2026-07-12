@@ -23,6 +23,10 @@ import { timeAgo, formatOrgName } from "@/lib/format";
 import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import { linkify } from "@/lib/linkify";
 import {
+  renderBodyWithMentions,
+  truncateMentionSafe,
+} from "@/lib/mentions";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -933,10 +937,16 @@ function RecapExcerpt({ body, postId }: { body: string; postId: string }) {
   const [expanded, setExpanded] = useState(false);
   const PREVIEW_CHARS = 280;
   const isLong = body.length > PREVIEW_CHARS;
-  const visible = expanded || !isLong ? body : body.slice(0, PREVIEW_CHARS).trimEnd() + "…";
+  // Mention-safe truncation (task #739): if the 280-char cut lands
+  // inside an inline @-mention token, back up to the token start so
+  // the preview never shows raw "@[Jane Do…" markup.
+  const visible =
+    expanded || !isLong
+      ? body
+      : truncateMentionSafe(body, PREVIEW_CHARS) + "…";
   return (
     <div className="text-sm leading-relaxed whitespace-pre-wrap mt-1">
-      {linkify(visible)}
+      {renderBodyWithMentions(visible)}
       {isLong && !expanded && (
         <>
           {" "}

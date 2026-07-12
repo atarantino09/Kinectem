@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { timeAgo, formatOrgName } from "@/lib/format";
 import { linkify } from "@/lib/linkify";
+import { renderBodyWithMentions } from "@/lib/mentions";
 import { PostInteractions } from "@/components/PostInteractions";
 import { GamePhotoAlbum } from "@/components/GamePhotoAlbum";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
@@ -866,7 +867,7 @@ export default function PostPage() {
                 <div className="prose prose-slate max-w-none">
                   {post.body.split("\n").map((para, i) => (
                     <p key={i} className="text-base leading-relaxed">
-                      {linkify(para)}
+                      {renderBodyWithMentions(para)}
                     </p>
                   ))}
                 </div>
@@ -877,7 +878,7 @@ export default function PostPage() {
             <div className="prose prose-slate max-w-none">
               {post.body.split("\n").map((para, i) => (
                 <p key={i} className="text-base leading-relaxed">
-                  {linkify(para)}
+                  {renderBodyWithMentions(para)}
                 </p>
               ))}
             </div>

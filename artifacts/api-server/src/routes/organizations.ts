@@ -88,7 +88,11 @@ import {
   loadPostShareStats,
   shareStatsFor,
 } from "../lib/post-stats";
-import { applyArticleTagFanout, notifyNewlyTaggedInRecap } from "../lib/article-tagging";
+import {
+  applyArticleTagFanout,
+  applyMentionTags,
+  notifyNewlyTaggedInRecap,
+} from "../lib/article-tagging";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { normalizeWebsite } from "../lib/normalize-website";
@@ -2095,18 +2099,36 @@ async function transitionApproval(
   // never get its roster tagged. Fan-out is idempotent (article_tags has
   // ON CONFLICT DO NOTHING on (article_id, user_id)) so it's safe to run
   // here even if the publish path already ran it. (task #242)
-  if (next === "published" && a.gameDate) {
+  if (next === "published") {
     const taggerUserId = a.authorId ?? me.id;
-    const newlyTagged = await applyArticleTagFanout({
+    // Task #739 — @-mention tags were upserted at create/publish time,
+    // but the "you were tagged" notify was deferred while the recap sat
+    // in pending_approval. Re-run the idempotent upsert (covers body
+    // edits made while pending) and notify EVERY mentioned player that
+    // holds a tag row — not just the ones inserted by this call — since
+    // none of them were pinged earlier. The 10-minute throttle inside
+    // the notify helper dedupes any overlap.
+    const mentionResult = await applyMentionTags({
       articleId: a.id,
       teamId: a.teamId,
       taggerUserId,
-      explicitUserIds: [],
-      gameDate: a.gameDate,
+      body: a.body,
     });
-    if (newlyTagged.length > 0) {
+    const fanoutTagged = a.gameDate
+      ? await applyArticleTagFanout({
+          articleId: a.id,
+          teamId: a.teamId,
+          taggerUserId,
+          explicitUserIds: [],
+          gameDate: a.gameDate,
+        })
+      : [];
+    const notifyIds = Array.from(
+      new Set([...mentionResult.mentioned, ...fanoutTagged]),
+    );
+    if (notifyIds.length > 0) {
       await notifyNewlyTaggedInRecap({
-        userIds: newlyTagged,
+        userIds: notifyIds,
         articleId: a.id,
         articleTitle: a.title,
         actorUserId: taggerUserId,
@@ -2116,8 +2138,8 @@ async function transitionApproval(
     // (posts.ts) fires, but deferred to here for recaps that were created as
     // pending_approval: a one-time first-recap milestone to the author, and an
     // opt-in `team_recap` fan-out to the team's followers. Both run through the
-    // COPPA-aware dispatch gate.
-    if (a.authorId) {
+    // COPPA-aware dispatch gate. Recap-only (`gameDate` present).
+    if (a.gameDate && a.authorId) {
       const [author] = await db
         .select({ name: users.name, isMinor: users.isMinor })
         .from(users)
