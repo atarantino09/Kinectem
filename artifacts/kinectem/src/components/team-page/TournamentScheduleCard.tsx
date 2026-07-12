@@ -264,23 +264,35 @@ function StatusPill({ group }: { group: TournamentGroup }) {
   );
 }
 
-// A competition counts as active while today is on or before its end
-// date — length doesn't matter, so a months-long league stays "active"
-// for its whole season. Finished competitions sink below active ones
-// and age down the list as newer ones wrap up above them.
+// Ordering mirrors the lifecycle pills (same competitionStatus helper,
+// so the two can't drift): Active competitions first — a months-long
+// league stays Active (and on top) for its whole season — then Future
+// ones, then Complete ones, which age down the list as newer
+// competitions wrap up above them.
+const STATUS_ORDER: Record<CompetitionStatus, number> = {
+  active: 0,
+  future: 1,
+  complete: 2,
+};
+
 function sortCompetitions(groups: TournamentGroup[]): TournamentGroup[] {
-  const today = todayKey();
-  const isActive = (g: TournamentGroup) => !g.endDate || g.endDate >= today;
   return [...groups].sort((a, b) => {
-    const aActive = isActive(a);
-    const bActive = isActive(b);
-    if (aActive !== bActive) return aActive ? -1 : 1;
-    if (aActive) {
-      // Active: most recently started first.
-      return b.startDate.localeCompare(a.startDate);
+    const aStatus = competitionStatus(a);
+    const bStatus = competitionStatus(b);
+    if (aStatus !== bStatus) {
+      return STATUS_ORDER[aStatus] - STATUS_ORDER[bStatus];
     }
-    // Finished: most recently ended first.
-    return b.endDate.localeCompare(a.endDate);
+    switch (aStatus) {
+      case "active":
+        // Most recently started first.
+        return b.startDate.localeCompare(a.startDate);
+      case "future":
+        // Starting soonest first.
+        return a.startDate.localeCompare(b.startDate);
+      case "complete":
+        // Most recently ended first.
+        return b.endDate.localeCompare(a.endDate);
+    }
   });
 }
 
