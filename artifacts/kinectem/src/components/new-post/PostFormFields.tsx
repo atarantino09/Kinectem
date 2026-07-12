@@ -460,18 +460,16 @@ export function PostFormFields({
               <p className="mt-2 text-[12px] text-muted-foreground font-semibold">
                 Only competitions where this team has claimed its spot are
                 listed. Picking one adds the competition's branding to the
-                published recap.
+                published recap, and the competition may also feature this
+                game recap on their feed.
               </p>
-              <p className="mt-1 text-[12px] text-muted-foreground font-semibold">
-                Don't see yours?{" "}
-                <Link
-                  href="/competitions"
-                  className="text-primary hover:underline"
-                  data-testid="link-claim-competition-spot"
-                >
-                  Find the competition and claim your team's spot
-                </Link>{" "}
-                first, then pick it here.
+              <p
+                className="mt-1 text-[12px] text-muted-foreground font-semibold"
+                data-testid="text-claim-competition-hint"
+              >
+                Don't see yours? Search for the competition in the search bar
+                at the top and claim your team's spot first, then pick it
+                here.
               </p>
             </>
           ) : (
@@ -486,15 +484,11 @@ export function PostFormFields({
                   : (
                     <>
                       This team hasn't claimed a spot in any competition
-                      yet, so there's nothing to link this recap to.{" "}
-                      <Link
-                        href="/competitions"
-                        className="text-primary hover:underline"
-                        data-testid="link-claim-competition-spot"
-                      >
-                        Find your competition and claim your team's spot
-                      </Link>{" "}
-                      to add its branding to future recaps.
+                      yet, so there's nothing to link this recap to. Search
+                      for the competition in the search bar at the top and
+                      claim your team's spot to add its branding to future
+                      recaps — the competition may also feature your game
+                      recaps on their feed.
                     </>
                   )}
               </p>
