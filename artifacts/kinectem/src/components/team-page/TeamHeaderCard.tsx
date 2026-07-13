@@ -326,42 +326,45 @@ export function TeamHeaderCard({
             )}
           </div>
           <div className="flex-1 min-w-0 sm:pb-2">
-            <div className="flex items-start gap-3 flex-wrap">
-              <div className="flex-1 min-w-0">
-                <FitText
-                  as="h1"
-                  max={48}
-                  min={18}
-                  className="font-black tracking-tight"
-                >
-                  {team.name}
-                </FitText>
+            {/* Name gets its own full-width row so long team names use the
+                whole hero instead of getting squeezed (and truncated) next
+                to the Edit / tour buttons, which now sit on a row below. */}
+            <FitText
+              as="h1"
+              max={48}
+              min={18}
+              className="font-black tracking-tight"
+            >
+              {team.name}
+            </FitText>
+            {(isAdmin || onReplayTour) && (
+              <div className="flex items-center gap-2 flex-wrap mt-2">
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-3 font-bold rounded-full"
+                    onClick={onEdit}
+                    data-testid="btn-edit-team"
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    Edit
+                  </Button>
+                )}
+                {onReplayTour && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-3 font-bold rounded-full"
+                    onClick={onReplayTour}
+                    data-testid="btn-team-replay-tour"
+                  >
+                    <Compass className="w-3.5 h-3.5 mr-1.5" />
+                    Show me around
+                  </Button>
+                )}
               </div>
-              {isAdmin && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-3 font-bold rounded-full mt-2"
-                  onClick={onEdit}
-                  data-testid="btn-edit-team"
-                >
-                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                  Edit
-                </Button>
-              )}
-              {onReplayTour && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-3 font-bold rounded-full mt-2"
-                  onClick={onReplayTour}
-                  data-testid="btn-team-replay-tour"
-                >
-                  <Compass className="w-3.5 h-3.5 mr-1.5" />
-                  Show me around
-                </Button>
-              )}
-            </div>
+            )}
             {team.description && (
               <TeamDescription
                 description={team.description}
