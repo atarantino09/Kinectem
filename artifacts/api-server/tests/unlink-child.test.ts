@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
   db,
+  guardianLinks,
   organizations,
   rosterEntries,
   teamFollowers,
@@ -100,18 +101,44 @@ describe("Task #403 — DELETE /users/me/children/:childId", () => {
       );
     expect(followsBefore).toHaveLength(1);
 
+    // Task #755 — the LAST guardian can never be removed, so a sole
+    // guardian's unlink is refused with 409 and nothing changes.
+    const soleUnlink = await lisa.delete(
+      `/api/v1/users/me/children/${orphan.id}`,
+    );
+    expect(soleUnlink.status).toBe(409);
+    const [stillLinked] = await db
+      .select({ parentId: users.parentId })
+      .from(users)
+      .where(eq(users.id, orphan.id))
+      .limit(1);
+    expect(stillLinked?.parentId).toBe(lisaId);
+
+    // Add a second active guardian (Marcus) so Lisa's detach is allowed.
+    const marcusId = await findUserId("marcus@kinectem.demo");
+    await db.insert(guardianLinks).values({
+      childId: orphan.id,
+      guardianId: marcusId,
+      relationshipType: "parent",
+      isPrimary: false,
+      status: "active",
+      consentGrantedAt: new Date(),
+      consentMethod: "test_setup",
+    });
+
     // Unlink it.
     const unlinkRes = await lisa.delete(
       `/api/v1/users/me/children/${orphan.id}`,
     );
     expect(unlinkRes.status).toBe(204);
 
+    // The parentId mirror re-derives to the remaining guardian (Marcus).
     const [after] = await db
       .select({ parentId: users.parentId })
       .from(users)
       .where(eq(users.id, orphan.id))
       .limit(1);
-    expect(after?.parentId).toBeNull();
+    expect(after?.parentId).toBe(marcusId);
 
     const followsAfter = await db
       .select()

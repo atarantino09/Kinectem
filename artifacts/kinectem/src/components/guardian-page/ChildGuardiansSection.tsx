@@ -52,10 +52,10 @@ const REL_LABEL: Record<string, string> = {
 };
 
 // Task #755 — "Guardians" subsection on a child card. Lists every guardian
-// link for the child (active + pending email invites), lets the primary
-// guardian invite the other parent, remove a co-guardian, or hand over the
-// primary role. The server enforces all permissions; buttons here are only
-// shown where they can plausibly succeed.
+// link for the child (active + pending email invites), lets any active
+// guardian invite the other parent, and lets the primary guardian remove a
+// co-guardian or hand over the primary role. The server enforces all
+// permissions; buttons here are only shown where they can plausibly succeed.
 export function ChildGuardiansSection({ child, myUserId }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -157,7 +157,7 @@ export function ChildGuardiansSection({ child, myUserId }: Props) {
             Guardians
           </p>
         </div>
-        {iAmPrimary && (
+        {myLink != null && (
           <Button
             size="sm"
             variant="outline"

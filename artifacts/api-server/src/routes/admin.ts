@@ -584,6 +584,13 @@ router.patch(
       } else {
         // Clearing the parent: revoke ALL active links for this child,
         // then re-sync the mirror (→ null).
+        //
+        // DELIBERATE POLICY EXCEPTION to "the last guardian can never be
+        // removed": this platform-admin-only path is support/compliance
+        // tooling (fixing wrongly-linked accounts, COPPA data corrections)
+        // and is the ONLY code path allowed to leave a child with zero
+        // active guardians. It is audit-logged via logAdminAction below;
+        // every user-facing removal path enforces the last-guardian guard.
         await db
           .update(guardianLinks)
           .set({ status: "revoked", updatedAt: new Date() })

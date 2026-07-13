@@ -256,14 +256,15 @@ router.post(
       .limit(1);
     if (!child) return apiError(res, 404, "User not found");
 
-    // Only the child themselves, an existing PRIMARY guardian, or a
-    // platform admin may invite. Guardian/admin powers don't apply while
-    // masquerading (consistent with the other guardian-privileged routes).
+    // Only the child themselves, any ACTIVE guardian (spec: "a linked
+    // parent"), or a platform admin may invite. Guardian/admin powers don't
+    // apply while masquerading (consistent with the other guardian-
+    // privileged routes).
     const isSelf = me.id === childId;
     const allowed =
       isSelf ||
       (!req.isMasquerading &&
-        (isAdmin(me) || (await isPrimaryActiveGuardian(me.id, childId))));
+        (isAdmin(me) || (await isActiveGuardian(me.id, childId))));
     if (!allowed) return apiError(res, 403, "Not allowed");
 
     const email = String(req.body?.email ?? "").trim().toLowerCase();

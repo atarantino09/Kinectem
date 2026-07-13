@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, users, guardianLinks } from "@workspace/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   ensureActiveGuardianLink,
   getActiveChildIds,
@@ -183,8 +183,22 @@ router.delete(
       return apiError(res, 404, "Child not found");
     }
     // Task #755 — revoke MY link only; the parentId mirror re-derives to
-    // the remaining active guardian (or null when I was the last one).
-    await db.transaction(async (tx) => {
+    // the remaining active guardian. Spec: the LAST guardian can never be
+    // removed — the checks run inside the same child-scoped advisory-lock
+    // tx the guardian-links routes use, so a concurrent removal can't
+    // race two "not last" reads into an orphaned child.
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${childId}))`);
+      const [{ n }] = (await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(guardianLinks)
+        .where(
+          and(
+            eq(guardianLinks.childId, childId),
+            eq(guardianLinks.status, "active"),
+          ),
+        )) as [{ n: number }];
+      if (n <= 1) return { ok: false as const };
       await tx
         .update(guardianLinks)
         .set({ status: "revoked", isPrimary: false, updatedAt: new Date() })
@@ -196,7 +210,15 @@ router.delete(
           ),
         );
       await syncParentIdMirror(childId, tx);
+      return { ok: true as const };
     });
+    if (!result.ok) {
+      return apiError(
+        res,
+        409,
+        "A child must always have at least one guardian. Invite the other parent first, or contact support to remove this account.",
+      );
+    }
     await cleanupTeamFollowsForUnlinkedChild(me.id, childId);
     res.status(204).send();
   }),
