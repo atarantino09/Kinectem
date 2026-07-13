@@ -221,7 +221,10 @@ export function OrganizerSidebar({ children }: { children: React.ReactNode }) {
 
   const isCurrentHub = (h: SidebarOrganizerRow) =>
     location === `/competitions/o/${h.slug}`;
+  // Names link to the PUBLIC competition page; the console is reached via
+  // its "Edit competition" button. Highlight the row on either page.
   const isCurrentComp = (c: SidebarCompetitionRow) =>
+    location === `/competitions/c/${c.slug}` ||
     location === `/competitions/${c.id}`;
 
   return (
@@ -309,7 +312,7 @@ export function OrganizerSidebar({ children }: { children: React.ReactNode }) {
                     </p>
                   ) : (
                     comps.map((c) => (
-                      <Link key={c.id} href={`/competitions/${c.id}`}>
+                      <Link key={c.id} href={`/competitions/c/${c.slug}`}>
                         <span
                           className={`flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-sm cursor-pointer ${
                             isCurrentComp(c)
@@ -366,7 +369,7 @@ export function OrganizerSidebar({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
               {comps.map((c) => (
-                <Link key={c.id} href={`/competitions/${c.id}`}>
+                <Link key={c.id} href={`/competitions/c/${c.slug}`}>
                   <span
                     className={`flex h-8 w-8 items-center justify-center rounded-lg cursor-pointer ${
                       isCurrentComp(c) ? "bg-accent" : "hover:bg-accent/60"

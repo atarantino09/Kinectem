@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -763,9 +764,14 @@ function CompetitionModCard({
                   </Button>
                 </div>
               ) : (
-                <p className="font-bold truncate" data-testid={`text-mod-comp-name-${c.id}`}>
-                  {c.name}
-                </p>
+                <Link href={`/competitions/c/${c.slug}`}>
+                  <p
+                    className="font-bold truncate cursor-pointer hover:underline"
+                    data-testid={`text-mod-comp-name-${c.id}`}
+                  >
+                    {c.name}
+                  </p>
+                </Link>
               )}
               <p className="text-xs text-muted-foreground truncate">
                 /c/{c.slug} · {c.startDate} → {c.endDate}

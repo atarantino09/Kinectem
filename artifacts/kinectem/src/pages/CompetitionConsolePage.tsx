@@ -1121,9 +1121,14 @@ export default function CompetitionConsolePage() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight truncate">
-                {row.name}
-              </h1>
+              <Link href={`/competitions/c/${row.slug}`}>
+                <h1
+                  className="text-2xl font-semibold tracking-tight truncate cursor-pointer hover:underline"
+                  data-testid="link-console-competition-name"
+                >
+                  {row.name}
+                </h1>
+              </Link>
               <Badge variant="outline" className="capitalize shrink-0">
                 {row.type}
               </Badge>
