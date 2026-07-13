@@ -585,6 +585,22 @@ export function PostFormFields({
                 at the top and claim your team's spot first, then pick it
                 here.
               </p>
+              <p
+                className="mt-1 text-[12px] text-muted-foreground font-semibold"
+                data-testid="text-organizer-link-hint"
+              >
+                Still don't see your event? Send your competition's organizer
+                this link to have them create their competition page:{" "}
+                <a
+                  href="https://www.kinectem.com/for-organizers.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-2 break-all"
+                  data-testid="link-for-organizers"
+                >
+                  https://www.kinectem.com/for-organizers.html
+                </a>
+              </p>
             </>
           ) : (
             <div
