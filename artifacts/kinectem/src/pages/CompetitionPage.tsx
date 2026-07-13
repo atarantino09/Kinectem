@@ -13,7 +13,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, Pencil, Star } from "lucide-react";
+import { ChevronDown, EyeOff, Pencil, Star } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
@@ -31,6 +41,8 @@ type Participant = {
   gender: string | null;
   claimed: boolean;
   teamId: string | null;
+  // Operators only — public viewers never receive hidden slots.
+  hidden?: boolean;
 };
 
 type Match = {
@@ -149,6 +161,40 @@ export default function CompetitionPage() {
 
   // Follow / unfollow — quick-access only (does NOT change the home feed).
   const qcTop = useQueryClient();
+  const { toast } = useToast();
+  // Hide / unhide a team slot from the public Teams list (operators only).
+  const [pendingHide, setPendingHide] = useState<Participant | null>(null);
+  const hideMutation = useMutation({
+    mutationFn: ({
+      participantId,
+      hide,
+      competitionId,
+    }: {
+      participantId: string;
+      hide: boolean;
+      competitionId: string;
+    }) =>
+      customFetch<{ ok: true; hidden: boolean }>(
+        `/api/v1/competitions/${competitionId}/participants/${participantId}/hide`,
+        { method: hide ? "POST" : "DELETE" },
+      ),
+    onSuccess: (r) => {
+      qcTop.invalidateQueries({ queryKey: ["competition", slug] });
+      toast({
+        title: r.hidden ? "Team hidden" : "Team visible again",
+        description: r.hidden
+          ? "It no longer appears in the public Teams list. Only competition admins can see it."
+          : "It's back in the public Teams list.",
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't update that team",
+        description:
+          err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      }),
+  });
   const followMutation = useMutation({
     mutationFn: (follow: boolean) =>
       customFetch<{ ok: true; isFollowing: boolean }>(
@@ -572,7 +618,9 @@ export default function CompetitionPage() {
                   {participants.map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                      className={`flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 ${
+                        p.hidden ? "opacity-60 bg-muted/40" : ""
+                      }`}
                       data-testid={`row-participant-${p.id}`}
                     >
                       <div className="min-w-0">
@@ -580,29 +628,72 @@ export default function CompetitionPage() {
                         <p className="text-xs text-muted-foreground break-words">
                           {groupLabel(p.division, p.bracket)}
                         </p>
-                      </div>
-                      {p.claimed ? (
-                        <Badge variant="secondary" className="shrink-0">
-                          Taken
-                        </Badge>
-                      ) : (
-                        <Link
-                          href={
-                            me
-                              ? `/c/${encodeURIComponent(slug)}/signup?participant=${p.id}`
-                              : `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup?participant=${p.id}`)}`
-                          }
-                        >
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="font-bold shrink-0"
-                            data-testid={`btn-claim-${p.id}`}
+                        {p.hidden ? (
+                          <p
+                            className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+                            data-testid={`text-hidden-participant-${p.id}`}
                           >
-                            Claim
-                          </Button>
-                        </Link>
-                      )}
+                            <EyeOff className="h-3 w-3 shrink-0" />
+                            Hidden — only competition admins can see this team
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {c.canManage ? (
+                          p.hidden ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="font-bold"
+                              disabled={hideMutation.isPending}
+                              onClick={() =>
+                                hideMutation.mutate({
+                                  participantId: p.id,
+                                  hide: false,
+                                  competitionId: c.id,
+                                })
+                              }
+                              data-testid={`btn-unhide-participant-${p.id}`}
+                            >
+                              Unhide
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="font-bold text-muted-foreground"
+                              disabled={hideMutation.isPending}
+                              onClick={() => setPendingHide(p)}
+                              data-testid={`btn-hide-participant-${p.id}`}
+                            >
+                              <EyeOff className="h-3.5 w-3.5 mr-1" />
+                              Hide
+                            </Button>
+                          )
+                        ) : null}
+                        {p.claimed ? (
+                          <Badge variant="secondary" className="shrink-0">
+                            Taken
+                          </Badge>
+                        ) : p.hidden ? null : (
+                          <Link
+                            href={
+                              me
+                                ? `/c/${encodeURIComponent(slug)}/signup?participant=${p.id}`
+                                : `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup?participant=${p.id}`)}`
+                            }
+                          >
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="font-bold shrink-0"
+                              data-testid={`btn-claim-${p.id}`}
+                            >
+                              Claim
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {participants.length === 0 ? (
@@ -682,6 +773,45 @@ export default function CompetitionPage() {
           Powered by <span className="font-bold">Kinectem</span>
         </p>
       </div>
+
+      {/* Hide-team confirmation (operators only). */}
+      <AlertDialog
+        open={pendingHide != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingHide(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hide this team?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{pendingHide?.name}" will no longer appear in the public Teams
+              list, and it can't be claimed while hidden. Its scheduled games
+              stay on the schedule. You can unhide it anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="btn-cancel-hide-participant">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="btn-confirm-hide-participant"
+              onClick={() => {
+                if (pendingHide) {
+                  hideMutation.mutate({
+                    participantId: pendingHide.id,
+                    hide: true,
+                    competitionId: c.id,
+                  });
+                }
+                setPendingHide(null);
+              }}
+            >
+              Hide team
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

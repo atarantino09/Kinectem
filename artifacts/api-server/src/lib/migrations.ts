@@ -1555,6 +1555,18 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       );
     `,
   },
+  {
+    // Competition-admin hide for participant slots — hidden slots are
+    // omitted from the public Teams list on the competition page; operators
+    // still see them (greyed) and can unhide. Schedule is unaffected.
+    name: "2026-07-13-tournament-participants-hidden",
+    sql: `
+      ALTER TABLE tournament_participants
+        ADD COLUMN IF NOT EXISTS hidden_at timestamp;
+      ALTER TABLE tournament_participants
+        ADD COLUMN IF NOT EXISTS hidden_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

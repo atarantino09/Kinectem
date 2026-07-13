@@ -1620,6 +1620,11 @@ export const tournamentParticipants = pgTable("tournament_participants", {
   pendingTeamId: uuid("pending_team_id").references(() => teams.id, { onDelete: "set null" }),
   pendingClaimedByUserId: uuid("pending_claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
   pendingClaimedAt: timestamp("pending_claimed_at"),
+  // Competition-admin hide: hidden slots are omitted from the public Teams
+  // list on the competition page; operators still see them (greyed) and can
+  // unhide. Schedule/matches are NOT affected — hiding is list-scoped only.
+  hiddenAt: timestamp("hidden_at"),
+  hiddenByUserId: uuid("hidden_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   byTournament: index("tournament_participants_tournament_id_idx").on(t.tournamentId),

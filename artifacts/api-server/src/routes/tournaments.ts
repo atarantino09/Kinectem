@@ -742,12 +742,23 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         ).length > 0
       : false;
 
-    const partRows = await db
+    // Operator check up front — it decides whether hidden participant slots
+    // are included (greyed for operators) or omitted entirely (public).
+    const canManage = req.sessionUser
+      ? await canOperateCompetition(req.sessionUser, tournament)
+      : false;
+
+    const allPartRows = await db
       .select()
       .from(tournamentParticipants)
       .where(eq(tournamentParticipants.tournamentId, tournament.id))
       .orderBy(tournamentParticipants.name);
-    const partById = new Map(partRows.map((p) => [p.id, p]));
+    // Hidden slots stay in the schedule (matches resolve names through the
+    // full map) — hiding only removes them from the public Teams list.
+    const partById = new Map(allPartRows.map((p) => [p.id, p]));
+    const partRows = canManage
+      ? allPartRows
+      : allPartRows.filter((p) => p.hiddenAt == null);
 
     const matchRows = await db
       .select()
@@ -804,9 +815,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       isFollowing,
       // True only for the competition operator (owner/creator or platform
       // admin) — drives the "Edit competition" button on the public page.
-      canManage: req.sessionUser
-        ? await canOperateCompetition(req.sessionUser, tournament)
-        : false,
+      canManage,
       // Parent-company hub (null when the competition is standalone).
       organizer: organizerRow ?? null,
     };
@@ -840,6 +849,8 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         gender: p.gender,
         claimed: p.teamId != null,
         teamId: p.teamId,
+        // Operators only — public viewers never receive hidden slots at all.
+        ...(canManage && p.hiddenAt != null ? { hidden: true } : {}),
       })),
       matches: matchRows
         .map((m) => {
@@ -1304,6 +1315,10 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
       )
       .limit(1);
     if (!participant) return apiError(res, 404, "Team slot not found");
+    // Operator-hidden slots are invisible to the public list, so a claim
+    // against one (stale link / direct API call) reads as not found.
+    if (participant.hiddenAt != null)
+      return apiError(res, 404, "Team slot not found");
     if (participant.teamId) {
       return apiError(res, 409, "That team slot has already been claimed.", {
         code: "ALREADY_CLAIMED",
@@ -2079,6 +2094,75 @@ router.delete(
           eq(teamHiddenCompetitionGames.competitionGameId, matchId),
         ),
       );
+    res.json({ ok: true, hidden: false });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Hide / unhide a participant slot from the competition's public Teams list.
+// Competition operators (owner, competition/hub admins, platform admin) only.
+// Hidden slots are omitted for public viewers but stay in the schedule and
+// remain visible (greyed) to operators. Both operations are idempotent.
+// ---------------------------------------------------------------------------
+
+router.post(
+  "/competitions/:competitionId/participants/:participantId/hide",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const competitionId = String(req.params.competitionId);
+    const participantId = String(req.params.participantId);
+    const [tournament] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, competitionId))
+      .limit(1);
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    if (!(await canOperateCompetition(me, tournament)))
+      return apiError(res, 403, "Only competition admins can hide teams");
+    const [updated] = await db
+      .update(tournamentParticipants)
+      .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+      .where(
+        and(
+          eq(tournamentParticipants.id, participantId),
+          eq(tournamentParticipants.tournamentId, tournament.id),
+        ),
+      )
+      .returning({ id: tournamentParticipants.id });
+    if (!updated)
+      return apiError(res, 404, "Team not found in this competition");
+    res.json({ ok: true, hidden: true });
+  }),
+);
+
+router.delete(
+  "/competitions/:competitionId/participants/:participantId/hide",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const competitionId = String(req.params.competitionId);
+    const participantId = String(req.params.participantId);
+    const [tournament] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, competitionId))
+      .limit(1);
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    if (!(await canOperateCompetition(me, tournament)))
+      return apiError(res, 403, "Only competition admins can unhide teams");
+    const [updated] = await db
+      .update(tournamentParticipants)
+      .set({ hiddenAt: null, hiddenByUserId: null })
+      .where(
+        and(
+          eq(tournamentParticipants.id, participantId),
+          eq(tournamentParticipants.tournamentId, tournament.id),
+        ),
+      )
+      .returning({ id: tournamentParticipants.id });
+    if (!updated)
+      return apiError(res, 404, "Team not found in this competition");
     res.json({ ok: true, hidden: false });
   }),
 );
