@@ -16,3 +16,6 @@ description: guardian_links is the parent↔child source of truth; users.parentI
 - The live-pair partial unique index (child, guardian, status<>revoked) means invite claim and accept must be idempotent: claim only the oldest pending row per child + swallow 23505; accept revokes any other live pair link inside the advisory-locked tx before activating.
 - Guardian-aware shim `patchParentIdForViewer` exists because locked `filterOutMinors` only honors the single mirror — non-primary guardians would otherwise lose sight of their child in list/search surfaces.
 - Test fixtures that insert `parent_id` directly get links auto-created by the trigger (test DB schema is pg_dumped from dev, so the trigger rides along).
+- Invite model is deliberately TOKEN-LESS (diverges from the original plan's "hashed invite token"): accepting is session-authenticated, and an unclaimed pending invite is claimed the first time a signed-in user with the invited (login-verified) email lists their children.
+  **Why:** the locked OpenAPI spec has no token param on accept/decline, and email ownership is already proven by login — a mailed token would add a second, weaker proof plus expiry/rotation surface.
+  **How to apply:** don't add invite tokens to guardian_links; keep invite responses generic (no account-existence probe); any future token would require a spec change first.
