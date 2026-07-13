@@ -15,11 +15,17 @@ import {
   tournamentParticipants,
   articles,
   teams,
+  organizerAdmins,
 } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
+import {
+  canOperateCompetition,
+  canOperateOrganizer,
+  isOrganizerAdmin,
+} from "../lib/competition-permissions";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAuth } from "../lib/auth";
 import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
@@ -49,14 +55,8 @@ function slugify(name: string): string {
   return base ? `${base}-${suffix}` : suffix;
 }
 
-type SessionUserLike = { id: string; role: string };
-
-function canOperateOrganizer(
-  me: SessionUserLike,
-  organizer: { ownerUserId: string },
-): boolean {
-  return me.role === "admin" || organizer.ownerUserId === me.id;
-}
+// Task #745 — operator scope widened to owner OR hub admin OR platform
+// admin; now async (DB-backed) and shared. See ../lib/competition-permissions.ts.
 
 // Validators — mirror tournaments.ts branding rules.
 const BrandColor = z
@@ -147,10 +147,22 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    // Task #745 — membership-aware: hubs the user owns OR administers.
+    // Each row carries accessRole so the UI can badge admin-granted hubs
+    // and hide owner-only controls.
+    const myAdminHubIds = db
+      .select({ id: organizerAdmins.organizerId })
+      .from(organizerAdmins)
+      .where(eq(organizerAdmins.userId, me.id));
     const rows = await db
       .select()
       .from(competitionOrganizers)
-      .where(eq(competitionOrganizers.ownerUserId, me.id))
+      .where(
+        or(
+          eq(competitionOrganizers.ownerUserId, me.id),
+          inArray(competitionOrganizers.id, myAdminHubIds),
+        ),
+      )
       .orderBy(desc(competitionOrganizers.createdAt));
     const counts = rows.length
       ? await db
@@ -172,6 +184,7 @@ router.get(
       data: rows.map((o) => ({
         ...organizerToJson(o),
         competitionCount: countById.get(o.id) ?? 0,
+        accessRole: o.ownerUserId === me.id ? "owner" : "admin",
       })),
     });
   }),
@@ -220,8 +233,8 @@ router.patch(
       .where(eq(competitionOrganizers.id, req.params.id))
       .limit(1);
     if (!organizer) return apiError(res, 404, "Organizer not found");
-    if (!canOperateOrganizer(me, organizer)) {
-      return apiError(res, 403, "Only the organizer owner can edit it");
+    if (!(await canOperateOrganizer(me, organizer))) {
+      return apiError(res, 403, "Only a hub owner or admin can edit it");
     }
 
     const parsed = UpdateOrganizerBody.safeParse(req.body);
@@ -286,8 +299,8 @@ router.post(
       .where(eq(competitionOrganizers.id, req.params.id))
       .limit(1);
     if (!organizer) return apiError(res, 404, "Organizer not found");
-    if (!canOperateOrganizer(me, organizer)) {
-      return apiError(res, 403, "Only the organizer owner can manage its competitions");
+    if (!(await canOperateOrganizer(me, organizer))) {
+      return apiError(res, 403, "Only a hub owner or admin can manage its competitions");
     }
     const [competition] = await db
       .select()
@@ -295,9 +308,9 @@ router.post(
       .where(eq(tournaments.id, parsed.data.competitionId))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
-    const compOwner = competition.ownerUserId ?? competition.createdById;
-    if (me.role !== "admin" && compOwner !== me.id) {
-      return apiError(res, 403, "You can only attach competitions you own");
+    // Task #745 — admins (not just owners) of the competition may attach it.
+    if (!(await canOperateCompetition(me, competition))) {
+      return apiError(res, 403, "You can only attach competitions you manage");
     }
     if (
       !parsed.data.attach &&
@@ -408,8 +421,21 @@ router.get(
       : [];
     const compById = new Map(comps.map((c) => [c.id, c]));
 
+    // Task #745 — viewer manage/owner flags for the hub page: admins get the
+    // manage surface, only the owner sees owner-only controls (admin removal).
+    const viewer = req.sessionUser;
+    const viewerIsOwner =
+      !!viewer && (viewer.role === "admin" || organizer.ownerUserId === viewer.id);
+    const viewerCanManage =
+      viewerIsOwner || (!!viewer && (await isOrganizerAdmin(viewer.id, organizer.id)));
+
     res.json({
-      organizer: { ...organizerToJson(organizer), isFollowing },
+      organizer: {
+        ...organizerToJson(organizer),
+        isFollowing,
+        viewerCanManage,
+        viewerIsOwner,
+      },
       competitions: comps.map((c) => ({
         id: c.id,
         slug: c.slug,

@@ -267,6 +267,47 @@ ${noteHtml}
   });
 }
 
+// Task #745 — accept-landing URL for a hub/competition admin invite token.
+export function buildCompetitionAdminInviteUrl(token: string): string {
+  return `${appBaseUrl()}/app/admin-invites/${token}`;
+}
+
+// Task #745 — Sent when a hub/competition owner or admin invites someone (by
+// email) to become an admin of their hub or competition. The link lands on
+// the in-app accept page; recipients sign in or sign up first if needed.
+export async function sendCompetitionAdminInviteEmail(
+  to: string,
+  args: {
+    targetName: string;
+    targetKind: "hub" | "competition";
+    inviterDisplayName: string;
+    token: string;
+  },
+): Promise<void> {
+  const { targetName, targetKind, inviterDisplayName, token } = args;
+  const url = buildCompetitionAdminInviteUrl(token);
+  const kindLabel =
+    targetKind === "hub" ? "competition hub" : "competition";
+  // S5 — escape user-controlled values for the HTML body.
+  const nameHtml = escapeHtml(targetName);
+  const inviterHtml = escapeHtml(inviterDisplayName);
+  await sendEmail({
+    to,
+    kind: "competition_admin_invite",
+    subject: `${inviterDisplayName} invited you to help run ${targetName} on Kinectem`,
+    text: `${inviterDisplayName} invited you to be an admin of the ${kindLabel} ${targetName} on Kinectem.
+
+Open this link to accept:
+${url}
+
+If you don't have a Kinectem account yet, you can sign up from the same link.`,
+    html: `<p><strong>${inviterHtml}</strong> invited you to be an admin of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
+<p>Open this link to accept:</p>
+<p><a href="${url}">${url}</a></p>
+<p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
+  });
+}
+
 // Task #634 — accept-landing URL for a roster invite token. The main web app
 // is served under the `/app/` base path (mirrors the in-app share link
 // `${origin}${import.meta.env.BASE_URL}invites/<token>`), so the link must

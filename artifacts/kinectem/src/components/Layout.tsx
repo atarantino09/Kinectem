@@ -97,7 +97,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const isNavActive = (path: string) => {
-    // Nav hrefs may carry a query string (e.g. /competitions?hubs=1) but
+    // Nav hrefs may carry a query string (e.g. /competitions?organizer=x) but
     // wouter's location never includes one — match on the pathname only.
     const clean = path.split("?")[0];
     if (clean === "/") return location === "/";
@@ -140,7 +140,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const drawerNavItems: NavItem[] = [
     { href: "/", label: "Feed", icon: Home },
     { href: "/organizations", label: "Orgs", icon: Building2 },
-    { href: "/competitions?hubs=1", label: "Competitions", icon: Trophy, testId: "link-competitions" },
+    { href: "/competitions", label: "Competitions", icon: Trophy, testId: "link-competitions" },
     { href: "/messages", label: "Inbox", icon: Mail, testId: "link-messages", badge: unreadCount },
     { href: "/announcements", label: "Announcements", icon: Megaphone, testId: "link-announcements", badge: announcementsUnread },
     ...navItems.slice(2),
@@ -395,7 +395,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <FileText className="w-4 h-4 mr-2" /> My Drafts
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={() => setLocation("/competitions?hubs=1")}
+                  onSelect={() => setLocation("/competitions")}
                   data-testid="menu-organizer-hubs"
                 >
                   <Trophy className="w-4 h-4 mr-2" /> Competitions

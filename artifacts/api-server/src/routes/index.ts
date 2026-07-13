@@ -33,6 +33,7 @@ import subscriptionsRouter from "./subscriptions";
 import announcementsRouter from "./announcements";
 import tournamentsRouter from "./tournaments";
 import organizersRouter from "./organizers";
+import competitionAdminsRouter from "./competition-admins";
 import broadcastsRouter from "./broadcasts";
 import dailyAdminDigestRouter from "./daily-admin-digest";
 
@@ -78,6 +79,7 @@ router.use(subscriptionsRouter);
 router.use(announcementsRouter);
 router.use(tournamentsRouter);
 router.use(organizersRouter);
+router.use(competitionAdminsRouter);
 router.use(broadcastsRouter);
 router.use(dailyAdminDigestRouter);
 

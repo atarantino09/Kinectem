@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
+import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
+import { OrganizerSidebar } from "@/components/OrganizerSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +27,7 @@ import {
   Star,
   Copy,
   Megaphone,
+  Building2,
 } from "lucide-react";
 
 // Competitions §9b — operator console for one competition: branding panel,
@@ -39,6 +42,7 @@ interface CompetitionRow {
   startDate: string;
   endDate: string;
   location: string | null;
+  organizerId: string | null;
   autoApproveClaims: boolean;
   logoUrl: string | null;
   brandColor: string | null;
@@ -46,6 +50,7 @@ interface CompetitionRow {
   participantCount: number;
   claimedCount: number;
   pendingClaimCount: number;
+  accessRole?: "owner" | "admin";
 }
 
 interface CompetitionDetail {
@@ -926,6 +931,129 @@ function SchedulePanel({
   );
 }
 
+// Task #745 — attach/detach this competition to one of the operator's hubs.
+// Re-homed here from the old "My competitions" cards on /app/competitions.
+// POST /organizers/:id/competitions { competitionId, attach } — caller must
+// manage BOTH sides (server enforces).
+interface HubRow {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+function HubPanel({
+  competitionId,
+  organizerId,
+}: {
+  competitionId: string;
+  organizerId: string | null;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const organizersQ = useQuery<{ data: HubRow[] }>({
+    queryKey: ["my", "organizers"],
+    queryFn: () =>
+      customFetch<{ data: HubRow[] }>(`/api/v1/my/organizers`, {
+        method: "GET",
+      }),
+  });
+  const hubs = organizersQ.data?.data ?? [];
+  const currentHub = hubs.find((h) => h.id === organizerId) ?? null;
+
+  const attachMut = useMutation({
+    mutationFn: ({ hubId, attach }: { hubId: string; attach: boolean }) =>
+      customFetch<{ ok: boolean }>(
+        `/api/v1/organizers/${encodeURIComponent(hubId)}/competitions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competitionId, attach }),
+        },
+      ),
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
+      toast({
+        title: vars.attach ? "Attached to hub" : "Detached from hub",
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't update the hub link",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
+
+  // Nothing to show if the operator has no hubs and this competition is
+  // standalone — the sidebar's "New hub" flow covers hub creation.
+  if (hubs.length === 0 && !organizerId) return null;
+
+  return (
+    <Card data-testid="panel-hub">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Building2 className="w-4 h-4" />
+          Competition hub
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {currentHub ? (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm">
+              Part of{" "}
+              <Link href={`/competitions/o/${currentHub.slug}`}>
+                <span className="font-bold hover:underline cursor-pointer">
+                  {currentHub.name}
+                </span>
+              </Link>
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="font-bold rounded-full"
+              disabled={attachMut.isPending}
+              onClick={() =>
+                attachMut.mutate({ hubId: currentHub.id, attach: false })
+              }
+              data-testid="btn-detach-hub"
+            >
+              Detach from hub
+            </Button>
+          </div>
+        ) : organizerId ? (
+          <p className="text-sm text-muted-foreground">
+            This competition is attached to a hub managed by someone else.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Attach this competition to one of your hubs so it shows up on the
+              hub's public page.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {hubs.map((h) => (
+                <Button
+                  key={h.id}
+                  size="sm"
+                  variant="outline"
+                  className="font-bold rounded-full"
+                  disabled={attachMut.isPending}
+                  onClick={() => attachMut.mutate({ hubId: h.id, attach: true })}
+                  data-testid={`btn-attach-hub-${h.id}`}
+                >
+                  <Building2 className="w-3.5 h-3.5 mr-1.5" />
+                  {h.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CompetitionConsolePage() {
   const [, params] = useRoute("/competitions/:id");
   const competitionId = params?.id ?? "";
@@ -982,7 +1110,8 @@ export default function CompetitionConsolePage() {
   const detail = detailQ.data?.competition;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <OrganizerSidebar>
+      <div className="max-w-3xl mx-auto space-y-6">
       <div className="space-y-2">
         <Link href="/competitions">
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline cursor-pointer">
@@ -1059,6 +1188,11 @@ export default function CompetitionConsolePage() {
       ) : (
         <Skeleton className="h-48 rounded-xl" />
       )}
-    </div>
+      <HubPanel competitionId={row.id} organizerId={row.organizerId} />
+      {/* Task #745 — per-competition admin management (any admin can add;
+          only the owner can remove). */}
+      <CompetitionAdminsPanel kind="competition" targetId={row.id} />
+      </div>
+    </OrganizerSidebar>
   );
 }

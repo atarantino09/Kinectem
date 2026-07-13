@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
+import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
+import { OrganizerSidebar } from "@/components/OrganizerSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +49,10 @@ type OrganizerMeta = {
   bannerUrl: string | null;
   websiteUrl: string | null;
   isFollowing?: boolean;
+  // Task #745 — server-derived management flags: admins get the manage
+  // surface, only the owner sees owner-only controls (admin removal).
+  viewerCanManage?: boolean;
+  viewerIsOwner?: boolean;
 };
 
 type OrganizerCompetition = {
@@ -87,8 +93,6 @@ type OrganizerResponse = {
   competitions: OrganizerCompetition[];
   featuredRecaps: OrganizerFeaturedRecap[];
 };
-
-type MyOrganizerRow = OrganizerMeta & { competitionCount: number };
 
 function contrastText(hex: string): string {
   const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
@@ -398,17 +402,6 @@ export default function OrganizerPage() {
     retry: false,
   });
 
-  // Ownership check for the edit panel — server re-enforces on PATCH.
-  const mineQ = useQuery<{ data: MyOrganizerRow[] }>({
-    queryKey: ["my", "organizers"],
-    queryFn: () =>
-      customFetch<{ data: MyOrganizerRow[] }>(`/api/v1/my/organizers`, {
-        method: "GET",
-      }),
-    enabled: !!me,
-  });
-  const isOwner = !!mineQ.data?.data.some((o) => o.slug === slug);
-
   if (q.isLoading) {
     return (
       <div className="min-h-screen max-w-4xl mx-auto p-6 space-y-4">
@@ -441,6 +434,9 @@ export default function OrganizerPage() {
   }
 
   const { organizer: o, competitions, featuredRecaps } = q.data;
+  // Task #745 — manage rights come from the server: owner OR hub admin.
+  // Owner-only distinctions (admin removal) live inside CompetitionAdminsPanel.
+  const canManage = !!o.viewerCanManage;
   const brand = o.brandColor ?? DEFAULT_BRAND;
   const heroText = contrastText(brand);
   const heroBackground = o.secondaryColor
@@ -451,7 +447,7 @@ export default function OrganizerPage() {
   const active = competitions.filter((c) => c.isActive);
   const past = competitions.filter((c) => c.isEnded);
 
-  return (
+  const page = (
     <div className="min-h-screen">
       {/* Branded hero — same visual language as the competition page */}
       <div
@@ -546,7 +542,7 @@ export default function OrganizerPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-8">
-        {isOwner && inApp ? (
+        {canManage && inApp ? (
           <Collapsible open={editOpen} onOpenChange={setEditOpen}>
             <div className="flex items-center gap-2 flex-wrap">
               <CollapsibleTrigger asChild>
@@ -573,6 +569,12 @@ export default function OrganizerPage() {
               <EditHubPanel organizer={o} />
             </CollapsibleContent>
           </Collapsible>
+        ) : null}
+
+        {canManage && inApp ? (
+          // Task #745 — hub admin management. Hub admins get rights over all
+          // of the hub's competitions, including ones attached later.
+          <CompetitionAdminsPanel kind="hub" targetId={o.id} />
         ) : null}
 
         {featuredRecaps.length > 0 && (
@@ -654,4 +656,8 @@ export default function OrganizerPage() {
       </div>
     </div>
   );
+
+  // Task #745 — the organizer sidebar only makes sense inside the app shell;
+  // the public fullscreen hub page (/organizers/:slug) stays sidebar-free.
+  return inApp ? <OrganizerSidebar>{page}</OrganizerSidebar> : page;
 }

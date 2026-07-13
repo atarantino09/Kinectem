@@ -1494,6 +1494,52 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       ALTER TABLE organizations ADD COLUMN IF NOT EXISTS brand_secondary_color text;
     `,
   },
+  {
+    // Task #745 — hub/competition admin memberships + email-invite table.
+    // organizer_admins grants hub-wide rights (all attached competitions,
+    // incl. later-attached); competition_admins scopes to one competition.
+    // Invites hash their token at rest (mirrors organization_invites).
+    name: "2026-07-13-task-745-competition-admins",
+    sql: `
+      CREATE TABLE IF NOT EXISTS organizer_admins (
+        organizer_id uuid NOT NULL REFERENCES competition_organizers(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        granted_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at timestamp DEFAULT now() NOT NULL,
+        PRIMARY KEY (organizer_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS organizer_admins_user_id_idx
+        ON organizer_admins (user_id);
+      CREATE TABLE IF NOT EXISTS competition_admins (
+        competition_id uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        granted_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at timestamp DEFAULT now() NOT NULL,
+        PRIMARY KEY (competition_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS competition_admins_user_id_idx
+        ON competition_admins (user_id);
+      CREATE TABLE IF NOT EXISTS competition_admin_invites (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        organizer_id uuid REFERENCES competition_organizers(id) ON DELETE CASCADE,
+        competition_id uuid REFERENCES tournaments(id) ON DELETE CASCADE,
+        invited_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        invited_email text NOT NULL,
+        token_hash text NOT NULL UNIQUE,
+        status invite_status DEFAULT 'pending' NOT NULL,
+        resolved_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        withdrawn_at timestamp,
+        accepted_at timestamp,
+        expires_at timestamp,
+        created_at timestamp DEFAULT now() NOT NULL,
+        updated_at timestamp DEFAULT now() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS competition_admin_invites_organizer_id_idx
+        ON competition_admin_invites (organizer_id);
+      CREATE INDEX IF NOT EXISTS competition_admin_invites_competition_id_idx
+        ON competition_admin_invites (competition_id);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

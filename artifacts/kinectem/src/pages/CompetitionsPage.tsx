@@ -1,21 +1,22 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
+import { OrganizerSidebar } from "@/components/OrganizerSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, CalendarDays, MapPin, ExternalLink, Settings2, Upload, Building2 } from "lucide-react";
+import { Trophy, Upload } from "lucide-react";
 
-// Competitions §4 — self-serve competition creation + "my competitions" list.
-// Any signed-in user can create a tournament or league they operate; the
-// per-competition console lives at /competitions/:id. customFetch — these
-// routes are outside the locked openapi.yaml.
+// Competitions §4 — self-serve competition creation. Any signed-in user can
+// create a tournament or league they operate; the per-competition console
+// lives at /competitions/:id. The old "Competition hub" card and "My
+// competitions" list moved into the collapsible OrganizerSidebar (Task #745).
+// customFetch — these routes are outside the locked openapi.yaml.
 
 interface CompetitionRow {
   id: string;
@@ -45,15 +46,6 @@ interface OrganizerRow {
   bannerUrl: string | null;
   websiteUrl: string | null;
   competitionCount: number;
-}
-
-function fmtDate(d: string): string {
-  const [y, m, day] = d.split("-").map(Number);
-  return new Date(y, (m ?? 1) - 1, day ?? 1).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 // Competitions §9c — 3-step self-serve create wizard:
@@ -566,174 +558,7 @@ function CreateCompetitionCard({
   );
 }
 
-// Task #723 — organizer hub section: list my hubs + create a new one.
-// A hub is the "parent company" that groups competitions under one brand.
-function OrganizerHubCard({ organizers }: { organizers: OrganizerRow[] }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [, navigate] = useLocation();
-  const [formOpen, setFormOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-
-  const create = useMutation({
-    mutationFn: () =>
-      customFetch<OrganizerRow>(`/api/v1/organizers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-        }),
-      }),
-    onSuccess: (row) => {
-      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
-      toast({ title: "Competition hub created" });
-      navigate(`/competitions/o/${row.slug}`);
-    },
-    onError: (err) =>
-      toast({
-        title: "Couldn't create the hub",
-        description:
-          err instanceof Error ? err.message : "Check the details and try again.",
-        variant: "destructive",
-      }),
-  });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Building2 className="w-4 h-4" />
-          Competition hub
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          A home base for your company — group all your competitions under one
-          brand with a shareable public page.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {organizers.map((o) => (
-          <div
-            key={o.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
-            data-testid={`row-organizer-${o.id}`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              {o.logoUrl ? (
-                <img
-                  src={o.logoUrl}
-                  alt=""
-                  className="h-8 w-8 rounded-lg object-contain bg-white shrink-0"
-                />
-              ) : (
-                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="font-black tracking-tight truncate">{o.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {o.competitionCount} competition
-                  {o.competitionCount === 1 ? "" : "s"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Link href={`/competitions/o/${o.slug}`}>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="font-bold rounded-full"
-                  data-testid={`btn-open-hub-${o.id}`}
-                >
-                  Open hub
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ))}
-        {formOpen ? (
-          <form
-            className="space-y-3 rounded-lg border border-dashed border-border p-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (name.trim() && !create.isPending) create.mutate();
-            }}
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="o-name" className="text-xs font-bold">
-                Company name
-              </Label>
-              <Input
-                id="o-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Apex Events Co"
-                maxLength={200}
-                data-testid="input-organizer-name"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="o-desc" className="text-xs font-bold">
-                About <span className="text-muted-foreground">(optional)</span>
-              </Label>
-              <Input
-                id="o-desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What your company runs and where."
-                maxLength={2000}
-                data-testid="input-organizer-description"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="submit"
-                size="sm"
-                variant="brand"
-                disabled={!name.trim() || create.isPending}
-                data-testid="btn-create-organizer"
-              >
-                {create.isPending ? "Creating…" : "Create hub"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setFormOpen(false)}
-                data-testid="btn-cancel-organizer"
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            className="font-bold rounded-full"
-            onClick={() => setFormOpen(true)}
-            data-testid="btn-new-organizer"
-          >
-            <Building2 className="w-3.5 h-3.5 mr-1.5" />
-            New competition hub
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function CompetitionsPage() {
-  const { data, isLoading, isError, refetch } = useQuery<{
-    data: CompetitionRow[];
-  }>({
-    queryKey: ["my", "competitions"],
-    queryFn: () =>
-      customFetch<{ data: CompetitionRow[] }>(`/api/v1/my/competitions`, {
-        method: "GET",
-      }),
-  });
-
   const organizersQ = useQuery<{ data: OrganizerRow[] }>({
     queryKey: ["my", "organizers"],
     queryFn: () =>
@@ -747,283 +572,25 @@ export default function CompetitionsPage() {
   const initialOrganizerId =
     new URLSearchParams(window.location.search).get("organizer") ?? null;
 
-  // Top-bar "Organizer Hubs" deep link: /competitions?hubs=1 scrolls to the
-  // hub card once it has rendered.
-  const wantHubs =
-    new URLSearchParams(window.location.search).get("hubs") === "1";
-  const hubCardRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (wantHubs && !organizersQ.isLoading && hubCardRef.current) {
-      hubCardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [wantHubs, organizersQ.isLoading]);
-
-  const competitions = data?.data ?? [];
-
-  // Group my competitions by organizer hub; standalone ones last.
-  const grouped = organizers
-    .map((o) => ({
-      organizer: o,
-      comps: competitions.filter((c) => c.organizerId === o.id),
-    }))
-    .filter((g) => g.comps.length > 0);
-  const knownOrganizerIds = new Set(organizers.map((o) => o.id));
-  const standalone = competitions.filter(
-    (c) => !c.organizerId || !knownOrganizerIds.has(c.organizerId),
-  );
-
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Competitions</h1>
-        <p className="text-sm text-muted-foreground">
-          Run a tournament or league on Kinectem: upload the schedule, brand
-          your public page, and let every team tell its story.
-        </p>
+    <OrganizerSidebar>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Competitions
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Run a tournament or league on Kinectem: upload the schedule, brand
+            your public page, and let every team tell its story. Your hubs and
+            competitions live in the sidebar.
+          </p>
+        </div>
+
+        <CreateCompetitionCard
+          organizers={organizers}
+          initialOrganizerId={initialOrganizerId}
+        />
       </div>
-
-      <CreateCompetitionCard
-        organizers={organizers}
-        initialOrganizerId={initialOrganizerId}
-      />
-
-      <div ref={hubCardRef} className="scroll-mt-20">
-        <OrganizerHubCard organizers={organizers} />
-      </div>
-
-      <div className="space-y-3">
-        <h2 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-          My competitions
-        </h2>
-        {isLoading ? (
-          <Card>
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              Loading competitions…
-            </CardContent>
-          </Card>
-        ) : isError ? (
-          <Card className="border-destructive/40">
-            <CardContent className="p-8 text-center space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Couldn't load your competitions.
-              </p>
-              <Button
-                variant="outline"
-                className="font-bold rounded-full"
-                onClick={() => refetch()}
-                data-testid="btn-retry-competitions"
-              >
-                Try again
-              </Button>
-            </CardContent>
-          </Card>
-        ) : competitions.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              No competitions yet. Create your first one above.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-5">
-            {/* Grouped by organizer hub first, then standalone. */}
-            {grouped.map(({ organizer: o, comps }) => (
-              <div key={o.id} className="space-y-3" data-testid={`group-hub-${o.id}`}>
-                <Link href={`/competitions/o/${o.slug}`}>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground cursor-pointer">
-                    <Building2 className="w-3.5 h-3.5" />
-                    {o.name}
-                  </span>
-                </Link>
-                {comps.map((c) => (
-                  <MyCompetitionCard key={c.id} c={c} organizers={organizers} />
-                ))}
-              </div>
-            ))}
-            {standalone.length > 0 && (
-              <div className="space-y-3" data-testid="group-standalone">
-                {grouped.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">
-                    Standalone
-                  </span>
-                )}
-                {standalone.map((c) => (
-                  <MyCompetitionCard key={c.id} c={c} organizers={organizers} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// One row in "My competitions" — includes attach/detach to an organizer hub
-// (retroactive grouping, Task #723).
-function MyCompetitionCard({
-  c,
-  organizers,
-}: {
-  c: CompetitionRow;
-  organizers: OrganizerRow[];
-}) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-
-  const link = useMutation({
-    mutationFn: (vars: { organizerId: string; action: "attach" | "detach" }) =>
-      customFetch(`/api/v1/organizers/${vars.organizerId}/competitions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          competitionId: c.id,
-          attach: vars.action === "attach",
-        }),
-      }),
-    onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
-      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
-      qc.invalidateQueries({ queryKey: ["organizer"] });
-      toast({
-        title:
-          vars.action === "attach" ? "Added to your hub" : "Removed from hub",
-      });
-    },
-    onError: (err) =>
-      toast({
-        title: "Couldn't update the hub link",
-        description: err instanceof Error ? err.message : "Try again.",
-        variant: "destructive",
-      }),
-  });
-
-  return (
-    <UngroupedCompetitionCard c={c}>
-      {organizers.length > 0 &&
-        (c.organizerId ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground"
-            disabled={link.isPending}
-            onClick={() =>
-              link.mutate({ organizerId: c.organizerId!, action: "detach" })
-            }
-            data-testid={`btn-detach-hub-${c.id}`}
-          >
-            Remove from hub
-          </Button>
-        ) : organizers.length === 1 ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={link.isPending}
-            onClick={() =>
-              link.mutate({ organizerId: organizers[0].id, action: "attach" })
-            }
-            data-testid={`btn-attach-hub-${c.id}`}
-          >
-            <Building2 className="w-3.5 h-3.5 mr-1.5" />
-            Add to {organizers[0].name}
-          </Button>
-        ) : (
-          <select
-            className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-bold"
-            value=""
-            disabled={link.isPending}
-            onChange={(e) => {
-              if (e.target.value)
-                link.mutate({ organizerId: e.target.value, action: "attach" });
-            }}
-            data-testid={`select-attach-hub-${c.id}`}
-          >
-            <option value="">Add to hub…</option>
-            {organizers.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        ))}
-    </UngroupedCompetitionCard>
-  );
-}
-
-function UngroupedCompetitionCard({
-  c,
-  children,
-}: {
-  c: CompetitionRow;
-  children?: React.ReactNode;
-}) {
-  return (
-    <Card data-testid={`card-competition-${c.id}`}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-black tracking-tight truncate">
-                          {c.name}
-                        </h3>
-                        <Badge variant="outline" className="capitalize shrink-0">
-                          {c.type}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <CalendarDays className="w-3.5 h-3.5" />
-                          {fmtDate(c.startDate)} – {fmtDate(c.endDate)}
-                        </span>
-                        {c.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {c.location}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      {c.pendingClaimCount > 0 ? (
-                        <Badge data-testid={`badge-pending-${c.id}`}>
-                          {c.pendingClaimCount} claim
-                          {c.pendingClaimCount === 1 ? "" : "s"} to review
-                        </Badge>
-                      ) : null}
-                      <Badge variant="secondary">
-                        {c.matchCount} games · {c.claimedCount}/
-                        {c.participantCount} teams claimed
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Link href={`/competitions/${c.id}`}>
-                      <Button
-                        size="sm"
-                        variant="brand"
-                        data-testid={`btn-manage-${c.id}`}
-                      >
-                        <Settings2 className="w-3.5 h-3.5 mr-1.5" />
-                        Manage
-                      </Button>
-                    </Link>
-                    <a
-                      href={`/app/c/${c.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="font-bold rounded-full"
-                        data-testid={`btn-view-${c.id}`}
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                        View public page
-                      </Button>
-                    </a>
-                    {children}
-                  </div>
-                </CardContent>
-              </Card>
+    </OrganizerSidebar>
   );
 }

@@ -29,6 +29,9 @@ const FollowRequestsPage = lazy(() => import("@/pages/FollowRequestsPage"));
 const ChildConversationPage = lazy(() => import("@/pages/ChildConversationPage"));
 const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
 const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
+const AdminInviteAcceptPage = lazy(
+  () => import("@/pages/AdminInviteAcceptPage"),
+);
 const ClaimOrgPage = lazy(() => import("@/pages/ClaimOrgPage"));
 const TeamAdoptPage = lazy(() => import("@/pages/TeamAdoptPage"));
 const CompetitionPage = lazy(() => import("@/pages/CompetitionPage"));
@@ -106,6 +109,8 @@ function Router() {
       <Route path="/coppa-notice" component={CoppaNoticePage} />
       <Route path="/invites/:token" component={InviteAcceptPage} />
       <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
+      {/* Task #745 — hub/competition admin invite accept page. */}
+      <Route path="/admin-invites/:token" component={AdminInviteAcceptPage} />
       <Route path="/claim/:token" component={ClaimOrgPage} />
       <Route path="/adopt-team/:token" component={TeamAdoptPage} />
       <Route path="/c/:slug/signup" component={TournamentSignupPage} />

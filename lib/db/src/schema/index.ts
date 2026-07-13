@@ -1489,6 +1489,55 @@ export const organizerFollowers = pgTable("organizer_followers", {
   userIdIdx: index("organizer_followers_user_id_idx").on(t.userId),
 }));
 
+// Task #745 — hub admin memberships. A hub admin can manage the hub AND every
+// competition attached to it (including ones attached later). Single "admin"
+// level; the owner stays on competition_organizers.owner_user_id and is never
+// a row here. Add is open to any admin; remove is owner-only (route layer).
+export const organizerAdmins = pgTable("organizer_admins", {
+  organizerId: uuid("organizer_id").references(() => competitionOrganizers.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  grantedById: uuid("granted_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.organizerId, t.userId] }),
+  userIdIdx: index("organizer_admins_user_id_idx").on(t.userId),
+}));
+
+// Task #745 — per-competition admin memberships (scoped to ONE competition;
+// hub-wide rights come from organizer_admins instead).
+export const competitionAdmins = pgTable("competition_admins", {
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  grantedById: uuid("granted_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.competitionId, t.userId] }),
+  userIdIdx: index("competition_admins_user_id_idx").on(t.userId),
+}));
+
+// Task #745 — email-invite flow for hub/competition admins. Exactly one of
+// organizerId / competitionId is set (checked at the route layer; kept as two
+// nullable FKs so either parent's deletion cascades its invites). Token is
+// SHA-256 hashed at rest, mirroring organization_invites.
+export const competitionAdminInvites = pgTable("competition_admin_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizerId: uuid("organizer_id").references(() => competitionOrganizers.id, { onDelete: "cascade" }),
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }),
+  invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
+  invitedEmail: text("invited_email").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  status: inviteStatusEnum("status").notNull().default("pending"),
+  resolvedUserId: uuid("resolved_user_id").references(() => users.id, { onDelete: "set null" }),
+  withdrawnAt: timestamp("withdrawn_at"),
+  acceptedAt: timestamp("accepted_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  organizerIdIdx: index("competition_admin_invites_organizer_id_idx").on(t.organizerId),
+  competitionIdIdx: index("competition_admin_invites_competition_id_idx").on(t.competitionId),
+}));
+
 export const tournaments = pgTable("tournaments", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Unguessable-ish public slug used in the funnel URL (`/t/<slug>`).

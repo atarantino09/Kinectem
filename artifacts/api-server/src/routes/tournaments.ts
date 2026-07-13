@@ -22,11 +22,17 @@ import {
   organizationAdmins,
   competitionFollowers,
   competitionOrganizers,
+  competitionAdmins,
+  organizerAdmins,
 } from "@workspace/db";
 import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
+import {
+  canOperateCompetition,
+  canOperateOrganizer,
+} from "../lib/competition-permissions";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
@@ -214,17 +220,9 @@ function slotKey(division: string, bracket: string, nameKey: string): string {
 // oversight. This is per-competition scope, NOT a platform role.
 // ---------------------------------------------------------------------------
 
-type SessionUserLike = { id: string; role: string };
-
-function canOperateCompetition(
-  me: SessionUserLike,
-  competition: { ownerUserId: string | null; createdById: string | null },
-): boolean {
-  if (me.role === "admin") return true;
-  // ownerUserId is backfilled from createdById; fall back for safety.
-  const owner = competition.ownerUserId ?? competition.createdById;
-  return owner != null && owner === me.id;
-}
+// Task #745 — widened to owner OR competition/hub admin OR platform admin;
+// now async (DB-backed membership lookups) and shared with organizers.ts.
+// See ../lib/competition-permissions.ts.
 
 const COMPETITION_TYPES = ["tournament", "league"] as const;
 
@@ -302,8 +300,9 @@ const createCompetitionHandler = asyncHandler(async (req, res) => {
       .where(eq(competitionOrganizers.id, body.organizerId))
       .limit(1);
     if (!o) return apiError(res, 404, "Organizer not found");
-    if (me.role !== "admin" && o.ownerUserId !== me.id) {
-      return apiError(res, 403, "You can only create competitions under your own organizer");
+    // Task #745 — hub admins (not just the owner) can create under the hub.
+    if (!(await canOperateOrganizer(me, o))) {
+      return apiError(res, 403, "You can only create competitions under a hub you manage");
     }
     organizer = o;
   }
@@ -476,6 +475,19 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    // Task #745 — membership-aware: competitions the user owns, is a
+    // per-competition admin of, or reaches through a hub-admin membership
+    // (organizer_admins → all competitions attached to that hub, including
+    // ones attached later). Each row carries accessRole so the UI can show
+    // an "Admin" badge and hide owner-only controls.
+    const myHubAdminIds = db
+      .select({ id: organizerAdmins.organizerId })
+      .from(organizerAdmins)
+      .where(eq(organizerAdmins.userId, me.id));
+    const myCompAdminIds = db
+      .select({ id: competitionAdmins.competitionId })
+      .from(competitionAdmins)
+      .where(eq(competitionAdmins.userId, me.id));
     const rows = await db
       .select()
       .from(tournaments)
@@ -483,10 +495,18 @@ router.get(
         or(
           eq(tournaments.ownerUserId, me.id),
           and(isNull(tournaments.ownerUserId), eq(tournaments.createdById, me.id)),
+          inArray(tournaments.id, myCompAdminIds),
+          inArray(tournaments.organizerId, myHubAdminIds),
         ),
       )
       .orderBy(desc(tournaments.createdAt));
-    const data = await Promise.all(rows.map(competitionListRow));
+    const data = await Promise.all(
+      rows.map(async (row) => ({
+        ...(await competitionListRow(row)),
+        accessRole:
+          (row.ownerUserId ?? row.createdById) === me.id ? "owner" : "admin",
+      })),
+    );
     res.json({ data });
   }),
 );
@@ -525,7 +545,7 @@ router.patch(
       .where(eq(tournaments.id, req.params.id))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
+    if (!(await canOperateCompetition(me, competition))) {
       return apiError(res, 403, "Only the competition operator can edit it.", {
         code: "COMPETITION_FORBIDDEN",
       });
@@ -780,7 +800,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       // True only for the competition operator (owner/creator or platform
       // admin) — drives the "Edit competition" button on the public page.
       canManage: req.sessionUser
-        ? canOperateCompetition(req.sessionUser, tournament)
+        ? await canOperateCompetition(req.sessionUser, tournament)
         : false,
       // Parent-company hub (null when the competition is standalone).
       organizer: organizerRow ?? null,
@@ -1004,7 +1024,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
     if (!tournament) return apiError(res, 404, "Competition not found");
     // Owner-or-admin (Competitions §3): the operator uploads their own
     // schedule; platform admins retain global access.
-    if (!canOperateCompetition(me, tournament)) {
+    if (!(await canOperateCompetition(me, tournament))) {
       return apiError(
         res,
         403,
@@ -1487,7 +1507,7 @@ router.get(
       .where(eq(tournaments.id, req.params.id))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
+    if (!(await canOperateCompetition(me, competition))) {
       return apiError(res, 403, "Only the competition operator can review claims.", {
         code: "COMPETITION_FORBIDDEN",
       });
@@ -1541,7 +1561,7 @@ router.post(
       .where(eq(tournaments.id, req.params.id))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
+    if (!(await canOperateCompetition(me, competition))) {
       return apiError(res, 403, "Only the competition operator can review claims.", {
         code: "COMPETITION_FORBIDDEN",
       });
@@ -1635,7 +1655,7 @@ router.get(
       .where(eq(tournaments.id, req.params.id))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
+    if (!(await canOperateCompetition(me, competition))) {
       return apiError(res, 403, "Only the competition operator can curate recaps.", {
         code: "COMPETITION_FORBIDDEN",
       });
@@ -1692,7 +1712,7 @@ router.post(
       .where(eq(tournaments.id, req.params.id))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
-    if (!canOperateCompetition(me, competition)) {
+    if (!(await canOperateCompetition(me, competition))) {
       return apiError(res, 403, "Only the competition operator can curate recaps.", {
         code: "COMPETITION_FORBIDDEN",
       });
