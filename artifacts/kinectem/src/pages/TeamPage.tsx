@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearch, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  customFetch,
   useGetTeamById,
   useListTeamMembers,
   useListTeamPosts,
@@ -34,6 +35,7 @@ import {
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
 import { AdoptLinkCard } from "@/components/team-page/AdoptLinkCard";
+import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
 import {
   SpotlightTour,
@@ -77,6 +79,7 @@ export default function TeamPage() {
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [adoptOpen, setAdoptOpen] = useState(false);
+  const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [claimCompOpen, setClaimCompOpen] = useState(false);
   const [expanded, setExpanded] = useState<TeamPanel>(
@@ -452,6 +455,14 @@ export default function TeamPage() {
                 >
                   Adopt into your organization →
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateOrgOpen(true)}
+                  className="block text-xs font-bold uppercase tracking-wider text-sky-700 hover:underline"
+                  data-testid="button-create-org-adopt-team"
+                >
+                  Create a new organization for this team →
+                </button>
                 <AdoptLinkCard teamId={teamId} />
               </div>
             )}
@@ -612,6 +623,52 @@ export default function TeamPage() {
           open={adoptOpen}
           onOpenChange={setAdoptOpen}
           onAdopted={() => {
+            qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
+            qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+          }}
+        />
+      )}
+
+      {isSoloTeam && (
+        <CreateOrgDialog
+          open={createOrgOpen}
+          onOpenChange={setCreateOrgOpen}
+          // Third continuation path: the coach creates a brand-new org and
+          // this temporary team is adopted into it immediately, so they can
+          // keep posting recaps without waiting on an existing org admin.
+          onCreated={async (org) => {
+            try {
+              await customFetch<{ ok: boolean; teamId: string }>(
+                `/api/v1/teams/${teamId}/adopt`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({ organizationId: org.id }),
+                },
+              );
+              toast({
+                title: "Team added to your new organization",
+                description: `${team?.name ?? "This team"} is now part of ${org.name} with full features — keep the story going.`,
+              });
+              qc.invalidateQueries({
+                queryKey: getGetTeamByIdQueryKey(teamId),
+              });
+              qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+              // Same as the normal org-creation flow: the new owner picks a
+              // plan first, then lands back on their (now org-backed) team.
+              navigate(`/organizations/${org.id}/subscribe`);
+              return;
+            } catch (err) {
+              // Org creation succeeded but the adopt step failed (e.g. the
+              // team was adopted elsewhere in a race). The org still exists;
+              // the user can retry from "Adopt into your organization".
+              toast({
+                variant: "destructive",
+                title: "Organization created, but the team couldn't be added",
+                description: `${
+                  err instanceof Error ? `${err.message} ` : ""
+                }Your new organization still exists — use "Adopt into your organization" to add this team.`,
+              });
+            }
             qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
             qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
           }}
