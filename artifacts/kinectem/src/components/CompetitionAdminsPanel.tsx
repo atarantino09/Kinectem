@@ -7,7 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Crown, Link2, Mail, ShieldCheck, UserPlus, X } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  ChevronDown,
+  Crown,
+  Link2,
+  Mail,
+  ShieldCheck,
+  UserPlus,
+  X,
+} from "lucide-react";
 
 // Task #745 — shared "Admins" panel for a hub (kind="hub") or a competition
 // (kind="competition"). Lists the owner + admins, lets any manager add an
@@ -45,10 +58,16 @@ interface SearchUser {
 export function CompetitionAdminsPanel({
   kind,
   targetId,
+  collapsible = false,
 }: {
   kind: "hub" | "competition";
   targetId: string;
+  // Task #753 — when true, the panel renders collapsed by default with a
+  // chevron toggle in its header (used on the hub page so competitions
+  // list first). The competition console keeps the always-open layout.
+  collapsible?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const base = kind === "hub" ? "organizers" : "competitions";
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -215,20 +234,16 @@ export function CompetitionAdminsPanel({
   // rather than render a broken card.
   if (adminsQ.isError) return null;
 
-  return (
-    <Card data-testid={`card-admins-${kind}`}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="w-4 h-4" />
-          Admins
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {kind === "hub"
-            ? "Admins can manage this hub and every competition in it — including ones added later."
-            : "Admins can manage this competition: schedule, branding, claims, and recap curation."}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+  const description = (
+    <p className="text-sm text-muted-foreground">
+      {kind === "hub"
+        ? "Admins can manage this hub and every competition in it — including ones added later."
+        : "Admins can manage this competition: schedule, branding, claims, and recap curation."}
+    </p>
+  );
+
+  const body = (
+    <CardContent className="space-y-4">
         {/* Current admins */}
         <div className="space-y-2">
           {(adminsQ.data?.data ?? []).map((m) => (
@@ -424,6 +439,44 @@ export function CompetitionAdminsPanel({
           ) : null}
         </div>
       </CardContent>
+  );
+
+  if (collapsible) {
+    return (
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <Card data-testid={`card-admins-${kind}`}>
+          <CollapsibleTrigger asChild>
+            <CardHeader
+              className="cursor-pointer select-none"
+              role="button"
+              data-testid={`btn-toggle-admins-${kind}`}
+            >
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheck className="w-4 h-4" />
+                Admins
+                <ChevronDown
+                  className={`w-4 h-4 ml-auto transition-transform ${open ? "rotate-180" : ""}`}
+                />
+              </CardTitle>
+              {description}
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>{body}</CollapsibleContent>
+        </Card>
+      </Collapsible>
+    );
+  }
+
+  return (
+    <Card data-testid={`card-admins-${kind}`}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="w-4 h-4" />
+          Admins
+        </CardTitle>
+        {description}
+      </CardHeader>
+      {body}
     </Card>
   );
 }

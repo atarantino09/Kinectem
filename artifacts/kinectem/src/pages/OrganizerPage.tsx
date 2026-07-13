@@ -571,12 +571,6 @@ export default function OrganizerPage() {
           </Collapsible>
         ) : null}
 
-        {canManage && inApp ? (
-          // Task #745 — hub admin management. Hub admins get rights over all
-          // of the hub's competitions, including ones attached later.
-          <CompetitionAdminsPanel kind="hub" targetId={o.id} />
-        ) : null}
-
         {featuredRecaps.length > 0 && (
           <section className="space-y-3" data-testid="rail-organizer-featured-recaps">
             <div className="flex items-baseline justify-between gap-2">
@@ -653,6 +647,13 @@ export default function OrganizerPage() {
             <CompetitionGroup title="Past" comps={past} brand={brand} inApp={inApp} />
           </>
         )}
+
+        {canManage && inApp ? (
+          // Task #745 — hub admin management. Hub admins get rights over all
+          // of the hub's competitions, including ones attached later.
+          // Task #753 — listed after competitions, collapsed by default.
+          <CompetitionAdminsPanel kind="hub" targetId={o.id} collapsible />
+        ) : null}
       </div>
     </div>
   );
