@@ -1540,6 +1540,21 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON competition_admin_invites (competition_id);
     `,
   },
+  {
+    // Task #746 — per-team hidden competition games. A team admin can hide
+    // an imported tournament match from the public team page (scoped to the
+    // team page only; the competition's own page is unaffected).
+    name: "2026-07-13-task-746-team-hidden-competition-games",
+    sql: `
+      CREATE TABLE IF NOT EXISTS team_hidden_competition_games (
+        team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        competition_game_id uuid NOT NULL REFERENCES tournament_matches(id) ON DELETE CASCADE,
+        hidden_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at timestamp DEFAULT now() NOT NULL,
+        PRIMARY KEY (team_id, competition_game_id)
+      );
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

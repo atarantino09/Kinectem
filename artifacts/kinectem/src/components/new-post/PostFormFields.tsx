@@ -22,7 +22,10 @@ import {
   RosterTagPicker,
   type RosterPickerMember,
 } from "./RosterTagPicker";
-import type { ClaimedCompetition } from "./useNewPostForm";
+import type {
+  ClaimedCompetition,
+  CompetitionGameOption,
+} from "./useNewPostForm";
 
 interface PostFormFieldsProps {
   postType: "short" | "long";
@@ -84,6 +87,16 @@ interface PostFormFieldsProps {
   competitionsLoading?: boolean;
   competitionId?: string;
   onCompetitionIdChange?: (v: string) => void;
+  // Task #746 — game picker (shown once a competition is picked).
+  // Lists the competition's already-played games; picking one links
+  // the recap to that specific game and auto-fills date + opponent.
+  competitionGameId?: string;
+  onCompetitionGameIdChange?: (
+    v: string,
+    game?: CompetitionGameOption | null,
+  ) => void;
+  competitionGames?: CompetitionGameOption[];
+  competitionGamesLoading?: boolean;
   saving: boolean;
   publishing: boolean;
   // True when the form should refuse submission because the user has
@@ -136,6 +149,10 @@ export function PostFormFields({
   competitionsLoading = false,
   competitionId = "",
   onCompetitionIdChange,
+  competitionGameId = "",
+  onCompetitionGameIdChange,
+  competitionGames = [],
+  competitionGamesLoading = false,
   saving,
   publishing,
   publishDisabled = false,
@@ -473,6 +490,87 @@ export function PostFormFields({
                   ))}
                 </SelectContent>
               </Select>
+              {/* Task #746 — game picker. Appears once a competition is
+                  picked and lists its already-played games so the recap
+                  can link to the specific game (the team page then shows
+                  a "Game recap" pill on that game's card). Optional —
+                  "No specific game" keeps the server's date-based
+                  auto-derive behavior. */}
+              {competitionId && (
+                <div className="mt-3" data-testid="section-game-picker">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Game{" "}
+                    <span className="normal-case font-semibold tracking-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  {competitionGamesLoading ? (
+                    <p className="mt-2 text-xs text-muted-foreground font-medium">
+                      Loading this competition's games…
+                    </p>
+                  ) : competitionGames.length > 0 ? (
+                    <>
+                      <Select
+                        value={competitionGameId || "__none__"}
+                        onValueChange={(v) => {
+                          const id = v === "__none__" ? "" : v;
+                          onCompetitionGameIdChange?.(
+                            id,
+                            id
+                              ? competitionGames.find((g) => g.id === id)
+                              : null,
+                          );
+                        }}
+                      >
+                        <SelectTrigger
+                          className="mt-2"
+                          data-testid="select-competition-game"
+                        >
+                          <SelectValue placeholder="No specific game" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem
+                            value="__none__"
+                            data-testid="option-competition-game-none"
+                          >
+                            No specific game
+                          </SelectItem>
+                          {competitionGames.map((g) => (
+                            <SelectItem
+                              key={g.id}
+                              value={g.id}
+                              data-testid={`option-competition-game-${g.id}`}
+                            >
+                              {[
+                                g.opponentName
+                                  ? `${g.isHome ? "vs" : "at"} ${g.opponentName}`
+                                  : `Game ${g.matchNumber}`,
+                                g.matchDate ?? null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-2 text-[12px] text-muted-foreground font-semibold">
+                        Linking a specific game shows a "Game recap" tag on
+                        that game in the team's competition schedule. Picking
+                        one also fills in the game date and opponent for you.
+                      </p>
+                    </>
+                  ) : (
+                    <p
+                      className="mt-2 text-xs text-muted-foreground font-medium"
+                      data-testid="empty-state-no-competition-games"
+                    >
+                      No played games in this competition's schedule yet. You
+                      can still publish the recap without linking a specific
+                      game.
+                    </p>
+                  )}
+                </div>
+              )}
               <p className="mt-2 text-[12px] text-muted-foreground font-semibold">
                 Only competitions where this team has claimed its spot are
                 listed. Picking one adds the competition's branding to the

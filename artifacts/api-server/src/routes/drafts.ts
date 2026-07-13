@@ -55,7 +55,10 @@ import {
 } from "../lib/article-tagging";
 import { notifyAdminsOfPendingPostApproval } from "../lib/notifications";
 import { displayName, maskedDisplayName } from "../lib/spec-helpers";
-import { deriveExplicitCompetitionLink } from "../lib/competition-link";
+import {
+  deriveExplicitCompetitionLink,
+  validateExplicitGameLink,
+} from "../lib/competition-link";
 
 const router: IRouter = Router();
 
@@ -404,6 +407,32 @@ router.patch(
         // Combined recaps span many games — competition-level link only.
         updates["competitionGameId"] =
           a.recapKind === "combined" ? null : explicit.competitionGameId;
+        // Task #746 — explicit game pick from the composer (extra-spec
+        // field, only honored alongside an explicit competition pick and
+        // never for combined recaps). Validated to belong to the chosen
+        // competition and this team's claimed slot. Absent/empty keeps
+        // the auto-derived game above.
+        if (
+          a.recapKind !== "combined" &&
+          typeof body.competitionGameId === "string" &&
+          body.competitionGameId.length > 0
+        ) {
+          if (!UUID_RE.test(body.competitionGameId))
+            return apiError(res, 400, "Invalid competitionGameId");
+          const validGame = await validateExplicitGameLink(
+            a.teamId,
+            body.competitionId,
+            body.competitionGameId,
+          );
+          if (!validGame)
+            return apiError(
+              res,
+              400,
+              "That game doesn't belong to the selected competition for this team.",
+              { code: "invalid_competition_game" },
+            );
+          updates["competitionGameId"] = body.competitionGameId;
+        }
       }
     }
     if (Object.keys(updates).length === 0)

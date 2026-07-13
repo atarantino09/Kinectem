@@ -17,7 +17,7 @@ import {
   tournamentParticipants,
   tournamentMatches,
 } from "@workspace/db";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 
 export type CompetitionLink = {
   competitionId: string | null;
@@ -92,6 +92,45 @@ export async function deriveExplicitCompetitionLink(
     competitionId,
     competitionGameId: games.length === 1 ? games[0].id : null,
   };
+}
+
+// Task #746 — validate the composer's explicit game pick. The game must
+// belong to the chosen competition AND involve one of the posting team's
+// claimed slots in it. Returns true when the link is valid. Callers only
+// invoke this alongside an explicit competition pick, so the claimed-slot
+// check has already passed by the time this runs — this just pins the
+// specific game to that same slot.
+export async function validateExplicitGameLink(
+  teamId: string,
+  competitionId: string,
+  gameId: string,
+): Promise<boolean> {
+  const slots = await db
+    .select({ id: tournamentParticipants.id })
+    .from(tournamentParticipants)
+    .where(
+      and(
+        eq(tournamentParticipants.teamId, teamId),
+        eq(tournamentParticipants.tournamentId, competitionId),
+      ),
+    );
+  if (slots.length === 0) return false;
+  const slotIds = slots.map((s) => s.id);
+  const [game] = await db
+    .select({ id: tournamentMatches.id })
+    .from(tournamentMatches)
+    .where(
+      and(
+        eq(tournamentMatches.id, gameId),
+        eq(tournamentMatches.tournamentId, competitionId),
+        or(
+          inArray(tournamentMatches.homeParticipantId, slotIds),
+          inArray(tournamentMatches.awayParticipantId, slotIds),
+        ),
+      ),
+    )
+    .limit(1);
+  return !!game;
 }
 
 // Shared per-slot resolution used by the auto-derive loop above.

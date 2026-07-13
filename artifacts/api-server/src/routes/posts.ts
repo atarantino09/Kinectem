@@ -91,6 +91,7 @@ import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStat
 import {
   deriveCompetitionLink,
   deriveExplicitCompetitionLink,
+  validateExplicitGameLink,
 } from "../lib/competition-link";
 
 // Loose UUID shape check for extra-spec body fields (avoids handing a
@@ -1987,6 +1988,15 @@ router.post(
         typeof body.competitionId === "string" && body.competitionId.length > 0
           ? body.competitionId
           : null;
+      // Task #746 — the composer can also pick the SPECIFIC game (extra-spec
+      // field, same precedent). Only honored alongside an explicit
+      // competition pick; validated to belong to that competition and to a
+      // slot claimed by this team.
+      const requestedGameId =
+        typeof body.competitionGameId === "string" &&
+        body.competitionGameId.length > 0
+          ? body.competitionGameId
+          : null;
       let rawLink: { competitionId: string | null; competitionGameId: string | null };
       if (requestedCompetitionId) {
         if (!UUID_RE.test(requestedCompetitionId))
@@ -2005,6 +2015,23 @@ router.post(
           );
         }
         rawLink = explicit;
+        if (requestedGameId) {
+          if (!UUID_RE.test(requestedGameId))
+            return apiError(res, 400, "Invalid competitionGameId");
+          const validGame = await validateExplicitGameLink(
+            teamId,
+            requestedCompetitionId,
+            requestedGameId,
+          );
+          if (!validGame)
+            return apiError(
+              res,
+              400,
+              "That game doesn't belong to the selected competition for this team.",
+              { code: "invalid_competition_game" },
+            );
+          rawLink = { ...rawLink, competitionGameId: requestedGameId };
+        }
       } else {
         rawLink = await deriveCompetitionLink(teamId, gameDate);
       }

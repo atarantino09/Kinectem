@@ -41,6 +41,10 @@ export default function NewPostPage() {
   const initialScheduleEventId = params.get("scheduleEventId");
   const initialGameDate = params.get("gameDate");
   const initialOpponent = params.get("opponent");
+  // Task #746 — team-page Competitions "Write recap" deep-link params.
+  // Pre-select the competition and the specific game in the composer.
+  const initialCompetitionId = params.get("competitionId");
+  const initialMatchId = params.get("matchId");
 
   const form = useNewPostForm({
     initialType,
@@ -51,6 +55,8 @@ export default function NewPostPage() {
     initialScheduleEventId,
     initialGameDate,
     initialOpponent,
+    initialCompetitionId,
+    initialMatchId,
   });
 
   const { data: me } = useGetLoggedInUser();
@@ -286,6 +292,10 @@ export default function NewPostPage() {
               competitionsLoading={form.claimedCompetitionsLoading}
               competitionId={form.competitionId}
               onCompetitionIdChange={form.setCompetitionId}
+              competitionGameId={form.competitionGameId}
+              onCompetitionGameIdChange={form.setCompetitionGameId}
+              competitionGames={form.competitionGames}
+              competitionGamesLoading={form.competitionGamesLoading}
               saving={form.saving}
               publishing={form.publishing}
               publishDisabled={publishDisabled}

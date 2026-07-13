@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,17 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
   Trophy,
   MapPin,
   ExternalLink,
@@ -17,6 +28,9 @@ import {
   Clock,
   FileText,
   ChevronDown,
+  Eye,
+  EyeOff,
+  Newspaper,
 } from "lucide-react";
 
 // Surfaces the imported tournament schedule for a team that claimed a
@@ -36,6 +50,13 @@ interface TournamentMatch {
   field: string | null;
   isHome: boolean;
   opponentName: string | null;
+  // Task #746 — earliest published recap explicitly linked to this
+  // game (null/absent when none). Drives the "Game recap" pill.
+  recapPostId?: string | null;
+  // Task #746 — present (true) only for team admins: this game is
+  // hidden from public view on the team page. Public responses simply
+  // omit hidden games.
+  hidden?: boolean;
 }
 
 interface TournamentGroup {
@@ -106,12 +127,18 @@ function isRecappable(m: TournamentMatch): boolean {
 // Prefilled recap composer deep-link for a tournament match. These aren't
 // schedule events, so we skip `scheduleEventId` — only the opponent + date
 // carry over. Mirrors the Team Schedule "Write game recap" param shape.
-function recapHrefFor(teamId: string, m: TournamentMatch): string {
+// Task #746 — also carries `competitionId` + `matchId` so the composer
+// pre-selects the competition AND the specific game.
+function recapHrefFor(
+  teamId: string,
+  tournamentId: string,
+  m: TournamentMatch,
+): string {
   const opponent = m.opponentName
     ? `&opponent=${encodeURIComponent(m.opponentName)}`
     : "";
   const date = m.matchDate ? `&gameDate=${m.matchDate}` : "";
-  return `/posts/new?type=long&teamId=${teamId}${date}${opponent}&from=${encodeURIComponent(
+  return `/posts/new?type=long&teamId=${teamId}${date}${opponent}&competitionId=${tournamentId}&matchId=${m.id}&from=${encodeURIComponent(
     `/teams/${teamId}`,
   )}`;
 }
@@ -299,13 +326,26 @@ function sortCompetitions(groups: TournamentGroup[]): TournamentGroup[] {
 export function TournamentScheduleCard({
   teamId,
   canPostRecap = false,
+  canManage = false,
 }: {
   teamId: string;
   // When true (the viewer can author recaps for this team), played matches
   // expose a "Write recap" link into the prefilled composer.
   canPostRecap?: boolean;
+  // Task #746 — when true (team admin), games expose Hide/Unhide
+  // controls and hidden games render greyed-out with a "Hidden"
+  // notice instead of being omitted.
+  canManage?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  // Pending hide-confirmation target (null = dialog closed). Unhide
+  // is immediate — restoring visibility is safe to do without asking.
+  const [confirmHide, setConfirmHide] = useState<{
+    matchId: string;
+    opponentName: string | null;
+  } | null>(null);
   const { data } = useQuery<{ data: TournamentGroup[] }>({
     queryKey: ["team", teamId, "tournament-schedule"],
     queryFn: () =>
@@ -314,6 +354,34 @@ export function TournamentScheduleCard({
         { method: "GET" },
       ),
     enabled: !!teamId,
+  });
+
+  // Task #746 — hide/unhide a single game from the public team page.
+  // Both endpoints are idempotent; on success we refetch the schedule
+  // (the admin view re-renders the game greyed-out / restored).
+  const hideMutation = useMutation({
+    mutationFn: ({ matchId, hide }: { matchId: string; hide: boolean }) =>
+      customFetch(`/api/v1/teams/${teamId}/competition-games/${matchId}/hide`, {
+        method: hide ? "POST" : "DELETE",
+      }),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({
+        queryKey: ["team", teamId, "tournament-schedule"],
+      });
+      toast({
+        title: vars.hide ? "Game hidden" : "Game restored",
+        description: vars.hide
+          ? "This game no longer appears on the public team page."
+          : "This game is visible on the team page again.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't update the game",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const groups = data?.data ?? [];
@@ -383,7 +451,9 @@ export function TournamentScheduleCard({
                 {g.matches.map((m) => (
                   <li
                     key={m.id}
-                    className="rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3"
+                    className={`rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3 ${
+                      m.hidden ? "opacity-60 bg-muted/40" : ""
+                    }`}
                     data-testid={`tournament-match-${m.id}`}
                   >
                     <div className="min-w-0">
@@ -403,6 +473,17 @@ export function TournamentScheduleCard({
                           <span className="truncate">{venueLine(m)}</span>
                         </p>
                       )}
+                      {/* Task #746 — admin-only notice on hidden games
+                          (public viewers never receive them). */}
+                      {m.hidden && (
+                        <p
+                          className="text-[11px] font-bold text-muted-foreground flex items-center gap-1 mt-1"
+                          data-testid={`notice-hidden-game-${m.id}`}
+                        >
+                          <EyeOff className="w-3 h-3 shrink-0" />
+                          Hidden — only team admins can see this game.
+                        </p>
+                      )}
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       {(m.division || m.bracket) && (
@@ -410,17 +491,69 @@ export function TournamentScheduleCard({
                           {[m.division, m.bracket].filter(Boolean).join(" · ")}
                         </Badge>
                       )}
-                      {canPostRecap && isRecappable(m) && (
-                        <Link href={recapHrefFor(teamId, m)}>
+                      {/* Task #746 — published recap linked to this game.
+                          Takes the place of "Write recap" (the game already
+                          has one). */}
+                      {m.recapPostId ? (
+                        <Link href={`/posts/${m.recapPostId}`}>
                           <span
-                            className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
-                            data-testid={`btn-write-recap-${m.id}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                            data-testid={`pill-game-recap-${m.id}`}
                           >
-                            <FileText className="w-3 h-3" />
-                            Write recap
+                            <Newspaper className="w-3 h-3" />
+                            Game recap
                           </span>
                         </Link>
+                      ) : (
+                        canPostRecap &&
+                        isRecappable(m) && (
+                          <Link href={recapHrefFor(teamId, g.tournamentId, m)}>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                              data-testid={`btn-write-recap-${m.id}`}
+                            >
+                              <FileText className="w-3 h-3" />
+                              Write recap
+                            </span>
+                          </Link>
+                        )
                       )}
+                      {/* Task #746 — admin hide/unhide controls. Hide asks
+                          for confirmation; unhide is immediate. */}
+                      {canManage &&
+                        (m.hidden ? (
+                          <button
+                            type="button"
+                            disabled={hideMutation.isPending}
+                            onClick={() =>
+                              hideMutation.mutate({
+                                matchId: m.id,
+                                hide: false,
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
+                            data-testid={`btn-unhide-game-${m.id}`}
+                          >
+                            <Eye className="w-3 h-3" />
+                            Unhide
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={hideMutation.isPending}
+                            onClick={() =>
+                              setConfirmHide({
+                                matchId: m.id,
+                                opponentName: m.opponentName,
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
+                            data-testid={`btn-hide-game-${m.id}`}
+                          >
+                            <EyeOff className="w-3 h-3" />
+                            Hide
+                          </button>
+                        ))}
                     </div>
                   </li>
                 ))}
@@ -442,6 +575,48 @@ export function TournamentScheduleCard({
           </button>
         )}
       </CardContent>
+
+      {/* Task #746 — hide-game confirmation. Scoped to the team page:
+          the game stays in the competition's own schedule and imports,
+          it just stops showing to non-admin visitors here. */}
+      <AlertDialog
+        open={confirmHide !== null}
+        onOpenChange={(next) => {
+          if (!next) setConfirmHide(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-hide-game-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hide this game?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmHide?.opponentName
+                ? `The game against ${confirmHide.opponentName} will no longer appear on the public team page. `
+                : "This game will no longer appear on the public team page. "}
+              Team admins will still see it greyed out and can unhide it at
+              any time. The competition's own page is not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-hide-game-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={hideMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!confirmHide) return;
+                hideMutation.mutate(
+                  { matchId: confirmHide.matchId, hide: true },
+                  { onSettled: () => setConfirmHide(null) },
+                );
+              }}
+              data-testid="button-hide-game-confirm"
+            >
+              {hideMutation.isPending ? "Hiding…" : "Hide game"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

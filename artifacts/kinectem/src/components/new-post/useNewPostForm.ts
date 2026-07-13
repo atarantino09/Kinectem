@@ -82,6 +82,19 @@ export type ClaimedCompetition = {
   endDate?: string | null;
 };
 
+// Task #746 — one selectable game in the composer's game picker. Sourced
+// from GET /teams/:teamId/tournament-schedule (the same endpoint the team
+// page's Competitions section renders from), filtered to the picked
+// competition's already-played games.
+export type CompetitionGameOption = {
+  id: string;
+  matchNumber: string;
+  matchDate: string | null;
+  startTime: string | null;
+  isHome: boolean;
+  opponentName: string | null;
+};
+
 // Today's local calendar date in YYYY-MM-DD form, the shape an
 // <input type="date"> control accepts.
 function todayLocalIso(): string {
@@ -104,6 +117,11 @@ interface UseNewPostFormParams {
   initialGameDate?: string | null;
   initialOpponent?: string | null;
   initialScheduleEventId?: string | null;
+  // Task #746 — team-page Competitions "Write recap" deep-link. When both
+  // are present the composer pre-selects the competition AND the specific
+  // game (marked as touched so the link persists through draft PATCHes).
+  initialCompetitionId?: string | null;
+  initialMatchId?: string | null;
 }
 
 export function useNewPostForm({
@@ -115,6 +133,8 @@ export function useNewPostForm({
   initialGameDate = null,
   initialOpponent = null,
   initialScheduleEventId = null,
+  initialCompetitionId = null,
+  initialMatchId = null,
 }: UseNewPostFormParams) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -249,12 +269,36 @@ export function useNewPostForm({
   // Explicit competition pick for the recap (empty = none / let the
   // server auto-derive). Reset whenever the team changes — a pick only
   // makes sense for the team whose claimed slots produced the list.
-  const [competitionId, setCompetitionId] = useState<string>("");
+  const [competitionId, setCompetitionId] = useState<string>(
+    initialCompetitionId ?? "",
+  );
   // True only after the coach has actually interacted with the
   // competition picker. Draft PATCHes omit `competitionId` while this
   // is false so an autosave never clobbers a link the server derived
-  // automatically at create time (PATCH absent = unchanged).
-  const [competitionTouched, setCompetitionTouched] = useState(false);
+  // automatically at create time (PATCH absent = unchanged). A
+  // competition deep-linked from the team page counts as touched so
+  // the pre-selected link persists through draft PATCHes.
+  const [competitionTouched, setCompetitionTouched] = useState(
+    !!initialCompetitionId,
+  );
+  // Task #746 — the SPECIFIC game the recap covers (empty = none /
+  // let the server auto-derive from the game date). Same touch-gating
+  // pattern as the competition pick above.
+  const [competitionGameId, setCompetitionGameId] = useState<string>(
+    initialCompetitionId && initialMatchId ? initialMatchId : "",
+  );
+  const [gameTouched, setGameTouched] = useState(
+    !!(initialCompetitionId && initialMatchId),
+  );
+  // Opponent name auto-filled when the coach picks a game in the
+  // composer (deep-links pass the opponent via `initialOpponent`
+  // instead). Feeds buildPayload's `opponentName`.
+  const [pickedOpponent, setPickedOpponent] = useState<string | null>(null);
+  const [competitionGames, setCompetitionGames] = useState<
+    CompetitionGameOption[]
+  >([]);
+  const [competitionGamesLoading, setCompetitionGamesLoading] =
+    useState(false);
   const [claimedCompetitions, setClaimedCompetitions] = useState<
     ClaimedCompetition[]
   >([]);
@@ -325,6 +369,47 @@ export function useNewPostForm({
       cancelled = true;
     };
   }, [postType, composerTeamId]);
+  // Task #746 — fetch the picked competition's games for the game
+  // picker. Reuses the team page's tournament-schedule endpoint and
+  // filters to the picked competition's already-played games (a recap
+  // covers a game that happened). Cleared when there's no pick.
+  useEffect(() => {
+    if (postType === "short" || !composerTeamId || !competitionId) {
+      setCompetitionGames([]);
+      return;
+    }
+    let cancelled = false;
+    setCompetitionGamesLoading(true);
+    customFetch<{
+      data?: Array<{
+        tournamentId: string;
+        matches?: CompetitionGameOption[];
+      }>;
+    }>(`/api/v1/teams/${composerTeamId}/tournament-schedule`, {
+      method: "GET",
+    })
+      .then((r) => {
+        if (cancelled) return;
+        const group = (r.data ?? []).find(
+          (g) => g.tournamentId === competitionId,
+        );
+        const today = todayLocalIso();
+        const played = (group?.matches ?? []).filter(
+          (m) => !!m.matchDate && m.matchDate <= today,
+        );
+        setCompetitionGames(played);
+      })
+      .catch(() => {
+        if (!cancelled) setCompetitionGames([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCompetitionGamesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [postType, composerTeamId, competitionId]);
+
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   // Per-viewer flag captured from the post we loaded into the editor.
@@ -361,6 +446,7 @@ export function useNewPostForm({
     videoUrl: string;
     taggedUserIds: string[];
     competitionId: string;
+    competitionGameId: string;
   }) => JSON.stringify(v);
   const initialSnapshot = buildSnapshot({
     title: "",
@@ -370,7 +456,9 @@ export function useNewPostForm({
     photos: [],
     videoUrl: "",
     taggedUserIds: [],
-    competitionId: "",
+    competitionId: initialCompetitionId ?? "",
+    competitionGameId:
+      initialCompetitionId && initialMatchId ? initialMatchId : "",
   });
   const [baseline, setBaseline] = useState<string>(initialSnapshot);
   const currentSnapshot = buildSnapshot({
@@ -382,6 +470,7 @@ export function useNewPostForm({
     videoUrl,
     taggedUserIds,
     competitionId,
+    competitionGameId,
   });
   const isDirty = currentSnapshot !== baseline;
   const dirtyRef = useRef(isDirty);
@@ -502,6 +591,14 @@ export function useNewPostForm({
       // create time.
       ...(competitionTouched
         ? ({ competitionId: competitionId || null } as object)
+        : {}),
+      // Task #746 — the explicit game pick rides along only once
+      // touched AND while a competition is picked (the server nests
+      // game handling inside the competitionId branch). An empty pick
+      // is simply omitted — the server then keeps its auto-derived
+      // game for the (re-sent) competition.
+      ...(gameTouched && competitionId && competitionGameId
+        ? ({ competitionGameId } as object)
         : {}),
     });
   };
@@ -704,6 +801,11 @@ export function useNewPostForm({
           taggedUserIds: [],
           competitionId:
             kind === "article" ? (d.competition?.id ?? "") : "",
+          // GET /posts/:id doesn't surface the linked game id (locked
+          // spec), so re-opened sessions start with an untouched empty
+          // pick — autosaves omit it and the server keeps the stored
+          // link.
+          competitionGameId: "",
         });
         setBaseline(loadedSnapshot);
       })
@@ -789,14 +891,21 @@ export function useNewPostForm({
       ...(photos.length > 0 ? ({ photoUrls: photos } as object) : {}),
       ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
       ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
-      ...(!isShort && initialOpponent && initialOpponent.trim()
-        ? ({ opponentName: initialOpponent.trim() } as object)
+      ...(!isShort && (pickedOpponent ?? initialOpponent)?.trim()
+        ? ({
+            opponentName: (pickedOpponent ?? initialOpponent)!.trim(),
+          } as object)
         : {}),
       // Explicit competition pick (extra-spec field, recapKind
       // precedent). Only sent when the coach actually picked one —
       // absent lets the server keep its automatic best-effort derive.
       ...(!isShort && competitionId
         ? ({ competitionId } as object)
+        : {}),
+      // Task #746 — the specific game the recap covers. Only
+      // meaningful alongside an explicit competition pick.
+      ...(!isShort && competitionId && competitionGameId
+        ? ({ competitionGameId } as object)
         : {}),
       ...(status ? ({ status } as object) : {}),
     };
@@ -1195,6 +1304,11 @@ export function useNewPostForm({
     competitionId,
     claimedCompetitions,
     claimedCompetitionsLoading,
+    // Task #746 — game picker surface: the picked competition's
+    // already-played games plus the current game pick.
+    competitionGameId,
+    competitionGames,
+    competitionGamesLoading,
     composerTeamId,
     draftId,
     editId,
@@ -1256,10 +1370,36 @@ export function useNewPostForm({
       setTeamId(v);
       setCompetitionId("");
       setCompetitionTouched(false);
+      setCompetitionGameId("");
+      setGameTouched(false);
+      setPickedOpponent(null);
     },
+    // Changing the competition invalidates the game pick — the game
+    // list is per-competition. The game reset stays "untouched": with
+    // the pick omitted, the PATCH's (re-sent) competitionId makes the
+    // server re-derive the game from the recap date.
     setCompetitionId: (v: string) => {
       setCompetitionId(v);
       setCompetitionTouched(true);
+      setCompetitionGameId("");
+      setGameTouched(false);
+      setPickedOpponent(null);
+    },
+    // Task #746 — explicit game pick. Marks BOTH pickers touched so
+    // draft PATCHes carry `competitionId` alongside the game (the
+    // server nests game handling inside the competitionId branch).
+    // Picking a game auto-fills the recap's game date and opponent
+    // from the schedule row; clearing the pick leaves them as-is.
+    setCompetitionGameId: (v: string, game?: CompetitionGameOption | null) => {
+      setCompetitionGameId(v);
+      setGameTouched(true);
+      setCompetitionTouched(true);
+      if (v && game) {
+        if (game.matchDate) setGameDate(game.matchDate.slice(0, 10));
+        setPickedOpponent(game.opponentName ?? null);
+      } else {
+        setPickedOpponent(null);
+      }
     },
     setPhotos,
     setVideoUrl,

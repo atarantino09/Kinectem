@@ -24,8 +24,9 @@ import {
   competitionOrganizers,
   competitionAdmins,
   organizerAdmins,
+  teamHiddenCompetitionGames,
 } from "@workspace/db";
-import { and, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
+import { and, asc, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
@@ -35,7 +36,11 @@ import {
 } from "../lib/competition-permissions";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAdmin, requireAuth } from "../lib/auth";
-import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
+import {
+  apiError,
+  articlePostId,
+  MAX_IMAGE_DATA_URL_LENGTH,
+} from "../lib/spec-helpers";
 import {
   canManageOrganization,
   canManageTeam,
@@ -1993,6 +1998,92 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// Task #746 — hide / unhide a competition game on the team page. Team admins
+// (coaches/managers + parent-org admins) can hide an individual imported
+// tournament match from the PUBLIC team page. Hiding is scoped to the team
+// page only — the competition's own public page is unaffected. Both
+// operations are idempotent.
+// ---------------------------------------------------------------------------
+
+router.post(
+  "/teams/:teamId/competition-games/:matchId/hide",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const teamId = String(req.params.teamId);
+    const matchId = String(req.params.matchId);
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return apiError(res, 404, "Team not found");
+    if (!(await canManageTeam(me.id, team)))
+      return apiError(res, 403, "Only team admins can hide games");
+    // The match must actually involve one of this team's claimed slots —
+    // otherwise a team admin could stash hide rows against arbitrary games.
+    const myParts = await db
+      .select({ id: tournamentParticipants.id })
+      .from(tournamentParticipants)
+      .where(eq(tournamentParticipants.teamId, teamId));
+    const partIds = myParts.map((p) => p.id);
+    const [match] =
+      partIds.length > 0
+        ? await db
+            .select({ id: tournamentMatches.id })
+            .from(tournamentMatches)
+            .where(
+              and(
+                eq(tournamentMatches.id, matchId),
+                or(
+                  inArray(tournamentMatches.homeParticipantId, partIds),
+                  inArray(tournamentMatches.awayParticipantId, partIds),
+                ),
+              ),
+            )
+            .limit(1)
+        : [];
+    if (!match) return apiError(res, 404, "Game not found for this team");
+    await db
+      .insert(teamHiddenCompetitionGames)
+      .values({
+        teamId,
+        competitionGameId: matchId,
+        hiddenByUserId: me.id,
+      })
+      .onConflictDoNothing();
+    res.json({ ok: true, hidden: true });
+  }),
+);
+
+router.delete(
+  "/teams/:teamId/competition-games/:matchId/hide",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const teamId = String(req.params.teamId);
+    const matchId = String(req.params.matchId);
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return apiError(res, 404, "Team not found");
+    if (!(await canManageTeam(me.id, team)))
+      return apiError(res, 403, "Only team admins can unhide games");
+    await db
+      .delete(teamHiddenCompetitionGames)
+      .where(
+        and(
+          eq(teamHiddenCompetitionGames.teamId, teamId),
+          eq(teamHiddenCompetitionGames.competitionGameId, matchId),
+        ),
+      );
+    res.json({ ok: true, hidden: false });
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // GET /teams/:teamId/tournament-schedule — PUBLIC. The tournament match
 // schedule for a team that claimed a participant slot, oriented to THAT team
 // (opponent name), grouped by tournament. The imported tournament schedule
@@ -2014,13 +2105,23 @@ router.get(
 
     // Org-backed teams have normal recap rights — the free-window notice is
     // only meaningful for org-less solo teams, so we null it out for them.
+    // Task #746 needs the FULL team row: canManageTeam decides whether the
+    // viewer sees hidden games (greyed out) or not at all.
     const [teamRow] = await db
-      .select({ organizationId: teams.organizationId })
+      .select()
       .from(teams)
       .where(eq(teams.id, teamId))
       .limit(1);
     const isOrgBacked = !!teamRow?.organizationId;
 
+    // Task #746 — team admins can hide individual games from the public
+    // team page. loadSession runs globally, so req.sessionUser is
+    // available even on this public route. Admin viewers get hidden
+    // matches back with `hidden: true`; everyone else doesn't see them.
+    const viewerCanManage =
+      req.sessionUser && teamRow
+        ? await canManageTeam(req.sessionUser.id, teamRow)
+        : false;
     const myPartIds = myParts.map((p) => p.id);
     const myPartIdSet = new Set(myPartIds);
     const tournamentIds = Array.from(new Set(myParts.map((p) => p.tournamentId)));
@@ -2043,6 +2144,50 @@ router.get(
           ),
         ),
       );
+
+    // Task #746 — per-team hidden games + published-recap links.
+    const matchIds = matchRows.map((m) => m.id);
+    const hiddenRows =
+      matchIds.length > 0
+        ? await db
+            .select({ id: teamHiddenCompetitionGames.competitionGameId })
+            .from(teamHiddenCompetitionGames)
+            .where(
+              and(
+                eq(teamHiddenCompetitionGames.teamId, teamId),
+                inArray(
+                  teamHiddenCompetitionGames.competitionGameId,
+                  matchIds,
+                ),
+              ),
+            )
+        : [];
+    const hiddenSet = new Set(hiddenRows.map((r) => r.id));
+    // This team's PUBLISHED recaps linked to a specific game. Ordered so
+    // the earliest published recap wins when several link the same game.
+    const recapRows =
+      matchIds.length > 0
+        ? await db
+            .select({
+              id: articles.id,
+              competitionGameId: articles.competitionGameId,
+            })
+            .from(articles)
+            .where(
+              and(
+                eq(articles.teamId, teamId),
+                eq(articles.status, "published"),
+                inArray(articles.competitionGameId, matchIds),
+              ),
+            )
+            .orderBy(asc(articles.publishedAt), asc(articles.createdAt))
+        : [];
+    const recapPostIdByMatch = new Map<string, string>();
+    for (const r of recapRows) {
+      if (r.competitionGameId && !recapPostIdByMatch.has(r.competitionGameId)) {
+        recapPostIdByMatch.set(r.competitionGameId, articlePostId(r.id));
+      }
+    }
 
     // Resolve opponent display names for every participant referenced.
     const refIds = new Set<string>();
@@ -2071,6 +2216,11 @@ router.get(
       field: string | null;
       isHome: boolean;
       opponentName: string | null;
+      // Task #746 — link to this team's published recap for the game
+      // (null when none) and, for admin viewers only, whether the game
+      // is hidden from the public team page.
+      recapPostId: string | null;
+      hidden?: boolean;
     }
     const groups = new Map<
       string,
@@ -2091,6 +2241,10 @@ router.get(
     for (const m of matchRows) {
       const t = tourneyById.get(m.tournamentId);
       if (!t) continue;
+      // Task #746 — hidden games: omitted entirely for the public,
+      // greyed-out (hidden: true) for team admins.
+      const isHidden = hiddenSet.has(m.id);
+      if (isHidden && !viewerCanManage) continue;
       const isHome =
         m.homeParticipantId != null && myPartIdSet.has(m.homeParticipantId);
       const oppId = isHome ? m.awayParticipantId : m.homeParticipantId;
@@ -2122,6 +2276,8 @@ router.get(
         field: m.field,
         isHome,
         opponentName: oppId ? nameById.get(oppId) ?? null : null,
+        recapPostId: recapPostIdByMatch.get(m.id) ?? null,
+        ...(isHidden ? { hidden: true } : {}),
       });
     }
 

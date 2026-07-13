@@ -1693,6 +1693,21 @@ export const gameScoreReports = pgTable("game_score_reports", {
   ),
 }));
 
+// Task #746 — per-team hidden competition games. A team admin can hide an
+// individual imported tournament match from the PUBLIC team page (the match
+// stays on the competition's own public page — hiding is scoped to the team
+// page only). Admins still see hidden matches greyed out with an unhide
+// control. One row per (team, match); hide/unhide are idempotent inserts /
+// deletes against the composite primary key.
+export const teamHiddenCompetitionGames = pgTable("team_hidden_competition_games", {
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  competitionGameId: uuid("competition_game_id").references(() => tournamentMatches.id, { onDelete: "cascade" }).notNull(),
+  hiddenByUserId: uuid("hidden_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.teamId, t.competitionGameId] }),
+}));
+
 // ---------------------------------------------------------------------------
 // Team Schedule. Coaches and org admins post practices/games to a team;
 // rostered members + their parents view them read-only. Visibility is
