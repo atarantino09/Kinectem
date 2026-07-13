@@ -57,6 +57,8 @@ export function buildCompetitionInviteMessage(
     ``,
     `${c.name} (${dates}${where}) is on Kinectem this year — and your team already has a page waiting for you. Claiming it is free and takes about two minutes.`,
     ``,
+    `Kinectem is a storytelling platform for youth sports organizations, where coaches publish game recaps that live on team pages and tag to each player's profile — going beyond the box score, capturing the hustle plays and turning points the stat sheet misses.`,
+    ``,
     `Why claim your team's page:`,
     `- It's completely free`,
     `- Your ${typeLabel} schedule shows up on your team page automatically`,
