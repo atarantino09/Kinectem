@@ -11,6 +11,10 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import {
+  isActiveGuardian,
+  patchParentIdForViewer,
+} from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
@@ -94,7 +98,10 @@ async function listOrgFollowers(req: Request, res: Response) {
     .limit(limit + 1);
   // Hide minors from public follower lists (the viewer-aware filter
   // still surfaces a minor to themself or their linked guardian).
-  const rows = filterOutMinors(rawRows, req.sessionUser?.id ?? null);
+  const rows = filterOutMinors(
+    await patchParentIdForViewer(rawRows, req.sessionUser?.id ?? null),
+    req.sessionUser?.id ?? null,
+  );
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const nextCursor =
@@ -150,7 +157,10 @@ router.get(
       .where(and(...conds))
       .orderBy(desc(teamFollowers.createdAt), desc(teamFollowers.userId))
       .limit(limit + 1);
-    const rows = filterOutMinors(rawRows, req.sessionUser?.id ?? null);
+    const rows = filterOutMinors(
+      await patchParentIdForViewer(rawRows, req.sessionUser?.id ?? null),
+      req.sessionUser?.id ?? null,
+    );
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor =
@@ -190,14 +200,8 @@ router.get(
     // family page reflects what they're managing.
     const me = req.sessionUser;
     const conds = [eq(userFollowers.followingUserId, userId)];
-    const isGuardianViewer = me ? await (async () => {
-      const [u] = await db
-        .select({ parentId: users.parentId })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-      return !!(u && u.parentId === me.id);
-    })() : false;
+    // Task #755 — any ACTIVE guardian qualifies, not just the primary.
+    const isGuardianViewer = me ? await isActiveGuardian(me.id, userId) : false;
     // Task #363 — pending follow edges are only visible to the linked
     // guardian. The child themselves should not see incoming pending
     // follows in their public follower list (those live on the
@@ -232,7 +236,10 @@ router.get(
     // Task #359 — minor accounts must not surface in stranger-visible
     // follower lists. Filter post-query so the cursor pagination plan
     // is unchanged; the page may now be slightly shorter than `limit`.
-    const rows = filterOutMinors(rowsRaw, req.sessionUser?.id ?? null);
+    const rows = filterOutMinors(
+      await patchParentIdForViewer(rowsRaw, req.sessionUser?.id ?? null),
+      req.sessionUser?.id ?? null,
+    );
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor =
@@ -297,7 +304,10 @@ router.get(
       .orderBy(desc(userFollowers.createdAt));
     // Task #359 — drop minor rows from the followed-user list; viewer
     // is allowed to see themselves and their own children through it.
-    const userRows = filterOutMinors(userRowsRaw, req.sessionUser?.id ?? null);
+    const userRows = filterOutMinors(
+      await patchParentIdForViewer(userRowsRaw, req.sessionUser?.id ?? null),
+      req.sessionUser?.id ?? null,
+    );
     // Task #414 — among the surviving minor rows, mask the last name
     // unless the viewer is privileged for that specific minor.
     const ctxFollowing = await buildMinorNameContext(

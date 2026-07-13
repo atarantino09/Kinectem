@@ -4,7 +4,10 @@ import { articlePostId, displayNameForViewer, highlightPostId } from "./spec-hel
 import type { MinorNameViewerContext, PostTaggedUserView } from "./spec-helpers";
 import { buildPostUrl, buildTagEmail, isEmailConfiguredAsync } from "./email";
 import { dispatchNotificationEmailToMany } from "./notification-email";
-import { notifyGuardianOfPendingItem } from "./coppa";
+import {
+  getActiveGuardianIdsForChildren,
+  notifyAllGuardiansOfPendingItem,
+} from "./guardian-links";
 
 // Task #363 Phase 2 — fire a `child_pending_tag` bell on the linked
 // guardian for every pending tag whose target is a minor. This is the
@@ -27,8 +30,8 @@ async function notifyGuardiansOfPendingTags(args: {
     .where(inArray(users.id, args.pendingUserIds));
   for (const c of childRows) {
     if (!c.isMinor || !c.parentId) continue;
-    await notifyGuardianOfPendingItem({
-      guardianUserId: c.parentId,
+    // Task #755 — notify ALL active guardians, not just the primary.
+    await notifyAllGuardiansOfPendingItem({
       childUserId: c.id,
       kind: "tag",
       message: `Please review a pending tag in "${args.postTitle}"`,
@@ -72,8 +75,12 @@ export async function applyArticleTagFanout(args: {
           eq(rosterEntries.status, "accepted"),
         ),
       );
+    // Task #755 — consent is required if ANY active guardian requires it.
+    const guardianIdsByChild = await getActiveGuardianIdsForChildren(
+      players.map((p) => p.userId),
+    );
     const parentIds = Array.from(
-      new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
+      new Set([...guardianIdsByChild.values()].flat()),
     );
     const parentConsent = new Map<string, boolean>();
     if (parentIds.length > 0) {
@@ -84,9 +91,9 @@ export async function applyArticleTagFanout(args: {
       for (const p of parents) parentConsent.set(p.id, !!p.flag);
     }
     for (const p of players) {
-      const parentRequires = p.parentId
-        ? !!parentConsent.get(p.parentId)
-        : false;
+      const parentRequires = (guardianIdsByChild.get(p.userId) ?? []).some(
+        (gid) => !!parentConsent.get(gid),
+      );
       const requires = !!p.requireTagConsent || parentRequires;
       const rosterStatus: "approved" | "pending" = requires ? "pending" : "approved";
       const existing = tagMap.get(p.userId);
@@ -228,8 +235,12 @@ export async function applyMentionTags(args: {
   if (players.length === 0) {
     return { inserted: [], mentioned: [], sanitizedBody };
   }
+  // Task #755 — consent is required if ANY active guardian requires it.
+  const mentionGuardianIdsByChild = await getActiveGuardianIdsForChildren(
+    players.map((p) => p.userId),
+  );
   const parentIds = Array.from(
-    new Set(players.map((p) => p.parentId).filter((p): p is string => !!p)),
+    new Set([...mentionGuardianIdsByChild.values()].flat()),
   );
   const parentConsent = new Map<string, boolean>();
   if (parentIds.length > 0) {
@@ -258,9 +269,9 @@ export async function applyMentionTags(args: {
     .insert(articleTags)
     .values(
       toInsert.map((p) => {
-        const parentRequires = p.parentId
-          ? !!parentConsent.get(p.parentId)
-          : false;
+        const parentRequires = (
+          mentionGuardianIdsByChild.get(p.userId) ?? []
+        ).some((gid) => !!parentConsent.get(gid));
         const requires = !!p.requireTagConsent || parentRequires;
         return {
           articleId: args.articleId,
@@ -547,12 +558,14 @@ export async function notifyNewlyTaggedInHighlight(args: {
     })
     .from(users)
     .where(inArray(users.id, pendingChildIds));
-  const withParent = childRows.filter(
-    (c): c is typeof c & { parentId: string } => !!c.parentId,
+  // Task #755 — fan out to ALL active guardians, not just the primary.
+  const pendingGuardianIdsByChild = await getActiveGuardianIdsForChildren(
+    childRows.map((c) => c.id),
   );
-  if (withParent.length === 0) return;
-
-  const parentIds = Array.from(new Set(withParent.map((c) => c.parentId)));
+  const parentIds = Array.from(
+    new Set([...pendingGuardianIdsByChild.values()].flat()),
+  );
+  if (parentIds.length === 0) return;
   const parents = await db
     .select({ id: users.id, requireTagConsent: users.requireTagConsent })
     .from(users)
@@ -562,18 +575,20 @@ export async function notifyNewlyTaggedInHighlight(args: {
   );
   // Drop self-tags by the parent (a parent tagging their own child is the
   // actor — they don't need a prompt to review their own action) and any
-  // child whose parent doesn't gate consent (the child can decide alone).
-  const guardianTargets = withParent
-    .filter((c) => gatingParents.has(c.parentId))
-    .filter((c) => !args.actorUserId || c.parentId !== args.actorUserId)
-    .map((c) => ({
-      parentId: c.parentId,
-      childId: c.id,
-      childFirst:
-        (c.name?.trim().split(/\s+/)[0] ?? "").length > 0
-          ? c.name!.trim().split(/\s+/)[0]
-          : "your child",
-    }));
+  // guardian who doesn't gate consent (the child can decide alone).
+  const guardianTargets = childRows.flatMap((c) =>
+    (pendingGuardianIdsByChild.get(c.id) ?? [])
+      .filter((gid) => gatingParents.has(gid))
+      .filter((gid) => !args.actorUserId || gid !== args.actorUserId)
+      .map((gid) => ({
+        parentId: gid,
+        childId: c.id,
+        childFirst:
+          (c.name?.trim().split(/\s+/)[0] ?? "").length > 0
+            ? c.name!.trim().split(/\s+/)[0]
+            : "your child",
+      })),
+  );
   if (guardianTargets.length === 0) return;
 
   // Each (parent, child) pair has its own link so dedupe is per-child even

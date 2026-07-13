@@ -17,6 +17,7 @@ import {
   postShares,
   takedownRequests,
   userSports,
+  guardianLinks,
 } from "@workspace/db";
 import {
   aliasedTable,
@@ -31,6 +32,12 @@ import {
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import {
+  getActiveChildIds,
+  getActiveGuardianIds,
+  isActiveGuardian,
+  patchParentIdForViewer,
+} from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canCreateRecap,
@@ -120,7 +127,10 @@ router.get(
     // Task #359 — minors are not discoverable through public listings.
     // The viewer-aware filter still surfaces the minor to themselves and
     // to their linked guardian.
-    rows = filterOutMinors(rows, req.sessionUser?.id ?? null);
+    rows = filterOutMinors(
+      await patchParentIdForViewer(rows, req.sessionUser?.id ?? null),
+      req.sessionUser?.id ?? null,
+    );
     // Task #414 — surviving minor rows (self / linked guardian / shared
     // team) get full names; strangers see "Sam K." and a masked
     // last-name field so the search row matches the post-author chip.
@@ -187,7 +197,8 @@ router.get(
       // for staff-style admin flows where the org explicitly opted in,
       // and would otherwise widen the disclosure surface beyond what
       // the guardian intended when leaving the profile non-`public`.
-      const isLinkedGuardian = !!me && u.parentId === me.id;
+      // Task #755 — any ACTIVE guardian link qualifies, not just primary.
+      const isLinkedGuardian = !!me && (await isActiveGuardian(me.id, u.id));
       const isPlatformAdmin = req.realUser?.role === "admin";
       let isApprovedFollower = false;
       if (!isLinkedGuardian && !isPlatformAdmin && me) {
@@ -229,7 +240,11 @@ router.get(
     //     own profile (DOB, email, COPPA flags) is unchanged.
     let canSeeParents = isOwnProfile;
     if (!canSeeParents && me) {
-      if (me.parentId === u.id || u.parentId === me.id) {
+      // Task #755 — link in either direction (me guards u, or u guards me).
+      if (
+        (await isActiveGuardian(me.id, u.id)) ||
+        (await isActiveGuardian(u.id, me.id))
+      ) {
         canSeeParents = true;
       } else {
         // Org admin of any org that owns a team the profile user is on.
@@ -256,16 +271,21 @@ router.get(
       if (req.realUser?.role === "admin") {
         canSeeChildren = true;
       } else {
+        // Task #755 — children of `u` come from ACTIVE guardian links.
         const sharedAdmin = await db
           .select({ id: organizationAdmins.organizationId })
           .from(organizationAdmins)
           .innerJoin(teams, eq(teams.organizationId, organizationAdmins.organizationId))
           .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
-          .innerJoin(users, eq(users.id, rosterEntries.userId))
+          .innerJoin(
+            guardianLinks,
+            eq(guardianLinks.childId, rosterEntries.userId),
+          )
           .where(
             and(
               eq(organizationAdmins.userId, me.id),
-              eq(users.parentId, u.id),
+              eq(guardianLinks.guardianId, u.id),
+              eq(guardianLinks.status, "active"),
               inArray(organizationAdmins.role, ["owner", "admin"]),
             ),
           )
@@ -281,20 +301,24 @@ router.get(
       // linked-account queries used to ignore `deletedAt` — which would
       // leak a deleted child's id/name/avatar through any non-deleted
       // parent's profile. Both halves now respect `deletedAt`.
+      // Task #755 — both halves derive from ACTIVE guardian links, so a
+      // second parent shows up in the family card too.
+      const guardianIds = canSeeParents ? await getActiveGuardianIds(u.id) : [];
       const parentRows =
-        canSeeParents && u.parentId
+        canSeeParents && guardianIds.length
           ? await db
               .select()
               .from(users)
-              .where(and(eq(users.id, u.parentId), isNull(users.deletedAt)))
-              .limit(1)
+              .where(and(inArray(users.id, guardianIds), isNull(users.deletedAt)))
           : [];
-      const childRows = canSeeChildren
-        ? await db
-            .select()
-            .from(users)
-            .where(and(eq(users.parentId, u.id), isNull(users.deletedAt)))
-        : [];
+      const childIds = canSeeChildren ? await getActiveChildIds(u.id) : [];
+      const childRows =
+        canSeeChildren && childIds.length
+          ? await db
+              .select()
+              .from(users)
+              .where(and(inArray(users.id, childIds), isNull(users.deletedAt)))
+          : [];
       const toLinked = (row: typeof users.$inferSelect) => {
         const { firstName, lastName } = splitName(row.name);
         return {
@@ -366,7 +390,7 @@ router.get(
     // the response stays `false` for the parent so the frontend doesn't
     // mistake them for the user themselves and render self-only UI.
     const isLinkedParentViewer =
-      !!me && !!u.parentId && u.parentId === me.id;
+      !!me && (await isActiveGuardian(me.id, u.id));
     // Task #426 — Per-field birthday visibility. Self / linked guardian
     // always see the real DOB (handled by toPrivateUser). For everyone
     // else the public response only carries `dateOfBirth` when the
@@ -494,9 +518,7 @@ router.patch(
     // child's profile fields. Masqueraded sessions don't get this power —
     // it's a real-account-only check, the same rule the admin branch uses.
     const isLinkedParent =
-      !!existing.parentId &&
-      existing.parentId === me.id &&
-      !req.isMasquerading;
+      !req.isMasquerading && (await isActiveGuardian(me.id, existing.id));
     if (existing.id !== me.id && !isAdmin && !isLinkedParent) {
       return apiError(res, 403, "Forbidden");
     }
@@ -729,8 +751,8 @@ router.get(
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
     const isSelf = me?.id === u.id;
     let isParent = false;
-    if (!isSelf && !isAdmin && me && !req.isMasquerading && u.parentId) {
-      isParent = u.parentId === me.id;
+    if (!isSelf && !isAdmin && me && !req.isMasquerading) {
+      isParent = await isActiveGuardian(me.id, u.id);
     }
     const canSeePending = isSelf || isAdmin || isParent;
 
@@ -1418,12 +1440,7 @@ router.get(
       !!me && req.realUser?.role === "admin" && !req.isMasquerading;
     let isParent = false;
     if (!isSelf && !isRealAdmin && me && !req.isMasquerading) {
-      const [child] = await db
-        .select({ parentId: users.parentId })
-        .from(users)
-        .where(eq(users.id, targetId))
-        .limit(1);
-      isParent = !!child && child.parentId === me.id;
+      isParent = await isActiveGuardian(me.id, targetId);
     }
     const showPending = isSelf || isRealAdmin || isParent;
     // Task #472 — exclude archived teams from the user's profile
@@ -1495,10 +1512,18 @@ router.get(
       .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
       .innerJoin(child, eq(rosterEntries.userId, child.id))
+      // Task #755 — "via child" derives from ACTIVE guardian links.
+      .innerJoin(
+        guardianLinks,
+        and(
+          eq(guardianLinks.childId, child.id),
+          eq(guardianLinks.guardianId, targetId),
+          eq(guardianLinks.status, "active"),
+        ),
+      )
       .where(
         and(
           eq(teamFollowers.userId, targetId),
-          eq(child.parentId, targetId),
           eq(rosterEntries.status, "accepted"),
           // Task #472 — synthetic "via child" rows also drop archived teams.
           isNull(teams.archivedAt),

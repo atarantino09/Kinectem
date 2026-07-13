@@ -30,6 +30,7 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
+import { isActiveGuardian } from "../lib/guardian-links";
 import {
   apiError,
   displayName,
@@ -55,11 +56,12 @@ async function authorizeGuardianForChild(
     return null;
   }
   const [child] = await db
-    .select({ id: users.id, parentId: users.parentId })
+    .select({ id: users.id })
     .from(users)
     .where(eq(users.id, childId))
     .limit(1);
-  if (!child || child.parentId !== me.id) {
+  // Task #755 — any ACTIVE guardian link authorizes, not just the primary.
+  if (!child || !(await isActiveGuardian(me.id, child.id))) {
     apiError(res, 404, "Child not found");
     return null;
   }

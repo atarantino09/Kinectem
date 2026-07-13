@@ -5,6 +5,7 @@ import { filterOutMinors } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import { patchParentIdForViewer } from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
@@ -92,7 +93,10 @@ router.get(
     // entity search. We filter post-query so the (possibly indexed)
     // ilike + name match still uses its existing plan.
     const viewerId = req.sessionUser?.id ?? null;
-    const userRows = filterOutMinors(userRowsRaw, viewerId).slice(0, 10);
+    const userRows = filterOutMinors(
+      await patchParentIdForViewer(userRowsRaw, viewerId),
+      viewerId,
+    ).slice(0, 10);
     // Task #414 — minors that survive the visibility filter (self,
     // linked guardian, shared-team viewer) may still need their last
     // name masked unless the viewer is privileged for that specific

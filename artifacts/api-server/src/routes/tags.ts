@@ -14,6 +14,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import { getActiveGuardianIdsForChildren } from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
@@ -277,10 +278,13 @@ router.post(
         })
         .from(users)
         .where(inArray(users.id, eligibleUserIds));
+      // Task #755 — consent is required if ANY active guardian requires it,
+      // not just the primary mirrored in `parentId`.
+      const guardianIdsByChild = await getActiveGuardianIdsForChildren(
+        userRows.map((u) => u.id),
+      );
       const parentIds = Array.from(
-        new Set(
-          userRows.map((u) => u.parentId).filter((p): p is string => !!p),
-        ),
+        new Set([...guardianIdsByChild.values()].flat()),
       );
       const parentConsent = new Map<string, boolean>();
       if (parentIds.length > 0) {
@@ -302,9 +306,9 @@ router.post(
       const toInsert = userRows
         .filter((u) => !skip.has(u.id))
         .map((u) => {
-          const parentRequires = u.parentId
-            ? !!parentConsent.get(u.parentId)
-            : false;
+          const parentRequires = (guardianIdsByChild.get(u.id) ?? []).some(
+            (gid) => !!parentConsent.get(gid),
+          );
           const requires = !!u.requireTagConsent || parentRequires;
           return {
             articleId: parsed.id,

@@ -11,8 +11,9 @@
 // guardian-confirm) do NOT go through this gate — callers send them directly.
 
 import { db, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { logger } from "./logger";
+import { getActiveGuardianIds } from "./guardian-links";
 import { appBaseUrl, sendEmail, type EmailMessage } from "./email";
 import {
   getOrCreatePreferences,
@@ -52,49 +53,59 @@ interface ResolvedRecipient {
   isGuardianCopy: boolean;
 }
 
-// Resolve an in-app notification target to the address we may email, applying
-// COPPA minor->guardian routing. Returns null when the email must be
+// Resolve an in-app notification target to the address(es) we may email,
+// applying COPPA minor->guardian routing. Returns [] when the email must be
 // suppressed (no such user, a minor with no linked guardian, or no address).
-async function resolveEmailRecipient(
+//
+// Task #755 — a minor can have MULTIPLE active guardians; engagement email
+// about the minor fans out to every active guardian with an address. Callers
+// dedupe by recipientId, so two children sharing both parents still produce
+// at most one email per parent.
+async function resolveEmailRecipients(
   userId: string,
-): Promise<ResolvedRecipient | null> {
+): Promise<ResolvedRecipient[]> {
   const [target] = await db
     .select({
       id: users.id,
       name: users.name,
       email: users.email,
       isMinor: users.isMinor,
-      parentId: users.parentId,
     })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  if (!target) return null;
-
-  let recipientId = target.id;
-  let recipientEmail = target.email;
-  let recipientName = target.name;
-  let isGuardianCopy = false;
-  const subjectName = target.name;
+  if (!target) return [];
 
   if (target.isMinor) {
-    // COPPA — never email a minor's own inbox for engagement. Route to the
-    // linked guardian; if there is none, suppress entirely.
-    if (!target.parentId) return null;
-    const [guardian] = await db
+    // COPPA — never email a minor's own inbox for engagement. Route to ALL
+    // active linked guardians; if there are none, suppress entirely.
+    const guardianIds = await getActiveGuardianIds(target.id);
+    if (guardianIds.length === 0) return [];
+    const guardians = await db
       .select({ id: users.id, name: users.name, email: users.email })
       .from(users)
-      .where(eq(users.id, target.parentId))
-      .limit(1);
-    if (!guardian?.email) return null;
-    recipientId = guardian.id;
-    recipientEmail = guardian.email;
-    recipientName = guardian.name;
-    isGuardianCopy = true;
+      .where(inArray(users.id, guardianIds));
+    return guardians
+      .filter((g) => !!g.email)
+      .map((g) => ({
+        recipientId: g.id,
+        recipientEmail: g.email!,
+        recipientName: g.name,
+        subjectName: target.name,
+        isGuardianCopy: true,
+      }));
   }
 
-  if (!recipientEmail) return null;
-  return { recipientId, recipientEmail, recipientName, subjectName, isGuardianCopy };
+  if (!target.email) return [];
+  return [
+    {
+      recipientId: target.id,
+      recipientEmail: target.email,
+      recipientName: target.name,
+      subjectName: target.name,
+      isGuardianCopy: false,
+    },
+  ];
 }
 
 // Gate on the resolved recipient's preferences, then build + send.
@@ -128,11 +139,12 @@ export async function dispatchNotificationEmail(args: {
 }): Promise<void> {
   const { userId, category, build, excludeRecipientUserId } = args;
   try {
-    const resolved = await resolveEmailRecipient(userId);
-    if (!resolved) return;
-    if (excludeRecipientUserId && resolved.recipientId === excludeRecipientUserId)
-      return;
-    await sendToResolved(resolved, category, build);
+    const resolvedList = await resolveEmailRecipients(userId);
+    for (const resolved of resolvedList) {
+      if (excludeRecipientUserId && resolved.recipientId === excludeRecipientUserId)
+        continue;
+      await sendToResolved(resolved, category, build);
+    }
   } catch (err) {
     // Email is best-effort; never let it break the originating request.
     logger.warn({ err, category }, "dispatchNotificationEmail failed");
@@ -155,15 +167,16 @@ export async function dispatchNotificationEmailToMany(args: {
   await Promise.allSettled(
     uniqueIds.map(async (userId) => {
       try {
-        const resolved = await resolveEmailRecipient(userId);
-        if (!resolved) return;
-        if (
-          args.excludeRecipientUserId &&
-          resolved.recipientId === args.excludeRecipientUserId
-        )
-          return;
-        if (!byRecipient.has(resolved.recipientId)) {
-          byRecipient.set(resolved.recipientId, resolved);
+        const resolvedList = await resolveEmailRecipients(userId);
+        for (const resolved of resolvedList) {
+          if (
+            args.excludeRecipientUserId &&
+            resolved.recipientId === args.excludeRecipientUserId
+          )
+            continue;
+          if (!byRecipient.has(resolved.recipientId)) {
+            byRecipient.set(resolved.recipientId, resolved);
+          }
         }
       } catch (err) {
         logger.warn(

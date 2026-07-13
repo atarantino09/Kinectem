@@ -10,6 +10,7 @@ import { logConsentEvent } from "../lib/coppa";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import { isActiveGuardian } from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
@@ -198,12 +199,8 @@ router.get(
     if (!isOwner && me.role !== "admin") {
       let isGuardianOfOwner = false;
       if (ownerId !== null) {
-        const [child] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(eq(users.id, ownerId), eq(users.parentId, me.id)))
-          .limit(1);
-        isGuardianOfOwner = Boolean(child);
+        // Task #755 — any ACTIVE guardian link grants read access.
+        isGuardianOfOwner = await isActiveGuardian(me.id, ownerId);
       }
       if (!isGuardianOfOwner) return apiError(res, 403, "Forbidden");
     }

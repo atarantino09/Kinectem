@@ -170,6 +170,12 @@ export const consentAuditEventEnum = pgEnum("consent_audit_event", [
   "guardian_takedown_requested",
   "guardian_takedown_approved",
   "guardian_takedown_declined",
+  // Task #755 — multi-guardian link lifecycle events.
+  "guardian_link_invited",
+  "guardian_link_accepted",
+  "guardian_link_declined",
+  "guardian_link_removed",
+  "guardian_link_primary_transferred",
 ]);
 
 export const users = pgTable("users", {
@@ -1376,6 +1382,67 @@ export const consentAuditLog = pgTable("consent_audit_log", {
   details: text("details"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Guardian links — multi-guardian support (task #755)
+//
+// Each row links one child account to one guardian. Implements the locked
+// OpenAPI guardian-links contract (invite / accept / decline / remove /
+// transfer-primary). `users.parentId` is kept as a MIRROR of the primary
+// ACTIVE link's guardian (dual-write) so the locked `coppa.ts` and other
+// single-parent readers stay correct — never let the two drift.
+// ---------------------------------------------------------------------------
+export const guardianRelationshipEnum = pgEnum("guardian_relationship", [
+  "parent",
+  "legal_guardian",
+]);
+export const guardianLinkStatusEnum = pgEnum("guardian_link_status", [
+  "pending",
+  "active",
+  "revoked",
+]);
+
+export const guardianLinks = pgTable(
+  "guardian_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    childId: uuid("child_id")
+      .notNull()
+      .references((): AnyPgColumn => users.id, { onDelete: "cascade" }),
+    // Null while the invite is pending for an email with no account yet;
+    // set when the invited address matches (or later creates) an account.
+    guardianId: uuid("guardian_id").references((): AnyPgColumn => users.id, {
+      onDelete: "cascade",
+    }),
+    // Lowercased invite target. Kept after acceptance for audit purposes.
+    inviteEmail: text("invite_email"),
+    relationshipType: guardianRelationshipEnum("relationship_type")
+      .notNull()
+      .default("parent"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    status: guardianLinkStatusEnum("status").notNull().default("pending"),
+    consentGrantedAt: timestamp("consent_granted_at"),
+    consentMethod: text("consent_method"),
+    invitedByUserId: uuid("invited_by_user_id").references(
+      (): AnyPgColumn => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    childIdx: index("guardian_links_child_id_idx").on(t.childId),
+    guardianIdx: index("guardian_links_guardian_id_idx").on(t.guardianId),
+    // At most one primary ACTIVE guardian per child.
+    onePrimaryActivePerChild: uniqueIndex("guardian_links_one_primary_active")
+      .on(t.childId)
+      .where(sql`${t.isPrimary} AND ${t.status} = 'active'`),
+    // A guardian can hold at most one live (non-revoked) link per child.
+    oneLiveLinkPerPair: uniqueIndex("guardian_links_live_pair_uniq")
+      .on(t.childId, t.guardianId)
+      .where(sql`${t.status} <> 'revoked'`),
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Org subscriptions + promo codes

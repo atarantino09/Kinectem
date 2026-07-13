@@ -12,6 +12,7 @@
 
 import { Router, type IRouter } from "express";
 import { db, users, parentalConsents, sessions, refreshTokens } from "@workspace/db";
+import { ensureActiveGuardianLink } from "../lib/guardian-links";
 import { eq } from "drizzle-orm";
 import { generateToken } from "../lib/passwords";
 import { apiError } from "../lib/spec-helpers";
@@ -252,11 +253,18 @@ router.post(
         guardianConfirmedAt: now,
         guardianConfirmTokenHash: null,
         guardianConfirmTokenExpiresAt: null,
-        // If the guardian's email matches a real user, link parentId so
-        // existing Family-page UI sees the relationship immediately.
-        ...(guardianUser ? { parentId: guardianUser.id } : {}),
       })
       .where(eq(users.id, row.child.id));
+    // Task #755 — if the guardian's email matches a real user, establish
+    // the relationship via guardian_links (keeps the parentId mirror in
+    // sync so the Family page sees it immediately).
+    if (guardianUser) {
+      await ensureActiveGuardianLink({
+        childId: row.child.id,
+        guardianId: guardianUser.id,
+        consentMethod: "parental_consent",
+      });
+    }
 
     try {
       await sendParentalConsentFinalizedEmail(

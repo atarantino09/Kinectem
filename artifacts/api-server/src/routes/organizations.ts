@@ -19,11 +19,13 @@ import {
   notifications,
   organizationJoinRequests,
   organizationClaimRequests,
+  guardianLinks,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import { notifyAllGuardiansOfPendingItem } from "../lib/guardian-links";
 import {
   sendGuardianConfirmationEmail,
   sendGuardianExpiredEmail,
@@ -2379,8 +2381,8 @@ router.post(
             }),
         });
       } else if (target.parentId) {
-        await notifyGuardianOfPendingItem({
-          guardianUserId: target.parentId,
+        // Task #755 — notify ALL active guardians, not just the primary.
+        await notifyAllGuardiansOfPendingItem({
           childUserId: target.id,
           kind: "follow",
           message: `${displayName(me)} wants to follow your child`,
@@ -2536,7 +2538,12 @@ async function computeOrgSetupStatus(orgId: string, userId: string) {
         inner join ${users} on ${users.id} = ${rosterEntries.userId}
         where ${teams.organizationId} = ${orgId}
           and ${teams.archivedAt} is null
-          and ${users.parentId} is not null
+          -- Task #755: linked = any ACTIVE guardian link, not just parentId
+          and exists (
+            select 1 from ${guardianLinks}
+            where ${guardianLinks.childId} = ${users.id}
+              and ${guardianLinks.status} = 'active'
+          )
       )`,
       pendingRosterInviteCount: sql<number>`(
         select count(*)::int from ${rosterInvites}

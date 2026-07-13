@@ -1,5 +1,6 @@
 import {
   db,
+  guardianLinks,
   teams,
   users,
   teamFollowers,
@@ -122,10 +123,16 @@ export async function cleanupTeamFollowsForUnlinkedChild(
       if (parentRoster) continue;
       // Any *other* linked child of this parent still accepted on this
       // team? Keep the follow so their other "Parent" badge survives.
+      // Task #755 — consult ACTIVE guardian links (multi-guardian aware).
       const otherChildren = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.parentId, parentUserId));
+        .select({ id: guardianLinks.childId })
+        .from(guardianLinks)
+        .where(
+          and(
+            eq(guardianLinks.guardianId, parentUserId),
+            eq(guardianLinks.status, "active"),
+          ),
+        );
       let keepForOtherChild = false;
       for (const c of otherChildren) {
         if (c.id === childUserId) continue;

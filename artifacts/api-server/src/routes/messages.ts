@@ -26,6 +26,11 @@ import {
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import {
+  filterChildrenOfGuardian,
+  notifyAllGuardiansOfPendingItem,
+  patchParentIdForViewer,
+} from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
@@ -403,8 +408,8 @@ router.post(
           actorEmail: me.email ?? null,
           details: `message:${created.id}`,
         });
-        await notifyGuardianOfPendingItem({
-          guardianUserId: dmGate.recipient.parentId,
+        // Task #755 — notify ALL active guardians, not just the primary.
+        await notifyAllGuardiansOfPendingItem({
           childUserId: dmGate.recipient.id,
           kind: "dm",
           message: `New message is awaiting your approval`,
@@ -466,7 +471,10 @@ router.get(
       .limit(limit);
     // Task #359 — strangers cannot start a DM with a minor through the
     // contacts picker; the minor's linked guardian still sees them.
-    const visible = filterOutMinors(rows, me.id);
+    const visible = filterOutMinors(
+      await patchParentIdForViewer(rows, me.id),
+      me.id,
+    );
     res.json({
       data: visible.map((u) => ({
         id: u.id,
@@ -576,8 +584,11 @@ router.get(
           eq(conversationParticipants.participantType, "user"),
         ),
       );
-    const myChildren = new Set(
-      otherUsers.filter((u) => u.parentId === me.id).map((u) => u.userId),
+    // Task #755 — child↔guardian map derives from ACTIVE guardian links so
+    // a non-primary guardian also sees pending messages for moderation.
+    const myChildren = await filterChildrenOfGuardian(
+      me.id,
+      otherUsers.map((u) => u.userId),
     );
     const isViewerGuardian = myChildren.size > 0;
     const visibleRows = rows.filter((r) => {
@@ -745,8 +756,8 @@ router.post(
         actorEmail: me.email ?? null,
         details: `message:${m.id}`,
       });
-      await notifyGuardianOfPendingItem({
-        guardianUserId: messageGate.recipient.parentId,
+      // Task #755 — notify ALL active guardians, not just the primary.
+      await notifyAllGuardiansOfPendingItem({
         childUserId: messageGate.recipient.id,
         kind: "dm",
         message: `New message is awaiting your approval`,

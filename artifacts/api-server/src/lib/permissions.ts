@@ -1,6 +1,7 @@
 import {
   db,
   articleAuthors,
+  guardianLinks,
   organizationAdmins,
   rosterEntries,
   teams,
@@ -164,7 +165,8 @@ export async function isTeamMember(userId: string, teamId: string): Promise<bool
 // the team's coaches, accepted rostered athletes, and the parents of those
 // athletes. Coaches and accepted players are both covered by `isTeamMember`
 // (an accepted roster row); org managers by `canManageOrganization`; parents
-// via the `users.parentId` link to an accepted child on this team.
+// via an ACTIVE guardian link to an accepted child on this team (Task #755 —
+// multi-guardian: any active guardian qualifies, not just the primary).
 export async function canViewTeamSchedule(
   userId: string,
   team: Team,
@@ -174,12 +176,16 @@ export async function canViewTeamSchedule(
   const [row] = await db
     .select({ id: rosterEntries.id })
     .from(rosterEntries)
-    .innerJoin(users, eq(users.id, rosterEntries.userId))
+    .innerJoin(
+      guardianLinks,
+      eq(guardianLinks.childId, rosterEntries.userId),
+    )
     .where(
       and(
         eq(rosterEntries.teamId, team.id),
         eq(rosterEntries.status, "accepted"),
-        eq(users.parentId, userId),
+        eq(guardianLinks.guardianId, userId),
+        eq(guardianLinks.status, "active"),
       ),
     )
     .limit(1);

@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, users, guardianLinks } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  ensureActiveGuardianLink,
+  getActiveChildIds,
+  getActiveGuardianIds,
+  isActiveGuardian,
+  syncParentIdMirror,
+} from "../lib/guardian-links";
 import { generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -55,10 +62,11 @@ router.get(
         );
       }
     }
-    const rows = await db
-      .select()
-      .from(users)
-      .where(eq(users.parentId, me.id));
+    // Task #755 — children come from ACTIVE guardian links (multi-guardian).
+    const childIds = await getActiveChildIds(me.id);
+    const rows = childIds.length
+      ? await db.select().from(users).where(inArray(users.id, childIds))
+      : [];
     res.json({
       data: rows.map((u) => {
         const [first, ...rest] = u.name.split(" ");
@@ -116,14 +124,23 @@ router.post(
       .where(eq(users.id, childId))
       .limit(1);
     if (!child) return apiError(res, 404, "User not found");
-    if (child.parentId && child.parentId !== me.id) {
+    // Task #755 — a child with any OTHER active guardian can't be claimed
+    // via this legacy endpoint; a second parent joins via the invite flow.
+    const activeGuardians = await getActiveGuardianIds(childId);
+    if (activeGuardians.some((g) => g !== me.id)) {
       return apiError(res, 409, "Already linked to another guardian");
     }
+    // Dual-write: create/reactivate the link and sync the parentId mirror.
+    await ensureActiveGuardianLink({
+      childId,
+      guardianId: me.id,
+      consentMethod: "legacy_claim",
+    });
     const [updated] = await db
-      .update(users)
-      .set({ parentId: me.id })
+      .select()
+      .from(users)
       .where(eq(users.id, childId))
-      .returning();
+      .limit(1);
     // Surface every team this child is already on under the parent's
     // profile Teams section by auto-following each one. Best-effort.
     await backfillTeamFollowsForLinkedChild(me.id, updated.id);
@@ -160,15 +177,26 @@ router.delete(
       .where(eq(users.id, childId))
       .limit(1);
     if (!child) return apiError(res, 404, "Child not found");
-    if (child.parentId !== me.id) {
+    if (!(await isActiveGuardian(me.id, childId))) {
       // Don't leak whether the child exists under another guardian —
       // 404 is consistent with the resend endpoint above.
       return apiError(res, 404, "Child not found");
     }
-    await db
-      .update(users)
-      .set({ parentId: null })
-      .where(eq(users.id, childId));
+    // Task #755 — revoke MY link only; the parentId mirror re-derives to
+    // the remaining active guardian (or null when I was the last one).
+    await db.transaction(async (tx) => {
+      await tx
+        .update(guardianLinks)
+        .set({ status: "revoked", isPrimary: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(guardianLinks.childId, childId),
+            eq(guardianLinks.guardianId, me.id),
+            eq(guardianLinks.status, "active"),
+          ),
+        );
+      await syncParentIdMirror(childId, tx);
+    });
     await cleanupTeamFollowsForUnlinkedChild(me.id, childId);
     res.status(204).send();
   }),
@@ -184,7 +212,7 @@ router.post(
       .from(users)
       .where(eq(users.id, req.params.childId))
       .limit(1);
-    if (!child || child.parentId !== me.id) {
+    if (!child || !(await isActiveGuardian(me.id, child.id))) {
       return apiError(res, 404, "Child not found");
     }
     if (!child.guardianEmail) {

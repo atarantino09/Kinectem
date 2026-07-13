@@ -442,6 +442,44 @@ If you don't recognize this signup, you can ignore this email and the account wi
   });
 }
 
+// Task #755 — sent when a parent (or the child / an admin) invites a second
+// parent or legal guardian to link with a child's account. The link lands on
+// the Family dashboard where the pending invite can be accepted or declined
+// (sign in — or sign up with this email address — first if needed).
+export async function sendGuardianLinkInviteEmail(
+  to: string,
+  args: {
+    childName: string;
+    inviterName: string;
+    relationshipType: "parent" | "legal_guardian";
+  },
+): Promise<void> {
+  const url = buildFamilyUrl();
+  const roleLabel =
+    args.relationshipType === "legal_guardian" ? "legal guardian" : "parent";
+  await sendEmail({
+    to,
+    kind: "guardian_link_invite",
+    subject: `${args.inviterName} invited you to be ${args.childName}'s ${roleLabel} on Kinectem`,
+    text: `${args.inviterName} invited you to join Kinectem as ${args.childName}'s ${roleLabel}.
+
+Once you accept, you'll see ${args.childName} on your Family dashboard, follow their teams automatically, and receive updates about their activity.
+
+To accept or decline, open your Family dashboard:
+${url}
+
+If you don't have a Kinectem account yet, sign up using this email address (${to}) and the invitation will be waiting for you.
+
+If you don't recognize this invitation, you can ignore this email or decline it in the app.`,
+    html: `<p><strong>${escapeHtml(args.inviterName)}</strong> invited you to join Kinectem as <strong>${escapeHtml(args.childName)}</strong>'s ${roleLabel}.</p>
+<p>Once you accept, you'll see ${escapeHtml(args.childName)} on your Family dashboard, follow their teams automatically, and receive updates about their activity.</p>
+<p>To accept or decline, open your Family dashboard:</p>
+<p><a href="${url}">${url}</a></p>
+<p>If you don't have a Kinectem account yet, sign up using this email address (${escapeHtml(to)}) and the invitation will be waiting for you.</p>
+<p>If you don't recognize this invitation, you can ignore this email or decline it in the app.</p>`,
+  });
+}
+
 // Task #359 — first email of the COPPA "email plus" verifiable parental
 // consent flow. The link points at the consent landing page that shows
 // the full COPPA notice and a checkbox the guardian must tick.

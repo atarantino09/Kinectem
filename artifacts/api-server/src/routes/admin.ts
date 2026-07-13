@@ -23,11 +23,13 @@ import {
   scheduleEvents,
   scheduleEventRsvps,
   announcements,
+  guardianLinks,
 } from "@workspace/db";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { hardDeleteUser } from "@workspace/user-hard-delete";
 import { asyncHandler } from "../lib/async-handler";
+import { ensureActiveGuardianLink, syncParentIdMirror } from "../lib/guardian-links";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
 import {
@@ -555,7 +557,9 @@ router.patch(
     if (body.dateOfBirth !== undefined) {
       updates.dateOfBirth = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
     }
-    if (body.parentId !== undefined) updates.parentId = body.parentId;
+    // Task #755 — parentId is a mirror of the primary ACTIVE guardian
+    // link. Route admin edits through the links table (below) instead of
+    // writing the column directly, so the invariant holds.
     if (body.guardianEmail !== undefined) updates.guardianEmail = body.guardianEmail;
     if (body.requireTagConsent !== undefined)
       updates.requireTagConsent = body.requireTagConsent;
@@ -565,11 +569,44 @@ router.patch(
       updates.guardianConfirmTokenHash = null;
       updates.guardianConfirmTokenExpiresAt = null;
     }
-    const [updated] = Object.keys(updates).length
+    let [updated] = Object.keys(updates).length
       ? await db.update(users).set(updates).where(eq(users.id, u.id)).returning()
       : [u];
+    // Task #755 — apply the parent link change via guardian_links so the
+    // parentId mirror stays consistent with the links table.
+    if (body.parentId !== undefined) {
+      if (body.parentId) {
+        await ensureActiveGuardianLink({
+          childId: u.id,
+          guardianId: body.parentId,
+          consentMethod: "admin_edit",
+        });
+      } else {
+        // Clearing the parent: revoke ALL active links for this child,
+        // then re-sync the mirror (→ null).
+        await db
+          .update(guardianLinks)
+          .set({ status: "revoked", updatedAt: new Date() })
+          .where(
+            and(
+              eq(guardianLinks.childId, u.id),
+              ne(guardianLinks.status, "revoked"),
+            ),
+          );
+        await syncParentIdMirror(u.id);
+      }
+      const [refreshed] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, u.id))
+        .limit(1);
+      if (refreshed) updated = refreshed;
+    }
     await logAdminAction(req.realUser!.id, "update_user", "user", u.id, {
-      changed: Object.keys(updates),
+      changed: [
+        ...Object.keys(updates),
+        ...(body.parentId !== undefined ? ["parentId"] : []),
+      ],
     });
     res.json(toPrivateUser(updated));
   }),

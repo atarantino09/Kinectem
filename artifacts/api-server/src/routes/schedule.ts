@@ -8,12 +8,14 @@ import {
   scheduleEvents,
   scheduleRecurrences,
   scheduleEventRsvps,
+  guardianLinks,
 } from "@workspace/db";
 import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
+import { isActiveGuardian } from "../lib/guardian-links";
 import { apiError, notFound, paginate } from "../lib/spec-helpers";
 import { canManageTeam, canViewTeamSchedule } from "../lib/permissions";
 import { notifyTeamOfScheduleChange } from "../lib/schedule-notifications";
@@ -684,16 +686,25 @@ async function myAthletesOnTeam(
         eq(rosterEntries.status, "accepted"),
       ),
     );
+  // Task #755 — children derive from ACTIVE guardian links, not the
+  // single parentId mirror, so a second parent can RSVP too.
   const children = await db
     .select({ athleteId: users.id, athleteName: users.name })
     .from(rosterEntries)
     .innerJoin(users, eq(users.id, rosterEntries.userId))
+    .innerJoin(
+      guardianLinks,
+      and(
+        eq(guardianLinks.childId, users.id),
+        eq(guardianLinks.guardianId, userId),
+        eq(guardianLinks.status, "active"),
+      ),
+    )
     .where(
       and(
         eq(rosterEntries.teamId, teamId),
         eq(rosterEntries.role, "player"),
         eq(rosterEntries.status, "accepted"),
-        eq(users.parentId, userId),
       ),
     );
   const byId = new Map<string, { athleteId: string; athleteName: string }>();
@@ -882,7 +893,8 @@ router.put(
         code: "ATHLETE_NOT_FOUND",
       });
     }
-    if (athlete.id !== me.id && athlete.parentId !== me.id) {
+    // Task #755 — any ACTIVE guardian may respond, not just the primary.
+    if (athlete.id !== me.id && !(await isActiveGuardian(me.id, athlete.id))) {
       return apiError(res, 403, "You can only respond for yourself or your child", {
         code: "RSVP_FORBIDDEN",
       });

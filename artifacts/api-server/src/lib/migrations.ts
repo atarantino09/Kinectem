@@ -1567,6 +1567,200 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS hidden_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL;
     `,
   },
+  {
+    // Task #755 — multi-guardian support. Creates guardian_links and
+    // backfills every existing users.parent_id into an ACTIVE PRIMARY link.
+    // `users.parent_id` stays as a dual-written mirror of the primary
+    // active guardian (the locked coppa.ts reads it), so the backfill must
+    // run before any link-aware code path. Idempotent: the backfill only
+    // inserts when no live link exists for the (child, guardian) pair.
+    name: "2026-07-13-task-755-guardian-links",
+    sql: `
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'guardian_relationship') THEN
+          CREATE TYPE guardian_relationship AS ENUM ('parent', 'legal_guardian');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'guardian_link_status') THEN
+          CREATE TYPE guardian_link_status AS ENUM ('pending', 'active', 'revoked');
+        END IF;
+      END$migration$;
+
+      ALTER TYPE consent_audit_event ADD VALUE IF NOT EXISTS 'guardian_link_invited';
+      ALTER TYPE consent_audit_event ADD VALUE IF NOT EXISTS 'guardian_link_accepted';
+      ALTER TYPE consent_audit_event ADD VALUE IF NOT EXISTS 'guardian_link_declined';
+      ALTER TYPE consent_audit_event ADD VALUE IF NOT EXISTS 'guardian_link_removed';
+      ALTER TYPE consent_audit_event ADD VALUE IF NOT EXISTS 'guardian_link_primary_transferred';
+
+      CREATE TABLE IF NOT EXISTS guardian_links (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        child_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        guardian_id uuid REFERENCES users(id) ON DELETE CASCADE,
+        invite_email text,
+        relationship_type guardian_relationship DEFAULT 'parent' NOT NULL,
+        is_primary boolean DEFAULT false NOT NULL,
+        status guardian_link_status DEFAULT 'pending' NOT NULL,
+        consent_granted_at timestamp,
+        consent_method text,
+        invited_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at timestamp DEFAULT now() NOT NULL,
+        updated_at timestamp DEFAULT now() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS guardian_links_child_id_idx
+        ON guardian_links (child_id);
+      CREATE INDEX IF NOT EXISTS guardian_links_guardian_id_idx
+        ON guardian_links (guardian_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS guardian_links_one_primary_active
+        ON guardian_links (child_id)
+        WHERE is_primary AND status = 'active';
+      CREATE UNIQUE INDEX IF NOT EXISTS guardian_links_live_pair_uniq
+        ON guardian_links (child_id, guardian_id)
+        WHERE status <> 'revoked';
+
+      -- Backfill: every existing parent_id becomes an active PRIMARY link.
+      INSERT INTO guardian_links
+        (child_id, guardian_id, invite_email, relationship_type, is_primary,
+         status, consent_granted_at, consent_method)
+      SELECT
+        c.id,
+        c.parent_id,
+        lower(g.email),
+        'parent',
+        true,
+        'active',
+        COALESCE(c.guardian_confirmed_at, c.consent_finalized_at, now()),
+        'legacy_parent_id_backfill'
+      FROM users c
+      JOIN users g ON g.id = c.parent_id
+      WHERE c.parent_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM guardian_links gl
+           WHERE gl.child_id = c.id
+             AND gl.guardian_id = c.parent_id
+             AND gl.status <> 'revoked'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM guardian_links gl2
+           WHERE gl2.child_id = c.id
+             AND gl2.is_primary
+             AND gl2.status = 'active'
+        );
+    `,
+  },
+  {
+    // Task #755 — belt-and-braces for the parent_id ↔ guardian_links
+    // invariant. All converted code writes links first and mirrors
+    // `users.parent_id` via syncParentIdMirror, but any remaining direct
+    // writer (legacy scripts, test fixtures, future code) that sets
+    // `parent_id` without a link would silently drop the child out of every
+    // link-derived fan-out. This trigger mirrors such writes into an ACTIVE
+    // guardian link (primary when the child has no active primary yet),
+    // exactly like the one-time backfill above. No-ops when a live link for
+    // the pair already exists, so the dual-writing app code never conflicts.
+    name: "2026-07-13-task-755-parent-id-write-trigger",
+    sql: `
+      CREATE OR REPLACE FUNCTION sync_guardian_link_from_parent_id()
+      RETURNS trigger AS $fn$
+      BEGIN
+        -- Legacy detach/reparent: a direct write that clears or changes
+        -- parent_id revokes the OLD pair's link — but ONLY while that link
+        -- is still the PRIMARY ACTIVE one. App-code flows (transfer-primary,
+        -- remove-guardian) demote/revoke the link BEFORE mirroring
+        -- parent_id, so this branch is a no-op for them and co-guardian
+        -- links are never touched.
+        IF TG_OP = 'UPDATE'
+           AND OLD.parent_id IS NOT NULL
+           AND NEW.parent_id IS DISTINCT FROM OLD.parent_id
+        THEN
+          UPDATE guardian_links
+             SET status = 'revoked', is_primary = false, updated_at = now()
+           WHERE child_id = NEW.id
+             AND guardian_id = OLD.parent_id
+             AND is_primary
+             AND status = 'active';
+        END IF;
+
+        IF NEW.parent_id IS NOT NULL
+           AND (TG_OP = 'INSERT' OR NEW.parent_id IS DISTINCT FROM OLD.parent_id)
+        THEN
+          INSERT INTO guardian_links
+            (child_id, guardian_id, relationship_type, is_primary,
+             status, consent_granted_at, consent_method)
+          SELECT
+            NEW.id,
+            NEW.parent_id,
+            'parent',
+            NOT EXISTS (
+              SELECT 1 FROM guardian_links gl
+               WHERE gl.child_id = NEW.id
+                 AND gl.is_primary
+                 AND gl.status = 'active'
+            ),
+            'active',
+            COALESCE(NEW.guardian_confirmed_at, NEW.consent_finalized_at, now()),
+            'legacy_parent_id_write'
+          WHERE NOT EXISTS (
+            SELECT 1 FROM guardian_links gl
+             WHERE gl.child_id = NEW.id
+               AND gl.guardian_id = NEW.parent_id
+               AND gl.status <> 'revoked'
+          );
+        END IF;
+
+        -- Legacy clear (parent_id -> NULL) while other ACTIVE co-guardian
+        -- links remain: promote the oldest remaining active link to primary
+        -- and mirror it back into users.parent_id so the invariant
+        -- "parent_id mirrors the primary ACTIVE guardian" cannot drift.
+        -- App-code flows never hit this: syncParentIdMirror only writes NULL
+        -- when NO active links remain, so the promote SELECT finds nothing.
+        -- The mirror UPDATE re-fires this trigger, but that pass takes the
+        -- insert branch (live pair exists -> no-op) and skips this one
+        -- (NEW.parent_id is no longer NULL), so it terminates.
+        IF TG_OP = 'UPDATE'
+           AND NEW.parent_id IS NULL
+           AND OLD.parent_id IS NOT NULL
+        THEN
+          DECLARE
+            promoted_guardian uuid;
+            promoted_link uuid;
+          BEGIN
+            SELECT gl.guardian_id, gl.id
+              INTO promoted_guardian, promoted_link
+              FROM guardian_links gl
+             WHERE gl.child_id = NEW.id
+               AND gl.status = 'active'
+               AND gl.guardian_id IS NOT NULL
+             ORDER BY gl.is_primary DESC, gl.created_at
+             LIMIT 1;
+            IF promoted_link IS NOT NULL THEN
+              UPDATE guardian_links
+                 SET is_primary = true, updated_at = now()
+               WHERE id = promoted_link
+                 AND NOT is_primary
+                 AND NOT EXISTS (
+                   SELECT 1 FROM guardian_links gl2
+                    WHERE gl2.child_id = NEW.id
+                      AND gl2.status = 'active'
+                      AND gl2.is_primary
+                 );
+              UPDATE users
+                 SET parent_id = promoted_guardian
+               WHERE id = NEW.id
+                 AND parent_id IS NULL;
+            END IF;
+          END;
+        END IF;
+        RETURN NEW;
+      END
+      $fn$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS users_parent_id_guardian_link_sync ON users;
+      CREATE TRIGGER users_parent_id_guardian_link_sync
+        AFTER INSERT OR UPDATE OF parent_id ON users
+        FOR EACH ROW
+        EXECUTE FUNCTION sync_guardian_link_from_parent_id();
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

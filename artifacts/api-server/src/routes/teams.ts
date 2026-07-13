@@ -24,6 +24,7 @@ import {
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import { getActiveGuardianIds, getActiveGuardianIdsForChildren, isActiveGuardian } from "../lib/guardian-links";
 import {
   sendGuardianConfirmationEmail,
   sendGuardianExpiredEmail,
@@ -382,12 +383,13 @@ router.get(
       // the end; collapse those to NULL first so nameless members always
       // sort last, matching the client render-time safety net.
       .orderBy(sql`nullif(btrim(lower(${users.name})), '') asc nulls last`);
+    // Task #755 — list ALL active guardians per member, not just the
+    // primary mirrored in `parentId`.
+    const guardianIdsByChild = await getActiveGuardianIdsForChildren(
+      rows.map((r) => r.u.id),
+    );
     const parentIds = Array.from(
-      new Set(
-        rows
-          .map((r) => r.u.parentId)
-          .filter((x): x is string => typeof x === "string"),
-      ),
+      new Set([...guardianIdsByChild.values()].flat()),
     );
     const parentRows = parentIds.length
       ? await db.select().from(users).where(inArray(users.id, parentIds))
@@ -407,19 +409,18 @@ router.get(
     }
     const data = rows.map((r) => {
       const base = toTeamMember(r.r, r.u);
-      const parent = r.u.parentId ? parentMap.get(r.u.parentId) : null;
+      const parents = (guardianIdsByChild.get(r.u.id) ?? [])
+        .map((gid) => parentMap.get(gid))
+        .filter((p): p is NonNullable<typeof p> => !!p)
+        .map((parent) => ({
+          id: parent.id,
+          displayName: parent.name || "Parent",
+          email: canSeeParentEmail ? (parent.email ?? null) : null,
+          avatarUrl: safeAvatarUrl(parent.avatarUrl),
+        }));
       return {
         ...base,
-        parents: parent
-          ? [
-              {
-                id: parent.id,
-                displayName: parent.name || "Parent",
-                email: canSeeParentEmail ? (parent.email ?? null) : null,
-                avatarUrl: safeAvatarUrl(parent.avatarUrl),
-              },
-            ]
-          : [],
+        parents,
       };
     });
     res.json(paginate(data));
@@ -510,8 +511,9 @@ router.post(
       // best-effort.
       try {
         await ensureTeamFollowed(userId, teamId);
-        if (u.parentId) {
-          await ensureTeamFollowedAsGuardian(u.parentId, teamId);
+        // Task #755 — auto-follow for ALL active guardians.
+        for (const gid of await getActiveGuardianIds(userId)) {
+          await ensureTeamFollowedAsGuardian(gid, teamId);
         }
       } catch (err) {
         req.log.warn(
@@ -550,9 +552,10 @@ router.post(
             link: `${appBaseUrl()}/app/teams/${teamId}?roster=1&entryId=${entry.id}`,
           }),
       });
-      // Fan out to the linked guardian, if any. A parent managing an
+      // Fan out to the linked guardians, if any. A parent managing an
       // under-13 athlete needs to see the invite in their own bell and
       // be able to accept on the child's behalf from /family.
+      // Task #755 — ALL active guardians, not just the primary.
       if (u.parentId) {
         const childFirstName =
           (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
@@ -560,13 +563,15 @@ router.post(
             : "your child";
         // Task #414 — same write-time mask: guardian is privileged
         // for `u` (their child) but not necessarily for `me`.
-        await db.insert(notifications).values({
-          userId: u.parentId,
-          kind: "roster_invite_for_child",
-          message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
-          link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
-          actorUserId: me.id,
-        });
+        for (const gid of await getActiveGuardianIds(u.id)) {
+          await db.insert(notifications).values({
+            userId: gid,
+            kind: "roster_invite_for_child",
+            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+            link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
+            actorUserId: me.id,
+          });
+        }
       }
     }
     res.status(201).json(toTeamMember(entry, u));
@@ -775,18 +780,21 @@ router.patch(
             link: `${appBaseUrl()}/app/teams/${teamId}?roster=1&entryId=${entry.id}`,
           }),
       });
+      // Task #755 — notify ALL active guardians.
       if (u.parentId) {
         const childFirstName =
           (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
             ? u.name!.trim().split(/\s+/)[0]
             : "your child";
-        await db.insert(notifications).values({
-          userId: u.parentId,
-          kind: "roster_role_changed_for_child",
-          message: `${actorName} changed ${childFirstName}'s role on ${t.name} to ${roleLabel}.`,
-          link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
-          actorUserId: me.id,
-        });
+        for (const gid of await getActiveGuardianIds(u.id)) {
+          await db.insert(notifications).values({
+            userId: gid,
+            kind: "roster_role_changed_for_child",
+            message: `${actorName} changed ${childFirstName}'s role on ${t.name} to ${roleLabel}.`,
+            link: `/family?childId=${u.id}&entryId=${entry.id}&teamId=${teamId}`,
+            actorUserId: me.id,
+          });
+        }
       }
     }
 
@@ -850,12 +858,8 @@ async function rosterEntryActor(
     return { allowed: true, actor: self ?? null };
   }
   if (req.isMasquerading) return { allowed: false, actor: null };
-  const [child] = await db
-    .select({ parentId: users.parentId })
-    .from(users)
-    .where(eq(users.id, entryUserId))
-    .limit(1);
-  if (child && child.parentId === me.id) {
+  // Task #755 — any ACTIVE guardian may act, not just the primary.
+  if (await isActiveGuardian(me.id, entryUserId)) {
     const [target] = await db.select().from(users).where(eq(users.id, entryUserId)).limit(1);
     return { allowed: true, actor: target ?? null };
   }
@@ -891,13 +895,9 @@ router.post(
     // never bubble up and turn a successful accept into a 5xx.
     try {
       await ensureTeamFollowed(entry.userId, entry.teamId);
-      const [accepter] = await db
-        .select({ parentId: users.parentId })
-        .from(users)
-        .where(eq(users.id, entry.userId))
-        .limit(1);
-      if (accepter?.parentId) {
-        await ensureTeamFollowedAsGuardian(accepter.parentId, entry.teamId);
+      // Task #755 — auto-follow for ALL active guardians.
+      for (const gid of await getActiveGuardianIds(entry.userId)) {
+        await ensureTeamFollowedAsGuardian(gid, entry.teamId);
       }
     } catch (err) {
       req.log.warn(
@@ -1043,8 +1043,9 @@ router.post(
         // addition to the existing parent-side follow. Best-effort.
         try {
           await ensureTeamFollowed(existingUser.id, teamId);
-          if (existingUser.parentId) {
-            await ensureTeamFollowedAsGuardian(existingUser.parentId, teamId);
+          // Task #755 — auto-follow for ALL active guardians.
+          for (const gid of await getActiveGuardianIds(existingUser.id)) {
+            await ensureTeamFollowedAsGuardian(gid, teamId);
           }
         } catch (err) {
           req.log.warn(
@@ -1064,18 +1065,21 @@ router.post(
           link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
           actorUserId: me.id,
         });
+        // Task #755 — notify ALL active guardians.
         if (existingUser.parentId) {
           const childFirstName =
             (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
               ? existingUser.name!.trim().split(/\s+/)[0]
               : "your child";
-          await db.insert(notifications).values({
-            userId: existingUser.parentId,
-            kind: "roster_invite_for_child",
-            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
-            link: `/family?childId=${existingUser.id}&entryId=${entry.id}&teamId=${teamId}`,
-            actorUserId: me.id,
-          });
+          for (const gid of await getActiveGuardianIds(existingUser.id)) {
+            await db.insert(notifications).values({
+              userId: gid,
+              kind: "roster_invite_for_child",
+              message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+              link: `/family?childId=${existingUser.id}&entryId=${entry.id}&teamId=${teamId}`,
+              actorUserId: me.id,
+            });
+          }
         }
       }
     } else if (existingUser) {
@@ -1097,18 +1101,21 @@ router.post(
         link: `/invites/${invite.token}`,
         actorUserId: me.id,
       });
+      // Task #755 — notify ALL active guardians.
       if (existingUser.parentId) {
         const childFirstName =
           (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
             ? existingUser.name!.trim().split(/\s+/)[0]
             : "your child";
-        await db.insert(notifications).values({
-          userId: existingUser.parentId,
-          kind: "roster_invite",
-          message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
-          link: `/invites/${invite.token}`,
-          actorUserId: me.id,
-        });
+        for (const gid of await getActiveGuardianIds(existingUser.id)) {
+          await db.insert(notifications).values({
+            userId: gid,
+            kind: "roster_invite",
+            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+            link: `/invites/${invite.token}`,
+            actorUserId: me.id,
+          });
+        }
       }
     } else {
       // Task #634 — no Kinectem account exists for this address, so the
@@ -1325,20 +1332,23 @@ router.post(
             : `/invites/${invite.token}`,
           actorUserId: me.id,
         });
+        // Task #755 — notify ALL active guardians.
         if (existingUser.parentId) {
           const childFirstName =
             (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
               ? existingUser.name!.trim().split(/\s+/)[0]
               : "your child";
-          await db.insert(notifications).values({
-            userId: existingUser.parentId,
-            kind: "roster_invite_for_child",
-            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
-            link: existingEntry
-              ? `/family?childId=${existingUser.id}&entryId=${existingEntry.id}&teamId=${teamId}`
-              : `/invites/${invite.token}`,
-            actorUserId: me.id,
-          });
+          for (const gid of await getActiveGuardianIds(existingUser.id)) {
+            await db.insert(notifications).values({
+              userId: gid,
+              kind: "roster_invite_for_child",
+              message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+              link: existingEntry
+                ? `/family?childId=${existingUser.id}&entryId=${existingEntry.id}&teamId=${teamId}`
+                : `/invites/${invite.token}`,
+              actorUserId: me.id,
+            });
+          }
         }
       } else {
         // Player invite to an existing (usually parent) account — route to
@@ -1351,18 +1361,21 @@ router.post(
           link: `/invites/${invite.token}`,
           actorUserId: me.id,
         });
+        // Task #755 — notify ALL active guardians.
         if (existingUser.parentId) {
           const childFirstName =
             (existingUser.name?.trim().split(/\s+/)[0] ?? "").length > 0
               ? existingUser.name!.trim().split(/\s+/)[0]
               : "your child";
-          await db.insert(notifications).values({
-            userId: existingUser.parentId,
-            kind: "roster_invite",
-            message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
-            link: `/invites/${invite.token}`,
-            actorUserId: me.id,
-          });
+          for (const gid of await getActiveGuardianIds(existingUser.id)) {
+            await db.insert(notifications).values({
+              userId: gid,
+              kind: "roster_invite",
+              message: `${actorName} invited ${childFirstName} to join ${t.name}.`,
+              link: `/invites/${invite.token}`,
+              actorUserId: me.id,
+            });
+          }
         }
       }
     } else {
@@ -1423,8 +1436,9 @@ router.get(
     // guardian on a real (non-masquerading) parent session, or a real admin.
     const isRealAdmin =
       req.realUser?.role === "admin" && !req.isMasquerading;
+    // Task #755 — any ACTIVE guardian qualifies, not just the primary.
     const isGuardian =
-      child.parentId === me.id && !req.isMasquerading;
+      !req.isMasquerading && (await isActiveGuardian(me.id, childId));
     if (!isGuardian && !isRealAdmin) {
       return apiError(res, 403, "Forbidden");
     }

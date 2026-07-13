@@ -16,6 +16,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import { isActiveGuardian } from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canManageOrganization,
@@ -276,7 +277,7 @@ router.patch(
       .from(users)
       .where(eq(users.id, req.params.childId))
       .limit(1);
-    if (!child || child.parentId !== me.id) {
+    if (!child || !(await isActiveGuardian(me.id, child.id))) {
       return apiError(res, 404, "Child not found");
     }
     const requireTagConsent = !!req.body?.requireTagConsent;

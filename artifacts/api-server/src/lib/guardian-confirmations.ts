@@ -2,6 +2,7 @@ import { db, users, notifications } from "@workspace/db";
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { sendGuardianExpiredEmail } from "./email";
 import { logger } from "./logger";
+import { getActiveChildIds } from "./guardian-links";
 
 // Creates a notification on the parent's account for each linked child whose
 // guardian-confirmation token has expired without being confirmed. Existing
@@ -10,6 +11,10 @@ import { logger } from "./logger";
 export async function notifyExpiredGuardianConfirmations(
   parentUserId: string,
 ): Promise<void> {
+  // Task #755 — children come from ACTIVE guardian links, not just the
+  // parentId mirror, so a non-primary guardian also gets expiry nudges.
+  const childIds = await getActiveChildIds(parentUserId);
+  if (childIds.length === 0) return;
   const expiredChildren = await db
     .select({
       id: users.id,
@@ -20,7 +25,7 @@ export async function notifyExpiredGuardianConfirmations(
     .from(users)
     .where(
       and(
-        eq(users.parentId, parentUserId),
+        inArray(users.id, childIds),
         isNull(users.guardianConfirmedAt),
         sql`${users.guardianConfirmTokenExpiresAt} IS NOT NULL`,
         lt(users.guardianConfirmTokenExpiresAt, new Date()),

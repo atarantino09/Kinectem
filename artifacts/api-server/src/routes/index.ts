@@ -20,6 +20,7 @@ import albumRouter from "./album";
 import tagsStubRouter from "./tags-stub";
 import tagsRouter from "./tags";
 import guardiansRouter from "./guardians";
+import guardianLinksRouter from "./guardian-links";
 import guardiansCoppaRouter from "./guardians-coppa";
 import childConversationsRouter from "./child-conversations";
 import searchRouter from "./search";
@@ -66,6 +67,10 @@ router.use(albumRouter);
 router.use(tagsStubRouter);
 router.use(tagsRouter);
 router.use(guardiansRouter);
+// Task #755 — registered AFTER guardiansRouter so its parameterized
+// GET /users/:userId/children never shadows the legacy literal
+// GET /users/me/children above.
+router.use(guardianLinksRouter);
 router.use(guardiansCoppaRouter);
 router.use(childConversationsRouter);
 router.use(searchRouter);

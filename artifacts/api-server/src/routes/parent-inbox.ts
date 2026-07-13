@@ -35,6 +35,11 @@ import {
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
+import {
+  getActiveChildIds,
+  getActiveGuardianIds,
+  isActiveGuardian,
+} from "../lib/guardian-links";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import { canCreateRecap, canManageOrganization, isTeamMember, canManageTeam } from "../lib/permissions";
 import {
@@ -850,7 +855,9 @@ export async function authorizeChildAccess(
     return null;
   }
   const isRealAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
-  const isLinkedParent = child.parentId === me.id && !req.isMasquerading;
+  // Task #755 — any ACTIVE guardian qualifies, not just the primary.
+  const isLinkedParent =
+    !req.isMasquerading && (await isActiveGuardian(me.id, childId));
   // If the child requires a confirmed guardian (i.e. signed up with a
   // guardianEmail), do not expose any of their private context — DMs,
   // notifications, posts, etc. — to a linked parent until the guardian
@@ -1451,13 +1458,9 @@ async function applyApproveRosterAction(
   // without an extra Follow click. The helpers already swallow their
   // own errors, but we still wrap the whole block defensively.
   await ensureTeamFollowed(entry.userId, entry.teamId);
-  const [accepter] = await db
-    .select({ parentId: users.parentId })
-    .from(users)
-    .where(eq(users.id, entry.userId))
-    .limit(1);
-  if (accepter?.parentId) {
-    await ensureTeamFollowedAsGuardian(accepter.parentId, entry.teamId);
+  // Task #755 — auto-follow for ALL active guardians.
+  for (const gid of await getActiveGuardianIds(entry.userId)) {
+    await ensureTeamFollowedAsGuardian(gid, entry.teamId);
   }
 }
 
@@ -1845,10 +1848,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const childRows = await db
-      .select()
-      .from(users)
-      .where(eq(users.parentId, me.id));
+    // Task #755 — enumerate children via ACTIVE guardian links, not the
+    // parentId mirror (secondary guardians have no mirror pointing at them).
+    const childIds = await getActiveChildIds(me.id);
+    const childRows = childIds.length
+      ? await db.select().from(users).where(inArray(users.id, childIds))
+      : [];
     const perChild: Array<{ childId: string; unreadCount: number }> = [];
     let totalUnreadCount = 0;
     for (const child of childRows) {
@@ -1936,13 +1941,9 @@ router.post(
     // turn a successful accept into a 5xx.
     try {
       await ensureTeamFollowed(me.id, invite.teamId);
-      const [meRow] = await db
-        .select({ parentId: users.parentId })
-        .from(users)
-        .where(eq(users.id, me.id))
-        .limit(1);
-      if (meRow?.parentId) {
-        await ensureTeamFollowedAsGuardian(meRow.parentId, invite.teamId);
+      // Task #755 — auto-follow for ALL active guardians.
+      for (const gid of await getActiveGuardianIds(me.id)) {
+        await ensureTeamFollowedAsGuardian(gid, invite.teamId);
       }
     } catch (err) {
       req.log.warn(
@@ -1989,7 +1990,8 @@ router.post(
         .from(users)
         .where(eq(users.id, rawChildId))
         .limit(1);
-      if (!existing || existing.parentId !== me.id) {
+      // Task #755 — any ACTIVE guardian may act, not just the primary.
+      if (!existing || !(await isActiveGuardian(me.id, existing.id))) {
         // Don't leak whether the child exists under another guardian.
         return apiError(res, 404, "Child not found");
       }

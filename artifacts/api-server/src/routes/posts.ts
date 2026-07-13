@@ -37,6 +37,11 @@ import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/p
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import {
+  isActiveGuardian,
+  notifyAllGuardiansOfPendingItem,
+  patchParentIdForViewer,
+} from "../lib/guardian-links";
+import {
   sendGuardianConfirmationEmail,
   sendGuardianExpiredEmail,
   sendPasswordResetEmail,
@@ -941,7 +946,10 @@ router.get(
     // self / linked-guardian / admin carve-outs intact so a guardian
     // can still see their own child surfaced in their own dashboard.
     const userRowsVisible = filterOutMinors(
-      userRows.map((r) => r.user),
+      await patchParentIdForViewer(
+        userRows.map((r) => r.user),
+        me.id,
+      ),
       me.id,
     );
     const visibleUserIds = new Set(userRowsVisible.map((u) => u.id));
@@ -1340,8 +1348,9 @@ router.get(
     const me = req.sessionUser;
     const ownerId = await loadPostOwnerId(parsed);
     const owner = ownerId ? await loadMinorLookup(ownerId) : null;
+    // Task #755 — any ACTIVE guardian qualifies, not just the primary.
     const viewerIsGuardian = !!(
-      me && owner?.parentId && owner.parentId === me.id
+      me && owner && (await isActiveGuardian(me.id, owner.id))
     );
     if (!viewerIsGuardian && !isAdmin) {
       // Approved comments are public; the comment author can also see
@@ -1429,8 +1438,8 @@ router.post(
         actorEmail: me.email ?? null,
         details: `comment:${c.id}`,
       });
-      await notifyGuardianOfPendingItem({
-        guardianUserId: owner.parentId,
+      // Task #755 — notify ALL active guardians, not just the primary.
+      await notifyAllGuardiansOfPendingItem({
         childUserId: owner.id,
         kind: "comment",
         message: `New comment is awaiting your approval`,

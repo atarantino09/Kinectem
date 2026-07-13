@@ -145,6 +145,11 @@ export default function GuardianConfirmPage() {
               <p className="text-sm text-slate-500">
                 {state.athleteName}'s account is now active. They can sign in.
               </p>
+              <p className="text-sm text-slate-500">
+                Co-parenting? You can invite the other parent as a guardian
+                anytime from your Family dashboard, so you both can look after{" "}
+                {state.athleteName}'s account.
+              </p>
               <Button
                 variant="brandBlock"
                 onClick={() => setLocation("/login")}

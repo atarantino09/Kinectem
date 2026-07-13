@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, users, passwordResets, apiKeys, parentalConsents } from "@workspace/db";
+import { ensureActiveGuardianLink } from "../lib/guardian-links";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import {
@@ -452,6 +453,16 @@ router.post(
       })
       .returning();
 
+    // Task #755 — adult signups may carry a client-supplied parent link;
+    // mirror it into guardian_links so parentId stays consistent.
+    if (!guardianRequired && body.parentId) {
+      await ensureActiveGuardianLink({
+        childId: created.id,
+        guardianId: body.parentId,
+        consentMethod: "signup",
+      });
+    }
+
     if (guardianRequired) {
       const [consent] = await db
         .insert(parentalConsents)
@@ -606,9 +617,17 @@ router.post(
         guardianConfirmTokenHash: null,
         guardianConfirmTokenExpiresAt: null,
         guardianConfirmedByUserId: guardianUser?.id ?? null,
-        parentId: user.parentId ?? guardianUser?.id ?? null,
       })
       .where(eq(users.id, user.id));
+    // Task #755 — establish the link via guardian_links (keeps the
+    // parentId mirror consistent; existing primary is preserved).
+    if (guardianUser) {
+      await ensureActiveGuardianLink({
+        childId: user.id,
+        guardianId: guardianUser.id,
+        consentMethod: "guardian_confirm",
+      });
+    }
     res.json({ ok: true, athleteName: user.name, guardianEmail: user.guardianEmail });
   }),
 );

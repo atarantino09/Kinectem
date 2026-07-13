@@ -8,6 +8,8 @@ import { EmailPrefCard } from "@/components/guardian-page/EmailPrefCard";
 import { LinkChildSearch } from "@/components/guardian-page/LinkChildSearch";
 import { ChildRow } from "@/components/guardian-page/ChildRow";
 import { MinorControls } from "@/components/guardian-page/MinorControls";
+import { ChildGuardiansSection } from "@/components/guardian-page/ChildGuardiansSection";
+import { PendingGuardianInvites } from "@/components/guardian-page/PendingGuardianInvites";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
 import { useWhoami } from "@/hooks/useWhoami";
 import {
@@ -25,6 +27,10 @@ export default function GuardianPage() {
   // Guardian capability is "this user has at least one linked child"
   // (any role), not `role === "parent"`. Whoami exposes this directly.
   const isGuardian = whoami?.isGuardian === true;
+  // Task #755 — effective user id (the masqueraded user when admins are
+  // impersonating). Drives the guardian-invite inbox + per-child guardian
+  // lists below.
+  const myUserId = whoami?.viewingAs?.id ?? whoami?.realUser?.id ?? null;
 
   const [, navigate] = useLocation();
   const search = useSearch();
@@ -59,7 +65,9 @@ export default function GuardianPage() {
           <>
             Each of your children shows up here. You can approve their follow
             requests, DMs, comments, and tags, edit their profile, and control
-            their privacy — all on their behalf.
+            their privacy — all on their behalf. Co-parenting? Use{" "}
+            <strong>Invite co-parent</strong> on a child's card to give the
+            other parent guardian access too.
           </>
         ),
       },
@@ -142,6 +150,13 @@ export default function GuardianPage() {
         </Card>
       )}
 
+      {myUserId && (
+        <PendingGuardianInvites
+          myUserId={myUserId}
+          onAccepted={() => void dash.refresh()}
+        />
+      )}
+
       <EmailPrefCard enabled={isGuardian} />
 
       <Card className="rounded-xl border-border" data-testid="card-linked-children">
@@ -183,6 +198,9 @@ export default function GuardianPage() {
                   onApproveAll={dash.notifs.approveAllChildItems}
                   onToggleShowDecided={dash.notifs.toggleShowDecided}
                 />
+                {myUserId && (
+                  <ChildGuardiansSection child={c} myUserId={myUserId} />
+                )}
                 <MinorControls child={c} />
                 </div>
               ))}

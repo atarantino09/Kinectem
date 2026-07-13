@@ -15,6 +15,7 @@ import {
   postComments,
   organizationJoinRequests,
   assets,
+  guardianLinks,
 } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
@@ -325,10 +326,18 @@ export async function buildMinorNameContext(
   // 1) Self
   if (ids.includes(viewer.id)) privileged.add(viewer.id);
   // 2) Linked children of the viewer.
+  // Task #755 — any ACTIVE guardian link qualifies, not just the primary
+  // mirrored in `users.parentId`.
   const childRows = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(inArray(users.id, ids), eq(users.parentId, viewer.id)));
+    .select({ id: guardianLinks.childId })
+    .from(guardianLinks)
+    .where(
+      and(
+        inArray(guardianLinks.childId, ids),
+        eq(guardianLinks.guardianId, viewer.id),
+        eq(guardianLinks.status, "active"),
+      ),
+    );
   for (const r of childRows) privileged.add(r.id);
   // 3) Shared accepted roster entries — anyone the viewer shares an
   //    accepted roster team with is "inside the team" and gets the
