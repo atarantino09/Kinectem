@@ -17,17 +17,25 @@ import { buildUnsubscribeUrl } from "../src/lib/notification-email";
 describe("email deep-link base paths", () => {
   const BASE = "https://kinectem.example";
   let originalBase: string | undefined;
+  let originalDevDomain: string | undefined;
 
   beforeAll(() => {
     // Pin appBaseUrl() to a deterministic value (it reads APP_BASE_URL at call
-    // time) so the assertions don't depend on the dev/CI environment.
+    // time) so the assertions don't depend on the dev/CI environment. Also
+    // clear REPLIT_DEV_DOMAIN — outside production appBaseUrl() prefers it
+    // over APP_BASE_URL (Task #759), which would make these assertions
+    // environment-dependent.
     originalBase = process.env.APP_BASE_URL;
+    originalDevDomain = process.env.REPLIT_DEV_DOMAIN;
     process.env.APP_BASE_URL = BASE;
+    delete process.env.REPLIT_DEV_DOMAIN;
   });
 
   afterAll(() => {
     if (originalBase === undefined) delete process.env.APP_BASE_URL;
     else process.env.APP_BASE_URL = originalBase;
+    if (originalDevDomain === undefined) delete process.env.REPLIT_DEV_DOMAIN;
+    else process.env.REPLIT_DEV_DOMAIN = originalDevDomain;
   });
 
   it("password-reset link includes the /app/ segment", () => {

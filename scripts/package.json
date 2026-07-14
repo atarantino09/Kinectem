@@ -27,6 +27,7 @@
     "send-inactivity-nudge": "tsx ./src/send-inactivity-nudge.ts",
     "send-daily-admin-digest": "tsx ./src/send-daily-admin-digest.ts",
     "seed-game-recap-demo": "tsx ./src/seed-game-recap-demo.ts",
+    "set-dev-user-password": "tsx ./src/set-dev-user-password.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

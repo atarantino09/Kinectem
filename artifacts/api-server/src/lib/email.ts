@@ -195,13 +195,26 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   }
 }
 
+// Task #759 — outside production, prefer the Replit dev domain over
+// APP_BASE_URL. The secret is set globally (it applies to dev too), so
+// without this override dev-sent emails link to production, where the
+// per-environment reset tokens are invalid. Production behavior is
+// unchanged: APP_BASE_URL wins there.
+let warnedAppBaseUrlIgnored = false;
+
 export function appBaseUrl(): string {
-  return (
-    process.env.APP_BASE_URL ??
-    (process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:5173")
-  ).replace(/\/+$/, "");
+  const devDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (process.env.NODE_ENV !== "production" && devDomain) {
+    if (process.env.APP_BASE_URL && !warnedAppBaseUrlIgnored) {
+      warnedAppBaseUrlIgnored = true;
+      logger.warn(
+        { devDomain },
+        "Ignoring APP_BASE_URL in development; email links will use the Replit dev domain",
+      );
+    }
+    return `https://${devDomain}`.replace(/\/+$/, "");
+  }
+  return (process.env.APP_BASE_URL ?? "http://localhost:5173").replace(/\/+$/, "");
 }
 
 export function buildPasswordResetUrl(token: string): string {
