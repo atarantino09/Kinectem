@@ -1488,7 +1488,7 @@ export const promoCodes = pgTable("promo_codes", {
 // One subscription record per organization (the org's chosen plan). Created /
 // updated from the post-creation checkout page. During the free launch window
 // the status stays "trialing" and `billingStartsAt` marks when real billing
-// begins (2026-10-01 at launch).
+// begins (2026-11-01 at launch).
 export const orgSubscriptions = pgTable("org_subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")

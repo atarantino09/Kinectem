@@ -1,13 +1,13 @@
 ---
 name: Stripe org billing (card-on-file, deferred charge)
-description: How Kinectem org subscriptions wire to Stripe — card-on-file now, first charge Oct 1; connector has no webhook secret so reconcile-on-return is the source of truth.
+description: How Kinectem org subscriptions wire to Stripe — card-on-file now, first charge Nov 1; connector has no webhook secret so reconcile-on-return is the source of truth.
 ---
 
 # Stripe org billing
 
 Kinectem orgs choose a plan **card-free** at signup. Putting a card on file is a
 separate, opt-in step that does NOT charge anything today — the first yearly
-charge runs automatically on **Oct 1 2026** (set via Stripe Checkout
+charge runs automatically on **Nov 1 2026** (set via Stripe Checkout
 `trial_end`). This is a product decision, not a temporary state.
 
 ## Key constraints / non-obvious decisions
@@ -20,6 +20,6 @@ charge runs automatically on **Oct 1 2026** (set via Stripe Checkout
 
 - **Plan prices & promo coupons are auto-provisioned in Stripe at runtime** by stable lookup keys (`kinectem_<plan>_yearly`, coupon id `kinectem_promo_<code>`) — no manual dashboard setup. Retrieving a coupon returns `Stripe.Coupon` without a typed `deleted` field; cast to `Stripe.Coupon & { deleted?: boolean }` (NOT `Stripe.DeletedCoupon`, which TS rejects as a non-overlapping cast).
 
-- **`hasCardOnFile` = `org_subscriptions.stripe_subscription_id != null`.** Same predicate drives the Sept-15 reminder query (reminder targets orgs where it IS null).
+- **`hasCardOnFile` = `org_subscriptions.stripe_subscription_id != null`.** Same predicate drives the Oct-15 reminder query (reminder targets orgs where it IS null).
 
-- **Sept-15 reminder is a self-contained script** (`scripts/src/send-billing-reminders.ts`), NOT in the app. Leaf workspace scripts can't import api-server's `email.ts`, so the SendGrid send + the approved campaign copy are duplicated there. It is **not idempotent** (re-runs re-send) — always `--dry-run` first. Schedule once for 2026-09-15.
+- **Oct-15 reminder is a self-contained script** (`scripts/src/send-billing-reminders.ts`), NOT in the app. Leaf workspace scripts can't import api-server's `email.ts`, so the SendGrid send + the approved campaign copy are duplicated there. It is **not idempotent** (re-runs re-send) — always `--dry-run` first. Schedule once for 2026-10-15.

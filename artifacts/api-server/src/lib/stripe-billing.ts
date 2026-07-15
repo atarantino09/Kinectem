@@ -20,7 +20,7 @@ const PLAN_PRODUCT_NAME: Record<PlanTier, string> = {
 // Annual billing begins here. Card-on-file subscriptions are created with a
 // trial that ends at this instant, so Stripe collects the card now and runs the
 // first charge automatically on this date — nothing is charged today.
-export const BILLING_STARTS_AT = "2026-10-01T00:00:00.000Z";
+export const BILLING_STARTS_AT = "2026-11-01T00:00:00.000Z";
 
 function billingTrialEndUnix(): number {
   return Math.floor(new Date(BILLING_STARTS_AT).getTime() / 1000);
@@ -123,7 +123,7 @@ export type CheckoutInput = {
 };
 
 // Create a Checkout Session that saves a card on file and schedules the first
-// charge for BILLING_STARTS_AT (Oct 1). No charge happens today.
+// charge for BILLING_STARTS_AT (Nov 1). No charge happens today.
 export async function createCardOnFileCheckout(
   input: CheckoutInput,
 ): Promise<{ url: string } | { error: string }> {

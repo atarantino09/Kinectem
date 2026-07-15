@@ -50,7 +50,7 @@ Run with `pnpm --filter @workspace/scripts run <name>`. All accept `--dry-run`/`
 - **Backfills (idempotent)**: `backfill-parent-team-follows`, `backfill-self-team-follows` (auto-follow team for parents / rostered users); `backfill-org-claim-links` (ensure every ownerless org has a `claim_token`).
 - **Org seed/export**: `export-org-names` (regenerate `organizations.csv`; **run in dev right before publishing**), `bulk-import-organizations` (create ownerless org pages from CSV), `export-org-claim-links` (CSV of `/app/claim/<token>` links), `seed-production-orgs` (legacy prod seed chain — see Deployment for the preferred button), `export-founding-100`.
 - **Email campaigns** (NOT idempotent; always `--dry-run` first; COPPA-safe — minor's email routes to guardian, each carries a no-login unsubscribe link; shared gate logic in `scripts/src/lib/email-campaign.ts`):
-  - `send-billing-reminders` — "add a card before Oct 1" to orgs with a plan but no card. **Schedule once for 2026-09-15.**
+  - `send-billing-reminders` — "add a card before Nov 1" to orgs with a plan but no card. **Schedule once for 2026-10-15.**
   - `send-weekly-digest` — weekly team-activity digest. **Schedule weekly.**
   - `send-inactivity-nudge` — "we miss you" to users inactive `--days` (default 21).
 - **Daily admin digest** (`send-daily-admin-digest`): emails enabled operator recipients a summary of *yesterday's* activity (counts + itemized lists; minor names masked; free-text UGC kept count-only; quiet-day email still sends). Recipients + a global on/off toggle managed in-app at `/app/admin/daily-digest`; **schedule daily** via a Scheduled Deployment. The cron honors the toggle — **ON by default** (absent `daily_admin_digest_settings` row = on, so a freshly-published DB needs no setup); when OFF the scheduled run sends nothing but the in-app "send preview" still works. `--stdout` renders regardless of the toggle. Window is computed in `ADMIN_DIGEST_TIME_ZONE` (default UTC). Flags: `--dry-run`/`--stdout`/`--day=YYYY-MM-DD`.
@@ -103,7 +103,7 @@ Invite delivery flags only advance once the Signed Event Webhook is wired. In Se
 
 - **Org claiming is invite-only** — the only way to claim an ownerless page is the secret-token link (`/app/claim/<token>`) the owner sends directly. The old open claim-*request* flow is retired: `POST /organizations/:orgId/claims` returns `403 CLAIM_INVITE_ONLY` and the in-app "Claim this organization" button is gone. Unclaimed orgs stay publicly visible (search + detail) on purpose. Both claim paths stay owner-exclusive via the one-owner index.
 - **Route prefix**: claim/billing/AI routes mount at `/api/v1`, NOT `/api` (that's docs + founding-admin page only).
-- **Billing**: card-free signup; orgs pick a plan, add a card later via Stripe Checkout (`trial_end` = Oct 1 2026, nothing charged today). Reconcile-on-return is source of truth; the connector has NO webhook secret. `hasCardOnFile` = `stripeSubscriptionId != null`.
+- **Billing**: card-free signup; orgs pick a plan, add a card later via Stripe Checkout (`trial_end` = Nov 1 2026, nothing charged today). Reconcile-on-return is source of truth; the connector has NO webhook secret. `hasCardOnFile` = `stripeSubscriptionId != null`.
 - **Roles vocabulary** (owner/admin/member/coach/player/parent/platform admin) is centralized in `RolesReference` and mirrored on marketing `getting-started.html` — update in one place.
 
 ### AI Assist

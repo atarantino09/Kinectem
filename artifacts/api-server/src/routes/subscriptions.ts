@@ -88,7 +88,7 @@ const PLAN_CATALOG: Array<{
 const PLAN_IDS = PLAN_CATALOG.map((p) => p.id) as [PlanTier, ...PlanTier[]];
 
 // Annual billing begins on this date. Until then the platform is free.
-const BILLING_STARTS_AT = "2026-10-01T00:00:00.000Z";
+const BILLING_STARTS_AT = "2026-11-01T00:00:00.000Z";
 
 const promoValidateLimiter = rateLimit({
   name: "promo-validate",
@@ -360,7 +360,7 @@ router.put(
 // ---------------------------------------------------------------------------
 // POST /organizations/:orgId/billing/checkout-session — start the "add a card
 // on file" flow. Returns a Stripe Checkout URL. The card is saved now and the
-// first charge runs automatically on BILLING_STARTS_AT (Oct 1); nothing is
+// first charge runs automatically on BILLING_STARTS_AT (Nov 1); nothing is
 // charged today. The org must have chosen a plan first (PUT subscription).
 // ---------------------------------------------------------------------------
 router.post(

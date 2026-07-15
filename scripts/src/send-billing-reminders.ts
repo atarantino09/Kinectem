@@ -1,4 +1,4 @@
-// Send the "add a card before October 1" reminder to org admins whose
+// Send the "add a card before November 1" reminder to org admins whose
 // organization has chosen a plan but has NOT yet put a card on file.
 //
 // Run from the repo root:
@@ -8,7 +8,7 @@
 // "No card on file" = org_subscriptions.stripe_subscription_id IS NULL. The
 // reminder goes to every owner/admin of each such org that has an email.
 //
-// Scheduling: this is meant to run once on 2026-09-15 (e.g. a Replit Scheduled
+// Scheduling: this is meant to run once on 2026-10-15 (e.g. a Replit Scheduled
 // Deployment, or trigger it manually). It is NOT idempotent — re-running
 // re-sends to everyone still missing a card. Always preview with --dry-run
 // first to see the exact recipient list.
@@ -151,13 +151,13 @@ function buildEmail(args: {
   const url = subscribeUrl(args.orgId);
 
   const subject =
-    "Your Kinectem teams are set — one quick step before October 1";
+    "Your Kinectem teams are set — one quick step before November 1";
 
   const text = `Hi ${greeting},
 
 It's been a joy watching ${args.orgName} bring its teams, players, and families onto Kinectem.
 
-Your free launch period wraps up on October 1, when annual billing begins for your ${planName} plan (${price}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. You won't be charged until October 1.
+Your free launch period wraps up on November 1, when annual billing begins for your ${planName} plan (${price}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. You won't be charged until November 1.
 
 Add your card: ${url}
 
@@ -169,7 +169,7 @@ Thanks for being one of our founding organizations — here's to a great season 
 
   const html = `<p>Hi ${escapeHtml(greeting)},</p>
 <p>It's been a joy watching <strong>${escapeHtml(args.orgName)}</strong> bring its teams, players, and families onto Kinectem. 🎉</p>
-<p>Your free launch period wraps up on <strong>October 1</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until October 1.</strong></p>
+<p>Your free launch period wraps up on <strong>November 1</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until November 1.</strong></p>
 <p><a href="${escapeHtml(url)}">Add your card →</a></p>
 <p>It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts.</p>
 <p>Thanks for being one of our founding organizations — here's to a great season ahead.</p>

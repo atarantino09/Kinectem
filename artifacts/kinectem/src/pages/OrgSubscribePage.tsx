@@ -34,7 +34,7 @@ type SubscriptionResponse = {
   billingStartsAt: string;
 };
 
-const BILLING_DATE_LABEL = "October 1, 2026";
+const BILLING_DATE_LABEL = "November 1, 2026";
 
 export default function OrgSubscribePage() {
   const { orgId } = useParams<{ orgId: string }>();
@@ -229,7 +229,7 @@ export default function OrgSubscribePage() {
             <p className="text-sm text-muted-foreground leading-relaxed">
               Pick the plan that fits your club and start building right away —
               you won't be charged a cent today. We'll send a friendly reminder
-              in mid-September so there are no surprises. Annual billing begins{" "}
+              in mid-October so there are no surprises. Annual billing begins{" "}
               {BILLING_DATE_LABEL}; add a payment method any time before then to
               keep everything running without a hitch.
             </p>

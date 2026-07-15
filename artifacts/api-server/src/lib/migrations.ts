@@ -1761,6 +1761,21 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         EXECUTE FUNCTION sync_guardian_link_from_parent_id();
     `,
   },
+  {
+    // Free launch period extended: billing now starts Nov 1 2026 (was
+    // Oct 1). BILLING_STARTS_AT in stripe-billing.ts/subscriptions.ts is
+    // the source for NEW rows; this idempotently moves rows that were
+    // stamped with the old date. Rows with a Stripe subscription would
+    // also need their Stripe trial_end moved via the API — as of this
+    // migration none exist; if any appear before it runs in prod, handle
+    // them via a one-off reconcile.
+    name: "2026-07-15-billing-start-nov-1",
+    sql: `
+      UPDATE org_subscriptions
+      SET billing_starts_at = '2026-11-01T00:00:00Z', updated_at = NOW()
+      WHERE billing_starts_at = '2026-10-01T00:00:00Z';
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {
