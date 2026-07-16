@@ -228,3 +228,9 @@ id = "aOvDNMd7_0FKk44icoPtH"
 uri = "file://organizations.csv"
 type = "table"
 title = "837 written-in org names (production seed list)"
+
+[[outputs]]
+id = "xfWrBKDzmxmU90FxIVSEs"
+uri = "file://exports/competition-pages-and-hubs-writeup.md"
+type = "text"
+title = "Competition Pages & Hubs — Feature Write-up"
