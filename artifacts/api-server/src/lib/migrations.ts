@@ -1776,6 +1776,24 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       WHERE billing_starts_at = '2026-10-01T00:00:00Z';
     `,
   },
+  {
+    // Task #761 — deleting a recap (soft delete via articles.hidden_at) now
+    // also clears the schedule game's game_recap_id in the same transaction.
+    // This backfills games whose linked recap was deleted BEFORE that fix,
+    // so the schedule stops referencing a dead post. recap_reminder_sent_at
+    // is stamped so the reminder sweep doesn't re-nudge staff about games
+    // whose recap they deliberately deleted.
+    name: "2026-07-17-task-761-clear-deleted-recap-links",
+    sql: `
+      UPDATE schedule_events se
+      SET game_recap_id = NULL,
+          recap_reminder_sent_at = COALESCE(se.recap_reminder_sent_at, NOW()),
+          updated_at = NOW()
+      FROM articles a
+      WHERE se.game_recap_id = a.id
+        AND a.hidden_at IS NOT NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

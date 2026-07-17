@@ -20,6 +20,7 @@ import {
   postComments,
   postShares,
   takedownRequests,
+  scheduleEvents,
 } from "@workspace/db";
 import {
   and,
@@ -1322,10 +1323,21 @@ router.delete(
       // doesn't surface a confusing error.
       return res.status(204).end();
     }
-    await db
-      .update(articles)
-      .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
-      .where(eq(articles.id, a.id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(articles)
+        .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+        .where(eq(articles.id, a.id));
+      // A recap can be linked to a schedule game (game_recap_id). Clear the
+      // linkage so the schedule stops surfacing a dead recap reference and
+      // the "Write game recap" affordance returns. Stamp
+      // recap_reminder_sent_at so the reminder sweep doesn't re-nudge the
+      // staff about a game whose recap they deliberately deleted.
+      await tx
+        .update(scheduleEvents)
+        .set({ gameRecapId: null, recapReminderSentAt: new Date() })
+        .where(eq(scheduleEvents.gameRecapId, a.id));
+    });
     res.status(204).end();
   }),
 );

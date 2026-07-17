@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, users, notifications } from "@workspace/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import {
+  db,
+  users,
+  notifications,
+  articles,
+  highlights,
+  orgPosts,
+} from "@workspace/db";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -49,6 +56,71 @@ const unsubscribeLimiter = rateLimit({
 // Notifications
 // ---------------------------------------------------------------------------
 
+// Read-time filter for notifications whose link targets a soft-deleted
+// (hidden) post. Posts are soft-deleted via `hiddenAt`, but historical
+// notifications ("New game recap", tag/reaction/comment fan-outs, …) keep
+// pointing at them and would 404 on click. Filtering at read time (rather
+// than deleting rows on post-delete) survives edge cases like admin
+// restores and covers every notification kind that links to a post.
+const POST_LINK_RE = /\/posts\/(article|highlight|orgpost)-([0-9a-fA-F-]{36})/;
+
+function postRefFromLink(
+  link: string | null,
+): { kind: "article" | "highlight" | "orgpost"; id: string } | null {
+  if (!link) return null;
+  const m = POST_LINK_RE.exec(link);
+  if (!m) return null;
+  return { kind: m[1] as "article" | "highlight" | "orgpost", id: m[2] };
+}
+
+async function loadHiddenPostIds(
+  rows: Array<{ link: string | null }>,
+): Promise<Set<string>> {
+  const articleIds = new Set<string>();
+  const highlightIds = new Set<string>();
+  const orgPostIds = new Set<string>();
+  for (const r of rows) {
+    const ref = postRefFromLink(r.link);
+    if (!ref) continue;
+    if (ref.kind === "article") articleIds.add(ref.id);
+    else if (ref.kind === "highlight") highlightIds.add(ref.id);
+    else orgPostIds.add(ref.id);
+  }
+  const hidden = new Set<string>();
+  const [hiddenArticles, hiddenHighlights, hiddenOrgPosts] = await Promise.all([
+    articleIds.size
+      ? db
+          .select({ id: articles.id })
+          .from(articles)
+          .where(and(inArray(articles.id, [...articleIds]), isNotNull(articles.hiddenAt)))
+      : Promise.resolve([]),
+    highlightIds.size
+      ? db
+          .select({ id: highlights.id })
+          .from(highlights)
+          .where(and(inArray(highlights.id, [...highlightIds]), isNotNull(highlights.hiddenAt)))
+      : Promise.resolve([]),
+    orgPostIds.size
+      ? db
+          .select({ id: orgPosts.id })
+          .from(orgPosts)
+          .where(and(inArray(orgPosts.id, [...orgPostIds]), isNotNull(orgPosts.hiddenAt)))
+      : Promise.resolve([]),
+  ]);
+  for (const r of hiddenArticles) hidden.add(`article-${r.id}`);
+  for (const r of hiddenHighlights) hidden.add(`highlight-${r.id}`);
+  for (const r of hiddenOrgPosts) hidden.add(`orgpost-${r.id}`);
+  return hidden;
+}
+
+function isHiddenTarget(
+  link: string | null,
+  hidden: Set<string>,
+): boolean {
+  const ref = postRefFromLink(link);
+  return !!ref && hidden.has(`${ref.kind}-${ref.id}`);
+}
+
 router.get(
   "/notifications",
   asyncHandler(async (req, res) => {
@@ -60,7 +132,9 @@ router.get(
       .where(eq(notifications.userId, me.id))
       .orderBy(desc(notifications.createdAt))
       .limit(50);
-    res.json(paginate(rows.map(toNotification)));
+    const hidden = await loadHiddenPostIds(rows);
+    const visible = rows.filter((r) => !isHiddenTarget(r.link, hidden));
+    res.json(paginate(visible.map(toNotification)));
   }),
 );
 
@@ -69,10 +143,16 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return res.json({ unreadCount: 0 });
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)::int` })
+    // Fetch unread rows (id + link only) so notifications pointing at
+    // soft-deleted posts don't inflate the badge count. Unread rows are a
+    // small working set in practice; cap defensively.
+    const rows = await db
+      .select({ id: notifications.id, link: notifications.link })
       .from(notifications)
-      .where(and(eq(notifications.userId, me.id), eq(notifications.read, false)));
+      .where(and(eq(notifications.userId, me.id), eq(notifications.read, false)))
+      .limit(500);
+    const hidden = await loadHiddenPostIds(rows);
+    const count = rows.filter((r) => !isHiddenTarget(r.link, hidden)).length;
     res.json({ unreadCount: count });
   }),
 );

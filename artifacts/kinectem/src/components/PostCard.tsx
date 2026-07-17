@@ -691,6 +691,17 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </Link>
           )}
           <div className="px-5 py-4">
+            {(post as { hidden?: boolean }).hidden && (
+              <div className="mb-2">
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-900 border border-red-300 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
+                  title="This post was deleted by its author. Only platform admins can still see it, for moderation."
+                  data-testid={`badge-deleted-${post.id}`}
+                >
+                  Deleted
+                </span>
+              </div>
+            )}
             {post.title && (
               <div className="flex items-start gap-2 mb-2">
                 <Link href={`/posts/${post.id}`} className="flex-1 min-w-0">

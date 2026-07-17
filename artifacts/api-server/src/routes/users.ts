@@ -1196,6 +1196,14 @@ router.get(
       articleRows.map((row) => row.a.competitionId),
     );
     const posts = limited.map((row) => {
+      // Platform admins see soft-deleted (hidden) posts on profiles for
+      // moderation. Annotate them (extra field beyond the locked spec) so
+      // the client can render a clear "Deleted" badge instead of the post
+      // silently looking alive.
+      const hiddenExtra =
+        isAdmin && (row.kind === "article" ? row.a.hiddenAt : row.h.hiddenAt)
+          ? { hidden: true as const }
+          : {};
       const sharedBy = row.sharedAt
         ? toPostAuthor(u, { minorNameCtx: profileMinorCtxWithOwner })
         : undefined;
@@ -1218,9 +1226,9 @@ router.get(
           minorNameCtx: profileMinorCtxWithOwner,
         });
         if (row.tagStatus === "pending") {
-          return { ...post, tagStatus: "pending" as const };
+          return { ...post, ...hiddenExtra, tagStatus: "pending" as const };
         }
-        return post;
+        return { ...post, ...hiddenExtra };
       }
       // Uploader-only edit/delete affordance for highlights — same
       // rule the post page enforces.
@@ -1246,9 +1254,9 @@ router.get(
       // affordance. Approved tags don't need the annotation — they
       // show normally.
       if (row.tagStatus === "pending") {
-        return { ...post, tagStatus: "pending" as const };
+        return { ...post, ...hiddenExtra, tagStatus: "pending" as const };
       }
-      return post;
+      return { ...post, ...hiddenExtra };
     });
     res.json(paginate(posts));
     return;
