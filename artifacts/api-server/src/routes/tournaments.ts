@@ -1062,7 +1062,25 @@ router.get(
 
 const ImportBody = z.object({
   csv: z.string().min(1).max(2_000_000),
+  // Task #766 — dry-run preview: parse + diff against existing games without
+  // writing anything. The apply path (dryRun absent/false) is unchanged.
+  dryRun: z.boolean().optional(),
 });
+
+// Fields the CSV upsert overwrites, compared field-by-field for the preview.
+// Team sides compare by lowercase key (matching slot semantics) but display
+// the human name. status/statusReason are NOT touched by imports.
+const DIFF_FIELDS = [
+  { key: "matchDate", label: "date" },
+  { key: "startTime", label: "start time" },
+  { key: "age", label: "age" },
+  { key: "gender", label: "gender" },
+  { key: "division", label: "division" },
+  { key: "bracket", label: "bracket" },
+  { key: "venue", label: "venue" },
+  { key: "venueState", label: "venue state" },
+  { key: "field", label: "field" },
+] as const;
 
 const importScheduleHandler = asyncHandler(async (req, res) => {
     const me = req.sessionUser;
@@ -1218,6 +1236,160 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         homeKey,
         awayName,
         awayKey,
+      });
+    }
+
+    // Task #766 — dry-run preview: diff the parsed rows against existing
+    // games and return without writing. Reuses the exact same parse above,
+    // so preview and apply can never disagree.
+    if (parsed.data.dryRun) {
+      // Later rows win in the apply loop (upsert per row), so preview the
+      // same way: keep the LAST rec per match number and warn on dupes.
+      const byNumber = new Map<string, MatchRec>();
+      for (const m of matchRecs) {
+        if (byNumber.has(m.matchNumber)) {
+          rowWarnings.push({
+            row: 0,
+            reason: `Game ${m.matchNumber} appears more than once in the file — the last row wins.`,
+          });
+        }
+        byNumber.set(m.matchNumber, m);
+      }
+
+      const existing = await db
+        .select()
+        .from(tournamentMatches)
+        .where(eq(tournamentMatches.tournamentId, tournament.id));
+      const partRows = await db
+        .select()
+        .from(tournamentParticipants)
+        .where(eq(tournamentParticipants.tournamentId, tournament.id));
+      const partById = new Map(partRows.map((p) => [p.id, p]));
+      const sideOf = (participantId: string | null) => {
+        const p = participantId ? partById.get(participantId) : undefined;
+        return { name: p?.name ?? "", key: p?.nameKey ?? "" };
+      };
+
+      const existingByNumber = new Map(existing.map((m) => [m.matchNumber, m]));
+
+      const added: {
+        matchNumber: string;
+        matchDate: string | null;
+        startTime: string | null;
+        homeName: string;
+        awayName: string;
+      }[] = [];
+      const changed: {
+        matchNumber: string;
+        changes: { field: string; before: string; after: string }[];
+      }[] = [];
+      let unchangedCount = 0;
+
+      const show = (v: string | null) => (v == null || v === "" ? "—" : v);
+
+      for (const m of byNumber.values()) {
+        const ex = existingByNumber.get(m.matchNumber);
+        if (!ex) {
+          added.push({
+            matchNumber: m.matchNumber,
+            matchDate: m.matchDate,
+            startTime: m.startTime,
+            homeName: m.homeName,
+            awayName: m.awayName,
+          });
+          continue;
+        }
+        const changes: { field: string; before: string; after: string }[] = [];
+        for (const f of DIFF_FIELDS) {
+          const before = (ex[f.key] ?? "") as string;
+          const after = (m[f.key] ?? "") as string;
+          if (before !== after) {
+            changes.push({ field: f.label, before: show(before || null), after: show(after || null) });
+          }
+        }
+        const exHome = sideOf(ex.homeParticipantId);
+        const exAway = sideOf(ex.awayParticipantId);
+        // Compare team sides by lowercase key + slot (division/bracket moves
+        // relink the slot even when the name text is identical).
+        const slotMoved =
+          ex.division !== m.division || ex.bracket !== m.bracket;
+        if (exHome.key !== m.homeKey || (slotMoved && m.homeName)) {
+          changes.push({ field: "home team", before: show(exHome.name || null), after: show(m.homeName || null) });
+        }
+        if (exAway.key !== m.awayKey || (slotMoved && m.awayName)) {
+          changes.push({ field: "away team", before: show(exAway.name || null), after: show(m.awayName || null) });
+        }
+        // Dedupe: a home/away change caused purely by a division/bracket move
+        // with the same name shows identical before/after — drop those.
+        const realChanges = changes.filter((c) => c.before !== c.after);
+        if (realChanges.length > 0) {
+          changed.push({ matchNumber: m.matchNumber, changes: realChanges });
+        } else {
+          unchangedCount += 1;
+        }
+      }
+
+      // Renumbering heuristic: a "new" game whose date + team pair matches an
+      // existing game filed under a DIFFERENT number usually means the
+      // scheduling tool regenerated match numbers — importing would create
+      // duplicates instead of updates.
+      const pairKey = (date: string | null, a: string, b: string) =>
+        `${date ?? ""}\u0000${[a, b].sort().join("\u0000")}`;
+      const existingByPair = new Map<string, string[]>();
+      for (const ex of existing) {
+        const h = sideOf(ex.homeParticipantId).key;
+        const a = sideOf(ex.awayParticipantId).key;
+        if (!h || !a) continue;
+        const k = pairKey(ex.matchDate, h, a);
+        existingByPair.set(k, [...(existingByPair.get(k) ?? []), ex.matchNumber]);
+      }
+      const renumberWarnings: {
+        fileMatchNumber: string;
+        existingMatchNumber: string;
+        matchDate: string | null;
+        homeName: string;
+        awayName: string;
+      }[] = [];
+      for (const m of added) {
+        const rec = byNumber.get(m.matchNumber)!;
+        if (!rec.homeKey || !rec.awayKey) continue;
+        const hits = existingByPair.get(
+          pairKey(rec.matchDate, rec.homeKey, rec.awayKey),
+        );
+        const other = hits?.find((n) => n !== m.matchNumber);
+        if (other !== undefined) {
+          renumberWarnings.push({
+            fileMatchNumber: m.matchNumber,
+            existingMatchNumber: other,
+            matchDate: rec.matchDate,
+            homeName: rec.homeName,
+            awayName: rec.awayName,
+          });
+        }
+      }
+
+      // Informational: games in the DB that this file doesn't mention.
+      // Imports never delete, so these stay untouched.
+      const missingFromFile = existing
+        .filter((ex) => !byNumber.has(ex.matchNumber))
+        .map((ex) => ({
+          matchNumber: ex.matchNumber,
+          matchDate: ex.matchDate,
+          homeName: sideOf(ex.homeParticipantId).name,
+          awayName: sideOf(ex.awayParticipantId).name,
+        }));
+
+      return res.json({
+        ok: true,
+        preview: true,
+        tournamentId: tournament.id,
+        added,
+        changed,
+        unchangedCount,
+        renumberWarnings,
+        missingFromFile,
+        columns: buildColumnSummary(grid[0], headerIndex),
+        rowWarnings,
       });
     }
 

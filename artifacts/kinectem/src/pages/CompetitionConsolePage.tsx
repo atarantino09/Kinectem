@@ -155,6 +155,39 @@ interface ImportResult {
   rowWarnings?: { row: number; reason: string }[];
 }
 
+// Task #766 — server dry-run preview: what an upload would add/change/leave
+// alone, computed by the exact same parser the real import uses.
+interface ImportPreview {
+  preview: true;
+  added: {
+    matchNumber: string;
+    matchDate: string | null;
+    startTime: string | null;
+    homeName: string;
+    awayName: string;
+  }[];
+  changed: {
+    matchNumber: string;
+    changes: { field: string; before: string; after: string }[];
+  }[];
+  unchangedCount: number;
+  renumberWarnings: {
+    fileMatchNumber: string;
+    existingMatchNumber: string;
+    matchDate: string | null;
+    homeName: string;
+    awayName: string;
+  }[];
+  missingFromFile: {
+    matchNumber: string;
+    matchDate: string | null;
+    homeName: string;
+    awayName: string;
+  }[];
+  columns?: ImportColumnSummary;
+  rowWarnings?: { row: number; reason: string }[];
+}
+
 function DetailsPanel({
   detail,
   competitionId,
