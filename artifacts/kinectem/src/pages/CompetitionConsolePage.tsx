@@ -30,6 +30,7 @@ import {
   Building2,
   CalendarDays,
   CalendarX,
+  ChevronDown,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -897,7 +898,35 @@ function SchedulePanel({
   const [csv, setCsv] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
+  // Task #766 — two-step import: server dry-run first, organizer confirms.
+  // pendingCsv is the exact text the preview was computed from; confirm
+  // sends that same text so what you saw is what gets applied.
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [pendingCsv, setPendingCsv] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const previewMut = useMutation({
+    mutationFn: (csvText: string) =>
+      customFetch<ImportPreview>(
+        `/api/v1/competitions/${competitionId}/import`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csv: csvText, dryRun: true }),
+        },
+      ),
+    onSuccess: (r, csvText) => {
+      setPendingCsv(csvText);
+      setPreview(r);
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't read that file",
+        description:
+          err instanceof Error ? err.message : "Check the CSV format and try again.",
+        variant: "destructive",
+      }),
+  });
 
   const importMut = useMutation({
     mutationFn: (csvText: string) =>
@@ -918,6 +947,8 @@ function SchedulePanel({
         description: `${r.matchesUpserted} games · ${r.participantCount} teams.`,
       });
       setCsv("");
+      setPreview(null);
+      setPendingCsv("");
     },
     onError: (err) =>
       toast({
@@ -1041,7 +1072,7 @@ function SchedulePanel({
             if (f)
               void f.text().then((text) => {
                 setCsv(text);
-                importMut.mutate(text);
+                previewMut.mutate(text);
               });
             e.target.value = "";
           }}
@@ -1052,14 +1083,16 @@ function SchedulePanel({
           variant="brand"
           size="lg"
           className="w-full font-bold"
-          disabled={importMut.isPending}
+          disabled={importMut.isPending || previewMut.isPending}
           onClick={() => fileRef.current?.click()}
           data-testid="btn-csv-choose-file"
         >
           <Upload className="mr-2 h-4 w-4" />
-          {importMut.isPending
-            ? "Uploading your schedule…"
-            : "Upload schedule file"}
+          {previewMut.isPending
+            ? "Reading your schedule…"
+            : importMut.isPending
+              ? "Uploading your schedule…"
+              : "Upload schedule file"}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
           Pick the CSV your scheduling tool exported — we'll read it and set up
@@ -1104,12 +1137,21 @@ function SchedulePanel({
         {pasteOpen ? (
           <Button
             variant="brand"
-            onClick={() => importMut.mutate(csv)}
-            disabled={!pasteOpen || !csv.trim() || importMut.isPending}
+            onClick={() => previewMut.mutate(csv)}
+            disabled={
+              !pasteOpen ||
+              !csv.trim() ||
+              importMut.isPending ||
+              previewMut.isPending
+            }
             data-testid="btn-upload-schedule"
           >
             <Upload className="w-3.5 h-3.5 mr-1.5" />
-            {importMut.isPending ? "Uploading…" : "Upload pasted CSV"}
+            {previewMut.isPending
+              ? "Reading…"
+              : importMut.isPending
+                ? "Uploading…"
+                : "Preview pasted CSV"}
           </Button>
         ) : null}
         {lastResult ? (
@@ -1181,6 +1223,201 @@ function SchedulePanel({
           </div>
         ) : null}
       </CardContent>
+
+      {/* Task #766 — preview dialog: what this upload will do, before it does it */}
+      <Dialog
+        open={preview !== null}
+        onOpenChange={(open) => {
+          if (!open && !importMut.isPending) {
+            setPreview(null);
+            setPendingCsv("");
+          }
+        }}
+      >
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto sm:max-w-xl"
+          data-testid="dialog-import-preview"
+        >
+          <DialogHeader>
+            <DialogTitle>Review before uploading</DialogTitle>
+            <DialogDescription>
+              Nothing has been changed yet — here's what this file will do.
+            </DialogDescription>
+          </DialogHeader>
+          {preview ? (
+            <div className="space-y-3 text-sm">
+              <div className="flex gap-2 flex-wrap" data-testid="text-preview-counts">
+                <Badge variant="secondary" className="font-bold">
+                  {preview.added.length} new
+                </Badge>
+                <Badge variant="secondary" className="font-bold">
+                  {preview.changed.length} changed
+                </Badge>
+                <Badge variant="secondary" className="font-bold">
+                  {preview.unchangedCount} unchanged
+                </Badge>
+              </div>
+
+              {preview.renumberWarnings.length > 0 ? (
+                <div
+                  className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 space-y-1"
+                  data-testid="panel-renumber-warning"
+                >
+                  <p className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                    Possible renumbered schedule — double-check before applying
+                  </p>
+                  <p className="text-[11px] text-amber-700/90 dark:text-amber-400/90">
+                    {preview.renumberWarnings.length} "new" game
+                    {preview.renumberWarnings.length === 1 ? "" : "s"} in this
+                    file look{preview.renumberWarnings.length === 1 ? "s" : ""}{" "}
+                    identical to existing games (same date and teams) but under
+                    a different match #. If your scheduling tool regenerated
+                    match numbers, uploading would create duplicates instead of
+                    updating the originals.
+                  </p>
+                  <ul className="space-y-0.5">
+                    {preview.renumberWarnings.slice(0, 6).map((w) => (
+                      <li
+                        key={`${w.fileMatchNumber}-${w.existingMatchNumber}`}
+                        className="text-[11px] text-amber-700/90 dark:text-amber-400/90"
+                      >
+                        File #{w.fileMatchNumber} ({w.homeName} vs {w.awayName}
+                        {w.matchDate ? `, ${w.matchDate}` : ""}) matches
+                        existing game #{w.existingMatchNumber}.
+                      </li>
+                    ))}
+                    {preview.renumberWarnings.length > 6 ? (
+                      <li className="text-[11px] text-amber-700/90 dark:text-amber-400/90">
+                        …and {preview.renumberWarnings.length - 6} more.
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+              ) : null}
+
+              {preview.changed.length > 0 ? (
+                <div className="space-y-1" data-testid="list-preview-changed">
+                  <p className="text-xs font-bold">
+                    Changing ({preview.changed.length})
+                  </p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                    {preview.changed.map((c) => (
+                      <div
+                        key={c.matchNumber}
+                        className="rounded-md border border-border px-2.5 py-1.5"
+                      >
+                        <p className="text-xs font-bold">Game #{c.matchNumber}</p>
+                        <ul>
+                          {c.changes.map((ch) => (
+                            <li
+                              key={ch.field}
+                              className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]"
+                            >
+                              {ch.field}:{" "}
+                              <span className="line-through">{ch.before}</span>{" "}
+                              → <span className="text-foreground">{ch.after}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {preview.added.length > 0 ? (
+                <div className="space-y-1" data-testid="list-preview-added">
+                  <p className="text-xs font-bold">
+                    Adding ({preview.added.length})
+                  </p>
+                  <ul className="space-y-0.5 max-h-36 overflow-y-auto pr-1">
+                    {preview.added.slice(0, 30).map((a) => (
+                      <li
+                        key={a.matchNumber}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        #{a.matchNumber} · {a.homeName || "TBD"} vs{" "}
+                        {a.awayName || "TBD"}
+                        {a.matchDate ? ` · ${a.matchDate}` : ""}
+                        {a.startTime ? ` · ${a.startTime}` : ""}
+                      </li>
+                    ))}
+                    {preview.added.length > 30 ? (
+                      <li className="text-[11px] text-muted-foreground">
+                        …and {preview.added.length - 30} more.
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+              ) : null}
+
+              {preview.missingFromFile.length > 0 ? (
+                <p
+                  className="text-[11px] text-muted-foreground"
+                  data-testid="text-preview-missing"
+                >
+                  <span className="font-bold text-foreground">
+                    Not in this file (left untouched):
+                  </span>{" "}
+                  {preview.missingFromFile.length} existing game
+                  {preview.missingFromFile.length === 1 ? "" : "s"} — imports
+                  never delete games.
+                </p>
+              ) : null}
+
+              {(preview.rowWarnings?.length ?? 0) > 0 ? (
+                <div className="space-y-0.5" data-testid="list-preview-warnings">
+                  <p className="text-[11px] font-bold text-amber-600 dark:text-amber-500">
+                    {preview.rowWarnings!.length} row
+                    {preview.rowWarnings!.length === 1 ? "" : "s"} to
+                    double-check:
+                  </p>
+                  <ul className="space-y-0.5 max-h-24 overflow-y-auto pr-1">
+                    {preview.rowWarnings!.slice(0, 8).map((w, i) => (
+                      <li
+                        key={`${w.row}-${i}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        {w.row > 0 ? `Row ${w.row}: ` : ""}
+                        {w.reason}
+                      </li>
+                    ))}
+                    {preview.rowWarnings!.length > 8 ? (
+                      <li className="text-[11px] text-muted-foreground">
+                        …and {preview.rowWarnings!.length - 8} more.
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={importMut.isPending}
+              onClick={() => {
+                setPreview(null);
+                setPendingCsv("");
+              }}
+              data-testid="btn-cancel-import"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="brand"
+              className="font-bold"
+              disabled={importMut.isPending || !pendingCsv}
+              onClick={() => importMut.mutate(pendingCsv)}
+              data-testid="btn-confirm-import"
+            >
+              {importMut.isPending ? "Applying…" : "Apply these changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -1367,6 +1604,9 @@ function GamesPanel({
   );
   const [statusReason, setStatusReason] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ConsoleMatch | null>(null);
+  // Long schedules (hundreds of games) shouldn't dominate the console —
+  // collapsed by default, expand on demand.
+  const [listOpen, setListOpen] = useState(false);
 
   const openAdd = () => {
     setForm({ ...EMPTY_GAME_FORM, matchNumber: suggestMatchNumber(matches) });
@@ -1486,10 +1726,21 @@ function GamesPanel({
     <Card data-testid="panel-games">
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2 text-base">
-          <span className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex items-center gap-2 min-w-0"
+            onClick={() => setListOpen((v) => !v)}
+            aria-expanded={listOpen}
+            data-testid="btn-toggle-games-list"
+          >
             <CalendarDays className="w-4 h-4" />
             Games ({matches.length})
-          </span>
+            <ChevronDown
+              className={`w-4 h-4 text-muted-foreground transition-transform ${
+                listOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
           <Button
             size="sm"
             variant="brand"
@@ -1512,7 +1763,19 @@ function GamesPanel({
           for any game with the same match # (the CSV stays the bulk source of
           truth). Postponed/canceled marks are kept.
         </p>
-        {q.isLoading ? (
+        {!listOpen ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="font-bold"
+            onClick={() => setListOpen(true)}
+            data-testid="btn-show-games-list"
+          >
+            <ChevronDown className="w-3.5 h-3.5 mr-1" />
+            Show {matches.length > 0 ? `all ${matches.length} ` : ""}games
+          </Button>
+        ) : q.isLoading ? (
           <Skeleton className="h-24 rounded-lg" />
         ) : matches.length === 0 ? (
           <p className="text-sm text-muted-foreground">
