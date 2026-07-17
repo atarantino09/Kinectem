@@ -46,6 +46,12 @@ import {
   canManageTeam,
   recapFreeUntil,
 } from "../lib/permissions";
+import {
+  materialChanges,
+  notifyGameEdited,
+  notifyGameStatusChanged,
+  notifyBulkGamesChanged,
+} from "../lib/game-change-notifications";
 
 const router: IRouter = Router();
 
@@ -1393,6 +1399,15 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       });
     }
 
+    // Task #767 — snapshot before-state so we can diff material fields
+    // (date / start time / venue / field) after the upserts and send ONE
+    // digest notification per affected claimed-team staffer.
+    const beforeMatches = await db
+      .select()
+      .from(tournamentMatches)
+      .where(eq(tournamentMatches.tournamentId, tournament.id));
+    const beforeByNumber = new Map(beforeMatches.map((m) => [m.matchNumber, m]));
+
     const summary = await db.transaction(async (tx) => {
       // Upsert participant slots (idempotent on the unique-slot index).
       const slotValues = Array.from(slots.values());
@@ -1472,8 +1487,50 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       return {
         participantCount: partRows.length,
         matchesUpserted,
+        partRows,
       };
     });
+
+    // Task #767 — digest fan-out. Compare each imported game's material
+    // fields against the pre-import snapshot; new games and cosmetic-only
+    // updates stay silent. Each affected claimed-team staffer gets ONE
+    // notification for the whole import, never a per-game flood.
+    {
+      const partById = new Map(summary.partRows.map((p) => [p.id, p]));
+      const partBySlot = new Map(
+        summary.partRows.map((p) => [slotKey(p.division, p.bracket, p.nameKey), p]),
+      );
+      // Later rows win on upsert, so diff only each match number's LAST row.
+      const finalByNumber = new Map<string, MatchRec>();
+      for (const m of matchRecs) finalByNumber.set(m.matchNumber, m);
+
+      const changedGames: { teamIds: string[] }[] = [];
+      for (const m of finalByNumber.values()) {
+        const ex = beforeByNumber.get(m.matchNumber);
+        if (!ex) continue; // brand-new game: no one to re-plan around it yet
+        const changes = materialChanges(ex, m);
+        if (changes.length === 0) continue;
+        const teamIds = new Set<string>();
+        for (const pid of [ex.homeParticipantId, ex.awayParticipantId]) {
+          const t = pid ? partById.get(pid)?.teamId : null;
+          if (t) teamIds.add(t);
+        }
+        for (const [name, key] of [
+          [m.homeName, m.homeKey],
+          [m.awayName, m.awayKey],
+        ] as const) {
+          if (!name) continue;
+          const t = partBySlot.get(slotKey(m.division, m.bracket, key))?.teamId;
+          if (t) teamIds.add(t);
+        }
+        changedGames.push({ teamIds: Array.from(teamIds) });
+      }
+      await notifyBulkGamesChanged({
+        competition: tournament,
+        changedGames,
+        actorUserId: me.id,
+      });
+    }
 
     res.json({
       ok: true,
@@ -1611,6 +1668,33 @@ async function loadOperableCompetition(
   return tournament;
 }
 
+// Task #767 — participant lookup for change notifications: display names +
+// claimed team ids for the sides of a game (unclaimed slots have no team).
+async function loadMatchSides(participantIds: (string | null)[]): Promise<{
+  nameOf: (id: string | null) => string | null;
+  teamIds: string[];
+}> {
+  const ids = Array.from(
+    new Set(participantIds.filter((i): i is string => i != null)),
+  );
+  if (ids.length === 0) return { nameOf: () => null, teamIds: [] };
+  const rows = await db
+    .select({
+      id: tournamentParticipants.id,
+      name: tournamentParticipants.name,
+      teamId: tournamentParticipants.teamId,
+    })
+    .from(tournamentParticipants)
+    .where(inArray(tournamentParticipants.id, ids));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return {
+    nameOf: (id) => (id ? (byId.get(id)?.name ?? null) : null),
+    teamIds: rows
+      .map((r) => r.teamId)
+      .filter((t): t is string => t != null),
+  };
+}
+
 // POST /competitions/:id/matches — add ONE game without a CSV.
 router.post(
   "/competitions/:id/matches",
@@ -1708,6 +1792,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const tournament = await loadOperableCompetition(req, res);
     if (!tournament) return;
+    const me = req.sessionUser!;
 
     const [match] = await db
       .select()
@@ -1783,9 +1868,9 @@ router.patch(
           updatedAt: new Date(),
         })
         .where(eq(tournamentMatches.id, match.id));
-      return true;
+      return { homeParticipantId, awayParticipantId };
     }).catch((err: unknown) => {
-      if (isUniqueViolation(err)) return false;
+      if (isUniqueViolation(err)) return null;
       throw err;
     });
     if (!updated) {
@@ -1795,6 +1880,35 @@ router.patch(
         `Game #${b.matchNumber} already exists in this competition. Pick a different match number.`,
         { code: "MATCH_NUMBER_TAKEN" },
       );
+    }
+
+    // Task #767 — material changes (date / start time / venue / field)
+    // notify the staff of any claimed team in this game. Cosmetic edits
+    // (labels, spelling, division/bracket) stay silent.
+    const changes = materialChanges(match, {
+      matchDate,
+      startTime: b.startTime || null,
+      venue: b.venue || null,
+      field: b.field || null,
+    });
+    if (changes.length > 0) {
+      const sides = await loadMatchSides([
+        match.homeParticipantId,
+        match.awayParticipantId,
+        updated.homeParticipantId,
+        updated.awayParticipantId,
+      ]);
+      await notifyGameEdited({
+        competition: tournament,
+        game: {
+          matchNumber: b.matchNumber,
+          homeName: sides.nameOf(updated.homeParticipantId ?? match.homeParticipantId),
+          awayName: sides.nameOf(updated.awayParticipantId ?? match.awayParticipantId),
+        },
+        teamIds: sides.teamIds,
+        changes,
+        actorUserId: me.id,
+      });
     }
 
     res.json({ ok: true });
@@ -1815,6 +1929,21 @@ router.post(
       return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
     }
     const { status, reason } = parsed.data;
+    const me = req.sessionUser!;
+
+    // Snapshot the current row so a no-op status write (same status) stays
+    // silent — only real transitions notify (Task #767).
+    const [before] = await db
+      .select()
+      .from(tournamentMatches)
+      .where(
+        and(
+          eq(tournamentMatches.id, String(req.params.matchId)),
+          eq(tournamentMatches.tournamentId, tournament.id),
+        ),
+      )
+      .limit(1);
+    if (!before) return apiError(res, 404, "Game not found");
 
     const updated = await db
       .update(tournamentMatches)
@@ -1833,6 +1962,27 @@ router.post(
       )
       .returning({ id: tournamentMatches.id });
     if (updated.length === 0) return apiError(res, 404, "Game not found");
+
+    // Task #767 — status transitions notify claimed-team staff AND
+    // competition followers (postponed / canceled / restored).
+    if (before.status !== status) {
+      const sides = await loadMatchSides([
+        before.homeParticipantId,
+        before.awayParticipantId,
+      ]);
+      await notifyGameStatusChanged({
+        competition: tournament,
+        game: {
+          matchNumber: before.matchNumber,
+          homeName: sides.nameOf(before.homeParticipantId),
+          awayName: sides.nameOf(before.awayParticipantId),
+        },
+        teamIds: sides.teamIds,
+        status,
+        reason: status === "scheduled" ? null : reason || null,
+        actorUserId: me.id,
+      });
+    }
 
     res.json({ ok: true });
   }),
