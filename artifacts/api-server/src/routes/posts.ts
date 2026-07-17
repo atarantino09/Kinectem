@@ -1101,8 +1101,12 @@ router.get(
         [{ id: row.a.id, authorId: row.a.authorId }],
         detailMinorCtx,
       );
-      res.json(
-        articleToPost(row.a, {
+      // Task #763 — mirror the profile-feed annotation: admins viewing a
+      // soft-deleted post get `hidden: true` (extra beyond the locked
+      // spec) so the detail page can badge it instead of the post
+      // silently looking alive.
+      res.json({
+        ...articleToPost(row.a, {
           team: row.team,
           org: row.org,
           author: row.author,
@@ -1118,7 +1122,8 @@ router.get(
             currentUserTags.articleTagByArticleId.get(row.a.id) ?? null,
           minorNameCtx: detailMinorCtx,
         }),
-      );
+        ...(isAdmin && row.a.hiddenAt ? { hidden: true as const } : {}),
+      });
       return;
     }
     if (parsed.kind === "org_post") {
@@ -1156,8 +1161,9 @@ router.get(
         { id: me?.id ?? null, role: req.realUser?.role ?? null },
         row.author?.id ? [row.author.id] : [],
       );
-      res.json(
-        orgPostToPost(row.p, {
+      // Task #763 — admin-only "Deleted" annotation, same as articles.
+      res.json({
+        ...orgPostToPost(row.p, {
           org: row.org,
           author: row.author,
           canEdit,
@@ -1165,7 +1171,8 @@ router.get(
           ...statsFor(stats, "org_post", row.p.id),
           minorNameCtx: orgPostMinorCtx,
         }),
-      );
+        ...(isAdmin && row.p.hiddenAt ? { hidden: true as const } : {}),
+      });
       return;
     }
     const [row] = await db
@@ -1242,8 +1249,9 @@ router.get(
         highlightIds: [row.h.id],
       }),
     ]);
-    res.json(
-      highlightToPost(row.h, {
+    // Task #763 — admin-only "Deleted" annotation, same as articles.
+    res.json({
+      ...highlightToPost(row.h, {
         team: row.team,
         org: row.org,
         author: row.uploader,
@@ -1256,7 +1264,8 @@ router.get(
           currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
         minorNameCtx: hlMinorCtx,
       }),
-    );
+      ...(isAdmin && row.h.hiddenAt ? { hidden: true as const } : {}),
+    });
   }),
 );
 

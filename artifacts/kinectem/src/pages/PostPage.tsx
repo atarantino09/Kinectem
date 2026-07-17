@@ -460,6 +460,15 @@ export default function PostPage() {
         </div>
       )}
       <div className="flex items-center gap-2">
+        {(post as { hidden?: boolean }).hidden && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-900 border border-red-300 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
+            title="This post was deleted by its author. Only platform admins can still see it, for moderation."
+            data-testid={`badge-deleted-${post.id}`}
+          >
+            Deleted
+          </span>
+        )}
         <Badge className="bg-slate-900 text-primary-foreground font-bold uppercase text-[10px] tracking-widest">
           <Icon className="w-3 h-3 mr-1 inline" />
           {label}
