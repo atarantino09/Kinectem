@@ -113,6 +113,41 @@ describe("deleted recap cleanup (task 761)", () => {
     expect(found.hidden).toBe(true);
   });
 
+  it("rejects re-linking a deleted recap to a schedule game", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org, team } = await getOrgAndTeam();
+    const postId = await createRecap(agent, org.id, "Recap relink guard");
+    const articleId = postId.replace(/^article-/, "");
+    // Recap must belong to the team for link-recap to consider it.
+    await db
+      .update(articles)
+      .set({ teamId: team.id })
+      .where(eq(articles.id, articleId));
+
+    const [event] = await db
+      .insert(scheduleEvents)
+      .values({
+        teamId: team.id,
+        organizationId: org.id,
+        eventType: "game",
+        opponent: "Relink Guard FC",
+        startAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        status: "completed",
+      })
+      .returning({ id: scheduleEvents.id });
+
+    const del = await agent.delete(`/api/v1/posts/${postId}`);
+    expect(del.status).toBe(204);
+
+    const relink = await agent
+      .post(`/api/v1/teams/${team.id}/schedule/${event.id}/link-recap`)
+      .send({ recapId: articleId });
+    expect(relink.status).toBe(404);
+    expect(relink.body.code).toBe("RECAP_NOT_FOUND");
+
+    await db.delete(scheduleEvents).where(eq(scheduleEvents.id, event.id));
+  });
+
   it("filters notifications pointing at deleted posts from the list and unread count", async () => {
     const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
     const { org } = await getOrgAndTeam();

@@ -144,13 +144,12 @@ router.get(
     const me = req.sessionUser;
     if (!me) return res.json({ unreadCount: 0 });
     // Fetch unread rows (id + link only) so notifications pointing at
-    // soft-deleted posts don't inflate the badge count. Unread rows are a
-    // small working set in practice; cap defensively.
+    // soft-deleted posts don't inflate the badge count. No LIMIT — the count
+    // must stay exact regardless of backlog size; rows are two small columns.
     const rows = await db
       .select({ id: notifications.id, link: notifications.link })
       .from(notifications)
-      .where(and(eq(notifications.userId, me.id), eq(notifications.read, false)))
-      .limit(500);
+      .where(and(eq(notifications.userId, me.id), eq(notifications.read, false)));
     const hidden = await loadHiddenPostIds(rows);
     const count = rows.filter((r) => !isHiddenTarget(r.link, hidden)).length;
     res.json({ unreadCount: count });

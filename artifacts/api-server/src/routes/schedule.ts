@@ -68,6 +68,9 @@ function toScheduleEvent(
     status: e.status,
     statusReason: e.statusReason,
     recurrenceId: e.recurrenceId,
+    // Invariant: gameRecapId never points at a soft-deleted (hidden) recap —
+    // post-delete clears it in the same transaction, a startup migration
+    // backfilled historical rows, and link-recap rejects hidden articles.
     gameRecapId: e.gameRecapId,
     scoreTeam: e.scoreTeam,
     scoreOpponent: e.scoreOpponent,
@@ -635,6 +638,14 @@ router.post(
       .where(eq(articles.id, parsed.data.recapId))
       .limit(1);
     if (!article || article.teamId !== team.id) {
+      return apiError(res, 404, "Recap not found for this team", {
+        code: "RECAP_NOT_FOUND",
+      });
+    }
+    // Soft-deleted recaps must never be (re-)linked — post-delete cleanup
+    // clears game_recap_id, and this guard keeps the "schedule never points
+    // at a hidden recap" invariant from being reintroduced here.
+    if (article.hiddenAt) {
       return apiError(res, 404, "Recap not found for this team", {
         code: "RECAP_NOT_FOUND",
       });
