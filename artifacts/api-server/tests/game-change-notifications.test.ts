@@ -6,7 +6,7 @@
 // and followers are NOT notified by non-status import changes.
 import { afterEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { db, tournaments } from "@workspace/db";
+import { db, rosterEntries, teams, tournaments } from "@workspace/db";
 import { loginAs } from "./helpers";
 import type { Agent } from "supertest";
 
@@ -225,5 +225,85 @@ describe("game change notifications (Task #767)", () => {
       .post(`/api/v1/competitions/${comp.id}/import`)
       .send({ csv: week2 });
     expect(await gameNotifs(claimer.agent, comp.slug)).toHaveLength(1);
+  });
+
+  it("CSV re-import status change notifies staff AND followers (one digest each)", async () => {
+    const { operator, claimer, follower, comp } = await setup();
+
+    // Same file plus an optional status column: game 1 canceled, game 2
+    // untouched (blank cell).
+    const week2 = `${HEADER},status
+1,2026-08-01,09:00,U12,boys,Gold,A,Riverside Park,CA,Field 2,Thunder FC,Lightning SC,Cancelled
+2,2026-08-01,10:30,U12,boys,Gold,A,Riverside Park,CA,Field 2,Strikers,Comets,`;
+    const res = await operator.agent
+      .post(`/api/v1/competitions/${comp.id}/import`)
+      .send({ csv: week2 });
+    expect(res.status).toBe(200);
+
+    // Status actually persisted (Cancelled alias → canceled).
+    const pub = await operator.agent.get(`/api/v1/competitions/${comp.slug}`);
+    const g1 = pub.body.matches.find(
+      (m: { matchNumber: string }) => m.matchNumber === "1",
+    );
+    expect(g1.status).toBe("canceled");
+
+    // Claimed-team staff get their digest.
+    const staffNotifs = await gameNotifs(claimer.agent, comp.slug);
+    expect(staffNotifs).toHaveLength(1);
+    expect(staffNotifs[0].kind).toBe("competition_games_digest");
+    expect(staffNotifs[0].message).toContain("1 of your games");
+
+    // Followers hear about the status change too — exactly one digest.
+    const followerNotifs = await gameNotifs(follower.agent, comp.slug);
+    expect(followerNotifs).toHaveLength(1);
+    expect(followerNotifs[0].kind).toBe("competition_games_digest");
+    expect(followerNotifs[0].message).toContain("canceled");
+
+    // Actor stays silent; identical re-import adds nothing.
+    expect(await gameNotifs(operator.agent, comp.slug)).toHaveLength(0);
+    await operator.agent
+      .post(`/api/v1/competitions/${comp.id}/import`)
+      .send({ csv: week2 });
+    expect(await gameNotifs(follower.agent, comp.slug)).toHaveLength(1);
+  });
+
+  it("accepted team managers are notified alongside coaches", async () => {
+    const { operator, claimer, comp } = await setup();
+    const manager = await loginAs("daniela@kinectem.demo");
+
+    // Find the claimer's solo team for this competition and add the
+    // manager as an accepted staff position on its roster.
+    const pub = await operator.agent.get(`/api/v1/competitions/${comp.slug}`);
+    const slot = pub.body.participants.find(
+      (p: { name: string }) => p.name === "Thunder FC",
+    );
+    const [team] = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(eq(teams.id, slot.teamId));
+    expect(team).toBeTruthy();
+    const [entry] = await db
+      .insert(rosterEntries)
+      .values({
+        teamId: team.id,
+        userId: manager.user.id,
+        role: "player",
+        status: "accepted",
+        position: "manager",
+      })
+      .returning({ id: rosterEntries.id });
+
+    try {
+      const id = await matchIdByNumber(operator.agent, comp.slug, "1");
+      const res = await operator.agent
+        .patch(`/api/v1/competitions/${comp.id}/matches/${id}`)
+        .send({ ...game1Fields, startTime: "12:00" });
+      expect(res.status).toBe(200);
+
+      expect(await gameNotifs(manager.agent, comp.slug)).toHaveLength(1);
+      expect(await gameNotifs(claimer.agent, comp.slug)).toHaveLength(1);
+    } finally {
+      await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
+    }
   });
 });

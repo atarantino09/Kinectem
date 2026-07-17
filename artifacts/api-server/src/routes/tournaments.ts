@@ -147,9 +147,27 @@ const CSV_COLUMNS = [
   "field",
   "home team",
   "away team",
+  "status",
 ] as const;
 
 type CsvColumn = (typeof CSV_COLUMNS)[number];
+
+// Task #767 — optional status column. Blank/absent means "leave the game's
+// status untouched" (imports never clobber statuses that were set inline).
+// Recognized values (forgiving): scheduled/on, postponed/ppd, canceled/
+// cancelled/cxl. Anything else is ignored with a row warning.
+const CSV_STATUS_VALUES: Record<string, "scheduled" | "postponed" | "canceled"> = {
+  scheduled: "scheduled",
+  on: "scheduled",
+  active: "scheduled",
+  confirmed: "scheduled",
+  postponed: "postponed",
+  ppd: "postponed",
+  delayed: "postponed",
+  canceled: "canceled",
+  cancelled: "canceled",
+  cxl: "canceled",
+};
 
 const REQUIRED_CSV_COLUMNS: CsvColumn[] = [
   "match #",
@@ -180,6 +198,7 @@ const CSV_HEADER_ALIASES: Record<CsvColumn, string[]> = {
   field: ["field", "fieldno", "field#", "pitch", "court", "surface"],
   "home team": ["hometeam", "home", "team1", "teama", "homeclub"],
   "away team": ["awayteam", "away", "visitor", "visitorteam", "team2", "teamb", "awayclub"],
+  status: ["status", "gamestatus", "matchstatus"],
 };
 
 // Resolve the header row to a canonical-column → index map. Returns the
@@ -1075,7 +1094,9 @@ const ImportBody = z.object({
 
 // Fields the CSV upsert overwrites, compared field-by-field for the preview.
 // Team sides compare by lowercase key (matching slot semantics) but display
-// the human name. status/statusReason are NOT touched by imports.
+// the human name. status is only touched when the file provides a
+// recognized value in an optional status column (Task #767); statusReason
+// is never touched by imports.
 const DIFF_FIELDS = [
   { key: "matchDate", label: "date" },
   { key: "startTime", label: "start time" },
@@ -1169,6 +1190,8 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       homeKey: string;
       awayName: string;
       awayKey: string;
+      // Task #767 — null means "leave the existing status untouched".
+      status: "scheduled" | "postponed" | "canceled" | null;
     }
 
     // First pass: parse rows + collect unique participant slots.
@@ -1208,6 +1231,16 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
           reason: `Game ${matchNumber} imported without a ${!homeName && !awayName ? "home or away team" : !homeName ? "home team" : "away team"} name — that side stays blank until a re-upload fills it in.`,
         });
       }
+      const rawStatus = col(r, "status");
+      const status = rawStatus
+        ? CSV_STATUS_VALUES[rawStatus.trim().toLowerCase()] ?? null
+        : null;
+      if (rawStatus && status === null) {
+        rowWarnings.push({
+          row: fileRow,
+          reason: `Game ${matchNumber}: couldn't read "${rawStatus}" as a status, so the game's status was left unchanged. Use scheduled, postponed, or canceled.`,
+        });
+      }
       const rawDate = col(r, "date");
       if (rawDate && parseDateCell(rawDate) === null) {
         rowWarnings.push({
@@ -1242,6 +1275,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         homeKey,
         awayName,
         awayKey,
+        status,
       });
     }
 
@@ -1312,6 +1346,11 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
           if (before !== after) {
             changes.push({ field: f.label, before: show(before || null), after: show(after || null) });
           }
+        }
+        // Task #767 — status only diffs when the file provides one (blank
+        // cells leave the existing status untouched).
+        if (m.status !== null && m.status !== ex.status) {
+          changes.push({ field: "status", before: ex.status, after: m.status });
         }
         const exHome = sideOf(ex.homeParticipantId);
         const exAway = sideOf(ex.awayParticipantId);
@@ -1463,6 +1502,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
             field: m.field,
             homeParticipantId,
             awayParticipantId,
+            ...(m.status !== null ? { status: m.status } : {}),
           })
           .onConflictDoUpdate({
             target: [tournamentMatches.tournamentId, tournamentMatches.matchNumber],
@@ -1478,6 +1518,15 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
               field: m.field,
               homeParticipantId,
               awayParticipantId,
+              // Task #767 — a provided status overwrites; a blank/absent
+              // cell leaves the inline-set status alone. Restoring to
+              // scheduled clears any stale postpone/cancel reason.
+              ...(m.status !== null
+                ? {
+                    status: m.status,
+                    ...(m.status === "scheduled" ? { statusReason: null } : {}),
+                  }
+                : {}),
               updatedAt: new Date(),
             },
           });
@@ -1504,12 +1553,13 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       const finalByNumber = new Map<string, MatchRec>();
       for (const m of matchRecs) finalByNumber.set(m.matchNumber, m);
 
-      const changedGames: { teamIds: string[] }[] = [];
+      const changedGames: { teamIds: string[]; statusChanged: boolean }[] = [];
       for (const m of finalByNumber.values()) {
         const ex = beforeByNumber.get(m.matchNumber);
         if (!ex) continue; // brand-new game: no one to re-plan around it yet
         const changes = materialChanges(ex, m);
-        if (changes.length === 0) continue;
+        const statusChanged = m.status !== null && m.status !== ex.status;
+        if (changes.length === 0 && !statusChanged) continue;
         const teamIds = new Set<string>();
         for (const pid of [ex.homeParticipantId, ex.awayParticipantId]) {
           const t = pid ? partById.get(pid)?.teamId : null;
@@ -1523,7 +1573,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
           const t = partBySlot.get(slotKey(m.division, m.bracket, key))?.teamId;
           if (t) teamIds.add(t);
         }
-        changedGames.push({ teamIds: Array.from(teamIds) });
+        changedGames.push({ teamIds: Array.from(teamIds), statusChanged });
       }
       await notifyBulkGamesChanged({
         competition: tournament,

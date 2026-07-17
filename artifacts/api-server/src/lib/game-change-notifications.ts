@@ -116,7 +116,7 @@ export async function resolveTeamStaff(
     ),
   );
 
-  const [coachRows, orgAdminRows] = await Promise.all([
+  const [coachRows, managerRows, orgAdminRows] = await Promise.all([
     db
       .select({ userId: rosterEntries.userId })
       .from(rosterEntries)
@@ -124,6 +124,17 @@ export async function resolveTeamStaff(
         and(
           inArray(rosterEntries.teamId, ids),
           eq(rosterEntries.role, "coach"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      ),
+    // Task #559 — `manager` is a staff position regardless of role.
+    db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          inArray(rosterEntries.teamId, ids),
+          eq(rosterEntries.position, "manager"),
           eq(rosterEntries.status, "accepted"),
         ),
       ),
@@ -140,6 +151,7 @@ export async function resolveTeamStaff(
       : Promise.resolve([] as { userId: string }[]),
   ]);
   for (const r of coachRows) if (r.userId) staff.add(r.userId);
+  for (const r of managerRows) if (r.userId) staff.add(r.userId);
   for (const r of orgAdminRows) staff.add(r.userId);
   return staff;
 }
@@ -253,18 +265,24 @@ export async function notifyGameStatusChanged(args: {
 }
 
 // Bulk CSV re-import: ONE digest notification per recipient covering all
-// materially-changed games (never a per-game flood). Each recipient's
-// digest counts only the games whose claimed teams they staff.
+// materially-changed games (never a per-game flood). Claimed-team staff get
+// a digest counting the games whose teams they staff; competition followers
+// get a digest ONLY when at least one game's STATUS changed (mirrors the
+// single-edit rule: followers care about postponed/canceled/restored, not
+// venue/time moves). A recipient in both sets gets one notification.
 export async function notifyBulkGamesChanged(args: {
   competition: CompetitionRef;
-  // Per changed game: which claimed teams are in it.
-  changedGames: { teamIds: string[] }[];
+  // Per changed game: which claimed teams are in it + whether its status
+  // (postponed/canceled/restored) changed in this import.
+  changedGames: { teamIds: string[]; statusChanged?: boolean }[];
   actorUserId: string;
 }): Promise<void> {
   if (args.changedGames.length === 0) return;
+  const statusChangedCount = args.changedGames.filter(
+    (g) => g.statusChanged,
+  ).length;
+
   // Resolve staff per game, then invert to recipient → affected-game count.
-  const allTeamIds = args.changedGames.flatMap((g) => g.teamIds);
-  if (allTeamIds.length === 0) return;
   const staffByGame = await Promise.all(
     args.changedGames.map((g) => resolveTeamStaff(g.teamIds)),
   );
@@ -274,16 +292,40 @@ export async function notifyBulkGamesChanged(args: {
       countByUser.set(userId, (countByUser.get(userId) ?? 0) + 1);
     }
   }
-  countByUser.delete(args.actorUserId);
-  if (countByUser.size === 0) return;
+
+  const followers =
+    statusChangedCount > 0
+      ? await resolveCompetitionFollowers(args.competition.id)
+      : new Set<string>();
+
   const link = competitionLink(args.competition);
-  await db.insert(notifications).values(
-    Array.from(countByUser.entries()).map(([userId, count]) => ({
+  const rows: {
+    userId: string;
+    kind: string;
+    message: string;
+    link: string;
+    actorUserId: string;
+  }[] = [];
+  for (const [userId, count] of countByUser) {
+    if (userId === args.actorUserId) continue;
+    rows.push({
       userId,
       kind: GAMES_DIGEST_NOTIF_KIND,
       message: `${count === 1 ? "1 of your games" : `${count} of your games`} in ${args.competition.name} changed — check the updated schedule.`,
       link,
       actorUserId: args.actorUserId,
-    })),
-  );
+    });
+  }
+  for (const userId of followers) {
+    if (userId === args.actorUserId || countByUser.has(userId)) continue;
+    rows.push({
+      userId,
+      kind: GAMES_DIGEST_NOTIF_KIND,
+      message: `${statusChangedCount === 1 ? "1 game" : `${statusChangedCount} games`} in ${args.competition.name} ${statusChangedCount === 1 ? "was" : "were"} postponed, canceled, or restored — check the updated schedule.`,
+      link,
+      actorUserId: args.actorUserId,
+    });
+  }
+  if (rows.length === 0) return;
+  await db.insert(notifications).values(rows);
 }
