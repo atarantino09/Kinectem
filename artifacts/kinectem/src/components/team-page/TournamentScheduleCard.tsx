@@ -57,6 +57,9 @@ interface TournamentMatch {
   // hidden from public view on the team page. Public responses simply
   // omit hidden games.
   hidden?: boolean;
+  // Task #765 — organizer-set game status (+ optional public reason).
+  status?: "scheduled" | "postponed" | "canceled";
+  statusReason?: string | null;
 }
 
 interface TournamentGroup {
@@ -457,12 +460,39 @@ export function TournamentScheduleCard({
                     data-testid={`tournament-match-${m.id}`}
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-bold truncate">
+                      <p
+                        className={`text-sm font-bold truncate ${
+                          m.status === "canceled"
+                            ? "line-through text-muted-foreground"
+                            : ""
+                        }`}
+                      >
                         <span className="text-muted-foreground font-semibold">
                           {m.isHome ? "vs" : "@"}
                         </span>{" "}
                         {m.opponentName ?? "TBD"}
                       </p>
+                      {/* Task #765 — organizer-set postponed/canceled
+                          status (+ optional public reason). */}
+                      {(m.status === "postponed" ||
+                        m.status === "canceled") && (
+                        <p
+                          className={`text-[11px] font-black uppercase tracking-wider ${
+                            m.status === "postponed"
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                          data-testid={`status-game-${m.id}`}
+                        >
+                          {m.status === "postponed" ? "Postponed" : "Canceled"}
+                          {m.statusReason ? (
+                            <span className="normal-case font-semibold text-muted-foreground tracking-normal">
+                              {" "}
+                              — {m.statusReason}
+                            </span>
+                          ) : null}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {fmtDate(m.matchDate)}
                         {m.startTime ? ` · ${fmtTime(m.startTime)}` : ""}

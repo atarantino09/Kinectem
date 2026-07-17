@@ -905,6 +905,10 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
             awayParticipantId: m.awayParticipantId,
             homeTeamId: home?.teamId ?? null,
             awayTeamId: away?.teamId ?? null,
+            // Task #765 — postponed/canceled games render with a status
+            // treatment instead of silently disappearing.
+            status: m.status,
+            statusReason: m.statusReason,
           };
         })
         .sort((a, b) => {
@@ -1322,6 +1326,368 @@ router.post(
   requireAuth,
   tournamentWriteLimiter,
   importScheduleHandler,
+);
+
+// ---------------------------------------------------------------------------
+// Task #765 — inline single-game management for the organizer console.
+// Create / edit / status-change / delete ONE match without a CSV re-import.
+// All guarded by canOperateCompetition; the CSV import stays the bulk source
+// of truth (a later re-import of the same match # overwrites these fields —
+// documented in the console UI).
+// ---------------------------------------------------------------------------
+
+// Postponed/canceled lifecycle values the console can set. "completed" is
+// reserved (schema comment) but intentionally not exposed here.
+const MATCH_STATUSES = ["scheduled", "postponed", "canceled"] as const;
+
+const MatchFieldsBody = z.object({
+  matchNumber: z.string().trim().min(1, "Match # is required").max(50),
+  matchDate: z.string().trim().max(50).nullable().optional(),
+  startTime: z.string().trim().max(50).nullable().optional(),
+  age: z.string().trim().max(100).nullable().optional(),
+  gender: z.string().trim().max(100).nullable().optional(),
+  division: z.string().trim().max(200).optional(),
+  bracket: z.string().trim().max(200).optional(),
+  venue: z.string().trim().max(200).nullable().optional(),
+  venueState: z.string().trim().max(100).nullable().optional(),
+  field: z.string().trim().max(200).nullable().optional(),
+  homeName: z.string().trim().max(200).nullable().optional(),
+  awayName: z.string().trim().max(200).nullable().optional(),
+});
+
+const MatchStatusBody = z.object({
+  status: z.enum(MATCH_STATUSES),
+  // Optional short reason ("Rainout"). Ignored/cleared for "scheduled".
+  reason: z.string().trim().max(300).nullable().optional(),
+});
+
+// Normalize a client-sent date to YYYY-MM-DD (reuses the forgiving CSV date
+// parser) or null. Returns undefined when the raw value can't be read.
+function parseMatchDateInput(
+  raw: string | null | undefined,
+): string | null | undefined {
+  if (raw == null || raw === "") return null;
+  const parsed = parseDateCell(raw);
+  return parsed === null ? undefined : parsed;
+}
+
+// Resolve (or create) the participant slot for a team name within a
+// division/bracket, mirroring the CSV import's slot-upsert semantics.
+// Returns null for a blank name (TBD side).
+async function resolveParticipantId(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tournamentId: string,
+  division: string,
+  bracket: string,
+  name: string | null,
+): Promise<string | null> {
+  if (!name) return null;
+  const nameKey = name.toLowerCase();
+  await tx
+    .insert(tournamentParticipants)
+    .values({ tournamentId, name, nameKey, division, bracket })
+    .onConflictDoNothing();
+  const [row] = await tx
+    .select({ id: tournamentParticipants.id })
+    .from(tournamentParticipants)
+    .where(
+      and(
+        eq(tournamentParticipants.tournamentId, tournamentId),
+        eq(tournamentParticipants.division, division),
+        eq(tournamentParticipants.bracket, bracket),
+        eq(tournamentParticipants.nameKey, nameKey),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+// Postgres unique-violation detector (code 23505, possibly wrapped) so the
+// rare pre-check race on the (tournament, matchNumber) unique index still
+// maps to a friendly 409 instead of a 500.
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; cause?: { code?: string } } | null;
+  return e?.code === "23505" || e?.cause?.code === "23505";
+}
+
+// Shared guard: load the tournament, 404 if missing, 403 unless the caller
+// can operate it. Returns null after writing the error response.
+async function loadOperableCompetition(
+  req: Parameters<Parameters<typeof asyncHandler>[0]>[0],
+  res: Parameters<Parameters<typeof asyncHandler>[0]>[1],
+) {
+  const me = req.sessionUser;
+  if (!me) {
+    apiError(res, 401, "Not authenticated");
+    return null;
+  }
+  const [tournament] = await db
+    .select()
+    .from(tournaments)
+    .where(eq(tournaments.id, String(req.params.id)))
+    .limit(1);
+  if (!tournament) {
+    apiError(res, 404, "Competition not found");
+    return null;
+  }
+  if (!(await canOperateCompetition(me, tournament))) {
+    apiError(res, 403, "Only the competition operator can manage its games.", {
+      code: "COMPETITION_FORBIDDEN",
+    });
+    return null;
+  }
+  return tournament;
+}
+
+// POST /competitions/:id/matches — add ONE game without a CSV.
+router.post(
+  "/competitions/:id/matches",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const parsed = MatchFieldsBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
+    }
+    const b = parsed.data;
+    const matchDate = parseMatchDateInput(b.matchDate);
+    if (matchDate === undefined) {
+      return apiError(
+        res,
+        400,
+        `Couldn't read "${b.matchDate}" as a date. Dates like 2026-07-11 or 7/11/2026 work best.`,
+      );
+    }
+    const division = b.division ?? "";
+    const bracket = b.bracket ?? "";
+
+    // Uniqueness pre-check for a friendly 409; the unique index still
+    // backstops races (insert throws → 500 is acceptable for the rare race).
+    const [dupe] = await db
+      .select({ id: tournamentMatches.id })
+      .from(tournamentMatches)
+      .where(
+        and(
+          eq(tournamentMatches.tournamentId, tournament.id),
+          eq(tournamentMatches.matchNumber, b.matchNumber),
+        ),
+      )
+      .limit(1);
+    if (dupe) {
+      return apiError(
+        res,
+        409,
+        `Game #${b.matchNumber} already exists in this competition. Pick a different match number.`,
+        { code: "MATCH_NUMBER_TAKEN" },
+      );
+    }
+
+    const created = await db.transaction(async (tx) => {
+      const homeParticipantId = await resolveParticipantId(
+        tx, tournament.id, division, bracket, b.homeName ?? null,
+      );
+      const awayParticipantId = await resolveParticipantId(
+        tx, tournament.id, division, bracket, b.awayName ?? null,
+      );
+      const [row] = await tx
+        .insert(tournamentMatches)
+        .values({
+          tournamentId: tournament.id,
+          matchNumber: b.matchNumber,
+          matchDate,
+          startTime: b.startTime || null,
+          age: b.age || null,
+          gender: b.gender || null,
+          division,
+          bracket,
+          venue: b.venue || null,
+          venueState: b.venueState || null,
+          field: b.field || null,
+          homeParticipantId,
+          awayParticipantId,
+        })
+        .returning();
+      return row;
+    }).catch((err: unknown) => {
+      if (isUniqueViolation(err)) return null;
+      throw err;
+    });
+    if (!created) {
+      return apiError(
+        res,
+        409,
+        `Game #${b.matchNumber} already exists in this competition. Pick a different match number.`,
+        { code: "MATCH_NUMBER_TAKEN" },
+      );
+    }
+
+    res.status(201).json({ ok: true, matchId: created.id });
+  }),
+);
+
+// PATCH /competitions/:id/matches/:matchId — edit ONE game's fields.
+router.patch(
+  "/competitions/:id/matches/:matchId",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const [match] = await db
+      .select()
+      .from(tournamentMatches)
+      .where(
+        and(
+          eq(tournamentMatches.id, String(req.params.matchId)),
+          eq(tournamentMatches.tournamentId, tournament.id),
+        ),
+      )
+      .limit(1);
+    if (!match) return apiError(res, 404, "Game not found");
+
+    const parsed = MatchFieldsBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
+    }
+    const b = parsed.data;
+    const matchDate = parseMatchDateInput(b.matchDate);
+    if (matchDate === undefined) {
+      return apiError(
+        res,
+        400,
+        `Couldn't read "${b.matchDate}" as a date. Dates like 2026-07-11 or 7/11/2026 work best.`,
+      );
+    }
+    const division = b.division ?? "";
+    const bracket = b.bracket ?? "";
+
+    if (b.matchNumber !== match.matchNumber) {
+      const [dupe] = await db
+        .select({ id: tournamentMatches.id })
+        .from(tournamentMatches)
+        .where(
+          and(
+            eq(tournamentMatches.tournamentId, tournament.id),
+            eq(tournamentMatches.matchNumber, b.matchNumber),
+          ),
+        )
+        .limit(1);
+      if (dupe) {
+        return apiError(
+          res,
+          409,
+          `Game #${b.matchNumber} already exists in this competition. Pick a different match number.`,
+          { code: "MATCH_NUMBER_TAKEN" },
+        );
+      }
+    }
+
+    const updated = await db.transaction(async (tx) => {
+      const homeParticipantId = await resolveParticipantId(
+        tx, tournament.id, division, bracket, b.homeName ?? null,
+      );
+      const awayParticipantId = await resolveParticipantId(
+        tx, tournament.id, division, bracket, b.awayName ?? null,
+      );
+      await tx
+        .update(tournamentMatches)
+        .set({
+          matchNumber: b.matchNumber,
+          matchDate,
+          startTime: b.startTime || null,
+          age: b.age || null,
+          gender: b.gender || null,
+          division,
+          bracket,
+          venue: b.venue || null,
+          venueState: b.venueState || null,
+          field: b.field || null,
+          homeParticipantId,
+          awayParticipantId,
+          updatedAt: new Date(),
+        })
+        .where(eq(tournamentMatches.id, match.id));
+      return true;
+    }).catch((err: unknown) => {
+      if (isUniqueViolation(err)) return false;
+      throw err;
+    });
+    if (!updated) {
+      return apiError(
+        res,
+        409,
+        `Game #${b.matchNumber} already exists in this competition. Pick a different match number.`,
+        { code: "MATCH_NUMBER_TAKEN" },
+      );
+    }
+
+    res.json({ ok: true });
+  }),
+);
+
+// POST /competitions/:id/matches/:matchId/status — postpone/cancel/restore.
+router.post(
+  "/competitions/:id/matches/:matchId/status",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const parsed = MatchStatusBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid body");
+    }
+    const { status, reason } = parsed.data;
+
+    const updated = await db
+      .update(tournamentMatches)
+      .set({
+        status,
+        // A reason only makes sense with a non-scheduled status; restoring
+        // to "scheduled" always clears it.
+        statusReason: status === "scheduled" ? null : reason || null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tournamentMatches.id, String(req.params.matchId)),
+          eq(tournamentMatches.tournamentId, tournament.id),
+        ),
+      )
+      .returning({ id: tournamentMatches.id });
+    if (updated.length === 0) return apiError(res, 404, "Game not found");
+
+    res.json({ ok: true });
+  }),
+);
+
+// DELETE /competitions/:id/matches/:matchId — remove a game entered in error.
+router.delete(
+  "/competitions/:id/matches/:matchId",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const deleted = await db
+      .delete(tournamentMatches)
+      .where(
+        and(
+          eq(tournamentMatches.id, String(req.params.matchId)),
+          eq(tournamentMatches.tournamentId, tournament.id),
+        ),
+      )
+      .returning({ id: tournamentMatches.id });
+    if (deleted.length === 0) return apiError(res, 404, "Game not found");
+
+    res.json({ ok: true });
+  }),
 );
 
 // ---------------------------------------------------------------------------
@@ -2379,6 +2745,9 @@ router.get(
       // is hidden from the public team page.
       recapPostId: string | null;
       hidden?: boolean;
+      // Task #765 — postponed/canceled treatment on the team page.
+      status: string;
+      statusReason: string | null;
     }
     const groups = new Map<
       string,
@@ -2435,6 +2804,8 @@ router.get(
         isHome,
         opponentName: oppId ? nameById.get(oppId) ?? null : null,
         recapPostId: recapPostIdByMatch.get(m.id) ?? null,
+        status: m.status,
+        statusReason: m.statusReason,
         ...(isHidden ? { hidden: true } : {}),
       });
     }

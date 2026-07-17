@@ -63,6 +63,10 @@ type Match = {
   awayParticipantId: string | null;
   homeTeamId?: string | null;
   awayTeamId?: string | null;
+  // Task #765 — postponed/canceled games render with a status badge (+
+  // optional reason) instead of silently disappearing.
+  status?: "scheduled" | "postponed" | "canceled";
+  statusReason?: string | null;
 };
 
 export type CompetitionMeta = {
@@ -742,7 +746,11 @@ export default function CompetitionPage() {
                     {matches.map((m) => (
                       <div
                         key={m.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+                        className={`flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm ${
+                          m.status === "postponed" || m.status === "canceled"
+                            ? "bg-muted/40"
+                            : ""
+                        }`}
                         data-testid={`row-match-${m.id}`}
                       >
                         <div className="min-w-0 flex-1">
@@ -752,12 +760,38 @@ export default function CompetitionPage() {
                             {m.startTime ? <span>{m.startTime}</span> : null}
                             {m.field ? <span>{m.field}</span> : null}
                           </div>
-                          <div className="truncate font-medium">
+                          <div
+                            className={`truncate font-medium ${
+                              m.status === "canceled"
+                                ? "line-through text-muted-foreground"
+                                : ""
+                            }`}
+                          >
                             {m.homeName ?? "TBD"}{" "}
                             <span className="text-muted-foreground">vs</span>{" "}
                             {m.awayName ?? "TBD"}
                           </div>
+                          {(m.status === "postponed" ||
+                            m.status === "canceled") &&
+                          m.statusReason ? (
+                            <p className="text-xs text-muted-foreground italic mt-0.5 truncate">
+                              {m.statusReason}
+                            </p>
+                          ) : null}
                         </div>
+                        {m.status === "postponed" ||
+                        m.status === "canceled" ? (
+                          <span
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                              m.status === "postponed"
+                                ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                                : "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-400"
+                            }`}
+                            data-testid={`badge-match-status-${m.id}`}
+                          >
+                            {m.status === "postponed" ? "Postponed" : "Canceled"}
+                          </span>
+                        ) : null}
                       </div>
                     ))}
                   </div>

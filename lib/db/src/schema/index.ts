@@ -1733,6 +1733,10 @@ export const tournamentMatches = pgTable("tournament_matches", {
   // scheduled | canceled | postponed | completed (text to avoid a new enum
   // migration hazard; validated at the route layer).
   status: text("status").notNull().default("scheduled"),
+  // Task #765 — optional operator-entered reason shown alongside a
+  // postponed/canceled status ("Rainout", "Field flooded"). Cleared when
+  // the game returns to "scheduled".
+  statusReason: text("status_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({

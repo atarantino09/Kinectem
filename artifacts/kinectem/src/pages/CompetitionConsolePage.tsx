@@ -28,7 +28,29 @@ import {
   Copy,
   Megaphone,
   Building2,
+  CalendarDays,
+  CalendarX,
+  Plus,
+  Trash2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Competitions §9b — operator console for one competition: branding panel,
 // claim-approval queue, and schedule CSV upload. Owner-or-platform-admin only
@@ -1130,6 +1152,616 @@ function SchedulePanel({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Task #765 — inline single-game management. Lists the imported schedule and
+// lets the organizer edit, add, postpone/cancel (with optional reason), and
+// delete individual games without touching the CSV.
+// ---------------------------------------------------------------------------
+
+interface ConsoleMatch {
+  id: string;
+  matchNumber: string;
+  matchDate: string | null;
+  startTime: string | null;
+  age: string | null;
+  gender: string | null;
+  division: string;
+  bracket: string;
+  venue: string | null;
+  venueState: string | null;
+  field: string | null;
+  homeName: string | null;
+  awayName: string | null;
+  status: "scheduled" | "postponed" | "canceled";
+  statusReason: string | null;
+}
+
+interface GameFormState {
+  matchNumber: string;
+  matchDate: string;
+  startTime: string;
+  division: string;
+  bracket: string;
+  homeName: string;
+  awayName: string;
+  venue: string;
+  venueState: string;
+  field: string;
+  age: string;
+  gender: string;
+}
+
+const EMPTY_GAME_FORM: GameFormState = {
+  matchNumber: "",
+  matchDate: "",
+  startTime: "",
+  division: "",
+  bracket: "",
+  homeName: "",
+  awayName: "",
+  venue: "",
+  venueState: "",
+  field: "",
+  age: "",
+  gender: "",
+};
+
+function formFromMatch(m: ConsoleMatch): GameFormState {
+  return {
+    matchNumber: m.matchNumber,
+    matchDate: m.matchDate ?? "",
+    startTime: m.startTime ?? "",
+    division: m.division,
+    bracket: m.bracket,
+    homeName: m.homeName ?? "",
+    awayName: m.awayName ?? "",
+    venue: m.venue ?? "",
+    venueState: m.venueState ?? "",
+    field: m.field ?? "",
+    age: m.age ?? "",
+    gender: m.gender ?? "",
+  };
+}
+
+// Suggest the next match number: one above the current numeric max. Falls
+// back to "1" when no games have a numeric match #.
+function suggestMatchNumber(matches: ConsoleMatch[]): string {
+  let max = 0;
+  for (const m of matches) {
+    const n = Number(m.matchNumber);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return String(max + 1);
+}
+
+const STATUS_BADGE: Record<
+  "postponed" | "canceled",
+  { label: string; cls: string }
+> = {
+  postponed: {
+    label: "Postponed",
+    cls: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  },
+  canceled: {
+    label: "Canceled",
+    cls: "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-400",
+  },
+};
+
+function GameFormFields({
+  form,
+  setForm,
+}: {
+  form: GameFormState;
+  setForm: (f: GameFormState) => void;
+}) {
+  const set = (k: keyof GameFormState) => (v: string) =>
+    setForm({ ...form, [k]: v });
+  const field = (
+    k: keyof GameFormState,
+    label: string,
+    props?: { placeholder?: string; type?: string; required?: boolean },
+  ) => (
+    <div className="space-y-1">
+      <Label htmlFor={`game-${k}`} className="text-xs">
+        {label}
+        {props?.required ? " *" : ""}
+      </Label>
+      <Input
+        id={`game-${k}`}
+        type={props?.type ?? "text"}
+        value={form[k]}
+        placeholder={props?.placeholder}
+        onChange={(e) => set(k)(e.target.value)}
+        data-testid={`input-game-${k}`}
+      />
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {field("matchNumber", "Match #", { required: true })}
+      {field("matchDate", "Date", { type: "date" })}
+      {field("startTime", "Start time", { placeholder: "e.g. 5:30 PM" })}
+      {field("field", "Field", { placeholder: "e.g. Field 2" })}
+      {field("homeName", "Home team")}
+      {field("awayName", "Away team")}
+      {field("venue", "Venue")}
+      {field("venueState", "Venue state", { placeholder: "e.g. CA" })}
+      {field("division", "Division")}
+      {field("bracket", "Bracket")}
+      {field("age", "Age group", { placeholder: "e.g. U12" })}
+      {field("gender", "Gender", { placeholder: "e.g. boys" })}
+    </div>
+  );
+}
+
+function GamesPanel({
+  competitionId,
+  slug,
+}: {
+  competitionId: string;
+  slug: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  // Same cache entry the public page + DetailsPanel use, extended with the
+  // matches array this panel manages.
+  const q = useQuery<{ matches: ConsoleMatch[] }>({
+    queryKey: ["competition", slug],
+    queryFn: () =>
+      customFetch<{ matches: ConsoleMatch[] }>(
+        `/api/v1/competitions/${encodeURIComponent(slug)}`,
+        { method: "GET" },
+      ),
+  });
+  const matches = q.data?.matches ?? [];
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["competition"] });
+    qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+  };
+
+  // Dialog state: null = closed; "new" = add game; otherwise the match
+  // being edited.
+  const [editTarget, setEditTarget] = useState<ConsoleMatch | "new" | null>(
+    null,
+  );
+  const [form, setForm] = useState<GameFormState>(EMPTY_GAME_FORM);
+  const [statusTarget, setStatusTarget] = useState<ConsoleMatch | null>(null);
+  const [statusChoice, setStatusChoice] = useState<"postponed" | "canceled">(
+    "postponed",
+  );
+  const [statusReason, setStatusReason] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ConsoleMatch | null>(null);
+
+  const openAdd = () => {
+    setForm({ ...EMPTY_GAME_FORM, matchNumber: suggestMatchNumber(matches) });
+    setEditTarget("new");
+  };
+  const openEdit = (m: ConsoleMatch) => {
+    setForm(formFromMatch(m));
+    setEditTarget(m);
+  };
+
+  const bodyFromForm = () => ({
+    matchNumber: form.matchNumber.trim(),
+    matchDate: form.matchDate.trim() || null,
+    startTime: form.startTime.trim() || null,
+    division: form.division.trim(),
+    bracket: form.bracket.trim(),
+    homeName: form.homeName.trim() || null,
+    awayName: form.awayName.trim() || null,
+    venue: form.venue.trim() || null,
+    venueState: form.venueState.trim() || null,
+    field: form.field.trim() || null,
+    age: form.age.trim() || null,
+    gender: form.gender.trim() || null,
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const body = JSON.stringify(bodyFromForm());
+      return editTarget === "new"
+        ? customFetch(`/api/v1/competitions/${competitionId}/matches`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          })
+        : customFetch(
+            `/api/v1/competitions/${competitionId}/matches/${(editTarget as ConsoleMatch).id}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body,
+            },
+          );
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: editTarget === "new" ? "Game added" : "Game updated",
+      });
+      setEditTarget(null);
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't save the game",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
+
+  const statusMut = useMutation({
+    mutationFn: ({
+      matchId,
+      status,
+      reason,
+    }: {
+      matchId: string;
+      status: "scheduled" | "postponed" | "canceled";
+      reason?: string;
+    }) =>
+      customFetch(
+        `/api/v1/competitions/${competitionId}/matches/${matchId}/status`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status, reason: reason || null }),
+        },
+      ),
+    onSuccess: (_r, vars) => {
+      invalidate();
+      toast({
+        title:
+          vars.status === "scheduled"
+            ? "Game back on the schedule"
+            : vars.status === "postponed"
+              ? "Game postponed"
+              : "Game canceled",
+      });
+      setStatusTarget(null);
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't update the game status",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (matchId: string) =>
+      customFetch(
+        `/api/v1/competitions/${competitionId}/matches/${matchId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Game deleted" });
+      setDeleteTarget(null);
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't delete the game",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <Card data-testid="panel-games">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2 text-base">
+          <span className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4" />
+            Games ({matches.length})
+          </span>
+          <Button
+            size="sm"
+            variant="brand"
+            className="font-bold"
+            onClick={openAdd}
+            data-testid="btn-add-game"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Add game
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Fix a one-off change right here — move a time, swap a venue, postpone
+          a rainout.{" "}
+          <span className="font-bold text-foreground">
+            Heads up: re-uploading your CSV overwrites these edits
+          </span>{" "}
+          for any game with the same match # (the CSV stays the bulk source of
+          truth). Postponed/canceled marks are kept.
+        </p>
+        {q.isLoading ? (
+          <Skeleton className="h-24 rounded-lg" />
+        ) : matches.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No games yet — upload a CSV below or add one here.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {matches.map((m) => (
+              <div
+                key={m.id}
+                className={`rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3 flex-wrap ${
+                  m.status !== "scheduled" ? "bg-muted/40" : ""
+                }`}
+                data-testid={`row-game-${m.id}`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p
+                      className={`text-sm font-bold ${
+                        m.status === "canceled"
+                          ? "line-through text-muted-foreground"
+                          : ""
+                      }`}
+                    >
+                      {m.homeName ?? "TBD"}{" "}
+                      <span className="font-normal text-muted-foreground">
+                        vs
+                      </span>{" "}
+                      {m.awayName ?? "TBD"}
+                    </p>
+                    {m.status !== "scheduled" && (
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${STATUS_BADGE[m.status].cls}`}
+                        data-testid={`badge-status-${m.id}`}
+                      >
+                        {STATUS_BADGE[m.status].label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    #{m.matchNumber}
+                    {m.matchDate ? ` · ${m.matchDate}` : ""}
+                    {m.startTime ? ` · ${m.startTime}` : ""}
+                    {[m.division, m.bracket].filter(Boolean).length > 0
+                      ? ` · ${[m.division, m.bracket].filter(Boolean).join(" / ")}`
+                      : ""}
+                    {[m.venue, m.field].filter(Boolean).length > 0
+                      ? ` · ${[m.venue, m.field].filter(Boolean).join(", ")}`
+                      : ""}
+                  </p>
+                  {m.status !== "scheduled" && m.statusReason ? (
+                    <p className="text-xs text-muted-foreground italic mt-0.5">
+                      Reason: {m.statusReason}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="font-bold text-muted-foreground"
+                    onClick={() => openEdit(m)}
+                    data-testid={`btn-edit-game-${m.id}`}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1" />
+                    Edit
+                  </Button>
+                  {m.status === "scheduled" ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="font-bold text-muted-foreground"
+                      onClick={() => {
+                        setStatusChoice("postponed");
+                        setStatusReason("");
+                        setStatusTarget(m);
+                      }}
+                      data-testid={`btn-status-game-${m.id}`}
+                    >
+                      <CalendarX className="w-3.5 h-3.5 mr-1" />
+                      Postpone / cancel
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="font-bold"
+                      disabled={statusMut.isPending}
+                      onClick={() =>
+                        statusMut.mutate({ matchId: m.id, status: "scheduled" })
+                      }
+                      data-testid={`btn-restore-game-${m.id}`}
+                    >
+                      Back to scheduled
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="font-bold text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteTarget(m)}
+                    data-testid={`btn-delete-game-${m.id}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      {/* Add / edit game dialog */}
+      <Dialog
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+      >
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto sm:max-w-lg"
+          data-testid="dialog-game-form"
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {editTarget === "new" ? "Add a game" : "Edit game"}
+            </DialogTitle>
+            <DialogDescription>
+              {editTarget === "new"
+                ? "Adds one game to the schedule — no CSV needed. The match # is suggested; change it if your numbering differs."
+                : "Changes save to this one game. A later CSV re-upload with the same match # will overwrite them."}
+            </DialogDescription>
+          </DialogHeader>
+          <GameFormFields form={form} setForm={setForm} />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="font-bold"
+              onClick={() => setEditTarget(null)}
+              data-testid="btn-cancel-game-form"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              className="font-bold"
+              disabled={!form.matchNumber.trim() || saveMut.isPending}
+              onClick={() => saveMut.mutate()}
+              data-testid="btn-save-game"
+            >
+              {saveMut.isPending
+                ? "Saving…"
+                : editTarget === "new"
+                  ? "Add game"
+                  : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Postpone / cancel dialog */}
+      <Dialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setStatusTarget(null);
+        }}
+      >
+        <DialogContent data-testid="dialog-game-status">
+          <DialogHeader>
+            <DialogTitle>
+              Postpone or cancel game #{statusTarget?.matchNumber}
+            </DialogTitle>
+            <DialogDescription>
+              The game stays on the public schedule with a clear{" "}
+              {statusChoice === "postponed" ? "Postponed" : "Canceled"} label —
+              it never silently disappears. You can undo this anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Button
+                variant={statusChoice === "postponed" ? "brand" : "outline"}
+                className="flex-1 font-bold"
+                onClick={() => setStatusChoice("postponed")}
+                data-testid="btn-choice-postponed"
+              >
+                Postponed
+              </Button>
+              <Button
+                variant={statusChoice === "canceled" ? "brand" : "outline"}
+                className="flex-1 font-bold"
+                onClick={() => setStatusChoice("canceled")}
+                data-testid="btn-choice-canceled"
+              >
+                Canceled
+              </Button>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="status-reason" className="text-xs">
+                Reason (optional, shown publicly)
+              </Label>
+              <Input
+                id="status-reason"
+                value={statusReason}
+                maxLength={300}
+                placeholder="e.g. Rainout — field flooded"
+                onChange={(e) => setStatusReason(e.target.value)}
+                data-testid="input-status-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="font-bold"
+              onClick={() => setStatusTarget(null)}
+              data-testid="btn-cancel-status"
+            >
+              Never mind
+            </Button>
+            <Button
+              variant="brand"
+              className="font-bold"
+              disabled={statusMut.isPending}
+              onClick={() => {
+                if (statusTarget) {
+                  statusMut.mutate({
+                    matchId: statusTarget.id,
+                    status: statusChoice,
+                    reason: statusReason.trim() || undefined,
+                  });
+                }
+              }}
+              data-testid="btn-confirm-status"
+            >
+              {statusMut.isPending
+                ? "Saving…"
+                : statusChoice === "postponed"
+                  ? "Mark postponed"
+                  : "Mark canceled"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-delete-game">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete game #{deleteTarget?.matchNumber}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `${deleteTarget.homeName ?? "TBD"} vs ${deleteTarget.awayName ?? "TBD"} will be removed from the schedule for everyone. If the game is just off, mark it postponed or canceled instead — deleting is for games entered in error.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="btn-cancel-delete-game">
+              Keep the game
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) deleteMut.mutate(deleteTarget.id);
+              }}
+              data-testid="btn-confirm-delete-game"
+            >
+              Delete game
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
 // Task #745 — attach/detach this competition to one of the operator's hubs.
 // Re-homed here from the old "My competitions" cards on /app/competitions.
 // POST /organizers/:id/competitions { competitionId, attach } — caller must
@@ -1382,6 +2014,7 @@ export default function CompetitionConsolePage() {
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
       />
       <CurationPanel competitionId={row.id} />
+      <GamesPanel competitionId={row.id} slug={row.slug} />
       <SchedulePanel
         competitionId={row.id}
         matchCount={row.matchCount}

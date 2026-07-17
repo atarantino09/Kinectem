@@ -1794,6 +1794,16 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         AND a.hidden_at IS NOT NULL;
     `,
   },
+  {
+    // Task #765 — inline game edit & cancel in the organizer console.
+    // `status` itself already exists (COMPETITIONS_STEP1, default
+    // 'scheduled'); this adds the optional operator-entered reason shown
+    // with postponed/canceled games.
+    name: "2026-07-17-task-765-match-status-reason",
+    sql: `
+      ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS status_reason text;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {
