@@ -90,6 +90,49 @@ const SAMPLE = `${CSV_HEADER}
 1,2026-07-11,09:00,U12,boys,Gold,A,Riverside Park,CA,Field 2,Thunder FC,Lightning SC
 2,2026-07-11,10:30,U12,boys,Gold,A,Riverside Park,CA,Field 2,Strikers,Comets`;
 
+// Task #768 — import rules, spelled out for organizers. Required columns and
+// the alias examples mirror the server's REQUIRED_CSV_COLUMNS +
+// CSV_HEADER_ALIASES (display copy only; the post-upload summary below is
+// sourced from the server so it can never drift).
+const REQUIRED_COLUMNS = ["match #", "date", "home team", "away team"];
+const OPTIONAL_COLUMNS = [
+  "start time",
+  "age",
+  "gender",
+  "division",
+  "bracket",
+  "venue",
+  "venue state",
+  "field",
+];
+const HEADER_EXAMPLES: { column: string; examples: string }[] = [
+  { column: "match #", examples: "Match #, Game #, Match Number, #" },
+  { column: "date", examples: "Date, Game Date, Match Date, Day" },
+  { column: "start time", examples: "Start Time, Time, Kickoff, Game Time" },
+  { column: "age", examples: "Age, Age Group" },
+  { column: "gender", examples: "Gender, Boys/Girls" },
+  { column: "division", examples: "Division, Div, Flight, Group, Pool" },
+  { column: "bracket", examples: "Bracket, Round, Pod" },
+  { column: "venue", examples: "Venue, Location, Park, Complex, Site" },
+  { column: "venue state", examples: "Venue State, State, ST" },
+  { column: "field", examples: "Field, Field #, Pitch, Court, Surface" },
+  { column: "home team", examples: "Home Team, Home, Team 1, Team A" },
+  { column: "away team", examples: "Away Team, Away, Visitor, Team 2, Team B" },
+];
+
+interface ImportColumnSummary {
+  matched: { column: string; header: string; required: boolean }[];
+  missingOptional: string[];
+  ignoredHeaders: string[];
+}
+
+interface ImportResult {
+  matchesUpserted: number;
+  participantCount: number;
+  columns?: ImportColumnSummary;
+  rowWarnings?: { row: number; reason: string }[];
+}
+
 function DetailsPanel({
   detail,
   competitionId,
@@ -798,11 +841,12 @@ function SchedulePanel({
   const { toast } = useToast();
   const [csv, setCsv] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
+  const [lastResult, setLastResult] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const importMut = useMutation({
     mutationFn: (csvText: string) =>
-      customFetch<{ matchesUpserted: number; participantCount: number }>(
+      customFetch<ImportResult>(
         `/api/v1/competitions/${competitionId}/import`,
         {
           method: "POST",
@@ -813,6 +857,7 @@ function SchedulePanel({
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["my", "competitions"] });
       qc.invalidateQueries({ queryKey: ["competition"] });
+      setLastResult(r);
       toast({
         title: "Schedule uploaded",
         description: `${r.matchesUpserted} games · ${r.participantCount} teams.`,
@@ -828,6 +873,19 @@ function SchedulePanel({
       }),
   });
 
+  const downloadSample = () => {
+    const blob = new Blob([SAMPLE + "\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "kinectem-schedule-sample.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const cols = lastResult?.columns;
+  const warnings = lastResult?.rowWarnings ?? [];
+
   return (
     <Card>
       <CardHeader>
@@ -838,13 +896,86 @@ function SchedulePanel({
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Paste the game CSV or choose a file. Re-uploading is safe: existing
-          games update in place and claimed teams keep their claims
-          {isLeague ? " — perfect for adding each week's games" : ""}.
+          Upload the CSV your scheduling tool exports — as-is, no cleanup
+          needed.
         </p>
-        <code className="block rounded-md bg-muted p-2 text-[11px] leading-relaxed break-words">
-          {CSV_HEADER}
-        </code>
+        <div
+          className="rounded-lg border border-border bg-muted/40 p-3 space-y-2"
+          data-testid="text-import-rules"
+        >
+          <p className="text-xs">
+            <span className="font-bold">Only 4 columns are required:</span>{" "}
+            {REQUIRED_COLUMNS.join(", ")}.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-bold text-foreground">
+              Everything else is optional
+            </span>{" "}
+            ({OPTIONAL_COLUMNS.join(", ")}) — leave any of them out and those
+            details simply stay blank.{" "}
+            <span className="font-bold text-foreground">
+              Extra columns are ignored
+            </span>
+            , so you don't need to delete anything from your file.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-bold text-foreground">
+              Re-uploading is safe:
+            </span>{" "}
+            games are matched by their match #, so existing games update in
+            place — nothing is duplicated or deleted, and claimed teams keep
+            their claims.{" "}
+            {isLeague
+              ? "Partial files are fine too — uploading just this week's games is the intended weekly workflow."
+              : "Partial files are fine — you can upload the rest of the schedule later."}
+          </p>
+        </div>
+        <details className="rounded-lg border border-border p-3">
+          <summary
+            className="cursor-pointer text-xs font-bold"
+            data-testid="toggle-header-reference"
+          >
+            Column names we recognize (your tool's spelling usually just works)
+          </summary>
+          <div className="mt-2 space-y-1">
+            <p className="text-[11px] text-muted-foreground">
+              Capitalization, spaces, dashes, and underscores don't matter.
+              A few examples per column:
+            </p>
+            <table className="w-full text-[11px]">
+              <tbody>
+                {HEADER_EXAMPLES.map((h) => (
+                  <tr key={h.column} className="border-t border-border/60">
+                    <td className="py-1 pr-2 font-bold whitespace-nowrap align-top">
+                      {h.column}
+                      {REQUIRED_COLUMNS.includes(h.column) ? (
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          (required)
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-1 text-muted-foreground">{h.examples}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <code className="block min-w-0 flex-1 rounded-md bg-muted p-2 text-[11px] leading-relaxed break-words">
+            {CSV_HEADER}
+          </code>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-full font-bold text-muted-foreground shrink-0"
+            onClick={downloadSample}
+            data-testid="btn-download-sample"
+          >
+            Download sample CSV
+          </Button>
+        </div>
         <input
           ref={fileRef}
           type="file"
@@ -925,6 +1056,74 @@ function SchedulePanel({
             <Upload className="w-3.5 h-3.5 mr-1.5" />
             {importMut.isPending ? "Uploading…" : "Upload pasted CSV"}
           </Button>
+        ) : null}
+        {lastResult ? (
+          <div
+            className="rounded-lg border border-border p-3 space-y-2"
+            data-testid="panel-import-summary"
+          >
+            <p className="text-xs font-bold">
+              Last upload: {lastResult.matchesUpserted} games ·{" "}
+              {lastResult.participantCount} teams
+            </p>
+            {cols ? (
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  <span className="font-bold text-foreground">
+                    Columns we read:
+                  </span>{" "}
+                  {cols.matched
+                    .map((m) =>
+                      m.header.toLowerCase() === m.column.toLowerCase()
+                        ? m.column
+                        : `${m.column} (from your "${m.header}" column)`,
+                    )
+                    .join(" · ")}
+                </p>
+                {cols.missingOptional.length > 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    <span className="font-bold text-foreground">
+                      Not in your file (optional, left blank):
+                    </span>{" "}
+                    {cols.missingOptional.join(" · ")}
+                  </p>
+                ) : null}
+                {cols.ignoredHeaders.length > 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    <span className="font-bold text-foreground">
+                      Ignored columns:
+                    </span>{" "}
+                    {cols.ignoredHeaders.map((h) => `"${h}"`).join(" · ")} —
+                    if one of these should have been read (say, a team
+                    column), rename its header and re-upload.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {warnings.length > 0 ? (
+              <div className="space-y-1" data-testid="list-import-warnings">
+                <p className="text-[11px] font-bold text-amber-600 dark:text-amber-500">
+                  {warnings.length} row{warnings.length === 1 ? "" : "s"} to
+                  double-check:
+                </p>
+                <ul className="space-y-0.5">
+                  {warnings.slice(0, 8).map((w, i) => (
+                    <li
+                      key={`${w.row}-${i}`}
+                      className="text-[11px] text-muted-foreground"
+                    >
+                      Row {w.row}: {w.reason}
+                    </li>
+                  ))}
+                  {warnings.length > 8 ? (
+                    <li className="text-[11px] text-muted-foreground">
+                      …and {warnings.length - 8} more.
+                    </li>
+                  ) : null}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </CardContent>
     </Card>

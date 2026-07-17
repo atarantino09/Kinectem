@@ -199,6 +199,37 @@ function resolveCsvHeader(headerRow: string[]): {
   return { index, missing };
 }
 
+// Task #768 — organizer-facing summary of how the header row was resolved,
+// derived from the SAME resolveCsvHeader result the import uses, so the UI
+// can never drift from the parser. Display-only: no behavior change.
+function buildColumnSummary(
+  headerRow: string[],
+  index: Partial<Record<CsvColumn, number>>,
+): {
+  matched: { column: CsvColumn; header: string; required: boolean }[];
+  missingOptional: CsvColumn[];
+  ignoredHeaders: string[];
+} {
+  const usedIdx = new Set<number>(
+    Object.values(index).filter((i): i is number => i !== undefined),
+  );
+  const matched = CSV_COLUMNS.filter((c) => index[c] !== undefined).map(
+    (c) => ({
+      column: c,
+      header: headerRow[index[c]!].trim(),
+      required: REQUIRED_CSV_COLUMNS.includes(c),
+    }),
+  );
+  const missingOptional = CSV_COLUMNS.filter(
+    (c) => index[c] === undefined && !REQUIRED_CSV_COLUMNS.includes(c),
+  );
+  const ignoredHeaders = headerRow
+    .map((h, i) => ({ h: h.trim(), i }))
+    .filter(({ h, i }) => h !== "" && !usedIdx.has(i))
+    .map(({ h }) => h);
+  return { matched, missingOptional, ignoredHeaders };
+}
+
 const MAX_IMPORT_ROWS = 1000;
 
 // Normalize a CSV date cell to a YYYY-MM-DD string for the `date` column, or
@@ -1061,11 +1092,24 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
 
     const { index: headerIndex, missing } = resolveCsvHeader(grid[0]);
     if (missing.length > 0) {
+      // Task #768 — include what WAS recognized so a mis-named column is
+      // easy to spot ("home team" arrived as "Home Side", etc.).
+      const found = buildColumnSummary(grid[0], headerIndex);
+      const foundNote =
+        found.matched.length > 0
+          ? ` Columns we did recognize: ${found.matched.map((m) => `${m.column} (from "${m.header}")`).join(", ")}.`
+          : "";
+      const ignoredNote =
+        found.ignoredHeaders.length > 0
+          ? ` Headers we couldn't match: ${found.ignoredHeaders.map((h) => `"${h}"`).join(", ")}.`
+          : "";
       return apiError(
         res,
         400,
-        `Couldn't find these columns in your file: ${missing.join(", ")}. ` +
-          "Make sure the first row has headers like: match #, date, home team, away team.",
+        `Couldn't find these required columns in your file: ${missing.join(", ")}. ` +
+          "Make sure the first row has headers like: match #, date, home team, away team." +
+          foundNote +
+          ignoredNote,
       );
     }
     const dataRows = grid.slice(1);
@@ -1106,9 +1150,21 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       { name: string; nameKey: string; division: string; bracket: string; age: string | null; gender: string | null }
     >();
 
-    for (const r of dataRows) {
+    // Task #768 — plain-language row warnings for the organizer. Display
+    // only: skipped/partial rows behave exactly as before. Row numbers are
+    // 1-based file line numbers (header = row 1).
+    const rowWarnings: { row: number; reason: string }[] = [];
+
+    for (const [rowIdx, r] of dataRows.entries()) {
+      const fileRow = rowIdx + 2;
       const matchNumber = col(r, "match #");
-      if (!matchNumber) continue; // skip rows with no match id
+      if (!matchNumber) {
+        rowWarnings.push({
+          row: fileRow,
+          reason: "Skipped — no value in the match # column.",
+        });
+        continue; // skip rows with no match id
+      }
       const division = col(r, "division");
       const bracket = col(r, "bracket");
       const age = col(r, "age") || null;
@@ -1117,6 +1173,20 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       const awayName = col(r, "away team");
       const homeKey = homeName.toLowerCase();
       const awayKey = awayName.toLowerCase();
+
+      if (!homeName || !awayName) {
+        rowWarnings.push({
+          row: fileRow,
+          reason: `Game ${matchNumber} imported without a ${!homeName && !awayName ? "home or away team" : !homeName ? "home team" : "away team"} name — that side stays blank until a re-upload fills it in.`,
+        });
+      }
+      const rawDate = col(r, "date");
+      if (rawDate && parseDateCell(rawDate) === null) {
+        rowWarnings.push({
+          row: fileRow,
+          reason: `Game ${matchNumber}: couldn't read "${rawDate}" as a date, so the game imported without one. Dates like 2026-07-11 or 7/11/2026 work best.`,
+        });
+      }
 
       for (const [name, key] of [
         [homeName, homeKey],
@@ -1234,6 +1304,10 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       tournamentId: tournament.id,
       matchesUpserted: summary.matchesUpserted,
       participantCount: summary.participantCount,
+      // Task #768 — display-only column-match + row-warning summary so the
+      // organizer can spot a mis-named column or skipped rows.
+      columns: buildColumnSummary(grid[0], headerIndex),
+      rowWarnings,
     });
 });
 
