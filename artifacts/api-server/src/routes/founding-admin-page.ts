@@ -147,9 +147,9 @@ const PAGE = String.raw`<!doctype html>
 
     <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
       <div style="font-weight:700; color:var(--danger);">Delete a specific organization</div>
-      <div class="sub">Permanently deletes <strong>one</strong> organization by ID, plus its teams and all their content (rosters, recaps, highlights, schedule, followers, invites). User accounts are left untouched. This cannot be undone. Type the organization's exact name to confirm.</div>
+      <div class="sub">Permanently deletes <strong>one</strong> organization, plus its teams and all their content (rosters, recaps, highlights, schedule, followers, invites). User accounts are left untouched. This cannot be undone. Paste the organization's page URL (or its ID) and type the organization's exact name to confirm.</div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-        <input id="delOrgId" type="text" placeholder="Organization ID (UUID)" style="min-width:320px;" />
+        <input id="delOrgId" type="text" placeholder="Organization URL or ID" style="min-width:320px;" />
         <input id="delOrgName" type="text" placeholder="Type exact org name to confirm" style="min-width:260px;" />
         <button id="delOrgBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete organization</button>
       </div>
@@ -169,9 +169,9 @@ const PAGE = String.raw`<!doctype html>
 
     <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
       <div style="font-weight:700; color:var(--danger);">Delete a specific competition hub</div>
-      <div class="sub">Permanently deletes <strong>one</strong> organizer hub by ID, plus its followers. Its competitions are <strong>not</strong> deleted — they are detached from the hub and keep working on their own (delete them individually first if they should go too). This cannot be undone. Type the hub's exact name to confirm.</div>
+      <div class="sub">Permanently deletes <strong>one</strong> organizer hub, plus its followers. Its competitions are <strong>not</strong> deleted — they are detached from the hub and keep working on their own (delete them individually first if they should go too). This cannot be undone. Paste the hub's page URL (or its ID) and type the hub's exact name to confirm.</div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-        <input id="delHubId" type="text" placeholder="Hub ID (UUID)" style="min-width:320px;" />
+        <input id="delHubId" type="text" placeholder="Hub URL or ID" style="min-width:320px;" />
         <input id="delHubName" type="text" placeholder="Type exact hub name to confirm" style="min-width:260px;" />
         <button id="delHubBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete hub</button>
       </div>
@@ -419,7 +419,7 @@ const PAGE = String.raw`<!doctype html>
     var s = $("delOrgStatus");
     var id = ($("delOrgId").value || "").trim();
     var name = ($("delOrgName").value || "").trim();
-    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Enter the organization ID."; return; }
+    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Paste the organization URL or ID."; return; }
     if (!name) { s.style.color = "var(--danger)"; s.textContent = "Type the organization's exact name to confirm."; return; }
     if (!confirm('Permanently delete this organization and all its teams + content? This cannot be undone.')) return;
     var btn = $("delOrgBtn"); btn.disabled = true;
@@ -467,7 +467,7 @@ const PAGE = String.raw`<!doctype html>
     var s = $("delHubStatus");
     var id = ($("delHubId").value || "").trim();
     var name = ($("delHubName").value || "").trim();
-    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Enter the hub ID."; return; }
+    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Paste the hub URL or ID."; return; }
     if (!name) { s.style.color = "var(--danger)"; s.textContent = "Type the hub's exact name to confirm."; return; }
     if (!confirm('Permanently delete this hub? Its competitions are detached (kept), not deleted. This cannot be undone.')) return;
     var btn = $("delHubBtn"); btn.disabled = true;
