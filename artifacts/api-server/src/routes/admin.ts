@@ -39,6 +39,7 @@ import {
   paginate,
   safeAvatarUrl,
   MAX_AVATAR_DATA_URL_LENGTH,
+  MAX_IMAGE_DATA_URL_LENGTH,
 } from "../lib/spec-helpers";
 
 const router: IRouter = Router();
@@ -2143,9 +2144,41 @@ router.get(
   }),
 );
 
+// Shared logo validation for the claim-links routes: inline base64
+// data:image URL (capped, friendly 413) or plain http(s) URL.
+function parseClaimLinkLogo(
+  raw: unknown,
+): { ok: true; logoUrl: string | null } | { ok: false; status: number; error: string } {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, logoUrl: null };
+  }
+  if (typeof raw !== "string") {
+    return { ok: false, status: 400, error: "logoUrl must be a string" };
+  }
+  if (raw.startsWith("data:")) {
+    if (!raw.startsWith("data:image/")) {
+      return { ok: false, status: 400, error: "logoUrl must be an image" };
+    }
+    if (raw.length > MAX_IMAGE_DATA_URL_LENGTH) {
+      return {
+        ok: false,
+        status: 413,
+        error: "That image is too large. Please choose a smaller photo.",
+      };
+    }
+    return { ok: true, logoUrl: raw };
+  }
+  if (/^https?:\/\//.test(raw) && raw.length <= 2000) {
+    return { ok: true, logoUrl: raw };
+  }
+  return { ok: false, status: 400, error: "logoUrl must be an image data: URL or http(s) URL" };
+}
+
 // Create a fresh ownerless competition with a claim token. Unlike orgs,
 // competitions require a type + active window (start/end dates are NOT NULL
-// and gate recap authoring), so the form collects them up front.
+// and gate recap authoring), so the form collects them up front. An optional
+// logo can be attached so the organizer's page is already branded when they
+// claim it.
 router.post(
   "/competition-claim-links",
   asyncHandler(async (req, res) => {
@@ -2184,6 +2217,10 @@ router.post(
         existing: existing[0],
       });
     }
+    const logo = parseClaimLinkLogo(req.body?.logoUrl);
+    if (!logo.ok) {
+      return res.status(logo.status).json({ error: logo.error, code: "INVALID_LOGO" });
+    }
     const token = generateToken();
     const [row] = await db
       .insert(tournaments)
@@ -2194,6 +2231,7 @@ router.post(
         startDate,
         endDate,
         claimToken: token,
+        ...(logo.logoUrl ? { logoUrl: logo.logoUrl } : {}),
       })
       .returning();
     return res.status(201).json({
@@ -2209,6 +2247,39 @@ router.post(
         token,
       },
     });
+  }),
+);
+
+// Set / replace / clear the logo on an ownerless competition so its page is
+// already branded when the organizer claims it. Body: { logoUrl } where
+// null/"" clears. Restricted to ownerless competitions — once claimed, the
+// operator manages branding through the normal competition settings.
+router.patch(
+  "/competition-claim-links/:id/logo",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const logo = parseClaimLinkLogo(req.body?.logoUrl);
+    if (!logo.ok) {
+      return res.status(logo.status).json({ error: logo.error, code: "INVALID_LOGO" });
+    }
+    const [row] = await db
+      .update(tournaments)
+      .set({ logoUrl: logo.logoUrl, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tournaments.id, id),
+          isNull(tournaments.ownerUserId),
+          isNull(tournaments.createdById),
+        ),
+      )
+      .returning({ id: tournaments.id, logoUrl: tournaments.logoUrl });
+    if (!row) {
+      return res.status(404).json({
+        error: "Ownerless competition not found (it may already be claimed)",
+        code: "COMPETITION_NOT_FOUND",
+      });
+    }
+    return res.json({ data: { id: row.id, logoUrl: row.logoUrl } });
   }),
 );
 

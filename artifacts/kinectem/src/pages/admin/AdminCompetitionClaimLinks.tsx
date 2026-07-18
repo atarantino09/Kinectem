@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -21,6 +21,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { BrandImageField } from "@/components/BrandImageField";
+import {
+  shrinkImageToDataUrl,
+  isUnsupportedHeicImage,
+  IMAGE_UPLOAD_MAX_BYTES,
+} from "@/lib/shrinkImage";
+import { Upload } from "lucide-react";
 
 // Admin screen listing every ownerless competition with its secret claim
 // link (same concept as the org claim-links tab). The operator copies each
@@ -105,6 +112,7 @@ export default function AdminCompetitionClaimLinks() {
   const [newType, setNewType] = useState<"tournament" | "league">("tournament");
   const [newStartDate, setNewStartDate] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
+  const [newLogoUrl, setNewLogoUrl] = useState("");
   const [debounced, setDebounced] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -145,6 +153,7 @@ export default function AdminCompetitionClaimLinks() {
             type: newType,
             startDate: newStartDate,
             endDate: newEndDate,
+            ...(newLogoUrl ? { logoUrl: newLogoUrl } : {}),
           }),
         },
       );
@@ -152,6 +161,7 @@ export default function AdminCompetitionClaimLinks() {
       setDebounced("");
       setNewStartDate("");
       setNewEndDate("");
+      setNewLogoUrl("");
       await queryClient.invalidateQueries({
         queryKey: ["admin", "competition-claim-links"],
       });
@@ -229,6 +239,59 @@ export default function AdminCompetitionClaimLinks() {
         description: err instanceof Error ? err.message : undefined,
         variant: "destructive",
       });
+    }
+  };
+
+  // Per-row logo upload: shrink client-side, PATCH inline as a data: URL
+  // (same pattern as org logos / team banners).
+  const rowLogoInputRef = useRef<HTMLInputElement>(null);
+  const [logoTargetId, setLogoTargetId] = useState<string | null>(null);
+  const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
+
+  const pickRowLogo = (id: string) => {
+    setLogoTargetId(id);
+    rowLogoInputRef.current?.click();
+  };
+
+  const uploadRowLogo = async (file: File) => {
+    const id = logoTargetId;
+    if (!id) return;
+    if (isUnsupportedHeicImage(file)) {
+      toast({
+        title: "That photo format isn't supported",
+        description: "Please choose a JPG or PNG version.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+      toast({
+        title: "That image is too large",
+        description: "Please choose an image under 5 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLogoUploadingId(id);
+    try {
+      const dataUrl = await shrinkImageToDataUrl(file);
+      await customFetch(`/api/v1/admin/competition-claim-links/${id}/logo`, {
+        method: "PATCH",
+        body: JSON.stringify({ logoUrl: dataUrl }),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "competition-claim-links"],
+      });
+      toast({ title: "Logo updated" });
+    } catch (err) {
+      toast({
+        title: "Couldn't upload logo",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setLogoUploadingId(null);
+      setLogoTargetId(null);
     }
   };
 
@@ -348,6 +411,16 @@ export default function AdminCompetitionClaimLinks() {
           </Button>
         </div>
 
+        <div className="mt-3 max-w-md">
+          <BrandImageField
+            label="Logo (optional — pre-loaded for the organizer)"
+            value={newLogoUrl}
+            onChange={setNewLogoUrl}
+            kind="logo"
+            idPrefix="add-competition-claim"
+          />
+        </div>
+
         {debounced.length >= 2 && (
           <div className="mt-3" data-testid="add-competition-matches">
             {exactMatch ? (
@@ -417,11 +490,24 @@ export default function AdminCompetitionClaimLinks() {
           {rows.length} ownerless competition{rows.length === 1 ? "" : "s"}
         </div>
       </div>
+      <input
+        ref={rowLogoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        data-testid="input-row-competition-logo"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void uploadRowLogo(file);
+        }}
+      />
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[110px]">Facebook</TableHead>
             <TableHead className="w-[110px]">Messaged</TableHead>
+            <TableHead className="w-[70px]">Logo</TableHead>
             <TableHead>Competition</TableHead>
             <TableHead>Dates</TableHead>
             <TableHead>Claim link</TableHead>
@@ -432,7 +518,7 @@ export default function AdminCompetitionClaimLinks() {
           {isLoading ? (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={7}
                 className="text-center py-6 text-muted-foreground"
               >
                 Loading…
@@ -441,7 +527,7 @@ export default function AdminCompetitionClaimLinks() {
           ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={7}
                 className="text-center py-6 text-muted-foreground"
               >
                 No ownerless competitions.
@@ -465,6 +551,28 @@ export default function AdminCompetitionClaimLinks() {
                     aria-label={`Messaged ${r.name}`}
                     data-testid={`checkbox-competition-messaged-${r.id}`}
                   />
+                </TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    onClick={() => pickRowLogo(r.id)}
+                    disabled={logoUploadingId === r.id}
+                    title={r.logoUrl ? "Change logo" : "Upload logo"}
+                    className="w-10 h-10 rounded-md border bg-muted flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-ring disabled:opacity-50"
+                    data-testid={`btn-competition-logo-${r.id}`}
+                  >
+                    {logoUploadingId === r.id ? (
+                      <span className="text-[10px] text-muted-foreground">…</span>
+                    ) : r.logoUrl ? (
+                      <img
+                        src={r.logoUrl}
+                        alt=""
+                        className="w-full h-full object-contain p-0.5"
+                      />
+                    ) : (
+                      <Upload className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
                 </TableCell>
                 <TableCell className="font-medium">
                   {r.name}
