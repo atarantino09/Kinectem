@@ -56,11 +56,17 @@ export function AiAssistButton({
   // whoami resolves (the dialog is author-gated). A ref (not state) guards
   // against re-opening when the user dismisses and whoami refetches.
   const autoOpened = useRef(false);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const canUse = !!whoami?.canAuthorRecap;
   useEffect(() => {
     if (autoOpen && canUse && !autoOpened.current) {
       autoOpened.current = true;
       setOpen(true);
+      // Pin the composer behind the dialog to the top of the screen —
+      // without this the dialog's initial focus scrolls the page down to
+      // the Recap section. (Focus itself is handled scroll-free in
+      // onOpenAutoFocus below.)
+      window.scrollTo({ top: 0 });
     }
   }, [autoOpen, canUse]);
 
@@ -143,7 +149,16 @@ export function AiAssistButton({
           if (!o) reset();
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent
+          className="sm:max-w-lg"
+          // Focus the notes box without letting the browser scroll the page
+          // behind the dialog (default focus scrolls the composer down to
+          // the Recap section, hiding the header behind the popup).
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            notesRef.current?.focus({ preventScroll: true });
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" /> Want AI to write
@@ -170,7 +185,7 @@ export function AiAssistButton({
                 placeholder="e.g. Won 3-2 in OT, great team defense, big second-half comeback, everyone hustled…"
                 className="mt-1.5 min-h-[100px]"
                 disabled={loading}
-                autoFocus
+                ref={notesRef}
                 data-testid="textarea-ai-notes"
               />
             </div>
