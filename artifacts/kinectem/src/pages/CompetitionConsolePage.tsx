@@ -239,6 +239,79 @@ function CollapsibleCardHeader({
   );
 }
 
+// Task #780 — shared type-to-confirm dialog for the destructive "clear all"
+// actions. The organizer must type the competition's exact name (server
+// re-checks, so this is UX guardrail + API contract in one).
+function ClearAllDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  competitionName,
+  confirmLabel,
+  pending,
+  onConfirm,
+  testId,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: string;
+  description: ReactNode;
+  competitionName: string;
+  confirmLabel: string;
+  pending: boolean;
+  onConfirm: (confirm: string) => void;
+  testId: string;
+}) {
+  const [confirm, setConfirm] = useState("");
+  useEffect(() => {
+    if (!open) setConfirm("");
+  }, [open]);
+  const matches =
+    confirm.trim().replace(/\s+/g, " ").toLowerCase() ===
+    competitionName.trim().replace(/\s+/g, " ").toLowerCase();
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent data-testid={testId}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">{description}</div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${testId}-confirm`} className="text-xs font-bold">
+            Type the competition name to confirm
+          </Label>
+          <Input
+            id={`${testId}-confirm`}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder={competitionName}
+            data-testid={`${testId}-input`}
+          />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid={`${testId}-cancel`}>
+            Never mind
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!matches || pending}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={(e) => {
+              e.preventDefault();
+              onConfirm(confirm);
+            }}
+            data-testid={`${testId}-confirm-btn`}
+          >
+            {pending ? "Clearing…" : confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function DetailsPanel({
   detail,
   competitionId,
@@ -640,13 +713,53 @@ function InviteTeamsPanel({
 function ClaimsPanel({
   competitionId,
   autoApproveClaims,
+  competitionName,
+  participantCount,
+  claimedCount,
 }: {
   competitionId: string;
   autoApproveClaims: boolean;
+  competitionName: string;
+  participantCount: number;
+  claimedCount: number;
 }) {
   const [open, setOpen] = useState(true);
+  const [clearOpen, setClearOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  // Task #780 — wipe every team slot (claimed teams are unlinked, never
+  // deleted) plus any games that reference them.
+  const clearTeams = useMutation({
+    mutationFn: (confirm: string) =>
+      customFetch<{
+        teamsRemoved: number;
+        claimedUnlinked: number;
+        gamesDeleted: number;
+      }>(`/api/v1/competitions/${competitionId}/clear-teams`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm }),
+      }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["competition"] });
+      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+      qc.invalidateQueries({
+        queryKey: ["competition", competitionId, "pending-claims"],
+      });
+      setClearOpen(false);
+      toast({
+        title: `Removed ${r.teamsRemoved} team${r.teamsRemoved === 1 ? "" : "s"}`,
+        description: `${r.claimedUnlinked} claimed team${r.claimedUnlinked === 1 ? " was" : "s were"} unlinked (not deleted) · ${r.gamesDeleted} game${r.gamesDeleted === 1 ? "" : "s"} referencing them removed.`,
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't clear the teams",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
 
   const pendingQ = useQuery<{ data: PendingClaim[] }>({
     queryKey: ["competition", competitionId, "pending-claims"],
@@ -711,6 +824,54 @@ function ClaimsPanel({
         open={open}
         onToggle={() => setOpen((v) => !v)}
         testId="btn-toggle-claims"
+        actions={
+          participantCount > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="font-bold text-muted-foreground hover:text-destructive"
+              onClick={() => setClearOpen(true)}
+              data-testid="btn-clear-all-teams"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Clear all teams
+            </Button>
+          ) : undefined
+        }
+      />
+      <ClearAllDialog
+        open={clearOpen}
+        onOpenChange={setClearOpen}
+        title={`Clear all ${participantCount} teams?`}
+        description={
+          <>
+            <p>
+              Every team slot in this competition will be removed — and because
+              games reference those slots,{" "}
+              <span className="font-bold text-foreground">
+                every game with a team on it is removed too
+              </span>
+              . This can't be undone; you'll start over with a fresh CSV
+              import.
+            </p>
+            {claimedCount > 0 ? (
+              <p>
+                <span className="font-bold text-foreground">
+                  {claimedCount} slot{claimedCount === 1 ? " is" : "s are"}{" "}
+                  claimed by real teams.
+                </span>{" "}
+                Those teams are never deleted — they're just unlinked from this
+                competition and would need to claim their spot again.
+              </p>
+            ) : null}
+            <p>Recap posts survive with their competition badge intact.</p>
+          </>
+        }
+        competitionName={competitionName}
+        confirmLabel="Clear all teams"
+        pending={clearTeams.isPending}
+        onConfirm={(c) => clearTeams.mutate(c)}
+        testId="dialog-clear-all-teams"
       />
       {open && (
       <CardContent className="space-y-4">
@@ -960,14 +1121,49 @@ function SchedulePanel({
   competitionId,
   matchCount,
   isLeague,
+  competitionName,
 }: {
   competitionId: string;
   matchCount: number;
   isLeague: boolean;
+  competitionName: string;
 }) {
   const [open, setOpen] = useState(true);
+  const [clearOpen, setClearOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  // Task #780 — wipe the whole schedule (team slots stay; recap posts keep
+  // their competition badge, only their game link is cleared).
+  const clearGames = useMutation({
+    mutationFn: (confirm: string) =>
+      customFetch<{ gamesDeleted: number; recapsUnlinked: number }>(
+        `/api/v1/competitions/${competitionId}/clear-games`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm }),
+        },
+      ),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["competition"] });
+      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+      setClearOpen(false);
+      toast({
+        title: `Removed ${r.gamesDeleted} game${r.gamesDeleted === 1 ? "" : "s"}`,
+        description:
+          r.recapsUnlinked > 0
+            ? `${r.recapsUnlinked} recap post${r.recapsUnlinked === 1 ? "" : "s"} kept — just unlinked from deleted games.`
+            : "Team slots and claims are untouched.",
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't clear the schedule",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
   const [csv, setCsv] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
@@ -1053,6 +1249,46 @@ function SchedulePanel({
         open={open}
         onToggle={() => setOpen((v) => !v)}
         testId="btn-toggle-schedule"
+        actions={
+          matchCount > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="font-bold text-muted-foreground hover:text-destructive"
+              onClick={() => setClearOpen(true)}
+              data-testid="btn-clear-all-games"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Clear all games
+            </Button>
+          ) : undefined
+        }
+      />
+      <ClearAllDialog
+        open={clearOpen}
+        onOpenChange={setClearOpen}
+        title={`Clear all ${matchCount} games?`}
+        description={
+          <>
+            <p>
+              Every game in this competition will be deleted — the whole
+              schedule, all at once. This can't be undone; re-upload a CSV to
+              rebuild it.
+            </p>
+            <p>
+              <span className="font-bold text-foreground">
+                Team slots and claims are untouched
+              </span>{" "}
+              — claimed teams keep their spot. Recap posts survive with their
+              competition badge; only their link to a deleted game is cleared.
+            </p>
+          </>
+        }
+        competitionName={competitionName}
+        confirmLabel="Clear all games"
+        pending={clearGames.isPending}
+        onConfirm={(c) => clearGames.mutate(c)}
+        testId="dialog-clear-all-games"
       />
       {open && (
       <CardContent className="space-y-3">
@@ -2535,6 +2771,9 @@ function ConsoleWithTour({
       <ClaimsPanel
         competitionId={row.id}
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
+        competitionName={detail?.name ?? row.name}
+        participantCount={row.participantCount}
+        claimedCount={row.claimedCount}
       />
       <CurationPanel competitionId={row.id} />
       <GamesPanel competitionId={row.id} slug={row.slug} />
@@ -2542,6 +2781,7 @@ function ConsoleWithTour({
         competitionId={row.id}
         matchCount={row.matchCount}
         isLeague={row.type === "league"}
+        competitionName={detail?.name ?? row.name}
       />
       {detail ? (
         <BrandingPanel detail={detail} competitionId={row.id} />

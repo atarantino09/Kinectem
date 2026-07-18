@@ -1539,6 +1539,13 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
     const beforeByNumber = new Map(beforeMatches.map((m) => [m.matchNumber, m]));
 
     const summary = await db.transaction(async (tx) => {
+      // Task #780 — serialize imports against the bulk clear-games /
+      // clear-teams actions (same per-competition lock key) so a clear can't
+      // interleave with an import and leave a mixed schedule.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`competition-clear:${tournament.id}`}))`,
+      );
+
       // Upsert participant slots (idempotent on the unique-slot index).
       const slotValues = Array.from(slots.values());
       if (slotValues.length > 0) {
@@ -2150,6 +2157,197 @@ router.delete(
     if (deleted.length === 0) return apiError(res, 404, "Game not found");
 
     res.json({ ok: true });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #780 — bulk "clear all" actions for the competition console. Both are
+// organizer-gated, type-to-confirm (the exact competition name), and run in a
+// single transaction behind a per-competition advisory lock so two overlapping
+// clears (or a clear racing an import) can't interleave. Recap posts survive:
+// their game link (articles.competition_game_id) is cleared, never broken —
+// the competition badge (articles.competition_id) stays. Score reports and
+// per-team hide rows cascade with the matches (FKs are ON DELETE CASCADE).
+// ---------------------------------------------------------------------------
+
+const normalizeConfirmName = (s: string) =>
+  s.trim().replace(/\s+/g, " ").toLowerCase();
+
+const ClearAllBody = z.object({ confirm: z.string() });
+
+// POST /competitions/:id/clear-games — delete EVERY game in the competition.
+// Team slots (participants) are untouched, so a fresh CSV re-import re-links
+// claimed teams by slot as usual.
+router.post(
+  "/competitions/:id/clear-games",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const parsed = ClearAllBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Confirmation text is required.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    if (
+      normalizeConfirmName(parsed.data.confirm) !==
+      normalizeConfirmName(tournament.name)
+    ) {
+      return apiError(
+        res,
+        400,
+        `Type the competition's exact name ("${tournament.name}") to confirm.`,
+        { code: "CONFIRMATION_REQUIRED" },
+      );
+    }
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`competition-clear:${tournament.id}`}))`,
+      );
+
+      // Clear (don't break) recap→game links first so the count is exact and
+      // the intent is explicit, even though the FK is SET NULL anyway.
+      const unlinked = await tx
+        .update(articles)
+        .set({ competitionGameId: null })
+        .where(
+          inArray(
+            articles.competitionGameId,
+            tx
+              .select({ id: tournamentMatches.id })
+              .from(tournamentMatches)
+              .where(eq(tournamentMatches.tournamentId, tournament.id)),
+          ),
+        )
+        .returning({ id: articles.id });
+
+      // Score reports + per-team hide rows cascade with the matches.
+      const deleted = await tx
+        .delete(tournamentMatches)
+        .where(eq(tournamentMatches.tournamentId, tournament.id))
+        .returning({ id: tournamentMatches.id });
+
+      return { gamesDeleted: deleted.length, recapsUnlinked: unlinked.length };
+    });
+
+    req.log.info(
+      { competitionId: tournament.id, ...result },
+      "competition clear all games",
+    );
+    res.json({ ok: true, ...result });
+  }),
+);
+
+// POST /competitions/:id/clear-teams — remove EVERY team slot. Claimed teams
+// themselves are never deleted — only the slot (and its claim/pending-claim
+// link) goes. Matches reference slots, so any game with a home or away slot
+// is deleted too (TBD-vs-TBD games with no slot on either side survive);
+// recap links on those games are cleared the same way as clear-games.
+router.post(
+  "/competitions/:id/clear-teams",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const parsed = ClearAllBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Confirmation text is required.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    if (
+      normalizeConfirmName(parsed.data.confirm) !==
+      normalizeConfirmName(tournament.name)
+    ) {
+      return apiError(
+        res,
+        400,
+        `Type the competition's exact name ("${tournament.name}") to confirm.`,
+        { code: "CONFIRMATION_REQUIRED" },
+      );
+    }
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`competition-clear:${tournament.id}`}))`,
+      );
+
+      const participants = await tx
+        .select({
+          id: tournamentParticipants.id,
+          teamId: tournamentParticipants.teamId,
+        })
+        .from(tournamentParticipants)
+        .where(eq(tournamentParticipants.tournamentId, tournament.id));
+      const participantIds = participants.map((p) => p.id);
+      const claimedUnlinked = participants.filter(
+        (p) => p.teamId != null,
+      ).length;
+
+      let gamesDeleted = 0;
+      let recapsUnlinked = 0;
+      if (participantIds.length > 0) {
+        // Matches that reference any slot go with the slots. Clear their
+        // recap links first (explicit, counted), then delete them.
+        const referencingMatch = or(
+          inArray(tournamentMatches.homeParticipantId, participantIds),
+          inArray(tournamentMatches.awayParticipantId, participantIds),
+        );
+        const unlinked = await tx
+          .update(articles)
+          .set({ competitionGameId: null })
+          .where(
+            inArray(
+              articles.competitionGameId,
+              tx
+                .select({ id: tournamentMatches.id })
+                .from(tournamentMatches)
+                .where(
+                  and(
+                    eq(tournamentMatches.tournamentId, tournament.id),
+                    referencingMatch,
+                  ),
+                ),
+            ),
+          )
+          .returning({ id: articles.id });
+        recapsUnlinked = unlinked.length;
+
+        const deletedMatches = await tx
+          .delete(tournamentMatches)
+          .where(
+            and(
+              eq(tournamentMatches.tournamentId, tournament.id),
+              referencingMatch,
+            ),
+          )
+          .returning({ id: tournamentMatches.id });
+        gamesDeleted = deletedMatches.length;
+
+        await tx
+          .delete(tournamentParticipants)
+          .where(eq(tournamentParticipants.tournamentId, tournament.id));
+      }
+
+      return {
+        teamsRemoved: participantIds.length,
+        claimedUnlinked,
+        gamesDeleted,
+        recapsUnlinked,
+      };
+    });
+
+    req.log.info(
+      { competitionId: tournament.id, ...result },
+      "competition clear all teams",
+    );
+    res.json({ ok: true, ...result });
   }),
 );
 
