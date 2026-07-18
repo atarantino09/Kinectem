@@ -24,7 +24,8 @@ import { NoIndex } from "@/components/NoIndex";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserAvatar } from "@/components/UserAvatar";
+import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
+import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import {
   Play,
   FileText,
@@ -330,6 +331,32 @@ export default function PostPage() {
       } | null;
     }
   ).competition;
+  // Team branding on the published recap page — the org brand colors ride
+  // on the post context as extra fields beyond the locked spec (same block
+  // PostCard reads for the feed-card strip). Recap detail pages for team
+  // posts get the thin full-strength brand strip plus the team logo in the
+  // context pill; solo teams / unbranded orgs render nothing extra.
+  const recapOrgBrand =
+    !isShort && post.context.type === "team"
+      ? readOrgBrandColors({
+          brandPrimaryColor: (
+            post.context as { orgBrandPrimaryColor?: string | null }
+          ).orgBrandPrimaryColor,
+          brandSecondaryColor: (
+            post.context as { orgBrandSecondaryColor?: string | null }
+          ).orgBrandSecondaryColor,
+        })
+      : null;
+  const contextAvatarUrl =
+    post.context.type === "team"
+      ? ((post.context as { avatarUrl?: string | null }).avatarUrl ??
+        (post.context as { orgAvatarUrl?: string | null }).orgAvatarUrl ??
+        null)
+      : null;
+  const contextOrgAvatarUrl =
+    post.context.type === "team"
+      ? ((post.context as { orgAvatarUrl?: string | null }).orgAvatarUrl ?? null)
+      : null;
   const images = post.assets?.filter((a) => a.fileType?.startsWith("image/")) ?? [];
   const videoAsset = post.assets?.find((a) => a.fileType?.startsWith("video/"));
 
@@ -459,6 +486,13 @@ export default function PostPage() {
           </div>
         </div>
       )}
+      {recapOrgBrand && (
+        <div
+          className="h-1.5 rounded-full"
+          style={{ background: orgStripGradient(recapOrgBrand) }}
+          data-testid={`strip-post-org-brand-${post.id}`}
+        />
+      )}
       <div className="flex items-center gap-2">
         {(post as { hidden?: boolean }).hidden && (
           <span
@@ -479,9 +513,17 @@ export default function PostPage() {
             <Link href={`/organizations/${post.context.orgId}`}>
               <Badge
                 variant="outline"
-                className="font-bold cursor-pointer"
+                className="font-bold cursor-pointer gap-1.5"
                 data-testid="link-post-context-organization"
               >
+                {contextOrgAvatarUrl && (
+                  <TeamAvatar
+                    avatarUrl={contextOrgAvatarUrl}
+                    displayName={post.context.orgName}
+                    size="xs"
+                    className="w-4 h-4 shrink-0"
+                  />
+                )}
                 {formatOrgName(post.context.orgName)}
               </Badge>
             </Link>
@@ -498,9 +540,17 @@ export default function PostPage() {
           >
             <Badge
               variant="outline"
-              className="font-bold cursor-pointer"
+              className="font-bold cursor-pointer gap-1.5"
               data-testid={`link-post-context-${post.context.type}`}
             >
+              {contextAvatarUrl && (
+                <TeamAvatar
+                  avatarUrl={contextAvatarUrl}
+                  displayName={post.context.name}
+                  size="xs"
+                  className="w-4 h-4 shrink-0"
+                />
+              )}
               {post.context.name}
             </Badge>
           </Link>
