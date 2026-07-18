@@ -224,24 +224,6 @@ export default function AdminCompetitionClaimLinks() {
     }
   };
 
-  const toggleFacebookAdded = async (id: string, facebookAdded: boolean) => {
-    try {
-      await customFetch(
-        `/api/v1/admin/competition-claim-links/${id}/facebook-added`,
-        { method: "PATCH", body: JSON.stringify({ facebookAdded }) },
-      );
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "competition-claim-links"],
-      });
-    } catch (err) {
-      toast({
-        title: "Couldn't update",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "destructive",
-      });
-    }
-  };
-
   // Per-row logo upload: shrink client-side, PATCH inline as a data: URL
   // (same pattern as org logos / team banners).
   const rowLogoInputRef = useRef<HTMLInputElement>(null);
@@ -505,8 +487,7 @@ export default function AdminCompetitionClaimLinks() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[110px]">Facebook</TableHead>
-            <TableHead className="w-[110px]">Messaged</TableHead>
+            <TableHead className="w-[110px]">Emailed</TableHead>
             <TableHead className="w-[70px]">Logo</TableHead>
             <TableHead>Competition</TableHead>
             <TableHead>Dates</TableHead>
@@ -518,7 +499,7 @@ export default function AdminCompetitionClaimLinks() {
           {isLoading ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={6}
                 className="text-center py-6 text-muted-foreground"
               >
                 Loading…
@@ -527,7 +508,7 @@ export default function AdminCompetitionClaimLinks() {
           ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={6}
                 className="text-center py-6 text-muted-foreground"
               >
                 No ownerless competitions.
@@ -538,18 +519,10 @@ export default function AdminCompetitionClaimLinks() {
               <TableRow key={r.id} data-testid={`row-competition-claim-link-${r.id}`}>
                 <TableCell>
                   <Checkbox
-                    checked={!!r.facebookAddedAt}
-                    onCheckedChange={(v) => toggleFacebookAdded(r.id, v === true)}
-                    aria-label={`Added ${r.name} on Facebook`}
-                    data-testid={`checkbox-competition-facebook-added-${r.id}`}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Checkbox
                     checked={!!r.messagedAt}
                     onCheckedChange={(v) => toggleMessaged(r.id, v === true)}
-                    aria-label={`Messaged ${r.name}`}
-                    data-testid={`checkbox-competition-messaged-${r.id}`}
+                    aria-label={`Emailed ${r.name}`}
+                    data-testid={`checkbox-competition-emailed-${r.id}`}
                   />
                 </TableCell>
                 <TableCell>
