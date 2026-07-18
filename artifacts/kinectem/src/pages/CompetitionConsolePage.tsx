@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -189,6 +189,51 @@ interface ImportPreview {
   rowWarnings?: { row: number; reason: string }[];
 }
 
+// Task #772 — reusable collapsible section header, matching the Games
+// section's toggle pattern (chevron button in the card title, aria-expanded,
+// trailing actions that don't toggle).
+function CollapsibleCardHeader({
+  icon,
+  label,
+  open,
+  onToggle,
+  testId,
+  badge,
+  actions,
+}: {
+  icon: ReactNode;
+  label: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  testId: string;
+  badge?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <CardHeader>
+      <CardTitle className="flex items-center justify-between gap-2 text-base">
+        <button
+          type="button"
+          className="flex items-center gap-2 min-w-0"
+          onClick={onToggle}
+          aria-expanded={open}
+          data-testid={testId}
+        >
+          {icon}
+          {label}
+          {badge}
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground transition-transform ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+        {actions}
+      </CardTitle>
+    </CardHeader>
+  );
+}
+
 function DetailsPanel({
   detail,
   competitionId,
@@ -196,6 +241,7 @@ function DetailsPanel({
   detail: CompetitionDetail["competition"];
   competitionId: string;
 }) {
+  const [open, setOpen] = useState(true);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [name, setName] = useState(detail.name);
@@ -254,12 +300,14 @@ function DetailsPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Pencil className="w-4 h-4" />
-          Competition details
-        </CardTitle>
-      </CardHeader>
+      <CollapsibleCardHeader
+        icon={<Pencil className="w-4 h-4" />}
+        label="Competition details"
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-details"
+      />
+      {open && (
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -356,6 +404,7 @@ function DetailsPanel({
           {save.isPending ? "Saving…" : "Save details"}
         </Button>
       </CardContent>
+      )}
     </Card>
   );
 }
@@ -367,6 +416,7 @@ function BrandingPanel({
   detail: CompetitionDetail["competition"];
   competitionId: string;
 }) {
+  const [open, setOpen] = useState(true);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [brandColor, setBrandColor] = useState(detail.brandColor ?? "");
@@ -429,12 +479,14 @@ function BrandingPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Palette className="w-4 h-4" />
-          Branding
-        </CardTitle>
-      </CardHeader>
+      <CollapsibleCardHeader
+        icon={<Palette className="w-4 h-4" />}
+        label="Branding"
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-branding"
+      />
+      {open && (
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BrandColorField
@@ -494,6 +546,7 @@ function BrandingPanel({
           {save.isPending ? "Saving…" : "Save branding"}
         </Button>
       </CardContent>
+      )}
     </Card>
   );
 }
@@ -517,6 +570,7 @@ function InviteTeamsPanel({
   autoApproveClaims: boolean;
   slug: string;
 }) {
+  const [open, setOpen] = useState(true);
   const { toast } = useToast();
 
   // Absolute public link (with the /app prefix) so it works when pasted
@@ -543,12 +597,14 @@ function InviteTeamsPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Megaphone className="w-4 h-4" />
-          Invite your teams
-        </CardTitle>
-      </CardHeader>
+      <CollapsibleCardHeader
+        icon={<Megaphone className="w-4 h-4" />}
+        label="Invite your teams"
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-invite-teams"
+      />
+      {open && (
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Copy this ready-made message and paste it into an email, group chat,
@@ -571,6 +627,7 @@ function InviteTeamsPanel({
           Copy message
         </Button>
       </CardContent>
+      )}
     </Card>
   );
 }
@@ -582,6 +639,7 @@ function ClaimsPanel({
   competitionId: string;
   autoApproveClaims: boolean;
 }) {
+  const [open, setOpen] = useState(true);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -642,12 +700,14 @@ function ClaimsPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="w-4 h-4" />
-          Team claims
-        </CardTitle>
-      </CardHeader>
+      <CollapsibleCardHeader
+        icon={<ShieldCheck className="w-4 h-4" />}
+        label="Team claims"
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-claims"
+      />
+      {open && (
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Coaches find their team on your competition page and claim their spot
@@ -727,6 +787,7 @@ function ClaimsPanel({
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
@@ -747,6 +808,7 @@ interface CurationRecap {
 }
 
 function CurationPanel({ competitionId }: { competitionId: string }) {
+  const [open, setOpen] = useState(true);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -797,17 +859,21 @@ function CurationPanel({ competitionId }: { competitionId: string }) {
 
   return (
     <Card id="recaps" ref={anchorRef} className="scroll-mt-6">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Newspaper className="w-4 h-4" />
-          Game recaps
-          {recaps.length > 0 && (
+      <CollapsibleCardHeader
+        icon={<Newspaper className="w-4 h-4" />}
+        label="Game recaps"
+        badge={
+          recaps.length > 0 ? (
             <Badge variant="secondary" className="ml-1">
               {recaps.length}
             </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
+          ) : undefined
+        }
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-recaps"
+      />
+      {open && (
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Recaps written by claimed teams land here. Feature the best ones to
@@ -880,6 +946,7 @@ function CurationPanel({ competitionId }: { competitionId: string }) {
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
@@ -893,6 +960,7 @@ function SchedulePanel({
   matchCount: number;
   isLeague: boolean;
 }) {
+  const [open, setOpen] = useState(true);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [csv, setCsv] = useState("");
@@ -974,12 +1042,14 @@ function SchedulePanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Upload className="w-4 h-4" />
-          Schedule ({matchCount} games)
-        </CardTitle>
-      </CardHeader>
+      <CollapsibleCardHeader
+        icon={<Upload className="w-4 h-4" />}
+        label={`Schedule (${matchCount} games)`}
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-schedule"
+      />
+      {open && (
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Upload the CSV your scheduling tool exports — as-is, no cleanup
@@ -1223,6 +1293,7 @@ function SchedulePanel({
           </div>
         ) : null}
       </CardContent>
+      )}
 
       {/* Task #766 — preview dialog: what this upload will do, before it does it */}
       <Dialog
@@ -2075,6 +2146,7 @@ function HubPanel({
   competitionId: string;
   organizerId: string | null;
 }) {
+  const [open, setOpen] = useState(true);
   const qc = useQueryClient();
   const { toast } = useToast();
   const organizersQ = useQuery<{ data: HubRow[] }>({
@@ -2118,12 +2190,14 @@ function HubPanel({
 
   return (
     <Card data-testid="panel-hub">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Building2 className="w-4 h-4" />
-          Competition hub
-        </CardTitle>
-      </CardHeader>
+      <CollapsibleCardHeader
+        icon={<Building2 className="w-4 h-4" />}
+        label="Competition hub"
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-hub"
+      />
+      {open && (
       <CardContent className="space-y-3">
         {currentHub ? (
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -2177,6 +2251,7 @@ function HubPanel({
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
