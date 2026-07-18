@@ -526,11 +526,24 @@ const deleteOrgLimiter = rateLimit({
 });
 
 const DeleteOrganizationBody = z.object({
-  organizationId: z.string().uuid(),
+  // Accepts a UUID or a full organization URL (…/app/organizations/<id>) —
+  // the operator can paste either.
+  organizationId: z.string().min(1).max(2000),
   confirm: z.string(),
 });
 
 const normalizeName = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Extract an org id from a pasted URL if present, otherwise use the raw
+// value. Org pages use the UUID directly in the URL (no slug).
+function parseOrganizationRef(input: string): string | undefined {
+  const raw = input.trim();
+  const urlMatch = raw.match(/\/organizations\/([^/?#\s]+)/i);
+  const candidate = urlMatch ? decodeURIComponent(urlMatch[1]) : raw;
+  return UUID_RE.test(candidate) ? candidate : undefined;
+}
 
 router.post(
   "/founding-admin/delete-organization",
@@ -539,10 +552,17 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = DeleteOrganizationBody.safeParse(req.body);
     if (!parsed.success) {
-      apiError(res, 400, "A valid organization ID is required.", { code: "INVALID_REQUEST" });
+      apiError(res, 400, "An organization ID or URL is required.", { code: "INVALID_REQUEST" });
       return;
     }
-    const { organizationId, confirm } = parsed.data;
+    const { organizationId: orgInput, confirm } = parsed.data;
+    const organizationId = parseOrganizationRef(orgInput);
+    if (!organizationId) {
+      apiError(res, 400, "Paste the organization's page URL or its ID.", {
+        code: "INVALID_REQUEST",
+      });
+      return;
+    }
 
     const result = await db.transaction(async (tx) => {
       // Serialize concurrent runs (same advisory-lock pattern as the other
@@ -611,8 +631,6 @@ const DeleteCompetitionBody = z.object({
   competitionId: z.string().min(1).max(2000),
   confirm: z.string(),
 });
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Normalize operator input to something we can look up: extract the slug from
 // a pasted URL if present, otherwise use the raw value as an id or slug.
@@ -686,9 +704,21 @@ const deleteOrganizerLimiter = rateLimit({
 });
 
 const DeleteOrganizerBody = z.object({
-  organizerId: z.string().uuid(),
+  // Accepts a UUID, a slug, or a full hub URL (…/app/organizers/<slug>) —
+  // the operator can paste any of them.
+  organizerId: z.string().min(1).max(2000),
   confirm: z.string(),
 });
+
+// Normalize operator input: extract the slug from a pasted hub URL if
+// present, otherwise use the raw value as an id or slug.
+function parseOrganizerRef(input: string): { id?: string; slug?: string } {
+  const raw = input.trim();
+  const urlMatch = raw.match(/\/organizers\/([^/?#\s]+)/i);
+  if (urlMatch) return { slug: decodeURIComponent(urlMatch[1]) };
+  if (UUID_RE.test(raw)) return { id: raw };
+  return { slug: raw };
+}
 
 router.post(
   "/founding-admin/delete-organizer",
@@ -701,13 +731,18 @@ router.post(
       return;
     }
     const { organizerId, confirm } = parsed.data;
+    const ref = parseOrganizerRef(organizerId);
 
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:delete-organizer'))`);
       const [hub] = await tx
         .select({ id: competitionOrganizers.id, name: competitionOrganizers.name })
         .from(competitionOrganizers)
-        .where(eq(competitionOrganizers.id, organizerId))
+        .where(
+          ref.id
+            ? eq(competitionOrganizers.id, ref.id)
+            : eq(competitionOrganizers.slug, ref.slug!),
+        )
         .limit(1);
       if (!hub) return { notFound: true as const };
       if (normalizeName(confirm) !== normalizeName(hub.name)) {
@@ -717,13 +752,15 @@ router.post(
       const detached = await tx
         .select({ id: tournaments.id })
         .from(tournaments)
-        .where(eq(tournaments.organizerId, organizerId));
-      await tx.delete(competitionOrganizers).where(eq(competitionOrganizers.id, organizerId));
+        .where(eq(tournaments.organizerId, hub.id));
+      await tx.delete(competitionOrganizers).where(eq(competitionOrganizers.id, hub.id));
       return { ok: true as const, name: hub.name, detachedCompetitions: detached.length };
     });
 
     if ("notFound" in result) {
-      apiError(res, 404, "No competition hub found with that ID.", { code: "ORGANIZER_NOT_FOUND" });
+      apiError(res, 404, "No competition hub found with that ID, slug, or URL.", {
+        code: "ORGANIZER_NOT_FOUND",
+      });
       return;
     }
     if ("mismatch" in result) {
