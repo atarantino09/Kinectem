@@ -27,7 +27,15 @@ import {
 // OpenAPI spec, and admin === platform admin, so an org admin signs up as a
 // regular "coach" on the wire and becomes an actual organization admin by
 // creating an organization (they become its owner) right after signup.
-export type Role = "athlete" | "coach" | "parent" | "org_admin";
+// "competition_organizer" follows the same pattern: tournament/league
+// operators sign up as "coach" on the wire and get their organizer powers
+// by creating a Competition Hub right after signup.
+export type Role =
+  | "athlete"
+  | "coach"
+  | "parent"
+  | "org_admin"
+  | "competition_organizer";
 
 function ageInYears(dob: string): number | null {
   if (!dob) return null;
@@ -133,7 +141,11 @@ export function SignUpForm({
       // "coach" account; they get real org-admin powers by creating an org
       // (becoming its owner) on the page we redirect to below.
       const isOrgAdmin = effectiveRole === "org_admin";
-      const wireRole = isOrgAdmin ? "coach" : effectiveRole;
+      // Competition organizers are also "coach" on the wire — organizer
+      // powers come from creating a hub, not from the account role.
+      const isCompetitionOrganizer = effectiveRole === "competition_organizer";
+      const wireRole =
+        isOrgAdmin || isCompetitionOrganizer ? "coach" : effectiveRole;
       const res = (await customFetch("/api/v1/auth/signup", {
         method: "POST",
         body: JSON.stringify({
@@ -155,7 +167,15 @@ export function SignUpForm({
       // Org admins land straight on the Create Organization flow so their
       // first action is setting up the org they'll administer. An explicit
       // returnTo (e.g. an invite deep link) still wins.
-      const dest = returnTo || (isOrgAdmin ? "/organizations/mine?new=1" : "/");
+      // Competition organizers land on the Competitions page with the
+      // "New competition hub" dialog auto-opened (mirrors the org flow).
+      const dest =
+        returnTo ||
+        (isOrgAdmin
+          ? "/organizations/mine?new=1"
+          : isCompetitionOrganizer
+            ? "/competitions?newHub=1"
+            : "/");
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         window.location.assign(base + (dest.startsWith("/") ? dest : "/" + dest));
@@ -376,6 +396,9 @@ export function SignUpForm({
               <SelectItem value="coach">Coach</SelectItem>
               <SelectItem value="parent">Parent / Guardian</SelectItem>
               <SelectItem value="org_admin">Organization Admin</SelectItem>
+              <SelectItem value="competition_organizer">
+                Competition Organizer
+              </SelectItem>
             </SelectContent>
           </Select>
           {role === "org_admin" && (
@@ -385,6 +408,15 @@ export function SignUpForm({
             >
               You'll set up your organization right after creating your
               account.
+            </p>
+          )}
+          {role === "competition_organizer" && (
+            <p
+              className="text-xs text-slate-500"
+              data-testid="note-competition-organizer"
+            >
+              For tournament and league operators. You'll set up your
+              competition hub right after creating your account.
             </p>
           )}
         </div>

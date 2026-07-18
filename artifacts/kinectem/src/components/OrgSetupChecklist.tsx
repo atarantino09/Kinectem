@@ -379,6 +379,20 @@ export function RolesReference() {
       </section>
       <section>
         <h3 className="text-xs uppercase tracking-wider font-black text-muted-foreground mb-1.5">
+          Competitions
+        </h3>
+        <ul className="space-y-1.5">
+          <li>
+            <span className="font-bold">Competition Organizer</span> — Runs
+            tournaments or leagues. Any user can become one by creating a
+            competition hub — it's a signup-time starting point, not a
+            separate permission. Hub owners and admins manage the hub's
+            branding and its competitions.
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h3 className="text-xs uppercase tracking-wider font-black text-muted-foreground mb-1.5">
           Family
         </h3>
         <ul className="space-y-1.5">

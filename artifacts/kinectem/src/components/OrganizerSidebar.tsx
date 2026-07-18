@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -188,6 +188,24 @@ export function OrganizerSidebar({ children }: { children: React.ReactNode }) {
   const [expanded, setExpanded] = useState(readStoredExpanded);
   const [newHubOpen, setNewHubOpen] = useState(false);
   const [location] = useLocation();
+
+  // Auto-open the "New competition hub" dialog when we arrive with
+  // `?newHub=1` (e.g. straight after a "Competition Organizer" signup).
+  // Strip the param afterward so a refresh doesn't re-trigger it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("newHub") === "1") {
+      setNewHubOpen(true);
+      params.delete("newHub");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    }
+  }, []);
 
   const toggle = () => {
     setExpanded((prev) => {
