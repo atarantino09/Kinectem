@@ -606,9 +606,23 @@ const deleteCompetitionLimiter = rateLimit({
 });
 
 const DeleteCompetitionBody = z.object({
-  competitionId: z.string().uuid(),
+  // Accepts a UUID, a slug, or a full competition URL
+  // (…/app/competitions/c/<slug>) — the operator can paste any of them.
+  competitionId: z.string().min(1).max(2000),
   confirm: z.string(),
 });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Normalize operator input to something we can look up: extract the slug from
+// a pasted URL if present, otherwise use the raw value as an id or slug.
+function parseCompetitionRef(input: string): { id?: string; slug?: string } {
+  const raw = input.trim();
+  const urlMatch = raw.match(/\/competitions\/c\/([^/?#\s]+)/i);
+  if (urlMatch) return { slug: decodeURIComponent(urlMatch[1]) };
+  if (UUID_RE.test(raw)) return { id: raw };
+  return { slug: raw };
+}
 
 router.post(
   "/founding-admin/delete-competition",
@@ -617,28 +631,31 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = DeleteCompetitionBody.safeParse(req.body);
     if (!parsed.success) {
-      apiError(res, 400, "A valid competition ID is required.", { code: "INVALID_REQUEST" });
+      apiError(res, 400, "A competition ID, slug, or URL is required.", { code: "INVALID_REQUEST" });
       return;
     }
     const { competitionId, confirm } = parsed.data;
+    const ref = parseCompetitionRef(competitionId);
 
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('founding-admin:delete-competition'))`);
       const [comp] = await tx
         .select({ id: tournaments.id, name: tournaments.name })
         .from(tournaments)
-        .where(eq(tournaments.id, competitionId))
+        .where(ref.id ? eq(tournaments.id, ref.id) : eq(tournaments.slug, ref.slug!))
         .limit(1);
       if (!comp) return { notFound: true as const };
       if (normalizeName(confirm) !== normalizeName(comp.name)) {
         return { mismatch: true as const, name: comp.name };
       }
-      await tx.delete(tournaments).where(eq(tournaments.id, competitionId));
+      await tx.delete(tournaments).where(eq(tournaments.id, comp.id));
       return { ok: true as const, name: comp.name };
     });
 
     if ("notFound" in result) {
-      apiError(res, 404, "No competition found with that ID.", { code: "COMPETITION_NOT_FOUND" });
+      apiError(res, 404, "No competition found with that ID, slug, or URL.", {
+        code: "COMPETITION_NOT_FOUND",
+      });
       return;
     }
     if ("mismatch" in result) {

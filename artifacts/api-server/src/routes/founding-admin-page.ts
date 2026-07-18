@@ -158,9 +158,9 @@ const PAGE = String.raw`<!doctype html>
 
     <div class="card" style="padding:16px; margin-bottom:14px; border-color:var(--danger);">
       <div style="font-weight:700; color:var(--danger);">Delete a specific competition</div>
-      <div class="sub">Permanently deletes <strong>one</strong> competition by ID, plus its schedule, matches, team slots, score reports, and followers. Recap posts are kept but lose their competition badge. This cannot be undone. Type the competition's exact name to confirm.</div>
+      <div class="sub">Permanently deletes <strong>one</strong> competition, plus its schedule, matches, team slots, score reports, and followers. Recap posts are kept but lose their competition badge. This cannot be undone. Paste the competition's page URL (or its ID) and type its exact name to confirm.</div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-        <input id="delCompId" type="text" placeholder="Competition ID (UUID)" style="min-width:320px;" />
+        <input id="delCompId" type="text" placeholder="Competition URL or ID" style="min-width:320px;" />
         <input id="delCompName" type="text" placeholder="Type exact competition name to confirm" style="min-width:260px;" />
         <button id="delCompBtn" class="ghost" style="border-color:var(--danger); color:var(--danger);">Delete competition</button>
       </div>
@@ -447,7 +447,7 @@ const PAGE = String.raw`<!doctype html>
     var s = $("delCompStatus");
     var id = ($("delCompId").value || "").trim();
     var name = ($("delCompName").value || "").trim();
-    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Enter the competition ID."; return; }
+    if (!id) { s.style.color = "var(--danger)"; s.textContent = "Paste the competition URL or ID."; return; }
     if (!name) { s.style.color = "var(--danger)"; s.textContent = "Type the competition's exact name to confirm."; return; }
     if (!confirm('Permanently delete this competition and all its schedule, matches, and team slots? This cannot be undone.')) return;
     var btn = $("delCompBtn"); btn.disabled = true;
