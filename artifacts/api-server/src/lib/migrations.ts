@@ -1804,6 +1804,19 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS status_reason text;
     `,
   },
+  {
+    // Competition claim links — admin screen mirroring the org claim-links
+    // tab: ownerless competitions carry a secret plaintext claim token plus
+    // operator outreach bookkeeping timestamps.
+    name: "2026-07-18-competition-claim-links",
+    sql: `
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS claim_token text;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS outreach_messaged_at timestamp;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS outreach_facebook_added_at timestamp;
+      CREATE UNIQUE INDEX IF NOT EXISTS tournaments_claim_token_idx
+        ON tournaments (claim_token) WHERE claim_token IS NOT NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

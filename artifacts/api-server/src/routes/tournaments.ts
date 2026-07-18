@@ -412,6 +412,97 @@ router.post(
   createCompetitionHandler,
 );
 
+// ---------------------------------------------------------------------------
+// Competition claim links — public consume flow (mirrors org-claim-links).
+// Possessing the secret token IS the authorization: the platform admin mints
+// links on the admin claim-links screen and sends each one to the right
+// organizer; whoever opens it and signs in becomes the competition's
+// operator (ownerUserId). Once claimed, the link shows "already claimed".
+// Hand-written validation + customFetch on the client — these endpoints
+// have no openapi.yaml entry (spec is locked; org-claim-links precedent).
+// ---------------------------------------------------------------------------
+const competitionClaimLinkLimiter = rateLimit({
+  name: "competition-claim-link",
+  windowMs: 60_000,
+  max: 30,
+  keys: (req) => [ipKey(req)],
+});
+
+// Public — resolve a secret token to its competition so the landing page can
+// render the target + the "already claimed" state. Never leaks the token
+// itself or any other secret field.
+router.get(
+  "/competition-claim-links/:token",
+  competitionClaimLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const token = String(req.params.token ?? "");
+    if (!token) return apiError(res, 404, "Not found");
+    const [row] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.claimToken, token))
+      .limit(1);
+    if (!row) return apiError(res, 404, "Not found");
+    res.json({
+      competition: {
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        type: row.type,
+        startDate: row.startDate,
+        endDate: row.endDate,
+        location: row.location,
+        logoUrl: row.logoUrl,
+        brandColor: row.brandColor,
+        secondaryColor: row.secondaryColor,
+      },
+      alreadyClaimed: row.ownerUserId != null || row.createdById != null,
+    });
+  }),
+);
+
+// Auth — finalize the claim for the signed-in user. Race-safe: a conditional
+// UPDATE ... WHERE owner_user_id IS NULL AND created_by_id IS NULL is the
+// backstop against two concurrent finalizes both passing the pre-check.
+router.post(
+  "/competition-claim-links/:token/claim",
+  competitionClaimLinkLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const token = String(req.params.token ?? "");
+    if (!token) return apiError(res, 404, "Not found");
+    const [row] = await db
+      .select({ id: tournaments.id, slug: tournaments.slug })
+      .from(tournaments)
+      .where(eq(tournaments.claimToken, token))
+      .limit(1);
+    if (!row) return apiError(res, 404, "Not found");
+    const claimed = await db
+      .update(tournaments)
+      .set({ ownerUserId: me.id, createdById: me.id, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tournaments.id, row.id),
+          isNull(tournaments.ownerUserId),
+          isNull(tournaments.createdById),
+        ),
+      )
+      .returning({ id: tournaments.id });
+    if (claimed.length === 0) {
+      return apiError(res, 409, "This competition has already been claimed", {
+        code: "ALREADY_CLAIMED",
+      });
+    }
+    // Auto-follow so the competition shows up in the new operator's sidebar.
+    await db
+      .insert(competitionFollowers)
+      .values({ competitionId: row.id, userId: me.id })
+      .onConflictDoNothing();
+    res.status(201).json({ ok: true, competitionId: row.id, slug: row.slug });
+  }),
+);
+
 // Legacy admin path — kept for back-compat with the existing admin console.
 router.post(
   "/tournaments",

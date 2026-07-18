@@ -1642,9 +1642,23 @@ export const tournaments = pgTable("tournaments", {
   tertiaryColor: text("tertiary_color"),
   bannerUrl: text("banner_url"),
   websiteUrl: text("website_url"),
+  // Per-competition secret claim-invite token (mirrors organizations.claim_token).
+  // Stored in plaintext (a shareable invite link, NOT a password) so the admin
+  // claim-links screen can re-display it on demand. Only ever issued for
+  // ownerless competitions (owner_user_id AND created_by_id both NULL);
+  // possessing the link is the authorization to become the operator.
+  claimToken: text("claim_token"),
+  // Operator outreach bookkeeping for the admin claim-links screen — NULL =
+  // not yet messaged / not yet added on Facebook. Never exposed publicly.
+  outreachMessagedAt: timestamp("outreach_messaged_at"),
+  outreachFacebookAddedAt: timestamp("outreach_facebook_added_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  claimTokenIdx: uniqueIndex("tournaments_claim_token_idx")
+    .on(t.claimToken)
+    .where(sql`${t.claimToken} IS NOT NULL`),
+}));
 
 // Users following a competition for quick access (mirrors team_followers).
 // Follow does NOT feed the home feed — it only powers the sidebar quick

@@ -29,6 +29,7 @@ const NAV = [
   { href: "/admin/activity", label: "Activity log", icon: History },
   { href: "/admin/founding-100", label: "Founding 100", icon: Sparkles },
   { href: "/admin/org-claim-links", label: "Claim links", icon: Link2 },
+  { href: "/admin/competition-claim-links", label: "Competition links", icon: Link2 },
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },
   { href: "/admin/email", label: "Email", icon: Mail },
   { href: "/admin/daily-digest", label: "Daily digest", icon: CalendarClock },

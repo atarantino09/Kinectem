@@ -59,6 +59,12 @@ const AdminFounding100 = lazy(() => import("@/pages/admin/AdminFounding100"));
 const AdminOrgClaimLinks = lazy(
   () => import("@/pages/admin/AdminOrgClaimLinks"),
 );
+const AdminCompetitionClaimLinks = lazy(
+  () => import("@/pages/admin/AdminCompetitionClaimLinks"),
+);
+const ClaimCompetitionPage = lazy(
+  () => import("@/pages/ClaimCompetitionPage"),
+);
 const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
 const AdminDailyDigest = lazy(
   () => import("@/pages/admin/AdminDailyDigest"),
@@ -111,6 +117,7 @@ function Router() {
       <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
       {/* Task #745 — hub/competition admin invite accept page. */}
       <Route path="/admin-invites/:token" component={AdminInviteAcceptPage} />
+      <Route path="/claim/competition/:token" component={ClaimCompetitionPage} />
       <Route path="/claim/:token" component={ClaimOrgPage} />
       <Route path="/adopt-team/:token" component={TeamAdoptPage} />
       <Route path="/c/:slug/signup" component={TournamentSignupPage} />
@@ -176,6 +183,7 @@ function Router() {
             <Route path="/admin/activity" component={AdminActivity} />
             <Route path="/admin/founding-100" component={AdminFounding100} />
             <Route path="/admin/org-claim-links" component={AdminOrgClaimLinks} />
+            <Route path="/admin/competition-claim-links" component={AdminCompetitionClaimLinks} />
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
             <Route path="/admin/daily-digest" component={AdminDailyDigest} />
             <Route path="/admin/email" component={AdminEmailSettings} />

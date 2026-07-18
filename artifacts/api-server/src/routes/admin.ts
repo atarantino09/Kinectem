@@ -22,6 +22,7 @@ import {
   organizationClaimRequests,
   scheduleEvents,
   scheduleEventRsvps,
+  tournaments,
   announcements,
   guardianLinks,
 } from "@workspace/db";
@@ -1998,6 +1999,280 @@ router.patch(
         id: org.id,
         facebookAddedAt: org.facebookAddedAt
           ? org.facebookAddedAt.toISOString()
+          : null,
+      },
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Competition claim links (mirrors the org claim-links screen)
+// ---------------------------------------------------------------------------
+// Admin screen listing every OWNERLESS competition (owner_user_id AND
+// created_by_id both NULL) with its durable secret claim token. The operator
+// copies each link to the corresponding organizer; whoever opens it and signs
+// up becomes the competition's operator. Self-healing: any ownerless
+// competition missing a token gets one minted on read.
+
+// Mirror of tournaments.ts slugify — base name + short random suffix so two
+// same-named competitions never collide on the unique slug.
+function competitionSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  const suffix = generateToken().slice(0, 8).toLowerCase();
+  return base ? `${base}-${suffix}` : suffix;
+}
+
+const competitionOwnerless = and(
+  isNull(tournaments.ownerUserId),
+  isNull(tournaments.createdById),
+);
+
+router.get(
+  "/competition-claim-links",
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select({
+        id: tournaments.id,
+        name: tournaments.name,
+        type: tournaments.type,
+        slug: tournaments.slug,
+        location: tournaments.location,
+        startDate: tournaments.startDate,
+        endDate: tournaments.endDate,
+        logoUrl: tournaments.logoUrl,
+        claimToken: tournaments.claimToken,
+        outreachMessagedAt: tournaments.outreachMessagedAt,
+        outreachFacebookAddedAt: tournaments.outreachFacebookAddedAt,
+      })
+      .from(tournaments)
+      .where(competitionOwnerless)
+      .orderBy(asc(tournaments.name));
+
+    // Mint a token for any ownerless competition that lacks one (idempotent).
+    const out: Array<{
+      id: string;
+      name: string;
+      type: string;
+      slug: string;
+      location: string | null;
+      startDate: string;
+      endDate: string;
+      logoUrl: string | null;
+      token: string;
+      messagedAt: string | null;
+      facebookAddedAt: string | null;
+    }> = [];
+    for (const r of rows) {
+      let token = r.claimToken;
+      if (!token) {
+        token = generateToken();
+        // Re-check ownerless in the WHERE so we never mint a token for a
+        // competition that got claimed between the select and this update.
+        const minted = await db
+          .update(tournaments)
+          .set({ claimToken: token })
+          .where(
+            and(
+              eq(tournaments.id, r.id),
+              isNull(tournaments.ownerUserId),
+              isNull(tournaments.createdById),
+            ),
+          )
+          .returning({ id: tournaments.id });
+        if (minted.length === 0) continue;
+      }
+      out.push({
+        id: r.id,
+        name: r.name,
+        type: r.type,
+        slug: r.slug,
+        location: r.location,
+        startDate: r.startDate,
+        endDate: r.endDate,
+        logoUrl: r.logoUrl,
+        token,
+        messagedAt: r.outreachMessagedAt
+          ? r.outreachMessagedAt.toISOString()
+          : null,
+        facebookAddedAt: r.outreachFacebookAddedAt
+          ? r.outreachFacebookAddedAt.toISOString()
+          : null,
+      });
+    }
+    res.json({ data: out });
+  }),
+);
+
+// Live duplicate detection for the "Add competition" field — surfaces any
+// existing competition (claimed or not) whose name matches.
+router.get(
+  "/competition-name-check",
+  asyncHandler(async (req, res) => {
+    const name = String(req.query.name ?? "").trim();
+    if (name.length < 2) {
+      return res.json({ data: [] });
+    }
+    const rows = await db
+      .select({
+        id: tournaments.id,
+        name: tournaments.name,
+        type: tournaments.type,
+        startDate: tournaments.startDate,
+        hasOwner: sql<boolean>`(${tournaments.ownerUserId} IS NOT NULL OR ${tournaments.createdById} IS NOT NULL)`,
+      })
+      .from(tournaments)
+      .where(sql`${tournaments.name} ILIKE ${"%" + escapeLike(name) + "%"}`)
+      .orderBy(asc(tournaments.name))
+      .limit(8);
+    const needle = name.toLowerCase();
+    return res.json({
+      data: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        type: r.type,
+        startDate: r.startDate,
+        hasOwner: Boolean(r.hasOwner),
+        exact: r.name.toLowerCase() === needle,
+      })),
+    });
+  }),
+);
+
+// Create a fresh ownerless competition with a claim token. Unlike orgs,
+// competitions require a type + active window (start/end dates are NOT NULL
+// and gate recap authoring), so the form collects them up front.
+router.post(
+  "/competition-claim-links",
+  asyncHandler(async (req, res) => {
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) {
+      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+    }
+    if (name.length > 200) {
+      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+    }
+    const type = req.body?.type === "league" ? "league" : "tournament";
+    const startDate = String(req.body?.startDate ?? "").trim();
+    const endDate = String(req.body?.endDate ?? "").trim();
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRe.test(startDate) || !dateRe.test(endDate)) {
+      return res.status(400).json({
+        error: "startDate and endDate must be YYYY-MM-DD",
+        code: "INVALID_DATES",
+      });
+    }
+    if (endDate < startDate) {
+      return res.status(400).json({
+        error: "endDate must be on or after startDate",
+        code: "INVALID_DATES",
+      });
+    }
+    const existing = await db
+      .select({ id: tournaments.id, name: tournaments.name })
+      .from(tournaments)
+      .where(sql`lower(${tournaments.name}) = ${name.toLowerCase()}`)
+      .limit(1);
+    if (existing.length > 0) {
+      return res.status(409).json({
+        error: "A competition with this name already exists",
+        code: "COMPETITION_NAME_TAKEN",
+        existing: existing[0],
+      });
+    }
+    const token = generateToken();
+    const [row] = await db
+      .insert(tournaments)
+      .values({
+        slug: competitionSlug(name),
+        name,
+        type,
+        startDate,
+        endDate,
+        claimToken: token,
+      })
+      .returning();
+    return res.status(201).json({
+      data: {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        slug: row.slug,
+        location: row.location,
+        startDate: row.startDate,
+        endDate: row.endDate,
+        logoUrl: row.logoUrl,
+        token,
+      },
+    });
+  }),
+);
+
+// Outreach bookkeeping toggles (mirror the org claim-links ones).
+router.patch(
+  "/competition-claim-links/:id/messaged",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const messaged = req.body?.messaged;
+    if (typeof messaged !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "messaged must be a boolean", code: "INVALID_BODY" });
+    }
+    const [row] = await db
+      .update(tournaments)
+      .set({ outreachMessagedAt: messaged ? new Date() : null })
+      .where(eq(tournaments.id, id))
+      .returning({
+        id: tournaments.id,
+        messagedAt: tournaments.outreachMessagedAt,
+      });
+    if (!row) {
+      return res
+        .status(404)
+        .json({ error: "competition not found", code: "COMPETITION_NOT_FOUND" });
+    }
+    return res.json({
+      data: {
+        id: row.id,
+        messagedAt: row.messagedAt ? row.messagedAt.toISOString() : null,
+      },
+    });
+  }),
+);
+
+router.patch(
+  "/competition-claim-links/:id/facebook-added",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const facebookAdded = req.body?.facebookAdded;
+    if (typeof facebookAdded !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "facebookAdded must be a boolean", code: "INVALID_BODY" });
+    }
+    const [row] = await db
+      .update(tournaments)
+      .set({ outreachFacebookAddedAt: facebookAdded ? new Date() : null })
+      .where(eq(tournaments.id, id))
+      .returning({
+        id: tournaments.id,
+        facebookAddedAt: tournaments.outreachFacebookAddedAt,
+      });
+    if (!row) {
+      return res
+        .status(404)
+        .json({ error: "competition not found", code: "COMPETITION_NOT_FOUND" });
+    }
+    return res.json({
+      data: {
+        id: row.id,
+        facebookAddedAt: row.facebookAddedAt
+          ? row.facebookAddedAt.toISOString()
           : null,
       },
     });
