@@ -68,7 +68,9 @@ export default function ClaimCompetitionPage() {
         { method: "POST" },
       );
       toast({ title: `You now run ${competitionName || "this competition"}!` });
-      navigate(`/competitions/c/${encodeURIComponent(res.slug)}`);
+      // Land the new operator on their console (not the public page) so the
+      // first-run "show me around" walkthrough can greet them there.
+      navigate(`/competitions/${encodeURIComponent(res.competitionId)}`);
     } catch (err) {
       toast({
         title: (err as Error)?.message ?? "Couldn't claim this competition",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -17,7 +17,12 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { buildCompetitionInviteMessage } from "@/lib/competition-invite-message";
 import {
+  SpotlightTour,
+  type TourStep,
+} from "@/components/team-page/SpotlightTour";
+import {
   Upload,
+  Compass,
   ExternalLink,
   Palette,
   Pencil,
@@ -2256,9 +2261,103 @@ function HubPanel({
   );
 }
 
+// First-run "show me around" for the competition console — once per browser,
+// the first time an organizer lands here after creating or claiming a
+// competition. Same pattern as the org/team tours (localStorage flag; the
+// openapi.yaml is locked, so there is no server-side "seen" field).
+const COMP_TOUR_KEY = "kinectem:competition-tour-v1";
+
 export default function CompetitionConsolePage() {
   const [, params] = useRoute("/competitions/:id");
   const competitionId = params?.id ?? "";
+  const [tourOpen, setTourOpen] = useState(false);
+
+  const tourSteps = useMemo<TourStep[]>(
+    () => [
+      {
+        targetTestId: "link-console-competition-name",
+        title: "Your competition console",
+        body: (
+          <>
+            This is where you run everything — details, teams, schedule, and
+            branding all live on this page.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-details",
+        title: "Edit the details",
+        body: (
+          <>
+            Update the name, dates, location, and description any time under{" "}
+            <strong>Details</strong>.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-invite-teams",
+        title: "Invite teams",
+        body: (
+          <>
+            <strong>Invite teams</strong> gives you a ready-to-send message so
+            coaches can claim their spot in your competition.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-claims",
+        title: "Approve team claims",
+        body: (
+          <>
+            When a coach claims a team, the request lands here. Approve it (or
+            turn on auto-approve) so their recaps carry your competition's
+            badge.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-schedule",
+        title: "Upload your schedule",
+        body: (
+          <>
+            Import your game schedule as a CSV — exports from most scheduling
+            tools work as-is. You can also add games one at a time.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-branding",
+        title: "Make it yours",
+        body: (
+          <>
+            Add your logo, banner, and colors under <strong>Branding</strong> —
+            they show up on your public page and on every recap.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-view-public",
+        title: "See the public page",
+        body: (
+          <>
+            <strong>View public page</strong> shows what families and followers
+            see. You can replay this tour any time with{" "}
+            <strong>Show me around</strong>.
+          </>
+        ),
+      },
+    ],
+    [],
+  );
+
+  const finishTour = () => {
+    try {
+      localStorage.setItem(COMP_TOUR_KEY, "1");
+    } catch {
+      // ignore storage failures (private mode etc.) — tour just won't persist
+    }
+    setTourOpen(false);
+  };
 
   const listQ = useQuery<{ data: CompetitionRow[] }>({
     queryKey: ["my", "competitions"],
@@ -2312,6 +2411,47 @@ export default function CompetitionConsolePage() {
   const detail = detailQ.data?.competition;
 
   return (
+    <ConsoleWithTour
+      row={row}
+      detail={detail}
+      tourOpen={tourOpen}
+      setTourOpen={setTourOpen}
+      finishTour={finishTour}
+      tourSteps={tourSteps}
+    />
+  );
+}
+
+function ConsoleWithTour({
+  row,
+  detail,
+  tourOpen,
+  setTourOpen,
+  finishTour,
+  tourSteps,
+}: {
+  row: CompetitionRow;
+  detail: CompetitionDetail["competition"] | undefined;
+  tourOpen: boolean;
+  setTourOpen: (v: boolean) => void;
+  finishTour: () => void;
+  tourSteps: TourStep[];
+}) {
+  // Open the walkthrough once per browser, the first time the organizer lands
+  // on any competition console (only organizers can reach this page — the
+  // /my/competitions lookup above already filtered to competitions they run).
+  useEffect(() => {
+    if (typeof window === "undefined" || !detail) return;
+    let alreadySeen = false;
+    try {
+      alreadySeen = localStorage.getItem(COMP_TOUR_KEY) === "1";
+    } catch {
+      // storage blocked (private mode etc.) — treat as not seen
+    }
+    if (!alreadySeen) setTourOpen(true);
+  }, [detail, setTourOpen]);
+
+  return (
     <OrganizerSidebar>
       <div className="max-w-3xl mx-auto space-y-6">
       <div className="space-y-2">
@@ -2340,21 +2480,33 @@ export default function CompetitionConsolePage() {
               {row.matchCount} games
             </p>
           </div>
-          <a
-            href={`/app/c/${row.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
               className="font-bold rounded-full"
-              data-testid="btn-view-public"
+              onClick={() => setTourOpen(true)}
+              data-testid="btn-competition-replay-tour"
             >
-              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-              View public page
+              <Compass className="w-3.5 h-3.5 mr-1.5" />
+              Show me around
             </Button>
-          </a>
+            <a
+              href={`/app/c/${row.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold rounded-full"
+                data-testid="btn-view-public"
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                View public page
+              </Button>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -2401,6 +2553,7 @@ export default function CompetitionConsolePage() {
           only the owner can remove). */}
       <CompetitionAdminsPanel kind="competition" targetId={row.id} />
       </div>
+      {tourOpen && <SpotlightTour steps={tourSteps} onFinish={finishTour} />}
     </OrganizerSidebar>
   );
 }
