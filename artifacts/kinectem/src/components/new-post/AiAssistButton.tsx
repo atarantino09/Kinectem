@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useWhoami } from "@/hooks/useWhoami";
-import { Sparkles, Loader2, Wand2, FileText } from "lucide-react";
+import { Sparkles, Loader2, Wand2, FileText, PenLine } from "lucide-react";
 
 interface AiAssistButtonProps {
   postType: "short" | "long";
@@ -22,6 +22,14 @@ interface AiAssistButtonProps {
   gameDate?: string;
   teamName?: string | null;
   onInsert: (text: string) => void;
+  /**
+   * Pop the dialog open automatically once, right when the composer mounts.
+   * The parent passes true only for a brand-new game recap (not highlights,
+   * org updates, edits, or reopened drafts with text) so AI Assist greets
+   * authors before the blank page does. Dismissing is non-destructive — the
+   * pill button stays available to reopen it.
+   */
+  autoOpen?: boolean;
 }
 
 // Lets coaches draft a recap/caption from rough notes, or polish what they've
@@ -35,21 +43,36 @@ export function AiAssistButton({
   gameDate,
   teamName,
   onInsert,
+  autoOpen = false,
 }: AiAssistButtonProps) {
   const { toast } = useToast();
   const { data: whoami } = useWhoami();
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"draft" | "polish">("draft");
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Fire the auto-open at most once per composer session, and only after
+  // whoami resolves (the dialog is author-gated). A ref (not state) guards
+  // against re-opening when the user dismisses and whoami refetches.
+  const autoOpened = useRef(false);
+  const canUse = !!whoami?.canAuthorRecap;
+  useEffect(() => {
+    if (autoOpen && canUse && !autoOpened.current) {
+      autoOpened.current = true;
+      setOpen(true);
+    }
+  }, [autoOpen, canUse]);
+
   const reset = () => {
+    setMode("draft");
     setNotes("");
     setResult("");
     setLoading(false);
   };
 
-  const run = async (mode: "draft" | "polish") => {
+  const run = async () => {
     if (mode === "draft" && !notes.trim()) {
       toast({
         title: "Add a few notes first",
@@ -98,11 +121,19 @@ export function AiAssistButton({
     reset();
   };
 
+  const dismiss = () => {
+    setOpen(false);
+    reset();
+  };
+
   // Only recap authors (org admins / coaches / explicit authors) may use
   // AI Assist. This mirrors the server-side guard on POST /ai/assist;
   // hiding the button keeps non-eligible users (incl. minors) from a
   // guaranteed 403.
-  if (!whoami?.canAuthorRecap) return null;
+  if (!canUse) return null;
+
+  const noun = postType === "short" ? "caption" : "recap";
+  const hasBody = !!body.trim();
 
   return (
     <>
@@ -126,59 +157,106 @@ export function AiAssistButton({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" /> AI Assist
+              <Sparkles className="h-4 w-4 text-primary" /> Want AI to write
+              your {noun}?
             </DialogTitle>
             <DialogDescription>
-              Draft a {postType === "short" ? "highlight caption" : "game recap"}{" "}
-              from your notes, or polish what you've already written.
+              Pick how you'd like help — you can edit anything before it goes
+              in your post.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <div>
-              <Label
-                htmlFor="ai-notes"
-                className="text-xs font-bold uppercase tracking-wide text-muted-foreground"
-              >
-                Your notes
-              </Label>
-              <Textarea
-                id="ai-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Won 3-2 in OT, great team defense, big second-half comeback, everyone hustled…"
-                className="mt-1.5 min-h-[100px]"
+            {/* Mode picker — two self-explanatory cards. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("draft")}
                 disabled={loading}
-                data-testid="textarea-ai-notes"
-              />
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  mode === "draft"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:bg-muted/50"
+                }`}
+                data-testid="mode-ai-draft"
+              >
+                <span className="flex items-center gap-1.5 text-sm font-bold">
+                  <FileText className="h-3.5 w-3.5 text-primary" /> Draft from
+                  notes
+                </span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Jot a few quick notes about the game and AI writes the full{" "}
+                  {noun} for you.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("polish")}
+                disabled={loading}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  mode === "polish"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:bg-muted/50"
+                }`}
+                data-testid="mode-ai-polish"
+              >
+                <span className="flex items-center gap-1.5 text-sm font-bold">
+                  <Wand2 className="h-3.5 w-3.5 text-primary" /> Polish my
+                  writing
+                </span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Already wrote something in the post? AI cleans it up and
+                  makes it read better.
+                </span>
+              </button>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => run("draft")}
-                disabled={loading}
-                data-testid="button-ai-draft"
+            {mode === "draft" ? (
+              <div>
+                <Label
+                  htmlFor="ai-notes"
+                  className="text-xs font-bold uppercase tracking-wide text-muted-foreground"
+                >
+                  Your notes
+                </Label>
+                <Textarea
+                  id="ai-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. Won 3-2 in OT, great team defense, big second-half comeback, everyone hustled…"
+                  className="mt-1.5 min-h-[100px]"
+                  disabled={loading}
+                  autoFocus
+                  data-testid="textarea-ai-notes"
+                />
+              </div>
+            ) : (
+              <p
+                className="rounded-lg bg-muted/60 border border-border px-3 py-2 text-xs text-muted-foreground font-medium"
+                data-testid="text-polish-hint"
               >
-                {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5" />
-                )}
-                Draft from notes
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => run("polish")}
-                disabled={loading || !body.trim()}
-                data-testid="button-ai-polish"
-              >
-                <Wand2 className="h-3.5 w-3.5" /> Polish current text
-              </Button>
-            </div>
+                {hasBody
+                  ? `Polish uses the text already in your ${noun} — nothing else to type here. Hit "Polish it" and review the improved version.`
+                  : `Your ${noun} is still empty, so there's nothing to polish yet. Close this window, write a rough version, then come back — or switch to "Draft from notes".`}
+              </p>
+            )}
+
+            <Button
+              type="button"
+              size="sm"
+              onClick={run}
+              disabled={loading || (mode === "polish" && !hasBody)}
+              data-testid="button-ai-generate"
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : mode === "draft" ? (
+                <FileText className="h-3.5 w-3.5" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5" />
+              )}
+              {mode === "draft" ? "Write my " + noun : "Polish it"}
+            </Button>
 
             {result && (
               <div>
@@ -199,16 +277,16 @@ export function AiAssistButton({
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
               type="button"
               variant="ghost"
-              onClick={() => {
-                setOpen(false);
-                reset();
-              }}
+              onClick={dismiss}
+              className="font-semibold"
+              data-testid="button-ai-dismiss"
             >
-              Cancel
+              <PenLine className="h-3.5 w-3.5 mr-1.5" />
+              No thanks, I'll write it myself
             </Button>
             <Button
               type="button"

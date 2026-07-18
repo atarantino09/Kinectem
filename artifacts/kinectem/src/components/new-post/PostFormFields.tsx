@@ -338,6 +338,16 @@ export function PostFormFields({
             gameDate={gameDate}
             teamName={aiTeamName}
             onInsert={onBodyChange}
+            // Greet authors with AI Assist the moment they start a brand-new
+            // game recap. Never for highlights, org updates, edits, or
+            // reopened drafts that already have text — those are mid-flow.
+            autoOpen={
+              !isShort &&
+              !isOrgPost &&
+              !draftId &&
+              !isEditingPublished &&
+              !body.trim()
+            }
           />
         </div>
         {!isShort && !isOrgPost ? (
