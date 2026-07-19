@@ -178,6 +178,7 @@ export default function OrganizationPage() {
     fetchNextPage: fetchMorePosts,
     hasNextPage: hasMorePosts,
     isFetchingNextPage: isFetchingMorePosts,
+    isFetchNextPageError: fetchMorePostsFailed,
   } = useInfiniteQuery({
     queryKey: [...getListOrgPostsQueryKey(orgId), "infinite"] as const,
     queryFn: ({ pageParam }) =>
@@ -195,6 +196,7 @@ export default function OrganizationPage() {
   const orgPostsSentinelRef = useInfiniteScrollSentinel({
     hasMore: !!hasMorePosts,
     isLoading: isFetchingMorePosts,
+    hasError: fetchMorePostsFailed,
     onLoadMore: fetchMorePosts,
   });
   const { data: membersResp } = useListMembers(orgId);
@@ -832,20 +834,37 @@ export default function OrganizationPage() {
                   {posts.map((p) => (
                     <PostCard key={p.id} post={p} />
                   ))}
-                  {/* Task #785 — auto-load older posts on scroll. */}
-                  {hasMorePosts && (
-                    <div
-                      ref={orgPostsSentinelRef}
-                      className="flex justify-center py-3"
-                      data-testid="sentinel-load-more-org-posts"
-                    >
-                      {isFetchingMorePosts && (
-                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Loading older posts…
+                  {/* Task #785 — auto-load older posts on scroll; on
+                      fetch failure, pause and offer a manual retry. */}
+                  {hasMorePosts &&
+                    (fetchMorePostsFailed ? (
+                      <div className="flex flex-col items-center gap-2 py-3">
+                        <span className="text-xs text-muted-foreground">
+                          Couldn't load older posts.
                         </span>
-                      )}
-                    </div>
-                  )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchMorePosts()}
+                          disabled={isFetchingMorePosts}
+                          data-testid="btn-retry-load-more-org-posts"
+                        >
+                          Retry loading older posts
+                        </Button>
+                      </div>
+                    ) : (
+                      <div
+                        ref={orgPostsSentinelRef}
+                        className="flex justify-center py-3"
+                        data-testid="sentinel-load-more-org-posts"
+                      >
+                        {isFetchingMorePosts && (
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Loading older posts…
+                          </span>
+                        )}
+                      </div>
+                    ))}
                 </>
               ) : (
                 <Card className="rounded-xl border border-border">

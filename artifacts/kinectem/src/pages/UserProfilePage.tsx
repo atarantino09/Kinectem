@@ -87,6 +87,7 @@ export default function UserProfilePage() {
     fetchNextPage: fetchMorePosts,
     hasNextPage: hasMorePosts,
     isFetchingNextPage: isFetchingMorePosts,
+    isFetchNextPageError: fetchMorePostsFailed,
   } = useInfiniteQuery({
     queryKey: [...getListUserPostsQueryKey(userId), "infinite"] as const,
     queryFn: ({ pageParam }) =>
@@ -104,6 +105,7 @@ export default function UserProfilePage() {
   const postsSentinelRef = useInfiniteScrollSentinel({
     hasMore: !!hasMorePosts,
     isLoading: isFetchingMorePosts,
+    hasError: fetchMorePostsFailed,
     onLoadMore: fetchMorePosts,
   });
   const { data: orgsResp } = useListUserOrganizations(userId);
@@ -682,20 +684,37 @@ export default function UserProfilePage() {
           )}
           {/* Task #785 — auto-load older posts on scroll. Rendered even
               when the team filter empties the visible list so older
-              pages keep loading until a match (or the end) is found. */}
-          {hasMorePosts && (
-            <div
-              ref={postsSentinelRef}
-              className="flex justify-center py-3"
-              data-testid="sentinel-load-more-user-posts"
-            >
-              {isFetchingMorePosts && (
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Loading older posts…
+              pages keep loading until a match (or the end) is found.
+              On fetch failure, pause and offer a manual retry. */}
+          {hasMorePosts &&
+            (fetchMorePostsFailed ? (
+              <div className="flex flex-col items-center gap-2 py-3">
+                <span className="text-xs text-muted-foreground">
+                  Couldn't load older posts.
                 </span>
-              )}
-            </div>
-          )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchMorePosts()}
+                  disabled={isFetchingMorePosts}
+                  data-testid="btn-retry-load-more-user-posts"
+                >
+                  Retry loading older posts
+                </Button>
+              </div>
+            ) : (
+              <div
+                ref={postsSentinelRef}
+                className="flex justify-center py-3"
+                data-testid="sentinel-load-more-user-posts"
+              >
+                {isFetchingMorePosts && (
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Loading older posts…
+                  </span>
+                )}
+              </div>
+            ))}
         </div>
       </section>
       </div>

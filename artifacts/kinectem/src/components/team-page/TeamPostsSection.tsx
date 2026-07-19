@@ -50,6 +50,9 @@ interface TeamPostsSectionProps {
   // reachable instead of capping at the newest page.
   hasMorePosts: boolean;
   isLoadingMorePosts: boolean;
+  // Task #785 — true when the last page fetch failed; pauses the
+  // auto-load sentinel and shows a manual retry button instead.
+  loadMorePostsFailed?: boolean;
   onLoadMorePosts: () => void;
 }
 
@@ -83,13 +86,16 @@ export function TeamPostsSection({
   posts,
   hasMorePosts,
   isLoadingMorePosts,
+  loadMorePostsFailed = false,
   onLoadMorePosts,
 }: TeamPostsSectionProps) {
   // Task #785 — infinite scroll: auto-fetch the next cursor page when
-  // the sentinel below the last post scrolls into view.
+  // the sentinel below the last post scrolls into view. On fetch
+  // failure the sentinel pauses and a manual retry button renders.
   const loadMoreSentinelRef = useInfiniteScrollSentinel({
     hasMore: hasMorePosts,
     isLoading: isLoadingMorePosts,
+    hasError: loadMorePostsFailed,
     onLoadMore: onLoadMorePosts,
   });
   const canPostHighlight = isAdmin || isTeamMember;
@@ -388,20 +394,38 @@ export function TeamPostsSection({
             <PostCard key={p.id} post={p} />
           ))}
           {/* Task #785 — auto-load older posts as the sentinel scrolls
-              into view (replaces the "Load older posts" button). */}
-          {hasMorePosts && (
-            <div
-              ref={loadMoreSentinelRef}
-              className="flex justify-center py-3"
-              data-testid="sentinel-load-more-posts"
-            >
-              {isLoadingMorePosts && (
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Loading older posts…
+              into view (replaces the "Load older posts" button). When
+              a page fetch fails, auto-loading pauses and a manual
+              retry button takes its place. */}
+          {hasMorePosts &&
+            (loadMorePostsFailed ? (
+              <div className="flex flex-col items-center gap-2 py-3">
+                <span className="text-xs text-muted-foreground">
+                  Couldn't load older posts.
                 </span>
-              )}
-            </div>
-          )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadMorePosts}
+                  disabled={isLoadingMorePosts}
+                  data-testid="btn-retry-load-more-posts"
+                >
+                  Retry loading older posts
+                </Button>
+              </div>
+            ) : (
+              <div
+                ref={loadMoreSentinelRef}
+                className="flex justify-center py-3"
+                data-testid="sentinel-load-more-posts"
+              >
+                {isLoadingMorePosts && (
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Loading older posts…
+                  </span>
+                )}
+              </div>
+            ))}
         </div>
       )}
     </section>

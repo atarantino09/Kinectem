@@ -355,6 +355,7 @@ export default function TeamPage() {
     fetchNextPage: fetchMorePosts,
     hasNextPage: hasMorePosts,
     isFetchingNextPage: isFetchingMorePosts,
+    isFetchNextPageError: fetchMorePostsFailed,
   } = useInfiniteQuery({
     queryKey: [...getListTeamPostsQueryKey(teamId), "infinite"] as const,
     queryFn: ({ pageParam }) =>
@@ -553,6 +554,7 @@ export default function TeamPage() {
               posts={recentPosts}
               hasMorePosts={!!hasMorePosts}
               isLoadingMorePosts={isFetchingMorePosts}
+              loadMorePostsFailed={fetchMorePostsFailed}
               onLoadMorePosts={() => fetchMorePosts()}
             />
           </>

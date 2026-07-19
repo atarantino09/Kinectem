@@ -6,13 +6,22 @@ import { useCallback, useEffect, useRef } from "react";
 // next page starts loading before the user hits the bottom) `onLoadMore`
 // fires. Callers gate on hasMore/isLoading themselves via the args so
 // the observer never spams requests while a page is in flight.
+//
+// `hasError` MUST be wired to the fetch's error state: when a page
+// fetch fails, auto-loading stops entirely (otherwise isLoading flips
+// back to false while hasMore stays true and the effect below would
+// retry in a hot loop, hammering the API). Callers render a manual
+// "Retry" button in that state; the retry calls `onLoadMore` directly,
+// which clears the error and resumes auto-loading on success.
 export function useInfiniteScrollSentinel({
   hasMore,
   isLoading,
+  hasError = false,
   onLoadMore,
 }: {
   hasMore: boolean;
   isLoading: boolean;
+  hasError?: boolean;
   onLoadMore: () => void;
 }) {
   const nodeRef = useRef<HTMLElement | null>(null);
@@ -20,8 +29,8 @@ export function useInfiniteScrollSentinel({
   // Keep the latest state in refs so the observer callback (created
   // once per attached node) always sees fresh values without needing
   // to re-create the observer on every render.
-  const stateRef = useRef({ hasMore, isLoading, onLoadMore });
-  stateRef.current = { hasMore, isLoading, onLoadMore };
+  const stateRef = useRef({ hasMore, isLoading, hasError, onLoadMore });
+  stateRef.current = { hasMore, isLoading, hasError, onLoadMore };
 
   const attach = useCallback((node: HTMLElement | null) => {
     if (observerRef.current) {
@@ -34,8 +43,8 @@ export function useInfiniteScrollSentinel({
       (entries) => {
         const entry = entries[0];
         if (!entry?.isIntersecting) return;
-        const { hasMore, isLoading, onLoadMore } = stateRef.current;
-        if (hasMore && !isLoading) onLoadMore();
+        const { hasMore, isLoading, hasError, onLoadMore } = stateRef.current;
+        if (hasMore && !isLoading && !hasError) onLoadMore();
       },
       // Start fetching one viewport-ish early so scrolling feels
       // continuous instead of stalling at the bottom.
@@ -48,9 +57,10 @@ export function useInfiniteScrollSentinel({
   // When a fetch finishes and the sentinel is STILL on screen (short
   // pages / tall viewports), the observer won't re-fire on its own —
   // nudge another load so the list keeps filling until the sentinel
-  // leaves the viewport or pages run out.
+  // leaves the viewport or pages run out. Never nudges while errored,
+  // or a failed fetch would retry in an infinite loop.
   useEffect(() => {
-    if (!hasMore || isLoading) return;
+    if (!hasMore || isLoading || hasError) return;
     const node = nodeRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
@@ -58,7 +68,7 @@ export function useInfiniteScrollSentinel({
       rect.top < (window.innerHeight || document.documentElement.clientHeight) + 600 &&
       rect.bottom > -600;
     if (inRange) onLoadMore();
-  }, [hasMore, isLoading, onLoadMore]);
+  }, [hasMore, isLoading, hasError, onLoadMore]);
 
   useEffect(
     () => () => {
