@@ -1,12 +1,13 @@
 import { useState, useMemo, type ReactNode } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import {
   useGetUserById,
   useGetUserSports,
   getGetUserSportsQueryKey,
   useGetLoggedInUser,
-  useListUserPosts,
+  listUserPosts,
+  getListUserPostsQueryKey,
   useListUserOrganizations,
   useListUserTeams,
   useFollowUser,
@@ -54,6 +55,7 @@ import { PostCard } from "@/components/PostCard";
 import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 
 export default function UserProfilePage() {
   const params = useParams<{ userId: string }>();
@@ -75,7 +77,35 @@ export default function UserProfilePage() {
     },
   });
   const userSports = sportsResp?.sports ?? [];
-  const { data: postsResp } = useListUserPosts(userId);
+  // Task #785 — infinite scroll. The endpoint now honors cursor +
+  // limit, so consume it with useInfiniteQuery (no generated infinite
+  // hook exists — build on the raw `listUserPosts` fetcher). The key
+  // extends the generated one so existing invalidations still hit it.
+  const USER_POSTS_PAGE_SIZE = 20;
+  const {
+    data: postPages,
+    fetchNextPage: fetchMorePosts,
+    hasNextPage: hasMorePosts,
+    isFetchingNextPage: isFetchingMorePosts,
+  } = useInfiniteQuery({
+    queryKey: [...getListUserPostsQueryKey(userId), "infinite"] as const,
+    queryFn: ({ pageParam }) =>
+      listUserPosts(userId, {
+        limit: USER_POSTS_PAGE_SIZE,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore
+        ? lastPage.pagination.nextCursor ?? undefined
+        : undefined,
+    enabled: !!userId,
+  });
+  const postsSentinelRef = useInfiniteScrollSentinel({
+    hasMore: !!hasMorePosts,
+    isLoading: isFetchingMorePosts,
+    onLoadMore: fetchMorePosts,
+  });
   const { data: orgsResp } = useListUserOrganizations(userId);
   const { data: teamsResp } = useListUserTeams(userId);
   const [teamFilter, setTeamFilter] = useState<string>("all");
@@ -133,7 +163,13 @@ export default function UserProfilePage() {
     }
   };
 
-  const allPosts = postsResp?.data ?? [];
+  const allPosts = useMemo(
+    () => postPages?.pages.flatMap((p) => p.data) ?? [],
+    [postPages],
+  );
+  // The team filter stays client-side (the locked spec has no team
+  // param on this endpoint); it filters whatever pages are loaded, and
+  // the sentinel keeps pulling older pages so matches keep appearing.
   const posts = useMemo(() => {
     if (teamFilter === "all") return allPosts;
     return allPosts.filter(
@@ -636,13 +672,29 @@ export default function UserProfilePage() {
         <div className="space-y-3">
           {posts.length > 0 ? (
             posts.map((p) => <PostCard key={p.id} post={p} />)
-          ) : (
+          ) : hasMorePosts ? null : (
             <Card className="rounded-xl border border-border">
               <CardContent className="p-8 text-center">
                 <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">No posts yet.</p>
               </CardContent>
             </Card>
+          )}
+          {/* Task #785 — auto-load older posts on scroll. Rendered even
+              when the team filter empties the visible list so older
+              pages keep loading until a match (or the end) is found. */}
+          {hasMorePosts && (
+            <div
+              ref={postsSentinelRef}
+              className="flex justify-center py-3"
+              data-testid="sentinel-load-more-user-posts"
+            >
+              {isFetchingMorePosts && (
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Loading older posts…
+                </span>
+              )}
+            </div>
           )}
         </div>
       </section>

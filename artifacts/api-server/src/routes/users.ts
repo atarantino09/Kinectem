@@ -71,6 +71,9 @@ import {
   buildMinorNameContext,
   displayNameForViewer,
   maskedDisplayName,
+  parsePostLimit,
+  decodePostCursor,
+  pagePosts,
 } from "../lib/spec-helpers";
 import { loadCompetitionBrandMap } from "../lib/competition-brand";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
@@ -1101,8 +1104,33 @@ router.get(
       if (r.kind === "article") return !pendingTakedownArticleIds.has(r.a.id);
       return !pendingTakedownHighlightIds.has(r.h.id);
     });
-    const ordered = filteredSeen.sort((x, y) => effectiveDate(y) - effectiveDate(x));
-    const limited = ordered.slice(0, 20);
+    // Task #785 — honor the spec's cursor/limit params so profile
+    // posts older than one page stay reachable (was a hard slice(0,20)).
+    // All sources are already fully fetched in memory, so the strict
+    // (effectiveTs, id) cursor filter is applied to the merged rows
+    // BEFORE the heavy stats/serialization work — only the page that
+    // will actually be returned gets serialized. The row id used for
+    // tie-breaks is the composite `article-…` / `highlight-…` id the
+    // serializers emit, so cursors round-trip cleanly through
+    // `pagePosts` on the serialized page below.
+    const pageLimit = parsePostLimit(req.query["limit"]);
+    const pageCursor = decodePostCursor(req.query["cursor"]);
+    const rowId = (row: MergedRow): string =>
+      row.kind === "article" ? `article-${row.a.id}` : `highlight-${row.h.id}`;
+    const ordered = filteredSeen.sort((x, y) => {
+      const diff = effectiveDate(y) - effectiveDate(x);
+      if (diff !== 0) return diff;
+      return rowId(x) < rowId(y) ? 1 : -1;
+    });
+    const cursorFiltered = pageCursor
+      ? ordered.filter((row) => {
+          const ts = effectiveDate(row);
+          const cTs = pageCursor.ts.getTime();
+          return ts < cTs || (ts === cTs && rowId(row) < pageCursor.id);
+        })
+      : ordered;
+    const pageHasMore = cursorFiltered.length > pageLimit;
+    const limited = cursorFiltered.slice(0, pageLimit);
 
     // Bulk-load reaction / comment / share stats for the page.
     const statKeys: { kind: StatsKind; refId: string }[] = limited.map((row) =>
@@ -1258,7 +1286,15 @@ router.get(
       }
       return { ...post, ...hiddenExtra };
     });
-    res.json(paginate(posts));
+    res.json(
+      pagePosts(posts, {
+        // The strict cursor filter already ran on the merged rows
+        // above, so `posts` is exactly the page — pass no cursor here.
+        cursor: null,
+        limit: pageLimit,
+        sourcesMayHaveMore: pageHasMore,
+      }),
+    );
     return;
   }),
 );

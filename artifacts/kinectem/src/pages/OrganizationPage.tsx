@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "wouter";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
   useGetOrganizationById,
   useListOrgTeams,
   useListArchivedOrgTeams,
   queryOpts,
-  useListOrgPosts,
+  listOrgPosts,
+  getListOrgPostsQueryKey,
   useListMembers,
   useListOrgJoinRequests,
   useListOrgPostApprovals,
@@ -83,6 +84,7 @@ import { OrganizationDescription } from "@/components/organization-page/Organiza
 import { formatOrgName } from "@/lib/format";
 import { readOrgBrandColors, orgHeroGradient } from "@/lib/orgBrand";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
+import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 
 type TeamRailItem = {
   id: string;
@@ -166,7 +168,35 @@ export default function OrganizationPage() {
       }),
     },
   );
-  const { data: postsResp } = useListOrgPosts(orgId);
+  // Task #785 — infinite scroll. The endpoint now honors cursor +
+  // limit, so consume it with useInfiniteQuery (no generated infinite
+  // hook exists — build on the raw `listOrgPosts` fetcher). The key
+  // extends the generated one so composer invalidations still hit it.
+  const ORG_POSTS_PAGE_SIZE = 20;
+  const {
+    data: postPages,
+    fetchNextPage: fetchMorePosts,
+    hasNextPage: hasMorePosts,
+    isFetchingNextPage: isFetchingMorePosts,
+  } = useInfiniteQuery({
+    queryKey: [...getListOrgPostsQueryKey(orgId), "infinite"] as const,
+    queryFn: ({ pageParam }) =>
+      listOrgPosts(orgId, {
+        limit: ORG_POSTS_PAGE_SIZE,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore
+        ? lastPage.pagination.nextCursor ?? undefined
+        : undefined,
+    enabled: !!orgId,
+  });
+  const orgPostsSentinelRef = useInfiniteScrollSentinel({
+    hasMore: !!hasMorePosts,
+    isLoading: isFetchingMorePosts,
+    onLoadMore: fetchMorePosts,
+  });
   const { data: membersResp } = useListMembers(orgId);
   const { data: planUsageResp } = useQuery<{ usage: OrgPlanUsage }>({
     queryKey: ["org-plan-usage", orgId],
@@ -319,7 +349,7 @@ export default function OrganizationPage() {
 
   const teams = teamsResp?.data ?? [];
   const archivedTeams = archivedTeamsResp?.data ?? [];
-  const posts = postsResp?.data ?? [];
+  const posts = postPages?.pages.flatMap((p) => p.data) ?? [];
   const members = membersResp?.data ?? [];
   const isOrgManager =
     organization.role === "admin" || organization.role === "owner";
@@ -798,7 +828,25 @@ export default function OrganizationPage() {
             </div>
             <div className="space-y-3">
               {posts.length > 0 ? (
-                posts.map((p) => <PostCard key={p.id} post={p} />)
+                <>
+                  {posts.map((p) => (
+                    <PostCard key={p.id} post={p} />
+                  ))}
+                  {/* Task #785 — auto-load older posts on scroll. */}
+                  {hasMorePosts && (
+                    <div
+                      ref={orgPostsSentinelRef}
+                      className="flex justify-center py-3"
+                      data-testid="sentinel-load-more-org-posts"
+                    >
+                      {isFetchingMorePosts && (
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Loading older posts…
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <Card className="rounded-xl border border-border">
                   <CardContent className="p-6 text-center text-sm text-muted-foreground space-y-3">

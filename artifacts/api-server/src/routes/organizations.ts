@@ -1448,6 +1448,21 @@ router.get(
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     if (!org) return notFound(res);
 
+    // Task #785 — honor the spec's cursor/limit params so org-page
+    // posts older than one page stay reachable (was a hard cap of 20).
+    // Same loose-SQL-cursor + strict (ts,id) JS filter pattern as the
+    // feed / team page: each source over-fetches to fetchCap with a
+    // loose `createdAt <= cursor.ts` bound, then `pagePosts` applies
+    // the strict cursor and slices the page.
+    const pageLimit = parsePostLimit(req.query["limit"]);
+    const pageCursor = decodePostCursor(req.query["cursor"]);
+    const fetchCap = pageLimit + 1;
+    // Articles serialize `createdAt` as publishedAt ?? createdAt, so the
+    // SQL bound + order MUST use the same effective timestamp — bounding
+    // on raw createdAt while sorting the page on publishedAt makes the
+    // fetchCap truncate in a different order than the final sort and
+    // pages go missing.
+    const articleEffTs = sql`coalesce(${articles.publishedAt}, ${articles.createdAt})`;
     const [articleRows, orgPostRows] = await Promise.all([
       db
         .select({ a: articles, team: teams, org: organizations, author: users })
@@ -1455,9 +1470,15 @@ router.get(
         .innerJoin(teams, eq(articles.teamId, teams.id))
         .innerJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(and(eq(articles.status, "published"), eq(organizations.id, orgId)))
-        .orderBy(desc(articles.createdAt))
-        .limit(20),
+        .where(
+          and(
+            eq(articles.status, "published"),
+            eq(organizations.id, orgId),
+            ...(pageCursor ? [sql`${articleEffTs} <= ${pageCursor.ts}`] : []),
+          ),
+        )
+        .orderBy(desc(articleEffTs))
+        .limit(fetchCap),
       db
         .select({ p: orgPosts, author: users })
         .from(orgPosts)
@@ -1467,10 +1488,11 @@ router.get(
             eq(orgPosts.organizationId, orgId),
             eq(orgPosts.status, "published"),
             isNull(orgPosts.hiddenAt),
+            ...(pageCursor ? [lte(orgPosts.createdAt, pageCursor.ts)] : []),
           ),
         )
         .orderBy(desc(orgPosts.createdAt))
-        .limit(20),
+        .limit(fetchCap),
     ]);
 
     const [stats, shareStats, canEditMap, authorRoleMap, currentUserTags] = await Promise.all([
@@ -1553,8 +1575,23 @@ router.get(
           minorNameCtx: orgPostsMinorCtx,
         });
       }),
-    ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    res.json(paginate(data));
+    ].sort((a, b) =>
+      a.createdAt === b.createdAt
+        ? a.id < b.id
+          ? 1
+          : -1
+        : a.createdAt < b.createdAt
+          ? 1
+          : -1,
+    );
+    res.json(
+      pagePosts(data, {
+        cursor: pageCursor,
+        limit: pageLimit,
+        sourcesMayHaveMore:
+          articleRows.length >= fetchCap || orgPostRows.length >= fetchCap,
+      }),
+    );
   }),
 );
 

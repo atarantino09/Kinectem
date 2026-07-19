@@ -181,4 +181,64 @@ describe("post pagination (Task #782)", () => {
       expect(titles).toContain(`Feed cursor recap ${i}`);
     }
   });
+
+  // Task #785 — the org page and profile page endpoints used to hard-cap
+  // at 20 (limit(20) per source / slice(0,20)); these pin cursor paging.
+  it("org page pages through more than one page of posts via cursor", async () => {
+    const { user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org, team } = await getOrgAndTeam();
+    await seedArticles(team.id, user.id, 25, "Org cursor recap");
+
+    const { seen, pages } = await walkPages(
+      (qs) => request(app).get(`/api/v1/organizations/${org.id}/posts?${qs}`),
+      10,
+    );
+    expect(pages).toBeGreaterThan(1);
+    const titles = [...seen.values()];
+    for (let i = 1; i <= 25; i++) {
+      expect(titles).toContain(`Org cursor recap ${i}`);
+    }
+  });
+
+  it("org page honors the limit param", async () => {
+    const { user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org, team } = await getOrgAndTeam();
+    await seedArticles(team.id, user.id, 8, "Org limit recap");
+    const res = await request(app).get(
+      `/api/v1/organizations/${org.id}/posts?limit=3`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(3);
+    expect(res.body.pagination.hasMore).toBe(true);
+    expect(res.body.pagination.nextCursor).toBeTruthy();
+  });
+
+  it("profile page pages through more than one page of posts via cursor", async () => {
+    const { user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+    await seedArticles(team.id, user.id, 25, "Profile cursor recap");
+
+    const { seen, pages } = await walkPages(
+      (qs) => request(app).get(`/api/v1/users/${user.id}/posts?${qs}`),
+      10,
+    );
+    expect(pages).toBeGreaterThan(1);
+    const titles = [...seen.values()];
+    for (let i = 1; i <= 25; i++) {
+      expect(titles).toContain(`Profile cursor recap ${i}`);
+    }
+  });
+
+  it("profile page honors the limit param", async () => {
+    const { user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+    await seedArticles(team.id, user.id, 8, "Profile limit recap");
+    const res = await request(app).get(
+      `/api/v1/users/${user.id}/posts?limit=3`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(3);
+    expect(res.body.pagination.hasMore).toBe(true);
+    expect(res.body.pagination.nextCursor).toBeTruthy();
+  });
 });

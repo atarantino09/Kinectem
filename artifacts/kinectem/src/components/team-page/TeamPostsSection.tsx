@@ -17,6 +17,7 @@ import {
   type PostResponse,
 } from "@workspace/api-client-react";
 import { toast } from "@/hooks/use-toast";
+import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import {
   Newspaper,
   FileText,
@@ -84,6 +85,13 @@ export function TeamPostsSection({
   isLoadingMorePosts,
   onLoadMorePosts,
 }: TeamPostsSectionProps) {
+  // Task #785 — infinite scroll: auto-fetch the next cursor page when
+  // the sentinel below the last post scrolls into view.
+  const loadMoreSentinelRef = useInfiniteScrollSentinel({
+    hasMore: hasMorePosts,
+    isLoading: isLoadingMorePosts,
+    onLoadMore: onLoadMorePosts,
+  });
   const canPostHighlight = isAdmin || isTeamMember;
   const [seasonRecapOpen, setSeasonRecapOpen] = useState(false);
   // Task #452 — only fetch the pending-recaps list when the viewer
@@ -379,17 +387,19 @@ export function TeamPostsSection({
           {posts.map((p) => (
             <PostCard key={p.id} post={p} />
           ))}
+          {/* Task #785 — auto-load older posts as the sentinel scrolls
+              into view (replaces the "Load older posts" button). */}
           {hasMorePosts && (
-            <div className="flex justify-center pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isLoadingMorePosts}
-                onClick={onLoadMorePosts}
-                data-testid="btn-load-more-posts"
-              >
-                {isLoadingMorePosts ? "Loading…" : "Load older posts"}
-              </Button>
+            <div
+              ref={loadMoreSentinelRef}
+              className="flex justify-center py-3"
+              data-testid="sentinel-load-more-posts"
+            >
+              {isLoadingMorePosts && (
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Loading older posts…
+                </span>
+              )}
             </div>
           )}
         </div>
