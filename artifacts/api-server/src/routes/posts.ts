@@ -30,10 +30,12 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
   ne,
   or,
   sql,
 } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -80,6 +82,9 @@ import {
   orgPostToPost,
   toPostAuthor,
   paginate,
+  parsePostLimit,
+  decodePostCursor,
+  pagePosts,
   parsePostId,
   articlePostId,
   highlightPostId,
@@ -233,6 +238,19 @@ router.get(
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
 
+    // Task #782 — honor the spec's cursor/limit params so recaps older
+    // than one page stay reachable instead of silently dropping off.
+    const pageLimit = parsePostLimit(req.query["limit"]);
+    const pageCursor = decodePostCursor(req.query["cursor"]);
+    // Fetch one extra row per source so we can tell whether more
+    // history exists beyond this page even after visibility filters.
+    const fetchCap = pageLimit + 1;
+    // Cursor filter for source queries: rows at exactly the cursor
+    // timestamp are re-fetched and de-duped in JS (id tiebreak), so a
+    // burst of same-millisecond posts can't be skipped.
+    const cursorCond = (col: AnyPgColumn) =>
+      pageCursor ? lte(col, pageCursor.ts) : undefined;
+
     const [followedOrgRows, followedTeamRows, followedUserRows] = await Promise.all([
       db
         .select({ id: organizationFollowers.organizationId })
@@ -266,17 +284,20 @@ router.get(
         .select({ a: articles, team: teams, org: organizations, author: users })
         .from(articles)
         .innerJoin(teams, eq(articles.teamId, teams.id))
-        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        // Task #782 — leftJoin so org-less independent/solo-team
+        // recaps still surface in the author's own feed.
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(articles.authorId, users.id))
         .where(
           and(
             eq(articles.status, "published"),
             eq(articles.authorId, me.id),
             isNull(articles.hiddenAt),
+            cursorCond(articles.createdAt),
           ),
         )
         .orderBy(desc(articles.createdAt))
-        .limit(10);
+        .limit(fetchCap);
       const ownHls = await db
         .select({ h: highlights, team: teams, org: organizations, uploader: users })
         .from(highlights)
@@ -285,9 +306,15 @@ router.get(
         .leftJoin(teams, eq(highlights.teamId, teams.id))
         .leftJoin(organizations, eq(teams.organizationId, organizations.id))
         .leftJoin(users, eq(highlights.uploaderId, users.id))
-        .where(and(eq(highlights.uploaderId, me.id), isNull(highlights.hiddenAt)))
+        .where(
+          and(
+            eq(highlights.uploaderId, me.id),
+            isNull(highlights.hiddenAt),
+            cursorCond(highlights.createdAt),
+          ),
+        )
         .orderBy(desc(highlights.createdAt))
-        .limit(10);
+        .limit(fetchCap);
       const statKeys = [
         ...ownArts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...ownHls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
@@ -296,7 +323,7 @@ router.get(
         articleId: r.a.id,
         authorId: r.a.authorId,
         teamId: r.team.id,
-        orgId: r.org.id,
+        orgId: r.org?.id ?? null,
       }));
       // Task #414 — own feed: viewer is the author/uploader for every
       // row, so they're privileged for their own minor children, but a
@@ -331,7 +358,7 @@ router.get(
           ownArts.map((r) => ({
             articleId: r.a.id,
             authorId: r.a.authorId,
-            orgId: r.org.id,
+            orgId: r.org?.id ?? null,
           })),
         ),
         computeArticleAuthorRoleMap(articleRoleRows),
@@ -389,8 +416,23 @@ router.get(
             minorNameCtx: ownMinorCtx,
           }),
         ),
-      ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-      return res.json(paginate(items));
+      ].sort((a, b) =>
+        a.createdAt === b.createdAt
+          ? a.id < b.id
+            ? 1
+            : -1
+          : a.createdAt < b.createdAt
+            ? 1
+            : -1,
+      );
+      return res.json(
+        pagePosts(items, {
+          cursor: pageCursor,
+          limit: pageLimit,
+          sourcesMayHaveMore:
+            ownArts.length >= fetchCap || ownHls.length >= fetchCap,
+        }),
+      );
     }
 
     // Articles whose tagged users include any followed user.
@@ -425,17 +467,20 @@ router.get(
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
       .innerJoin(teams, eq(articles.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      // Task #782 — leftJoin so org-less independent/solo-team recaps
+      // aren't dropped from the followed feed.
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
       .where(
         and(
           eq(articles.status, "published"),
           isNull(articles.hiddenAt),
           or(...articleConds),
+          cursorCond(articles.createdAt),
         ),
       )
       .orderBy(desc(articles.createdAt))
-      .limit(20);
+      .limit(fetchCap);
 
     const highlightConds = [eq(highlights.uploaderId, me.id)];
     if (followedTeamIds.length)
@@ -462,10 +507,11 @@ router.get(
           isNull(highlights.hiddenAt),
           eq(highlights.approvalStatus, "approved"),
           or(...highlightConds),
+          cursorCond(highlights.createdAt),
         ),
       )
       .orderBy(desc(highlights.createdAt))
-      .limit(20);
+      .limit(fetchCap);
 
     // Org-level announcements from followed organizations.
     const orgPostRows = followedOrgIds.length
@@ -479,10 +525,11 @@ router.get(
               eq(orgPosts.status, "published"),
               isNull(orgPosts.hiddenAt),
               inArray(orgPosts.organizationId, followedOrgIds),
+              cursorCond(orgPosts.createdAt),
             ),
           )
           .orderBy(desc(orgPosts.createdAt))
-          .limit(20)
+          .limit(fetchCap)
       : [];
 
     // Re-shares posted by the viewer or any followed user. Each
@@ -493,13 +540,21 @@ router.get(
     // share card if the viewer hasn't seen the post yet (in which
     // case it appears with `sharedBy`/`sharedAt` set).
     const sharerIds = [me.id, ...followedUserIds];
+    // Shares page on their own createdAt (= the item's effective feed
+    // timestamp `sharedAt`), so older shares stay reachable too.
+    const shareFetchCap = fetchCap * 2;
     const shareRows = await db
       .select({ s: postShares, sharer: users })
       .from(postShares)
       .leftJoin(users, eq(postShares.sharerUserId, users.id))
-      .where(inArray(postShares.sharerUserId, sharerIds))
+      .where(
+        and(
+          inArray(postShares.sharerUserId, sharerIds),
+          cursorCond(postShares.createdAt),
+        ),
+      )
       .orderBy(desc(postShares.createdAt))
-      .limit(40);
+      .limit(shareFetchCap);
 
     const sharedArticleIds = shareRows
       .filter((r) => r.s.postKind === "article")
@@ -513,7 +568,8 @@ router.get(
           .select({ a: articles, team: teams, org: organizations, author: users })
           .from(articles)
           .innerJoin(teams, eq(articles.teamId, teams.id))
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          // Task #782 — shared org-less recaps stay visible too.
+          .leftJoin(organizations, eq(teams.organizationId, organizations.id))
           .leftJoin(users, eq(articles.authorId, users.id))
           .where(
             and(
@@ -560,12 +616,12 @@ router.get(
       ...arts.map((r) => ({
         articleId: r.a.id,
         authorId: r.a.authorId,
-        orgId: r.org.id,
+        orgId: r.org?.id ?? null,
       })),
       ...sharedArticleRows.map((r) => ({
         articleId: r.a.id,
         authorId: r.a.authorId,
-        orgId: r.org.id,
+        orgId: r.org?.id ?? null,
       })),
     ];
     // Same row set as `articleEditRows`, but extended with the team id
@@ -576,13 +632,13 @@ router.get(
         articleId: r.a.id,
         authorId: r.a.authorId,
         teamId: r.team.id,
-        orgId: r.org.id,
+        orgId: r.org?.id ?? null,
       })),
       ...sharedArticleRows.map((r) => ({
         articleId: r.a.id,
         authorId: r.a.authorId,
         teamId: r.team.id,
-        orgId: r.org.id,
+        orgId: r.org?.id ?? null,
       })),
     ];
     // Batched org-admin lookup for `canEdit` on org_post rows.
@@ -590,10 +646,12 @@ router.get(
     // out of the org-admin lookup batch (they have no org-scope edit
     // ACL to compute).
     const feedOrgIds = [
-      ...arts.map((r) => r.org.id),
+      ...arts.map((r) => r.org?.id).filter((id): id is string => !!id),
       ...hls.map((r) => r.org?.id).filter((id): id is string => !!id),
       ...orgPostRows.map((r) => r.org.id),
-      ...sharedArticleRows.map((r) => r.org.id),
+      ...sharedArticleRows
+        .map((r) => r.org?.id)
+        .filter((id): id is string => !!id),
       ...sharedHighlightRows
         .map((r) => r.org?.id)
         .filter((id): id is string => !!id),
@@ -809,9 +867,20 @@ router.get(
     items.sort((a, b) => {
       const ad = a.sharedAt ?? a.createdAt;
       const bd = b.sharedAt ?? b.createdAt;
+      if (ad === bd) return a.id < b.id ? 1 : -1;
       return ad < bd ? 1 : -1;
     });
-    res.json(paginate(items));
+    res.json(
+      pagePosts(items, {
+        cursor: pageCursor,
+        limit: pageLimit,
+        sourcesMayHaveMore:
+          arts.length >= fetchCap ||
+          hls.length >= fetchCap ||
+          orgPostRows.length >= fetchCap ||
+          shareRows.length >= shareFetchCap,
+      }),
+    );
   }),
 );
 

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearch, useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import {
   customFetch,
   useGetTeamById,
   useListTeamMembers,
-  useListTeamPosts,
+  listTeamPosts,
+  getListTeamPostsQueryKey,
   useListRosterInvites,
   useGetOrganizationById,
   useGetLoggedInUser,
@@ -344,12 +345,29 @@ export default function TeamPage() {
     query: queryOpts({ enabled: !!teamId && canManage }),
   });
 
-  // Use the generated hook so the new-post composer can target this
-  // exact query key (`getListTeamPostsQueryKey(teamId)`) when it
-  // refreshes the list after a publish/edit, instead of relying on
-  // an ad-hoc key the composer doesn't know about.
-  const { data: postsResp } = useListTeamPosts(teamId, undefined, {
-    query: queryOpts({ enabled: !!teamId }),
+  // Task #782 — cursor-paginated team posts. Key extends the
+  // generated `getListTeamPostsQueryKey(teamId)` so the composer's
+  // prefix-matched invalidation after a publish/edit still refreshes
+  // this infinite list.
+  const TEAM_POSTS_PAGE_SIZE = 20;
+  const {
+    data: postPages,
+    fetchNextPage: fetchMorePosts,
+    hasNextPage: hasMorePosts,
+    isFetchingNextPage: isFetchingMorePosts,
+  } = useInfiniteQuery({
+    queryKey: [...getListTeamPostsQueryKey(teamId), "infinite"] as const,
+    queryFn: ({ pageParam }) =>
+      listTeamPosts(teamId, {
+        limit: TEAM_POSTS_PAGE_SIZE,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore
+        ? lastPage.pagination.nextCursor ?? undefined
+        : undefined,
+    enabled: !!teamId,
   });
 
   const onToggleFollow = async () => {
@@ -407,7 +425,7 @@ export default function TeamPage() {
     );
 
   const seasonId = team.currentSeason?.id ?? team.id;
-  const recentPosts = postsResp?.data ?? [];
+  const recentPosts = postPages?.pages.flatMap((p) => p.data) ?? [];
 
   // Task #367 — team pages with any minor roster member must not be
   // search-indexed. We treat any roster row with at least one linked
@@ -533,6 +551,9 @@ export default function TeamPage() {
               canPostRecap={canPostRecap}
               teamName={team.name}
               posts={recentPosts}
+              hasMorePosts={!!hasMorePosts}
+              isLoadingMorePosts={isFetchingMorePosts}
+              onLoadMorePosts={() => fetchMorePosts()}
             />
           </>
         )}

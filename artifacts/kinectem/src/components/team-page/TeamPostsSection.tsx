@@ -45,6 +45,11 @@ interface TeamPostsSectionProps {
   // Team display name — used to title the AI season/tournament recap.
   teamName: string;
   posts: PostResponse[];
+  // Task #782 — cursor pagination controls so older recaps stay
+  // reachable instead of capping at the newest page.
+  hasMorePosts: boolean;
+  isLoadingMorePosts: boolean;
+  onLoadMorePosts: () => void;
 }
 
 function shortExcerpt(p: PostResponse): string {
@@ -75,6 +80,9 @@ export function TeamPostsSection({
   canPostRecap,
   teamName,
   posts,
+  hasMorePosts,
+  isLoadingMorePosts,
+  onLoadMorePosts,
 }: TeamPostsSectionProps) {
   const canPostHighlight = isAdmin || isTeamMember;
   const [seasonRecapOpen, setSeasonRecapOpen] = useState(false);
@@ -368,9 +376,22 @@ export function TeamPostsSection({
         </Card>
       ) : (
         <div className="space-y-3">
-          {posts.slice(0, 5).map((p) => (
+          {posts.map((p) => (
             <PostCard key={p.id} post={p} />
           ))}
+          {hasMorePosts && (
+            <div className="flex justify-center pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isLoadingMorePosts}
+                onClick={onLoadMorePosts}
+                data-testid="btn-load-more-posts"
+              >
+                {isLoadingMorePosts ? "Loading…" : "Load older posts"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </section>

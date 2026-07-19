@@ -38,6 +38,7 @@
 - [Competition CSV import header aliasing](csv-import-header-aliasing.md) — schedule import must accept scheduling-tool exports as-is; only 4 required columns, never re-tighten.
 - [Competition branding on posts](post-competition-branding.md) — recap PostResponse carries a `competition` brand block (extra beyond locked spec); in-app page at /competitions/c/:slug must precede console route.
 - [Independent teams & org joins](independent-team-org-joins.md) — org-less teams: innerJoin organizations silently drops all their posts; always leftJoin + nullable org.
+- [Post cursor pagination](post-cursor-pagination.md) — feed/team-posts page merged sources via fetchCap+1 loose SQL cursor + strict JS (ts,id) filter in pagePosts(); never hasMore without nextCursor.
 - [Competition existing-team claim](competition-existing-team-claim.md) — one-slot-per-team needs advisory-lock tx (TOCTOU); name mismatch is a coach-confirmed UI gate, not server-enforced.
 - [Competition organizer hub](organizer-hub.md) — hub branding is COPIED onto competitions at creation, never referenced; wizard must hydrate inherited branding or partial saves null it.
 - [First-run onboarding](first-run-onboarding.md) — onboarding "seen" flag is per-browser localStorage (openapi locked, no server field); reusable SpotlightTour gated on canManage; don't open route-based composers mid-tour.

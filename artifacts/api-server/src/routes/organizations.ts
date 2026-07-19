@@ -21,7 +21,7 @@ import {
   organizationClaimRequests,
   guardianLinks,
 } from "@workspace/db";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -76,6 +76,9 @@ import {
   highlightToPost,
   orgPostToPost,
   paginate,
+  parsePostLimit,
+  decodePostCursor,
+  pagePosts,
   parsePostId,
   toJoinRequest,
   apiError,
@@ -1275,6 +1278,11 @@ router.get(
     // wiring the share button on every team-page card would render as
     // "0 / not shared" until the user navigates away.
     const me = req.sessionUser;
+    // Task #782 — honor the spec's cursor/limit params so recaps older
+    // than one page stay reachable on the team page.
+    const pageLimit = parsePostLimit(req.query["limit"]);
+    const pageCursor = decodePostCursor(req.query["cursor"]);
+    const fetchCap = pageLimit + 1;
     const rows = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
@@ -1293,10 +1301,11 @@ router.get(
           // article disappears for everyone (author, teammates,
           // anonymous viewers) instead of lingering as a "ghost".
           isNull(articles.hiddenAt),
+          ...(pageCursor ? [lte(articles.createdAt, pageCursor.ts)] : []),
         ),
       )
       .orderBy(desc(articles.createdAt))
-      .limit(20);
+      .limit(fetchCap);
     const hRows = await db
       .select({ h: highlights, team: teams, org: organizations, author: users })
       .from(highlights)
@@ -1312,10 +1321,11 @@ router.get(
           eq(highlights.teamId, req.params.teamId),
           isNull(highlights.hiddenAt),
           eq(highlights.approvalStatus, "approved"),
+          ...(pageCursor ? [lte(highlights.createdAt, pageCursor.ts)] : []),
         ),
       )
       .orderBy(desc(highlights.createdAt))
-      .limit(20);
+      .limit(fetchCap);
 
     const [shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
@@ -1411,9 +1421,22 @@ router.get(
       });
     });
     const merged = [...articleData, ...highlightData].sort((a, b) =>
-      a.createdAt < b.createdAt ? 1 : -1,
+      a.createdAt === b.createdAt
+        ? a.id < b.id
+          ? 1
+          : -1
+        : a.createdAt < b.createdAt
+          ? 1
+          : -1,
     );
-    res.json(paginate(merged.slice(0, 20)));
+    res.json(
+      pagePosts(merged, {
+        cursor: pageCursor,
+        limit: pageLimit,
+        sourcesMayHaveMore:
+          rows.length >= fetchCap || hRows.length >= fetchCap,
+      }),
+    );
   }),
 );
 

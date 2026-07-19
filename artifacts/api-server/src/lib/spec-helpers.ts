@@ -425,6 +425,78 @@ export function paginate<T>(data: T[], totalCount?: number) {
   };
 }
 
+// Cursor helpers for merged post feeds (feed + team page). The cursor
+// encodes the *effective* timestamp (sharedAt ?? createdAt) plus the
+// composite post id (`article-…` / `highlight-…` / `orgpost-…`) as an
+// opaque base64 token so ties on identical timestamps page stably.
+export function parsePostLimit(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 20;
+  return Math.min(50, Math.max(1, Math.floor(n)));
+}
+
+export function decodePostCursor(
+  raw: unknown,
+): { ts: Date; id: string } | null {
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  try {
+    const decoded = Buffer.from(raw, "base64").toString("utf8");
+    const idx = decoded.indexOf("|");
+    if (idx < 0) return null;
+    const ts = new Date(decoded.slice(0, idx));
+    const id = decoded.slice(idx + 1);
+    if (Number.isNaN(ts.getTime())) return null;
+    return { ts, id };
+  } catch {
+    return null;
+  }
+}
+
+export function encodePostCursor(tsIso: string, id: string): string {
+  return Buffer.from(`${tsIso}|${id}`, "utf8").toString("base64");
+}
+
+// Slice a merged, already-visibility-filtered post list into one cursor
+// page. `items` must be pre-sorted newest-first by effective timestamp.
+// `sourcesMayHaveMore` should be true when any underlying per-kind
+// query returned its full fetch cap (meaning older rows exist beyond
+// what we fetched even if post-filtering shrank this page).
+export function pagePosts<T extends { id: string; createdAt: string; sharedAt?: string | null }>(
+  items: T[],
+  opts: {
+    cursor: { ts: Date; id: string } | null;
+    limit: number;
+    sourcesMayHaveMore: boolean;
+  },
+) {
+  const effTs = (it: T) => it.sharedAt ?? it.createdAt;
+  let filtered = items;
+  if (opts.cursor) {
+    const cIso = opts.cursor.ts.toISOString();
+    const cId = opts.cursor.id;
+    filtered = items.filter((it) => {
+      const ts = effTs(it);
+      return ts < cIso || (ts === cIso && it.id < cId);
+    });
+  }
+  const hasMore = opts.sourcesMayHaveMore || filtered.length > opts.limit;
+  const page = filtered.slice(0, opts.limit);
+  const last = page[page.length - 1];
+  const nextCursor = hasMore && last ? encodePostCursor(effTs(last), last.id) : null;
+  return {
+    data: page,
+    pagination: {
+      nextCursor,
+      // Without a next cursor the client can't continue, so never
+      // report hasMore=true with a null cursor.
+      hasMore: hasMore && nextCursor !== null,
+      // Matches `paginate()`'s behavior — the count of items in this
+      // page (the endpoints never computed a true total).
+      totalCount: page.length,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
