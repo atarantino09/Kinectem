@@ -282,7 +282,7 @@ export function TeamHeaderCard({
             otherwise CSS paints positioned descendants above non-positioned
             siblings in the same stacking context, which would let the
             uploaded team photo cover the logo square. */}
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 -mt-16">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6 -mt-16">
           <div className="shrink-0 flex flex-col items-center sm:items-start">
             <AvatarLightbox
               avatarUrl={orgLogoUrl || null}
@@ -325,7 +325,10 @@ export function TeamHeaderCard({
               </span>
             )}
           </div>
-          <div className="flex-1 min-w-0 sm:pb-2">
+          {/* pt-20 > the row's -mt-16 pull, so the name always starts BELOW
+              the banner — bottom-aligning it next to the logo let the Edit /
+              tour buttons push the name up under the banner and clip it. */}
+          <div className="flex-1 min-w-0 sm:pt-20 sm:pb-2">
             {/* Name gets its own full-width row so long team names use the
                 whole hero instead of getting squeezed (and truncated) next
                 to the Edit / tour buttons, which now sit on a row below. */}
