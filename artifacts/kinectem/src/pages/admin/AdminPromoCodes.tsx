@@ -22,7 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Tag, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Tag, Trash2 } from "lucide-react";
 
 type PromoCode = {
   id: string;
@@ -110,6 +110,77 @@ export default function AdminPromoCodes() {
     }
   };
 
+  // Edit dialog state — code itself is immutable; everything else
+  // (description, discount, max redemptions, expiry) can be changed.
+  const [editRow, setEditRow] = useState<PromoCode | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [editDiscountType, setEditDiscountType] = useState<"percent" | "amount">("percent");
+  const [editDiscountValue, setEditDiscountValue] = useState("10");
+  const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
+  const [editExpiryMode, setEditExpiryMode] = useState<"lifetime" | "date">("lifetime");
+  const [editExpiresAt, setEditExpiresAt] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const openEdit = (row: PromoCode) => {
+    setEditRow(row);
+    setEditDescription(row.description ?? "");
+    setEditDiscountType(row.discountType);
+    setEditDiscountValue(String(row.discountValue));
+    setEditMaxRedemptions(row.maxRedemptions != null ? String(row.maxRedemptions) : "");
+    if (row.expiresAt) {
+      setEditExpiryMode("date");
+      // Date input wants YYYY-MM-DD.
+      setEditExpiresAt(row.expiresAt.slice(0, 10));
+    } else {
+      setEditExpiryMode("lifetime");
+      setEditExpiresAt("");
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editRow) return;
+    const value = Number(editDiscountValue);
+    if (!Number.isFinite(value) || value < 1) {
+      toast({ title: "Enter a discount of at least 1.", variant: "destructive" });
+      return;
+    }
+    if (editDiscountType === "percent" && value > 100) {
+      toast({ title: "Percent discount can't exceed 100.", variant: "destructive" });
+      return;
+    }
+    if (editExpiryMode === "date" && !editExpiresAt) {
+      toast({ title: "Pick an expiry date or switch to Lifetime.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await customFetch(`/api/v1/admin/promo-codes/${editRow.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          description: editDescription.trim() || null,
+          discountType: editDiscountType,
+          discountValue: value,
+          maxRedemptions: editMaxRedemptions.trim() ? Number(editMaxRedemptions) : null,
+          expiresAt:
+            editExpiryMode === "date" && editExpiresAt
+              ? new Date(editExpiresAt).toISOString()
+              : null,
+        }),
+      });
+      toast({ title: "Promo code updated." });
+      setEditRow(null);
+      refresh();
+    } catch (err) {
+      toast({
+        title: "Couldn't update code",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleActive = async (row: PromoCode) => {
     try {
       await customFetch(`/api/v1/admin/promo-codes/${row.id}`, {
@@ -175,6 +246,7 @@ export default function AdminPromoCodes() {
                       <th className="py-2 pr-4 font-semibold">Code</th>
                       <th className="py-2 pr-4 font-semibold">Discount</th>
                       <th className="py-2 pr-4 font-semibold">Redemptions</th>
+                      <th className="py-2 pr-4 font-semibold">Expires</th>
                       <th className="py-2 pr-4 font-semibold">Status</th>
                       <th className="py-2 pr-4 font-semibold text-right">Actions</th>
                     </tr>
@@ -197,6 +269,23 @@ export default function AdminPromoCodes() {
                           {row.redemptionCount}
                           {row.maxRedemptions != null ? ` / ${row.maxRedemptions}` : ""}
                         </td>
+                        <td className="py-3 pr-4" data-testid={`cell-expires-${row.code}`}>
+                          {row.expiresAt ? (
+                            <span
+                              className={
+                                new Date(row.expiresAt).getTime() < Date.now()
+                                  ? "text-destructive font-semibold"
+                                  : ""
+                              }
+                            >
+                              {new Date(row.expiresAt).toLocaleDateString(undefined, {
+                                dateStyle: "medium",
+                              })}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">Never</span>
+                          )}
+                        </td>
                         <td className="py-3 pr-4">
                           <button
                             type="button"
@@ -211,7 +300,15 @@ export default function AdminPromoCodes() {
                             {row.active ? "Active" : "Inactive"}
                           </button>
                         </td>
-                        <td className="py-3 pr-0 text-right">
+                        <td className="py-3 pr-0 text-right whitespace-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEdit(row)}
+                            data-testid={`btn-edit-${row.code}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -341,6 +438,116 @@ export default function AdminPromoCodes() {
             <Button onClick={create} disabled={creating} data-testid="btn-save-promo">
               {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Create code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editRow} onOpenChange={(open) => !open && setEditRow(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Edit {editRow?.code.toUpperCase() ?? "promo code"}
+            </DialogTitle>
+            <DialogDescription>
+              Update the discount, redemption limit, or expiry date. The code
+              itself can't be changed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-promo-desc">Description (optional)</Label>
+              <Input
+                id="edit-promo-desc"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Founding member discount"
+                data-testid="input-edit-desc"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Type</Label>
+                <Select
+                  value={editDiscountType}
+                  onValueChange={(v) => setEditDiscountType(v as "percent" | "amount")}
+                >
+                  <SelectTrigger data-testid="select-edit-discount-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percent">Percent off</SelectItem>
+                    <SelectItem value="amount">Dollars off</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-promo-value">
+                  {editDiscountType === "percent" ? "Percent (1–100)" : "Dollars off"}
+                </Label>
+                <Input
+                  id="edit-promo-value"
+                  type="number"
+                  min={1}
+                  value={editDiscountValue}
+                  onChange={(e) => setEditDiscountValue(e.target.value)}
+                  data-testid="input-edit-value"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-promo-max">Max redemptions (optional)</Label>
+                <Input
+                  id="edit-promo-max"
+                  type="number"
+                  min={1}
+                  value={editMaxRedemptions}
+                  onChange={(e) => setEditMaxRedemptions(e.target.value)}
+                  placeholder="Unlimited"
+                  data-testid="input-edit-max"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-promo-expiry-mode">Expiry</Label>
+                <Select
+                  value={editExpiryMode}
+                  onValueChange={(v) => setEditExpiryMode(v as "lifetime" | "date")}
+                >
+                  <SelectTrigger
+                    id="edit-promo-expiry-mode"
+                    data-testid="select-edit-expiry-mode"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lifetime">Lifetime (never expires)</SelectItem>
+                    <SelectItem value="date">Expires on date</SelectItem>
+                  </SelectContent>
+                </Select>
+                {editExpiryMode === "date" ? (
+                  <Input
+                    id="edit-promo-expires"
+                    type="date"
+                    value={editExpiresAt}
+                    onChange={(e) => setEditExpiresAt(e.target.value)}
+                    data-testid="input-edit-expires"
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Discount applies as long as they stay a member.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditRow(null)}>
+              Cancel
+            </Button>
+            <Button onClick={saveEdit} disabled={saving} data-testid="btn-save-edit-promo">
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>
