@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { buildCompetitionInviteMessage } from "@/lib/competition-invite-message";
+import { PLANS } from "@/lib/plans";
 import {
   SpotlightTour,
   type TourStep,
@@ -31,6 +32,7 @@ import {
   Newspaper,
   Star,
   Copy,
+  Gift,
   Megaphone,
   Building2,
   CalendarDays,
@@ -704,6 +706,188 @@ function InviteTeamsPanel({
           <Copy className="w-3.5 h-3.5 mr-1.5" />
           Copy message
         </Button>
+      </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// Task #788 — promo referral program: informational only (no tracking or
+// automated sends). Pricing figures are derived from the shared PLANS
+// catalog so they can never drift from the pricing page.
+const REFERRAL_DISCOUNT = 0.25; // new orgs get 25% off
+const REFERRAL_COMMISSION = 0.15; // competition earns 15% of what they pay
+// 10-org example mix used in the earnings illustration.
+const REFERRAL_EXAMPLE_MIX: Record<string, number> = {
+  starter: 3,
+  pro: 4,
+  elite: 3,
+};
+
+// Prices in this section can have cents (e.g. $112.50), unlike the
+// whole-dollar plan catalog, so format with cents only when needed.
+function formatUsdExact(amount: number): string {
+  const hasCents = Math.round(amount * 100) % 100 !== 0;
+  return `$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function buildPromoReferralMessage(competitionName: string): string {
+  const cheapest = PLANS.reduce((a, b) =>
+    b.priceYearly < a.priceYearly ? b : a,
+  );
+  const discounted = cheapest.priceYearly * (1 - REFERRAL_DISCOUNT);
+  return `Hi coaches and club directors,
+
+If your club isn't on Kinectem yet, now is a great time to join. Kinectem is the youth-sports platform we use for ${competitionName} — team pages, schedules, game recaps, and safe, COPPA-compliant profiles for players and parents.
+
+As a team in our competition, your organization gets 25% off any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)}/year to get your whole club on board.
+
+Here's how to claim it:
+1. Go to Kinectem and create your organization.
+2. Pick the plan that fits your club's size.
+3. Enter promo code [YOUR PROMO CODE] at checkout to get 25% off.
+
+Feel free to reach out if you have any questions — we'd love to see your club on Kinectem.
+
+Thanks,
+The ${competitionName} team`;
+}
+
+function PromoReferralPanel({ competitionName }: { competitionName: string }) {
+  const [open, setOpen] = useState(true);
+  const { toast } = useToast();
+
+  const rows = PLANS.map((plan) => {
+    const discounted = plan.priceYearly * (1 - REFERRAL_DISCOUNT);
+    const commission = discounted * REFERRAL_COMMISSION;
+    return { plan, discounted, commission };
+  });
+  const exampleTotal = rows.reduce(
+    (sum, r) => sum + r.commission * (REFERRAL_EXAMPLE_MIX[r.plan.id] ?? 0),
+    0,
+  );
+  const exampleCount = Object.values(REFERRAL_EXAMPLE_MIX).reduce(
+    (a, b) => a + b,
+    0,
+  );
+  const exampleMixLabel = rows
+    .map((r) => `${REFERRAL_EXAMPLE_MIX[r.plan.id] ?? 0} ${r.plan.name}`)
+    .join(" + ");
+
+  const message = buildPromoReferralMessage(competitionName);
+
+  const copyMessage = () =>
+    navigator.clipboard
+      .writeText(message)
+      .then(() => toast({ title: "Message copied" }))
+      .catch(() =>
+        toast({ title: "Couldn't copy message", variant: "destructive" }),
+      );
+
+  return (
+    <Card>
+      <CollapsibleCardHeader
+        icon={<Gift className="w-4 h-4" />}
+        label="Earn with your promo code"
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-promo-referral"
+      />
+      {open && (
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Share your competition's promo code with the teams and clubs in your
+          event. New organizations that sign up with your code get{" "}
+          <span className="font-bold text-foreground">
+            25% off their Kinectem plan
+          </span>
+          , and your competition earns a{" "}
+          <span className="font-bold text-foreground">15% commission</span> on
+          what those new clubs pay.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table
+            className="w-full text-sm"
+            data-testid="table-promo-earnings"
+          >
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="py-2 pr-3 font-bold">Plan</th>
+                <th className="py-2 pr-3 font-bold">List price</th>
+                <th className="py-2 pr-3 font-bold">New org pays (25% off)</th>
+                <th className="py-2 font-bold">You earn (15%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ plan, discounted, commission }) => (
+                <tr
+                  key={plan.id}
+                  className="border-b border-border/60"
+                  data-testid={`row-promo-earnings-${plan.id}`}
+                >
+                  <td className="py-2 pr-3 font-bold">{plan.name}</td>
+                  <td className="py-2 pr-3">
+                    {formatUsdExact(plan.priceYearly)}/yr
+                  </td>
+                  <td className="py-2 pr-3">{formatUsdExact(discounted)}</td>
+                  <td className="py-2 font-bold">
+                    {formatUsdExact(commission)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div
+          className="rounded-lg border border-border bg-muted/40 p-3 text-sm"
+          data-testid="text-promo-example"
+        >
+          <span className="font-bold">Example:</span> bring {exampleCount} new
+          organizations onto Kinectem ({exampleMixLabel}) and your competition
+          earns{" "}
+          <span className="font-bold">{formatUsdExact(exampleTotal)}</span>.
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Copy this ready-made message, swap in your promo code, and send it
+            to the teams and clubs in your competition.
+          </p>
+          <pre
+            className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-sans text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]"
+            data-testid="text-promo-message"
+          >
+            {message}
+          </pre>
+          <Button
+            variant="brand"
+            onClick={copyMessage}
+            data-testid="btn-copy-promo-message"
+          >
+            <Copy className="w-3.5 h-3.5 mr-1.5" />
+            Copy message
+          </Button>
+        </div>
+
+        <p
+          className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"
+          data-testid="text-promo-no-code"
+        >
+          <span className="font-bold">Don't have a promo code yet?</span> Email{" "}
+          <a
+            href="mailto:competitions@kinectem.com"
+            className="font-bold text-primary underline underline-offset-2"
+            data-testid="link-promo-email"
+          >
+            competitions@kinectem.com
+          </a>{" "}
+          and we'll create a custom code for your competition.
+        </p>
       </CardContent>
       )}
     </Card>
@@ -2768,6 +2952,7 @@ function ConsoleWithTour({
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
         slug={row.slug}
       />
+      <PromoReferralPanel competitionName={detail?.name ?? row.name} />
       <ClaimsPanel
         competitionId={row.id}
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
