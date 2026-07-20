@@ -8,6 +8,7 @@ import {
 import {
   CalendarCheck,
   ChevronDown,
+  Gift,
   Megaphone,
   Send,
   Trophy,
@@ -18,7 +19,7 @@ import {
 // Organizer-only walkthrough of the competition lifecycle. Rendered on the
 // public competition page (canManage only) and in the operator console —
 // never shown to public visitors. Opens with the zero-disruption reassurance,
-// walks the five setup steps, and lands on the branding payoff as the
+// walks the setup steps, and lands on the branding payoff as the
 // emphasized climax (themed with the competition's brand colors).
 
 const STEPS = [
@@ -26,6 +27,11 @@ const STEPS = [
     icon: Trophy,
     title: "Create your competition",
     body: "Name, dates, logo, and colors — your branded public page goes live instantly.",
+  },
+  {
+    icon: Gift,
+    title: "Email your teams your promo code",
+    body: "New organizations that sign up with your code get 25% off their Kinectem plan — and your competition earns a 15% commission on what they pay. A ready-made message is waiting in the Earn with your promo code section below.",
   },
   {
     icon: Upload,
@@ -140,7 +146,7 @@ export function CompetitionHowItWorks({
               <div className="flex items-center gap-2">
                 <Megaphone className="w-4 h-4 shrink-0 drop-shadow-sm" />
                 <p className="text-[11px] font-black uppercase tracking-widest opacity-90 drop-shadow-sm">
-                  Step 6 · The payoff
+                  Step {STEPS.length + 1} · The payoff
                 </p>
               </div>
               <p className="mt-1.5 text-base font-black tracking-tight drop-shadow-sm">
