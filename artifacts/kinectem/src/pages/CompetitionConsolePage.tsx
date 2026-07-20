@@ -2695,43 +2695,45 @@ export default function CompetitionConsolePage() {
         ),
       },
       {
+        targetTestId: "btn-how-it-works-toggle",
+        title: "How it all works",
+        body: (
+          <>
+            <strong>How your competition works on Kinectem</strong> is a
+            2-minute guide to the whole lifecycle — from setup to your brand on
+            every game recap. Only you can see it.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-hub",
+        title: "Competition hub",
+        body: (
+          <>
+            Run more than one event? <strong>Competition hub</strong> groups
+            all your competitions under one branded home so teams always know
+            where to find you.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-admins-competition",
+        title: "Add admins",
+        body: (
+          <>
+            <strong>Admins</strong> lets you share the work — add trusted
+            people who can manage the schedule, branding, claims, and recap
+            curation with you.
+          </>
+        ),
+      },
+      {
         targetTestId: "btn-toggle-details",
         title: "Edit the details",
         body: (
           <>
             Update the name, dates, location, and description any time under{" "}
-            <strong>Details</strong>.
-          </>
-        ),
-      },
-      {
-        targetTestId: "btn-toggle-invite-teams",
-        title: "Invite teams",
-        body: (
-          <>
-            <strong>Invite teams</strong> gives you a ready-to-send message so
-            coaches can claim their spot in your competition.
-          </>
-        ),
-      },
-      {
-        targetTestId: "btn-toggle-claims",
-        title: "Approve team claims",
-        body: (
-          <>
-            When a coach claims a team, the request lands here. Approve it (or
-            turn on auto-approve) so their recaps carry your competition's
-            badge.
-          </>
-        ),
-      },
-      {
-        targetTestId: "btn-toggle-schedule",
-        title: "Upload your schedule",
-        body: (
-          <>
-            Import your game schedule as a CSV — exports from most scheduling
-            tools work as-is. You can also add games one at a time.
+            <strong>Competition details</strong>.
           </>
         ),
       },
@@ -2742,6 +2744,72 @@ export default function CompetitionConsolePage() {
           <>
             Add your logo, banner, and colors under <strong>Branding</strong> —
             they show up on your public page and on every recap.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-promo-referral",
+        title: "Earn with your promo code",
+        body: (
+          <>
+            Email your teams your promo code — new organizations get{" "}
+            <strong>25% off</strong> their Kinectem plan and your competition
+            earns a <strong>15% commission</strong>. A ready-made message is
+            waiting inside.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-schedule",
+        title: "Upload your schedule",
+        body: (
+          <>
+            Import your game schedule as a CSV under{" "}
+            <strong>Schedule</strong> — exports from most scheduling tools work
+            as-is.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-invite-teams",
+        title: "Invite your teams",
+        body: (
+          <>
+            <strong>Invite your teams</strong> gives you a ready-to-send
+            message so coaches can claim their spot in your competition.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-claims",
+        title: "Approve team claims",
+        body: (
+          <>
+            When a coach claims a team, the request lands in{" "}
+            <strong>Team claims</strong>. Approve it (or turn on auto-approve)
+            so their recaps carry your competition's badge.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-games-list",
+        title: "Manage individual games",
+        body: (
+          <>
+            <strong>Games</strong> is for one-off fixes — move a time, swap a
+            venue, postpone a rainout, or add a single game without
+            re-uploading your CSV.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-toggle-recaps",
+        title: "Feature the best recaps",
+        body: (
+          <>
+            <strong>Game recaps</strong> is where you curate — pick the best
+            team-written recaps to feature front-and-center on your public
+            page.
           </>
         ),
       },
