@@ -63,8 +63,8 @@ export function CompetitionAdminsPanel({
   kind: "hub" | "competition";
   targetId: string;
   // Task #753 — when true, the panel renders collapsed by default with a
-  // chevron toggle in its header (used on the hub page so competitions
-  // list first). The competition console keeps the always-open layout.
+  // chevron toggle in its header (used on the hub page and the competition
+  // console, both of which land with every section collapsed).
   collapsible?: boolean;
 }) {
   const [open, setOpen] = useState(false);

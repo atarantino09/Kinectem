@@ -321,7 +321,7 @@ function DetailsPanel({
   detail: CompetitionDetail["competition"];
   competitionId: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [name, setName] = useState(detail.name);
@@ -496,7 +496,7 @@ function BrandingPanel({
   detail: CompetitionDetail["competition"];
   competitionId: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [brandColor, setBrandColor] = useState(detail.brandColor ?? "");
@@ -650,7 +650,7 @@ function InviteTeamsPanel({
   autoApproveClaims: boolean;
   slug: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
   // Absolute public link (with the /app prefix) so it works when pasted
@@ -757,7 +757,7 @@ The ${competitionName} team`;
 }
 
 function PromoReferralPanel({ competitionName }: { competitionName: string }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
   const rows = PLANS.map((plan) => {
@@ -907,7 +907,7 @@ function ClaimsPanel({
   participantCount: number;
   claimedCount: number;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1158,7 +1158,7 @@ interface CurationRecap {
 }
 
 function CurationPanel({ competitionId }: { competitionId: string }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -1312,7 +1312,7 @@ function SchedulePanel({
   isLeague: boolean;
   competitionName: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2249,6 +2249,7 @@ function GamesPanel({
           </Button>
         </CardTitle>
       </CardHeader>
+      {listOpen && (
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Fix a one-off change right here — move a time, swap a venue, postpone
@@ -2259,19 +2260,7 @@ function GamesPanel({
           for any game with the same match # (the CSV stays the bulk source of
           truth). Postponed/canceled marks are kept.
         </p>
-        {!listOpen ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="font-bold"
-            onClick={() => setListOpen(true)}
-            data-testid="btn-show-games-list"
-          >
-            <ChevronDown className="w-3.5 h-3.5 mr-1" />
-            Show {matches.length > 0 ? `all ${matches.length} ` : ""}games
-          </Button>
-        ) : q.isLoading ? (
+        {q.isLoading ? (
           <Skeleton className="h-24 rounded-lg" />
         ) : matches.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -2383,6 +2372,7 @@ function GamesPanel({
           </div>
         )}
       </CardContent>
+      )}
 
       {/* Add / edit game dialog */}
       <Dialog
@@ -2571,7 +2561,7 @@ function HubPanel({
   competitionId: string;
   organizerId: string | null;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
   const organizersQ = useQuery<{ data: HubRow[] }>({
@@ -2931,18 +2921,33 @@ function ConsoleWithTour({
       </div>
 
       {/* Compact lifecycle guide right where the organizer does the work —
-          collapsed entry point unless nothing has been set up yet. */}
+          starts collapsed like every section so the page lands condensed. */}
       <CompetitionHowItWorks
         brandColor={detail?.brandColor}
         secondaryColor={detail?.secondaryColor}
-        defaultOpen={row.matchCount === 0}
       />
 
+      <HubPanel competitionId={row.id} organizerId={row.organizerId} />
+      {/* Task #745 — per-competition admin management (any admin can add;
+          only the owner can remove). */}
+      <CompetitionAdminsPanel kind="competition" targetId={row.id} collapsible />
       {detail ? (
         <DetailsPanel detail={detail} competitionId={row.id} />
       ) : (
         <Skeleton className="h-48 rounded-xl" />
       )}
+      {detail ? (
+        <BrandingPanel detail={detail} competitionId={row.id} />
+      ) : (
+        <Skeleton className="h-48 rounded-xl" />
+      )}
+      <PromoReferralPanel competitionName={detail?.name ?? row.name} />
+      <SchedulePanel
+        competitionId={row.id}
+        matchCount={row.matchCount}
+        isLeague={row.type === "league"}
+        competitionName={detail?.name ?? row.name}
+      />
       <InviteTeamsPanel
         name={detail?.name ?? row.name}
         type={detail?.type ?? row.type}
@@ -2952,7 +2957,6 @@ function ConsoleWithTour({
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
         slug={row.slug}
       />
-      <PromoReferralPanel competitionName={detail?.name ?? row.name} />
       <ClaimsPanel
         competitionId={row.id}
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
@@ -2960,23 +2964,8 @@ function ConsoleWithTour({
         participantCount={row.participantCount}
         claimedCount={row.claimedCount}
       />
-      <CurationPanel competitionId={row.id} />
       <GamesPanel competitionId={row.id} slug={row.slug} />
-      <SchedulePanel
-        competitionId={row.id}
-        matchCount={row.matchCount}
-        isLeague={row.type === "league"}
-        competitionName={detail?.name ?? row.name}
-      />
-      {detail ? (
-        <BrandingPanel detail={detail} competitionId={row.id} />
-      ) : (
-        <Skeleton className="h-48 rounded-xl" />
-      )}
-      <HubPanel competitionId={row.id} organizerId={row.organizerId} />
-      {/* Task #745 — per-competition admin management (any admin can add;
-          only the owner can remove). */}
-      <CompetitionAdminsPanel kind="competition" targetId={row.id} />
+      <CurationPanel competitionId={row.id} />
       </div>
       {tourOpen && <SpotlightTour steps={tourSteps} onFinish={finishTour} />}
     </OrganizerSidebar>
