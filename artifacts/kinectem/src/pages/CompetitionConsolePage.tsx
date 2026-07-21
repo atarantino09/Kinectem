@@ -692,6 +692,17 @@ function InviteTeamsPanel({
           step by step. It always uses your latest name, dates, and public
           link.
         </p>
+        <p
+          className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground"
+          data-testid="text-invite-timing-tip"
+        >
+          <span className="font-bold text-foreground">
+            Best time to send:
+          </span>{" "}
+          right after you upload your schedule. Coaches can claim their teams
+          in about two minutes and see their games instantly — one quick send
+          and you're done.
+        </p>
         <pre
           className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-sans text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]"
           data-testid="text-invite-message"
@@ -807,6 +818,17 @@ function PromoReferralPanel({ competitionName }: { competitionName: string }) {
           (renewals bill at full price), and your competition earns a{" "}
           <span className="font-bold text-foreground">15% commission</span> on
           what those new clubs pay.
+        </p>
+        <p
+          className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground"
+          data-testid="text-promo-timing-tip"
+        >
+          <span className="font-bold text-foreground">
+            Best time to send:
+          </span>{" "}
+          at least 7 days before your event starts. That gives clubs plenty of
+          time to sign up with your code before game day — one quick message
+          now and the commissions take care of themselves.
         </p>
 
         <div className="overflow-x-auto">
