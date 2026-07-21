@@ -18,8 +18,12 @@ charge runs automatically on **Nov 1 2026** (set via Stripe Checkout
 
 - **`stripe` is a dependency of `artifacts/api-server`, not root.** pnpm workspace packages don't inherit root deps; a runtime import must be declared in that package. Don't `pnpm add -w stripe`.
 
-- **Plan prices & promo coupons are auto-provisioned in Stripe at runtime** by stable lookup keys (`kinectem_<plan>_yearly`, coupon id `kinectem_promo_<code>`) — no manual dashboard setup. Retrieving a coupon returns `Stripe.Coupon` without a typed `deleted` field; cast to `Stripe.Coupon & { deleted?: boolean }` (NOT `Stripe.DeletedCoupon`, which TS rejects as a non-overlapping cast).
+- **Plan prices & promo coupons are auto-provisioned in Stripe at runtime** by stable lookup keys (`kinectem_<plan>_yearly`; percent coupon id `kinectem_promo_<code>_y1`, amount coupon id `kinectem_promo_<code>`) — no manual dashboard setup. Retrieving a coupon returns `Stripe.Coupon` without a typed `deleted` field; cast to `Stripe.Coupon & { deleted?: boolean }` (NOT `Stripe.DeletedCoupon`, which TS rejects as a non-overlapping cast).
 
 - **`hasCardOnFile` = `org_subscriptions.stripe_subscription_id != null`.** Same predicate drives the Oct-15 reminder query (reminder targets orgs where it IS null).
+
+- **Promo discounts are first-year only.** Plans bill yearly, so a `duration:"once"` subscription coupon discounts exactly the first invoice (year 1) even with the Nov-1 `trial_end`; renewals bill at list price.
+  - **Why:** product decision — the referral discount shouldn't compound forever; early builds used `duration:"forever"`, so percent coupon ids were versioned to `_y1` to guarantee legacy forever coupons never get reattached.
+  - **How to apply:** never change percent coupons back to forever/repeating; `scripts/src/fix-promo-coupon-durations.ts` (idempotent, `--dry-run`) swaps forever coupons on live subs — run before the first invoice so year-1 pricing is preserved; it refuses to remove a discount it can't replace. Stripe SDK v22 moved the coupon to `discount.source.coupon` (expand `discounts.source.coupon`) — `discount.coupon` no longer typechecks.
 
 - **Oct-15 reminder is a self-contained script** (`scripts/src/send-billing-reminders.ts`), NOT in the app. Leaf workspace scripts can't import api-server's `email.ts`, so the SendGrid send + the approved campaign copy are duplicated there. It is **not idempotent** (re-runs re-send) — always `--dry-run` first. Schedule once for 2026-10-15.

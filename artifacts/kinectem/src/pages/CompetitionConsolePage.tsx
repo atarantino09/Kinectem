@@ -743,12 +743,12 @@ function buildPromoReferralMessage(competitionName: string): string {
 
 If your club isn't on Kinectem yet, now is a great time to join. Kinectem is the youth-sports platform we use for ${competitionName} — team pages, schedules, game recaps, and safe, COPPA-compliant profiles for players and parents.
 
-As a team in our competition, your organization gets 25% off any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)}/year to get your whole club on board.
+As a team in our competition, your organization gets 25% off your first year on any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)} for your first year to get your whole club on board.
 
 Here's how to claim it:
 1. Go to Kinectem and create your organization.
 2. Pick the plan that fits your club's size.
-3. Enter promo code [YOUR PROMO CODE] at checkout to get 25% off.
+3. Enter promo code [YOUR PROMO CODE] at checkout to get 25% off your first year.
 
 Feel free to reach out if you have any questions — we'd love to see your club on Kinectem.
 
@@ -802,9 +802,9 @@ function PromoReferralPanel({ competitionName }: { competitionName: string }) {
           Share your competition's promo code with the teams and clubs in your
           event. New organizations that sign up with your code get{" "}
           <span className="font-bold text-foreground">
-            25% off their Kinectem plan
-          </span>
-          , and your competition earns a{" "}
+            25% off their first year on Kinectem
+          </span>{" "}
+          (renewals bill at full price), and your competition earns a{" "}
           <span className="font-bold text-foreground">15% commission</span> on
           what those new clubs pay.
         </p>
@@ -818,7 +818,9 @@ function PromoReferralPanel({ competitionName }: { competitionName: string }) {
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="py-2 pr-3 font-bold">Plan</th>
                 <th className="py-2 pr-3 font-bold">List price</th>
-                <th className="py-2 pr-3 font-bold">New org pays (25% off)</th>
+                <th className="py-2 pr-3 font-bold">
+                  Year 1 price (25% off)
+                </th>
                 <th className="py-2 font-bold">You earn (15%)</th>
               </tr>
             </thead>
@@ -2753,7 +2755,7 @@ export default function CompetitionConsolePage() {
         body: (
           <>
             Email your teams your promo code — new organizations get{" "}
-            <strong>25% off</strong> their Kinectem plan and your competition
+            <strong>25% off</strong> their first year and your competition
             earns a <strong>15% commission</strong>. A ready-made message is
             waiting inside.
           </>

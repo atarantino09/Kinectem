@@ -48,6 +48,7 @@ Youth-sports social platform: user profiles, posts/comments/likes, team & org ma
 Run with `pnpm --filter @workspace/scripts run <name>`. All accept `--dry-run`/`--stdout`/`--out=` where noted; read each script's header for full flags.
 
 - **Backfills (idempotent)**: `backfill-parent-team-follows`, `backfill-self-team-follows` (auto-follow team for parents / rostered users); `backfill-org-claim-links` (ensure every ownerless org has a `claim_token`).
+- **Billing fix**: `fix-promo-coupon-durations` — idempotent; swaps legacy duration-"forever" promo coupons on live Stripe subscriptions for first-year-only ("once") coupons. Run once (with `--dry-run` first) before the Nov 1 first invoice.
 - **Org seed/export**: `export-org-names` (regenerate `organizations.csv`; **run in dev right before publishing**), `bulk-import-organizations` (create ownerless org pages from CSV), `export-org-claim-links` (CSV of `/app/claim/<token>` links), `seed-production-orgs` (legacy prod seed chain — see Deployment for the preferred button), `export-founding-100`.
 - **Email campaigns** (NOT idempotent; always `--dry-run` first; COPPA-safe — minor's email routes to guardian, each carries a no-login unsubscribe link; shared gate logic in `scripts/src/lib/email-campaign.ts`):
   - `send-billing-reminders` — "add a card before Nov 1" to orgs with a plan but no card. **Schedule once for 2026-10-15.**
@@ -104,6 +105,7 @@ Invite delivery flags only advance once the Signed Event Webhook is wired. In Se
 - **Org claiming is invite-only** — the only way to claim an ownerless page is the secret-token link (`/app/claim/<token>`) the owner sends directly. The old open claim-*request* flow is retired: `POST /organizations/:orgId/claims` returns `403 CLAIM_INVITE_ONLY` and the in-app "Claim this organization" button is gone. Unclaimed orgs stay publicly visible (search + detail) on purpose. Both claim paths stay owner-exclusive via the one-owner index.
 - **Route prefix**: claim/billing/AI routes mount at `/api/v1`, NOT `/api` (that's docs + founding-admin page only).
 - **Billing**: card-free signup; orgs pick a plan, add a card later via Stripe Checkout (`trial_end` = Nov 1 2026, nothing charged today). Reconcile-on-return is source of truth; the connector has NO webhook secret. `hasCardOnFile` = `stripeSubscriptionId != null`.
+- **Promo discounts are FIRST YEAR ONLY** — percent coupons are `duration:"once"` under versioned `kinectem_promo_<code>_y1` Stripe ids (legacy unversioned ids were "forever" — never reattach them); renewals bill at list price. Promo *redemption* expiry is separate and only gates new signups.
 - **Roles vocabulary** (owner/admin/member/coach/player/parent/platform admin) is centralized in `RolesReference` and mirrored on marketing `getting-started.html` — update in one place.
 
 ### AI Assist

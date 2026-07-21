@@ -31,7 +31,7 @@ const STEPS = [
   {
     icon: Gift,
     title: "Email your teams your promo code",
-    body: "New organizations that sign up with your code get 25% off their Kinectem plan — and your competition earns a 15% commission on what they pay. A ready-made message is waiting in the Earn with your promo code section below.",
+    body: "New organizations that sign up with your code get 25% off their first year on Kinectem — and your competition earns a 15% commission on what they pay. A ready-made message is waiting in the Earn with your promo code section below.",
   },
   {
     icon: Upload,

@@ -77,11 +77,20 @@ type PromoInput = {
 
 // Idempotently ensure a Stripe coupon mirrors an app promo code, keyed by a
 // stable id. Returns the coupon id, or null when it can't be expressed.
+//
+// Discounts apply to the FIRST YEAR ONLY: plans bill yearly, so a
+// duration:"once" coupon discounts the first invoice (year 1) and renewals
+// bill at full list price. Percent coupons use a `_y1` id suffix because
+// earlier builds created `kinectem_promo_<code>` with duration:"forever" —
+// the versioned id guarantees those legacy coupons are never reattached.
 async function ensurePromoCouponId(
   stripe: Stripe,
   promo: PromoInput,
 ): Promise<string | null> {
-  const couponId = `kinectem_promo_${promo.code}`;
+  const couponId =
+    promo.discountType === "percent"
+      ? `kinectem_promo_${promo.code}_y1`
+      : `kinectem_promo_${promo.code}`;
   try {
     const existing = (await stripe.coupons.retrieve(couponId)) as Stripe.Coupon & {
       deleted?: boolean;
@@ -96,8 +105,8 @@ async function ensurePromoCouponId(
       await stripe.coupons.create({
         id: couponId,
         percent_off: pct,
-        duration: "forever",
-        name: `Promo ${promo.code}`,
+        duration: "once",
+        name: `Promo ${promo.code} (first year)`,
       });
     } else {
       await stripe.coupons.create({

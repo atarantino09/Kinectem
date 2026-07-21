@@ -298,7 +298,9 @@ export default function OrgSubscribePage() {
                   )}
                   <div className="text-3xl font-black">
                     {formatUsd(discounted)}
-                    <span className="text-base font-medium text-muted-foreground">/yr</span>
+                    <span className="text-base font-medium text-muted-foreground">
+                      {hasDiscount ? " first year" : "/yr"}
+                    </span>
                   </div>
                 </div>
                 <ul className="mt-4 space-y-2">
@@ -327,9 +329,9 @@ export default function OrgSubscribePage() {
               <div className="text-sm">
                 <span className="font-bold uppercase">{promo.code}</span> applied —{" "}
                 {promo.discountType === "percent"
-                  ? `${promo.discountValue}% off`
-                  : `${formatUsd(promo.discountValue)} off`}
-                .
+                  ? `${promo.discountValue}% off your first year`
+                  : `${formatUsd(promo.discountValue)} off your first year`}
+                . Renewals bill at full price.
               </div>
               <Button variant="ghost" size="sm" onClick={clearPromo} data-testid="btn-remove-promo">
                 Remove

@@ -17,6 +17,7 @@
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "db:load-check": "tsx ./src/db-load-check.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
+    "fix-promo-coupon-durations": "tsx ./src/fix-promo-coupon-durations.ts",
     "export-org-claim-links": "tsx ./src/export-org-claim-links.ts",
     "export-org-names": "tsx ./src/export-org-names.ts",
     "record-walkthrough": "tsx ./src/record-walkthrough.ts",
@@ -36,7 +37,8 @@
     "@workspace/user-hard-delete": "workspace:*",
     "drizzle-orm": "catalog:",
     "pg": "^8.20.0",
-    "sharp": "^0.34.4"
+    "sharp": "^0.34.4",
+    "stripe": "^22.2.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",
