@@ -482,6 +482,10 @@ router.post(
       existingCustomerId: sub.stripeCustomerId,
       promo,
       orgCreatedAt: createdAt,
+      // Persisted charge date is the source of truth — keeps the Stripe
+      // trial_end aligned with the date the UI and reminder emails show
+      // (matters for legacy orgs whose date was migration-stamped).
+      billingStartsAt: sub.billingStartsAt ?? null,
     });
     if ("error" in result) {
       const msg =
@@ -549,6 +553,10 @@ router.post(
     };
     if (info.customerId) set.stripeCustomerId = info.customerId;
     if (info.subscriptionId) set.stripeSubscriptionId = info.subscriptionId;
+    // Stripe's trial_end is the actual charge instant — align our persisted
+    // date to it so the UI and reminder emails can never drift from what
+    // Stripe will really do (e.g. the 49h floor kicked in at checkout).
+    if (info.trialEnd) set.billingStartsAt = info.trialEnd;
 
     const [sub] = await db
       .update(orgSubscriptions)

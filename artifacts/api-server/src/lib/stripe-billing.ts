@@ -144,7 +144,21 @@ export type CheckoutInput = {
   promo: PromoInput | null;
   // When the org was created — drives the 90-day trial end.
   orgCreatedAt: Date;
+  // The persisted charge date (org_subscriptions.billing_starts_at). When
+  // set, it is the source of truth for trial_end so Stripe matches what the
+  // UI and reminder emails display. Falls back to the computed date.
+  billingStartsAt?: Date | null;
 };
+
+// The trial_end sent to Stripe: the persisted charge date when one exists
+// (so Stripe stays aligned with the date the UI/reminders show), otherwise
+// the computed 90-day date — always floored at Stripe's minimum from now.
+function checkoutTrialEnd(input: CheckoutInput, now = new Date()): Date {
+  const target =
+    input.billingStartsAt ?? billingStartDate(input.orgCreatedAt, now);
+  const floor = new Date(now.getTime() + MIN_TRIAL_END_MS);
+  return target.getTime() > floor.getTime() ? target : floor;
+}
 
 // Create a Checkout Session that saves a card on file and schedules the first
 // charge for 90 days after the org was created. No charge happens today.
@@ -175,9 +189,7 @@ export async function createCardOnFileCheckout(
           : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_end: Math.floor(
-          billingStartDate(input.orgCreatedAt).getTime() / 1000,
-        ),
+        trial_end: Math.floor(checkoutTrialEnd(input).getTime() / 1000),
         metadata: { orgId: input.orgId, plan: input.plan },
       },
       ...(discounts ? { discounts } : {}),
@@ -244,6 +256,7 @@ export async function readCheckoutSession(sessionId: string): Promise<
       customerId: string | null;
       subscriptionId: string | null;
       status: "trialing" | "active" | "past_due" | "canceled";
+      trialEnd: Date | null;
     }
   | { error: string }
 > {
@@ -270,6 +283,9 @@ export async function readCheckoutSession(sessionId: string): Promise<
       customerId,
       subscriptionId: subscription?.id ?? (typeof sub === "string" ? sub : null),
       status: mapStripeStatus(subscription?.status),
+      trialEnd: subscription?.trial_end
+        ? new Date(subscription.trial_end * 1000)
+        : null,
     };
   } catch {
     // Invalid/expired session id or a transient Stripe error.
