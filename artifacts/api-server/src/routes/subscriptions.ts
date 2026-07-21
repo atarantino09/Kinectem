@@ -314,6 +314,34 @@ router.put(
     }
 
     const newPromoId = promoRow?.id ?? null;
+
+    // Once a Stripe subscription exists (card on file), its price, coupon,
+    // and trial_end are already fixed in Stripe. Changing the local plan or
+    // promo here would silently diverge from what Stripe will charge — so
+    // lock edits and direct the user to cancel billing first (free during
+    // the trial), then re-pick a plan and re-checkout.
+    const [current] = await db
+      .select({
+        stripeSubscriptionId: orgSubscriptions.stripeSubscriptionId,
+        plan: orgSubscriptions.plan,
+        promoCodeId: orgSubscriptions.promoCodeId,
+      })
+      .from(orgSubscriptions)
+      .where(eq(orgSubscriptions.organizationId, orgId))
+      .limit(1);
+    if (
+      current?.stripeSubscriptionId &&
+      (current.plan !== plan || (current.promoCodeId ?? null) !== newPromoId)
+    ) {
+      apiError(
+        res,
+        409,
+        "You already have a card on file for your current plan. Cancel billing first (free during your trial), then pick a new plan.",
+        { code: "PLAN_LOCKED" },
+      );
+      return;
+    }
+
     const createdAt = await orgCreatedAt(orgId);
     if (!createdAt) {
       apiError(res, 404, "Organization not found.", { code: "NOT_FOUND" });
@@ -347,7 +375,11 @@ router.put(
           set: {
             plan,
             promoCodeId: newPromoId,
-            billingStartsAt: startsAt,
+            // Stamp the charge date exactly once. Re-deriving it on every
+            // plan edit would move the date (the computed value has a
+            // rolling now+49h floor) and drift from the Stripe trial_end
+            // already fixed at checkout.
+            billingStartsAt: sql`COALESCE(${orgSubscriptions.billingStartsAt}, ${startsAt})`,
             updatedAt: new Date(),
           },
         })

@@ -142,6 +142,16 @@ export default function OrgSubscribePage() {
   const applyPromoCode = async () => {
     const code = promoInput.trim();
     if (!code) return;
+    // Promo is locked once a card is on file — the coupon is already fixed
+    // on the Stripe subscription. Cancel billing first, then re-apply.
+    if (hasCardOnFile) {
+      toast({
+        title: "Promo locked while billing is scheduled",
+        description:
+          "You already have a card on file. Cancel billing below (free during your trial), then apply a promo code and re-add your card.",
+      });
+      return;
+    }
     setCheckingPromo(true);
     setPromoError(null);
     try {
@@ -163,6 +173,14 @@ export default function OrgSubscribePage() {
   };
 
   const clearPromo = () => {
+    if (hasCardOnFile) {
+      toast({
+        title: "Promo locked while billing is scheduled",
+        description:
+          "You already have a card on file with this promo applied. Cancel billing below first if you want to change it.",
+      });
+      return;
+    }
     setPromo(null);
     setPromoInput("");
     setPromoError(null);
@@ -301,7 +319,20 @@ export default function OrgSubscribePage() {
               <button
                 key={plan.id}
                 type="button"
-                onClick={() => setSelected(plan.id)}
+                onClick={() => {
+                  // Plan is locked once a card is on file — the Stripe
+                  // subscription already carries the old price. Cancel
+                  // billing first, then re-pick.
+                  if (hasCardOnFile && plan.id !== activePlan) {
+                    toast({
+                      title: "Plan locked while billing is scheduled",
+                      description:
+                        "You already have a card on file for your current plan. Cancel billing below (free during your trial), then pick a new plan.",
+                    });
+                    return;
+                  }
+                  setSelected(plan.id);
+                }}
                 data-testid={`plan-${plan.id}`}
                 className={`relative text-left rounded-xl border-2 p-6 transition-all ${
                   isSelected
