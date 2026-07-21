@@ -69,7 +69,7 @@ interface TournamentGroup {
   startDate: string;
   endDate: string;
   // Last calendar day (YYYY-MM-DD) free game recaps are available for this
-  // team — one week after the tournament starts. Null for org-backed teams,
+  // team — two weeks after the tournament starts. Null for org-backed teams,
   // which have normal recap rights (no free-window notice).
   recapFreeUntil: string | null;
   logoUrl: string | null;
@@ -175,7 +175,7 @@ function formatCountdown(ms: number): string {
 }
 
 // Note + live countdown for the team's free game recap period. Recaps are free
-// for one week after a tournament starts. If a window is currently open we count
+// for two weeks after a tournament starts. If a window is currently open we count
 // down to when it ends; otherwise we note the next/last window.
 function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
   const [now, setNow] = useState(() => Date.now());
@@ -200,7 +200,9 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     body = (
       <p className="mt-0.5 flex items-center gap-1.5 text-xs">
         <Clock className="w-3 h-3 shrink-0" />
-        Free for 1 week after the tournament starts. Ends {dayLabel(end)} —{" "}
+        Your standalone team page is free for 2 weeks after the tournament
+        starts, then it must join or create an organization. Ends{" "}
+        {dayLabel(end)} —{" "}
         <span
           className="font-black tabular-nums"
           data-testid="free-recap-countdown"
@@ -216,7 +218,8 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     body = (
       <p className="mt-0.5 text-xs">
         Free game recaps unlock when the tournament starts on {dayLabel(start)},
-        then stay free for 1 week.
+        then stay free for 2 weeks. After that, your standalone team page must
+        join or create an organization to keep going.
       </p>
     );
   } else {
@@ -224,8 +227,10 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     tone = "muted";
     body = (
       <p className="mt-0.5 text-xs">
-        The free game recap period ended on {dayLabel(end)}. Join or create an
-        organization to keep publishing recaps.
+        Your team page's free 2-week window ended on {dayLabel(end)}. Join or
+        create an organization to keep publishing recaps — creating an
+        organization starts a 90-day free period, so your team keeps going
+        without interruption.
       </p>
     );
   }

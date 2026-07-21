@@ -60,7 +60,7 @@ export function buildCompetitionInviteMessage(
     `Kinectem is a storytelling platform for youth sports organizations, where coaches publish game recaps that live on team pages and tag to each player's profile — going beyond the box score, capturing the hustle plays and turning points the stat sheet misses.`,
     ``,
     `Why claim your team's page:`,
-    `- It's completely free to claim — and if your club creates its own Kinectem organization, your first 90 days are free with no charge until then`,
+    `- It's completely free to claim (teams new to Kinectem get a standalone team page free for 2 weeks after our event starts — after that, just create or join an organization on Kinectem; a new organization's first 90 days are free, so your team keeps going without interruption)`,
     `- Your ${typeLabel} schedule shows up on your team page automatically`,
     `- Share game recaps and highlights after every game`,
     `- Parents and players can follow your team page for updates`,

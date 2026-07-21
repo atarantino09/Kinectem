@@ -2024,7 +2024,7 @@ router.post(
           return apiError(
             res,
             403,
-            "This tournament has ended. Create or join an organization to keep posting game recaps.",
+            "Your team's free 2-week window has ended. Standalone team pages only work for 2 weeks — create or join an organization (organizations get 90 days free) to keep posting game recaps.",
             { code: "tournament_window_closed" },
           );
         }
