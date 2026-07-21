@@ -11,7 +11,8 @@ import { logger } from "../lib/logger.js";
 // <APP_BASE_URL>/api/stripe/webhook and paste its signing secret into Secrets.
 // Without it the card-on-file flow still works via the Checkout success-redirect
 // reconcile; this handler just keeps org_subscriptions.status fresh after the
-// Nov 1 charge (active / past_due / canceled).
+// first charge at the end of the org's 90-day free period
+// (active / past_due / canceled).
 export async function stripeWebhookHandler(
   req: Request,
   res: Response,

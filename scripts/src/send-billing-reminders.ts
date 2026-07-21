@@ -1,5 +1,7 @@
-// Send the "add a card before November 1" reminder to org admins whose
-// organization has chosen a plan but has NOT yet put a card on file.
+// Send the "add a card before your free period ends" reminder to org admins
+// whose organization has chosen a plan but has NOT yet put a card on file.
+// Each org's free period is 90 days from its creation, so the email quotes
+// that org's own billing start date (org_subscriptions.billing_starts_at).
 //
 // Run from the repo root:
 //   pnpm --filter @workspace/scripts run send-billing-reminders -- --dry-run
@@ -7,11 +9,12 @@
 //
 // "No card on file" = org_subscriptions.stripe_subscription_id IS NULL. The
 // reminder goes to every owner/admin of each such org that has an email.
+// Only orgs whose billing starts within the next 21 days are included, so a
+// scheduled run doesn't nag orgs months away from their charge date.
 //
-// Scheduling: this is meant to run once on 2026-10-15 (e.g. a Replit Scheduled
-// Deployment, or trigger it manually). It is NOT idempotent — re-running
-// re-sends to everyone still missing a card. Always preview with --dry-run
-// first to see the exact recipient list.
+// Scheduling: run WEEKLY (e.g. a Replit Scheduled Deployment). It is NOT
+// idempotent — re-running re-sends to everyone still missing a card whose
+// date is inside the window. Always preview with --dry-run first.
 //
 // This script is intentionally self-contained: leaf workspace packages can't
 // import the api-server's email helpers, so the SendGrid send + the approved
@@ -25,7 +28,7 @@ import {
   orgSubscriptions,
   users,
 } from "@workspace/db";
-import { and, eq, isNull, inArray } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, inArray, lte, gte } from "drizzle-orm";
 
 type PlanTier = "starter" | "pro" | "elite";
 
@@ -139,25 +142,35 @@ async function sendEmail(
   }
 }
 
+function formatDate(d: Date): string {
+  return d.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function buildEmail(args: {
   adminName: string;
   orgName: string;
   plan: PlanTier;
   orgId: string;
+  billingStartsAt: Date;
 }): { subject: string; text: string; html: string } {
   const greeting = firstName(args.adminName);
   const planName = PLAN_LABEL[args.plan];
   const price = `$${PLAN_YEARLY_USD[args.plan].toLocaleString("en-US")}`;
   const url = subscribeUrl(args.orgId);
+  const dateLabel = formatDate(args.billingStartsAt);
 
-  const subject =
-    "Your Kinectem teams are set — one quick step before November 1";
+  const subject = `Your Kinectem teams are set — one quick step before ${dateLabel}`;
 
   const text = `Hi ${greeting},
 
 It's been a joy watching ${args.orgName} bring its teams, players, and families onto Kinectem.
 
-Your free launch period wraps up on November 1, when annual billing begins for your ${planName} plan (${price}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. You won't be charged until November 1.
+Your 90-day free period wraps up on ${dateLabel}, when annual billing begins for your ${planName} plan (${price}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. You won't be charged until ${dateLabel}, and you can cancel any time during your free period at no cost.
 
 Add your card: ${url}
 
@@ -169,7 +182,7 @@ Thanks for being one of our founding organizations — here's to a great season 
 
   const html = `<p>Hi ${escapeHtml(greeting)},</p>
 <p>It's been a joy watching <strong>${escapeHtml(args.orgName)}</strong> bring its teams, players, and families onto Kinectem. 🎉</p>
-<p>Your free launch period wraps up on <strong>November 1</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until November 1.</strong></p>
+<p>Your 90-day free period wraps up on <strong>${escapeHtml(dateLabel)}</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until ${escapeHtml(dateLabel)}</strong>, and you can cancel any time during your free period at no cost.</p>
 <p><a href="${escapeHtml(url)}">Add your card →</a></p>
 <p>It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts.</p>
 <p>Thanks for being one of our founding organizations — here's to a great season ahead.</p>
@@ -181,19 +194,30 @@ Thanks for being one of our founding organizations — here's to a great season 
 async function main() {
   const dryRun = process.argv.slice(2).includes("--dry-run");
 
-  // Orgs with a chosen plan but no card on file yet.
+  // Orgs with a chosen plan but no card on file yet, whose billing starts
+  // within the next 21 days.
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000);
   const subs = await db
     .select({
       orgId: orgSubscriptions.organizationId,
       plan: orgSubscriptions.plan,
       orgName: organizations.name,
+      billingStartsAt: orgSubscriptions.billingStartsAt,
     })
     .from(orgSubscriptions)
     .innerJoin(
       organizations,
       eq(organizations.id, orgSubscriptions.organizationId),
     )
-    .where(isNull(orgSubscriptions.stripeSubscriptionId));
+    .where(
+      and(
+        isNull(orgSubscriptions.stripeSubscriptionId),
+        isNotNull(orgSubscriptions.billingStartsAt),
+        gte(orgSubscriptions.billingStartsAt, now),
+        lte(orgSubscriptions.billingStartsAt, windowEnd),
+      ),
+    );
 
   if (subs.length === 0) {
     console.log("No organizations need a billing reminder. Nothing to do.");
@@ -233,6 +257,7 @@ async function main() {
         orgName: sub.orgName,
         plan: sub.plan as PlanTier,
         orgId: sub.orgId,
+        billingStartsAt: sub.billingStartsAt!,
       });
       if (dryRun) {
         console.log(`[dry-run] ${r.email} <- ${sub.orgName} (${sub.plan})`);

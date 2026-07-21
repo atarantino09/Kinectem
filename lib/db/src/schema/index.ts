@@ -1486,9 +1486,9 @@ export const promoCodes = pgTable("promo_codes", {
 });
 
 // One subscription record per organization (the org's chosen plan). Created /
-// updated from the post-creation checkout page. During the free launch window
-// the status stays "trialing" and `billingStartsAt` marks when real billing
-// begins (2026-11-01 at launch).
+// updated from the post-creation checkout page. During the 90-day free period
+// (from org creation) the status stays "trialing" and `billingStartsAt` marks
+// when real billing begins (org.createdAt + 90 days).
 export const orgSubscriptions = pgTable("org_subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")
@@ -1504,6 +1504,9 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   billingStartsAt: timestamp("billing_starts_at"),
+  // Stamped when the "your first charge is coming up" reminder email was
+  // sent (~14 days before billingStartsAt), so the sweep never re-sends.
+  trialReminderSentAt: timestamp("trial_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

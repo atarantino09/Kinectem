@@ -1817,6 +1817,29 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON tournaments (claim_token) WHERE claim_token IS NOT NULL;
     `,
   },
+  {
+    // Task #794 — rolling 90-day free period. Billing now starts 90 days
+    // after each org's creation instead of the fixed Nov 1 2026 date.
+    // Re-stamps existing rows from organizations.created_at (floored at
+    // NOW() + 3 days so nothing lands in the past), and adds the
+    // trial_reminder_sent_at stamp for the 14-days-before-charge reminder.
+    // Rows with a live Stripe subscription also need their Stripe trial_end
+    // moved via the API — run scripts/sync-stripe-trial-ends for those.
+    name: "2026-07-21-task-794-rolling-90-day-free-period",
+    sql: `
+      ALTER TABLE org_subscriptions
+        ADD COLUMN IF NOT EXISTS trial_reminder_sent_at timestamp;
+      UPDATE org_subscriptions s
+      SET billing_starts_at = GREATEST(
+            o.created_at + interval '90 days',
+            NOW() + interval '3 days'
+          ),
+          updated_at = NOW()
+      FROM organizations o
+      WHERE o.id = s.organization_id
+        AND s.billing_starts_at = '2026-11-01T00:00:00Z';
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

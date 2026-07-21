@@ -17,13 +17,26 @@ const PLAN_PRODUCT_NAME: Record<PlanTier, string> = {
   elite: "Kinectem Elite",
 };
 
-// Annual billing begins here. Card-on-file subscriptions are created with a
-// trial that ends at this instant, so Stripe collects the card now and runs the
-// first charge automatically on this date — nothing is charged today.
-export const BILLING_STARTS_AT = "2026-11-01T00:00:00.000Z";
+// Every organization gets a rolling free period: 90 days from the moment the
+// org is created. Card-on-file subscriptions are created with a trial that
+// ends at that instant, so Stripe collects the card now and runs the first
+// charge automatically on day 90 — nothing is charged today.
+export const FREE_PERIOD_DAYS = 90;
 
-function billingTrialEndUnix(): number {
-  return Math.floor(new Date(BILLING_STARTS_AT).getTime() / 1000);
+// Stripe Checkout requires trial_end to be at least 48 hours in the future.
+// For orgs already older than (90 days - 48h) we floor the trial end at the
+// smallest safe value so checkout still succeeds and the charge kicks in at
+// the next minimum Stripe allows.
+const MIN_TRIAL_END_MS = 49 * 60 * 60 * 1000; // 48h Stripe minimum + 1h buffer
+
+// The instant an org's card is charged: creation + 90 days, floored at the
+// Stripe-safe minimum from `now`.
+export function billingStartDate(orgCreatedAt: Date, now = new Date()): Date {
+  const target = new Date(
+    orgCreatedAt.getTime() + FREE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const floor = new Date(now.getTime() + MIN_TRIAL_END_MS);
+  return target.getTime() > floor.getTime() ? target : floor;
 }
 
 // Public base URL of the app (no trailing slash). Mirrors email.ts.
@@ -129,10 +142,12 @@ export type CheckoutInput = {
   customerEmail: string | null;
   existingCustomerId: string | null;
   promo: PromoInput | null;
+  // When the org was created — drives the 90-day trial end.
+  orgCreatedAt: Date;
 };
 
 // Create a Checkout Session that saves a card on file and schedules the first
-// charge for BILLING_STARTS_AT (Nov 1). No charge happens today.
+// charge for 90 days after the org was created. No charge happens today.
 export async function createCardOnFileCheckout(
   input: CheckoutInput,
 ): Promise<{ url: string } | { error: string }> {
@@ -160,7 +175,9 @@ export async function createCardOnFileCheckout(
           : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_end: billingTrialEndUnix(),
+        trial_end: Math.floor(
+          billingStartDate(input.orgCreatedAt).getTime() / 1000,
+        ),
         metadata: { orgId: input.orgId, plan: input.plan },
       },
       ...(discounts ? { discounts } : {}),
@@ -176,6 +193,25 @@ export async function createCardOnFileCheckout(
     // Provisioning a price/coupon or creating the session failed (transient
     // Stripe error, bad key, etc.). Surface a controlled error to the caller.
     return { error: "CHECKOUT_FAILED" };
+  }
+}
+
+// Cancel a Stripe subscription immediately. During the free period (trial)
+// this cancels with zero charge — the card was never billed. Treats an
+// already-canceled/missing subscription as success so the flow is idempotent.
+export async function cancelStripeSubscription(
+  subscriptionId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const stripe = await getStripeClient();
+  if (!stripe) return { error: "STRIPE_NOT_CONFIGURED" };
+  try {
+    await stripe.subscriptions.cancel(subscriptionId);
+    return { ok: true };
+  } catch (err) {
+    // Already canceled or gone — treat as success.
+    const msg = err instanceof Error ? err.message : "";
+    if (/No such subscription|canceled/i.test(msg)) return { ok: true };
+    return { error: "CANCEL_FAILED" };
   }
 }
 

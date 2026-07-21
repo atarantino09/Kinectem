@@ -754,12 +754,12 @@ function buildPromoReferralMessage(competitionName: string): string {
 
 If your club isn't on Kinectem yet, now is a great time to join. Kinectem is the youth-sports platform we use for ${competitionName} — team pages, schedules, game recaps, and safe, COPPA-compliant profiles for players and parents.
 
-As a team in our competition, your organization gets 25% off your first year on any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)} for your first year to get your whole club on board.
+Every new organization gets its first 90 days on Kinectem completely free — your card isn't charged until day 90, and you can cancel anytime during the free period at no cost. On top of that, as a team in our competition, your organization gets 25% off your first year on any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)} for your first year to get your whole club on board.
 
 Here's how to claim it:
-1. Go to Kinectem and create your organization.
+1. Go to Kinectem and create your organization — your 90-day free period starts right away.
 2. Pick the plan that fits your club's size.
-3. Enter promo code [YOUR PROMO CODE] at checkout to get 25% off your first year.
+3. Enter promo code [YOUR PROMO CODE] when you pick your plan — it's applied automatically at checkout, and the 25% discount comes off your first charge.
 
 Feel free to reach out if you have any questions — we'd love to see your club on Kinectem.
 

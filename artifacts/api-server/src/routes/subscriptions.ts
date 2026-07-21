@@ -16,6 +16,9 @@ import { canManageOrganization } from "../lib/permissions";
 import {
   createCardOnFileCheckout,
   readCheckoutSession,
+  cancelStripeSubscription,
+  billingStartDate,
+  FREE_PERIOD_DAYS,
 } from "../lib/stripe-billing";
 
 const router: IRouter = Router();
@@ -25,10 +28,10 @@ const ONE_MINUTE = 60 * 1000;
 // ---------------------------------------------------------------------------
 // Plan catalog + launch window
 //
-// Prices mirror the public marketing pricing page. Stripe is not connected
-// yet — checkout records the chosen plan + promo so it can be wired to Stripe
-// later. During the free launch window every new subscription stays
-// "trialing" and real billing begins on BILLING_STARTS_AT.
+// Prices mirror the public marketing pricing page. Every organization gets
+// FREE_PERIOD_DAYS (90) free from the moment the org is created; during that
+// window the subscription stays "trialing" and the first charge lands on
+// billingStartDate(org.createdAt) — see lib/stripe-billing.ts.
 // ---------------------------------------------------------------------------
 type PlanTier = "starter" | "pro" | "elite";
 
@@ -87,8 +90,15 @@ const PLAN_CATALOG: Array<{
 
 const PLAN_IDS = PLAN_CATALOG.map((p) => p.id) as [PlanTier, ...PlanTier[]];
 
-// Annual billing begins on this date. Until then the platform is free.
-const BILLING_STARTS_AT = "2026-11-01T00:00:00.000Z";
+// Fetch the org's creation instant (null when the org doesn't exist).
+async function orgCreatedAt(orgId: string): Promise<Date | null> {
+  const [org] = await db
+    .select({ createdAt: organizations.createdAt })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  return org?.createdAt ?? null;
+}
 
 const promoValidateLimiter = rateLimit({
   name: "promo-validate",
@@ -227,11 +237,21 @@ router.get(
     const plan = (sub?.plan as PlanTier | undefined) ?? DEFAULT_PLAN;
     const teamsLimit = teamLimitForPlan(plan);
     const teamsUsed = await countActiveTeams(orgId);
+    const createdAt = await orgCreatedAt(orgId);
+
+    // Prefer the persisted date (what reminders + Stripe actually use); the
+    // computed fallback only covers orgs that haven't picked a plan yet. The
+    // computed value has a rolling now+49h floor, so re-deriving it on every
+    // request would let the displayed date drift.
+    const billingStartsAt =
+      sub?.billingStartsAt ?? (createdAt ? billingStartDate(createdAt) : null);
 
     res.json({
       subscription: serializeSubscription(sub, promo),
       plans: PLAN_CATALOG,
-      billingStartsAt: BILLING_STARTS_AT,
+      // The org's real charge date: creation + 90 days (Stripe-safe floor).
+      billingStartsAt: billingStartsAt?.toISOString() ?? null,
+      freePeriodDays: FREE_PERIOD_DAYS,
       usage: {
         plan,
         teamsUsed,
@@ -294,6 +314,12 @@ router.put(
     }
 
     const newPromoId = promoRow?.id ?? null;
+    const createdAt = await orgCreatedAt(orgId);
+    if (!createdAt) {
+      apiError(res, 404, "Organization not found.", { code: "NOT_FOUND" });
+      return;
+    }
+    const startsAt = billingStartDate(createdAt);
 
     // Upsert the subscription and keep promo redemption counts in lockstep in
     // a single transaction: when the applied promo changes we decrement the
@@ -314,13 +340,14 @@ router.put(
           plan,
           status: "trialing",
           promoCodeId: newPromoId,
-          billingStartsAt: new Date(BILLING_STARTS_AT),
+          billingStartsAt: startsAt,
         })
         .onConflictDoUpdate({
           target: orgSubscriptions.organizationId,
           set: {
             plan,
             promoCodeId: newPromoId,
+            billingStartsAt: startsAt,
             updatedAt: new Date(),
           },
         })
@@ -360,8 +387,8 @@ router.put(
 // ---------------------------------------------------------------------------
 // POST /organizations/:orgId/billing/checkout-session — start the "add a card
 // on file" flow. Returns a Stripe Checkout URL. The card is saved now and the
-// first charge runs automatically on BILLING_STARTS_AT (Nov 1); nothing is
-// charged today. The org must have chosen a plan first (PUT subscription).
+// first charge runs automatically 90 days after the org was created; nothing
+// is charged today. The org must have chosen a plan first (PUT subscription).
 // ---------------------------------------------------------------------------
 router.post(
   "/organizations/:orgId/billing/checkout-session",
@@ -410,12 +437,19 @@ router.post(
       }
     }
 
+    const createdAt = await orgCreatedAt(orgId);
+    if (!createdAt) {
+      apiError(res, 404, "Organization not found.", { code: "NOT_FOUND" });
+      return;
+    }
+
     const result = await createCardOnFileCheckout({
       orgId,
       plan: sub.plan,
       customerEmail: me.email ?? null,
       existingCustomerId: sub.stripeCustomerId,
       promo,
+      orgCreatedAt: createdAt,
     });
     if ("error" in result) {
       const msg =
@@ -507,6 +541,69 @@ router.post(
       }
     }
     res.json({ subscription: serializeSubscription(sub, promo) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// POST /organizations/:orgId/billing/cancel — cancel the scheduled billing.
+// During the 90-day free period this cancels the Stripe subscription (still
+// trialing, so nothing was ever charged) and removes the card on file. The
+// org keeps its chosen plan and stays usable through the free period.
+// ---------------------------------------------------------------------------
+router.post(
+  "/organizations/:orgId/billing/cancel",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) {
+      apiError(res, 401, "Not authenticated", { code: "UNAUTHENTICATED" });
+      return;
+    }
+    const orgId = req.params.orgId;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      apiError(res, 403, "You don't manage this organization.", {
+        code: "FORBIDDEN",
+      });
+      return;
+    }
+    const [sub] = await db
+      .select()
+      .from(orgSubscriptions)
+      .where(eq(orgSubscriptions.organizationId, orgId))
+      .limit(1);
+    if (!sub?.stripeSubscriptionId) {
+      // Nothing scheduled — idempotent success.
+      res.json({ ok: true, canceled: false });
+      return;
+    }
+    // Cancel-free is a free-period-only escape hatch: once the subscription
+    // has been charged (status past "trialing"), self-serve cancel would
+    // rewrite paid state — direct those orgs to support instead.
+    if (sub.status !== "trialing") {
+      apiError(
+        res,
+        409,
+        "Your subscription is already active. Contact support to make billing changes.",
+        { code: "SUBSCRIPTION_ACTIVE" },
+      );
+      return;
+    }
+    const result = await cancelStripeSubscription(sub.stripeSubscriptionId);
+    if ("error" in result) {
+      apiError(res, 503, "Couldn't cancel billing. Please try again.", {
+        code: result.error,
+      });
+      return;
+    }
+    await db
+      .update(orgSubscriptions)
+      .set({
+        stripeSubscriptionId: null,
+        status: "trialing",
+        updatedAt: new Date(),
+      })
+      .where(eq(orgSubscriptions.organizationId, orgId));
+    res.json({ ok: true, canceled: true });
   }),
 );
 

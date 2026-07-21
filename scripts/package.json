@@ -24,6 +24,8 @@
     "seed-ai-assist-demo": "tsx ./src/seed-ai-assist-demo.ts",
     "seed-production-orgs": "tsx ./src/seed-production-orgs.ts",
     "send-billing-reminders": "tsx ./src/send-billing-reminders.ts",
+    "send-trial-ending-reminders": "tsx ./src/send-trial-ending-reminders.ts",
+    "sync-stripe-trial-ends": "tsx ./src/sync-stripe-trial-ends.ts",
     "send-weekly-digest": "tsx ./src/send-weekly-digest.ts",
     "send-inactivity-nudge": "tsx ./src/send-inactivity-nudge.ts",
     "send-daily-admin-digest": "tsx ./src/send-daily-admin-digest.ts",

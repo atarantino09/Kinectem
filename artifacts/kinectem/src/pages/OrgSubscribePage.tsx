@@ -31,10 +31,21 @@ type SubscriptionResponse = {
     hasCardOnFile?: boolean;
   } | null;
   plans: Plan[];
-  billingStartsAt: string;
+  billingStartsAt: string | null;
+  freePeriodDays?: number;
 };
 
-const BILLING_DATE_LABEL = "November 1, 2026";
+// Format the org's real charge date (creation + 90 days) for display.
+function formatBillingDate(iso: string | null | undefined): string {
+  if (!iso) return "the end of your free period";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "the end of your free period";
+  return d.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default function OrgSubscribePage() {
   const { orgId } = useParams<{ orgId: string }>();
@@ -61,7 +72,9 @@ export default function OrgSubscribePage() {
   const [promoError, setPromoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [startingCheckout, setStartingCheckout] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const hasCardOnFile = Boolean(data?.subscription?.hasCardOnFile);
+  const billingDateLabel = formatBillingDate(data?.billingStartsAt);
 
   // Seed the selected plan + applied promo from the org's existing
   // subscription (once), so reopening this page doesn't silently reset a
@@ -99,7 +112,8 @@ export default function OrgSubscribePage() {
         .then(() => {
           toast({
             title: "Card saved! 🎉",
-            description: `You're all set — billing begins ${BILLING_DATE_LABEL}. No charge until then.`,
+            description:
+              "You're all set — your first charge comes at the end of your 90-day free period. Nothing until then, and you can cancel anytime before it at no cost.",
           });
           queryClient.invalidateQueries({
             queryKey: ["org-subscription", orgId],
@@ -187,13 +201,38 @@ export default function OrgSubscribePage() {
     }
   };
 
+  // Cancel scheduled billing during the free period — removes the card on
+  // file with zero charge. The org keeps its plan through the free period.
+  const cancelBilling = async () => {
+    setCanceling(true);
+    try {
+      await customFetch(`/api/v1/organizations/${orgId}/billing/cancel`, {
+        method: "POST",
+      });
+      toast({
+        title: "Billing canceled",
+        description:
+          "Your card was removed and you won't be charged. You can add a card again any time before your free period ends.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["org-subscription", orgId] });
+    } catch {
+      toast({
+        title: "Couldn't cancel billing",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   const continueToOrg = async () => {
     setSaving(true);
     try {
       await savePlan();
       toast({
         title: "You're all set!",
-        description: `Your ${selected} plan is saved. Enjoy Kinectem free until ${BILLING_DATE_LABEL}.`,
+        description: `Your ${selected} plan is saved. Enjoy Kinectem free until ${billingDateLabel}.`,
       });
       // Land on the org page with the "Bulk add teams" popup open so the
       // user can stand up their roster of teams right after checkout.
@@ -224,14 +263,15 @@ export default function OrgSubscribePage() {
           </div>
           <div className="space-y-1">
             <h2 className="text-lg font-black tracking-tight">
-              Your organization is free until {BILLING_DATE_LABEL} 🎉
+              Your first 90 days are free 🎉
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Pick the plan that fits your club and start building right away —
-              you won't be charged a cent today. We'll send a friendly reminder
-              in mid-October so there are no surprises. Annual billing begins{" "}
-              {BILLING_DATE_LABEL}; add a payment method any time before then to
-              keep everything running without a hitch.
+              you won't be charged a cent today. Your free period runs 90 days
+              from the day you created your organization, so your first charge
+              lands on {billingDateLabel}. We'll email you a reminder about two
+              weeks before, and you can cancel any time during your free period
+              and pay nothing at all.
             </p>
           </div>
         </CardContent>
@@ -396,13 +436,30 @@ export default function OrgSubscribePage() {
         </Button>
       </div>
       {hasCardOnFile ? (
-        <p className="text-center text-xs font-medium text-emerald-600 flex items-center justify-center gap-1">
-          <CheckCircle2 className="w-3.5 h-3.5" /> Card on file — billing begins{" "}
-          {BILLING_DATE_LABEL}. No charge until then.
-        </p>
+        <div className="space-y-2">
+          <p className="text-center text-xs font-medium text-emerald-600 flex items-center justify-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Card on file — your first
+            charge is {billingDateLabel}. No charge until then.
+          </p>
+          <p className="text-center text-xs text-muted-foreground">
+            Changed your mind?{" "}
+            <button
+              type="button"
+              onClick={cancelBilling}
+              disabled={canceling}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+              data-testid="btn-cancel-billing"
+            >
+              {canceling ? "Canceling…" : "Cancel billing"}
+            </button>{" "}
+            any time during your free period and you won't pay a cent.
+          </p>
+        </div>
       ) : (
         <p className="text-center text-xs text-muted-foreground">
-          No charge today. Annual billing begins {BILLING_DATE_LABEL}.
+          No charge today — your first 90 days are free. Annual billing begins{" "}
+          {billingDateLabel}, and you can cancel any time before then at no
+          cost.
         </p>
       )}
     </div>
