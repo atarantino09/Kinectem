@@ -48,9 +48,11 @@ import {
   Link2,
   Copy,
   AlertTriangle,
+  FileUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
+import { parseRosterCsv, type RosterCsvRow } from "@/lib/roster-csv";
 
 const POSITIONS = [
   { value: "player", label: "Player" },
@@ -86,6 +88,15 @@ type SendOutcome = {
   emailSent?: boolean | null;
   acceptUrl?: string;
 };
+
+// A parsed CSV roster row plus its send-eligibility status.
+type CsvRowStatus = RosterCsvRow & {
+  status: "valid" | "duplicate" | "alreadyOnRoster" | "alreadyPending";
+};
+
+const POSITION_LABELS: Record<string, string> = Object.fromEntries(
+  POSITIONS.map((p) => [p.value, p.label]),
+);
 
 function parseEmails(raw: string): string[] {
   return raw
@@ -126,6 +137,17 @@ export function InviteRosterDialog({
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkResults, setBulkResults] = useState<SendOutcome[] | null>(null);
   const bulkAbortRef = useRef(false);
+
+  // "Import CSV" tab — roster export from another platform (GotSport,
+  // TeamSnap, PlayMetrics, …). Parsed entirely in the browser; sends through
+  // the same roster-invite endpoint as the bulk tab, one row at a time.
+  const [csvText, setCsvText] = useState("");
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  const [csvSending, setCsvSending] = useState(false);
+  const [csvProgress, setCsvProgress] = useState({ done: 0, total: 0 });
+  const [csvResults, setCsvResults] = useState<SendOutcome[] | null>(null);
+  const csvAbortRef = useRef(false);
+  const csvFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Task #654 — outcome of the most recent single email invite, used to show
   // honest "emailed / couldn't email" feedback plus a copy-link fallback.
@@ -270,6 +292,12 @@ export function InviteRosterDialog({
       setBulkSending(false);
       setBulkProgress({ done: 0, total: 0 });
       setBulkResults(null);
+      setCsvText("");
+      setCsvFileName(null);
+      setCsvSending(false);
+      setCsvProgress({ done: 0, total: 0 });
+      setCsvResults(null);
+      csvAbortRef.current = false;
       setShowFullMessage(false);
       setInviteResult(null);
       setResultCopied(false);
@@ -487,6 +515,114 @@ export function InviteRosterDialog({
     bulkAbortRef.current = true;
   };
 
+  // --- Import CSV tab -------------------------------------------------------
+
+  const csvParsed = useMemo(
+    () => (csvText.trim() ? parseRosterCsv(csvText) : null),
+    [csvText],
+  );
+
+  const csvRows: CsvRowStatus[] = useMemo(() => {
+    if (!csvParsed) return [];
+    const seen = new Set<string>();
+    return csvParsed.rows.map((r) => {
+      let status: CsvRowStatus["status"] = "valid";
+      if (seen.has(r.email)) status = "duplicate";
+      else if (existingEmails.has(r.email)) status = "alreadyOnRoster";
+      else if (pendingEmails.has(r.email)) status = "alreadyPending";
+      seen.add(r.email);
+      return { ...r, status };
+    });
+  }, [csvParsed, existingEmails, pendingEmails]);
+
+  const csvCounts = useMemo(() => {
+    const c = { valid: 0, duplicates: 0, alreadyOn: 0, alreadyPending: 0 };
+    for (const r of csvRows) {
+      if (r.status === "valid") c.valid++;
+      else if (r.status === "duplicate") c.duplicates++;
+      else if (r.status === "alreadyOnRoster") c.alreadyOn++;
+      else c.alreadyPending++;
+    }
+    return c;
+  }, [csvRows]);
+
+  const onPickCsvFile = (file: File | null) => {
+    if (!file) return;
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setCsvText(String(reader.result ?? ""));
+    reader.onerror = () =>
+      toast({ title: "Couldn't read that file", variant: "destructive" });
+    reader.readAsText(file);
+  };
+
+  const onSendCsv = async () => {
+    const sendRows = csvRows.filter((r) => r.status === "valid");
+    const skipped: SendOutcome[] = csvRows
+      .filter((r) => r.status !== "valid")
+      .map((r) => ({
+        email: r.email,
+        status: "skipped",
+        reason:
+          r.status === "duplicate"
+            ? "Duplicate in file"
+            : r.status === "alreadyOnRoster"
+              ? "Already on roster"
+              : "Already invited",
+      }));
+    if (sendRows.length === 0) {
+      toast({ title: "No new people to invite", variant: "destructive" });
+      return;
+    }
+
+    csvAbortRef.current = false;
+    setCsvSending(true);
+    setCsvProgress({ done: 0, total: sendRows.length });
+
+    const sent: SendOutcome[] = [];
+    let cursor = 0;
+    const worker = async () => {
+      while (!csvAbortRef.current) {
+        const idx = cursor++;
+        if (idx >= sendRows.length) return;
+        const row = sendRows[idx];
+        try {
+          // Locked spec: CreateInviteRequest has no `name` field — the
+          // parsed name is preview-only.
+          const resp = await createRosterInvite(teamId, {
+            email: row.email,
+            seasonId,
+            position: row.position,
+          });
+          const extra = resp as { emailSent?: boolean | null; acceptUrl?: string };
+          sent.push({
+            email: row.email,
+            status: "success",
+            emailSent: extra.emailSent ?? null,
+            acceptUrl: extra.acceptUrl,
+          });
+        } catch (err) {
+          let msg = "Failed";
+          if (err && typeof err === "object" && "message" in err) {
+            msg = String((err as { message?: unknown }).message ?? "Failed");
+          }
+          sent.push({ email: row.email, status: "failed", reason: msg });
+        } finally {
+          setCsvProgress((p) => ({ done: p.done + 1, total: p.total }));
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(BULK_CONCURRENCY, sendRows.length) }, () =>
+        worker(),
+      ),
+    );
+
+    await invalidate();
+    setCsvSending(false);
+    setCsvResults([...sent, ...skipped]);
+  };
+
   const helperFor = (pos: AddTeamMemberRequestPosition) => {
     if (pos === "player") {
       return (
@@ -654,15 +790,26 @@ export function InviteRosterDialog({
         )}
 
         <Tabs defaultValue="search" className="mt-2 min-w-0">
-          <TabsList className="grid grid-cols-3 w-full">
-            <TabsTrigger value="search" className="font-bold">
-              <UserCheck className="w-4 h-4 mr-2" /> Existing user
+          <TabsList className="grid grid-cols-4 w-full">
+            <TabsTrigger value="search" className="font-bold text-xs sm:text-sm">
+              <UserCheck className="w-4 h-4 mr-1.5 hidden sm:inline" /> Existing
             </TabsTrigger>
-            <TabsTrigger value="email" className="font-bold">
-              <Mail className="w-4 h-4 mr-2" /> Email invite
+            <TabsTrigger value="email" className="font-bold text-xs sm:text-sm">
+              <Mail className="w-4 h-4 mr-1.5 hidden sm:inline" /> Email
             </TabsTrigger>
-            <TabsTrigger value="bulk" className="font-bold" data-testid="tab-bulk-invite">
-              <Users className="w-4 h-4 mr-2" /> Bulk invite
+            <TabsTrigger
+              value="bulk"
+              className="font-bold text-xs sm:text-sm"
+              data-testid="tab-bulk-invite"
+            >
+              <Users className="w-4 h-4 mr-1.5 hidden sm:inline" /> Bulk
+            </TabsTrigger>
+            <TabsTrigger
+              value="csv"
+              className="font-bold text-xs sm:text-sm"
+              data-testid="tab-csv-import"
+            >
+              <FileUp className="w-4 h-4 mr-1.5 hidden sm:inline" /> Import CSV
             </TabsTrigger>
           </TabsList>
 
@@ -1182,6 +1329,266 @@ export function InviteRosterDialog({
                     {bulkSending
                       ? `Sending ${bulkProgress.done} of ${bulkProgress.total}…`
                       : `Send ${counts.valid} invite${counts.valid === 1 ? "" : "s"}`}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="csv" className="mt-4 space-y-3">
+            {csvResults ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="text-2xl font-black text-emerald-700">
+                      {csvResults.filter((r) => r.status === "success").length}
+                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Invited</p>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-2xl font-black text-amber-700">
+                      {csvResults.filter((r) => r.status === "skipped").length}
+                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Skipped</p>
+                  </div>
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+                    <p className="text-2xl font-black text-rose-700">
+                      {csvResults.filter((r) => r.status === "failed").length}
+                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Failed</p>
+                  </div>
+                </div>
+                <div className="border border-border rounded-lg max-h-64 overflow-y-auto divide-y divide-border text-sm">
+                  {csvResults.map((r, i) => (
+                    <div
+                      key={`${r.email}-${i}`}
+                      className="flex items-center gap-2 p-2"
+                      data-testid={`csv-result-row-${r.status}`}
+                    >
+                      {r.status === "success" && r.emailSent !== false && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                      {r.status === "success" && r.emailSent === false && (
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                      {r.status === "skipped" && (
+                        <MinusCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                      {r.status === "failed" && (
+                        <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      )}
+                      <span className="flex-1 truncate font-mono text-xs">{r.email}</span>
+                      {r.status === "success" && r.emailSent === false && r.acceptUrl && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 font-bold shrink-0 h-7"
+                          onClick={() => copyToClipboard(r.acceptUrl!, "Link")}
+                          data-testid="button-copy-csv-undelivered-link"
+                        >
+                          <Copy className="w-3 h-3" /> Copy link
+                        </Button>
+                      )}
+                      {r.reason && (
+                        <span className="text-[11px] text-muted-foreground">{r.reason}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setCsvResults(null);
+                      setCsvText("");
+                      setCsvFileName(null);
+                    }}
+                    data-testid="btn-csv-import-again"
+                  >
+                    Import another file
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="brand"
+                    onClick={() => onOpenChange(false)}
+                    data-testid="btn-csv-done"
+                  >
+                    Done
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900 space-y-1">
+                  <p className="font-bold">
+                    Coming from GotSport, TeamSnap, PlayMetrics, or another platform?
+                  </p>
+                  <p>
+                    Export your roster there (usually Roster → Export or
+                    Download CSV) and upload the file as-is — no editing
+                    needed. Kinectem finds the email columns automatically.
+                    Player invites go to the parent email when your export has
+                    one.
+                  </p>
+                </div>
+
+                <input
+                  ref={csvFileInputRef}
+                  type="file"
+                  accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+                  className="hidden"
+                  onChange={(e) => {
+                    onPickCsvFile(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                  data-testid="input-csv-file"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2 font-bold"
+                  onClick={() => csvFileInputRef.current?.click()}
+                  disabled={csvSending}
+                  data-testid="btn-csv-choose-file"
+                >
+                  <FileUp className="w-4 h-4" />
+                  {csvFileName ? `Replace ${csvFileName}` : "Choose a roster file"}
+                </Button>
+
+                <div className="space-y-1.5">
+                  <Label className="font-bold text-xs text-muted-foreground">
+                    …or paste the spreadsheet contents
+                  </Label>
+                  <Textarea
+                    value={csvText}
+                    onChange={(e) => {
+                      setCsvText(e.target.value);
+                      setCsvFileName(null);
+                    }}
+                    placeholder={"First Name,Last Name,Role,Parent Email\nJordan,Lee,Player,parent@example.com"}
+                    rows={4}
+                    className="font-mono text-xs"
+                    disabled={csvSending}
+                    data-testid="textarea-csv-paste"
+                  />
+                </div>
+
+                {csvParsed?.noEmailColumn && (
+                  <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
+                    <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">No email column found.</span>{" "}
+                      Make sure your export includes an email or parent/guardian
+                      email column — that's the only column Kinectem needs.
+                    </p>
+                  </div>
+                )}
+                {csvParsed && !csvParsed.noEmailColumn && csvParsed.empty && (
+                  <p className="text-xs text-muted-foreground">
+                    That doesn't look like a spreadsheet — it needs a header row
+                    plus at least one person.
+                  </p>
+                )}
+
+                {csvRows.length > 0 && (
+                  <>
+                    <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+                      <span
+                        className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5"
+                        data-testid="csv-count-valid"
+                      >
+                        {csvCounts.valid} to invite
+                      </span>
+                      {csvCounts.duplicates > 0 && (
+                        <span className="rounded-full bg-slate-100 text-slate-700 px-2 py-0.5">
+                          {csvCounts.duplicates} duplicate
+                        </span>
+                      )}
+                      {csvCounts.alreadyOn > 0 && (
+                        <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">
+                          {csvCounts.alreadyOn} on roster
+                        </span>
+                      )}
+                      {csvCounts.alreadyPending > 0 && (
+                        <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">
+                          {csvCounts.alreadyPending} already invited
+                        </span>
+                      )}
+                      {(csvParsed?.skipped.length ?? 0) > 0 && (
+                        <span className="rounded-full bg-rose-100 text-rose-800 px-2 py-0.5">
+                          {csvParsed!.skipped.length} no email
+                        </span>
+                      )}
+                    </div>
+                    <div className="border border-border rounded-lg max-h-48 overflow-y-auto divide-y divide-border text-sm">
+                      {csvRows.map((r, i) => (
+                        <div
+                          key={`${r.email}-${i}`}
+                          className="flex items-center gap-2 p-2"
+                          data-testid={`csv-preview-row-${r.status}`}
+                        >
+                          <span className="flex-1 min-w-0">
+                            <span className="block truncate text-xs font-bold">
+                              {r.name ?? r.email}
+                            </span>
+                            {r.name && (
+                              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                                {r.email}
+                                {r.emailSource === "parent" ? " (parent)" : ""}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0">
+                            {POSITION_LABELS[r.position] ?? r.position}
+                          </span>
+                          {r.status !== "valid" && (
+                            <span className="text-[11px] text-amber-700 shrink-0">
+                              {r.status === "duplicate"
+                                ? "Duplicate"
+                                : r.status === "alreadyOnRoster"
+                                  ? "On roster"
+                                  : "Invited"}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <DialogFooter>
+                  {csvSending ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        csvAbortRef.current = true;
+                      }}
+                      data-testid="btn-csv-cancel"
+                    >
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => onOpenChange(false)}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="brand"
+                    onClick={onSendCsv}
+                    disabled={csvSending || csvCounts.valid === 0}
+                    data-testid="btn-csv-send"
+                  >
+                    {csvSending
+                      ? `Sending ${csvProgress.done} of ${csvProgress.total}…`
+                      : `Send ${csvCounts.valid} invite${csvCounts.valid === 1 ? "" : "s"}`}
                   </Button>
                 </DialogFooter>
               </>
