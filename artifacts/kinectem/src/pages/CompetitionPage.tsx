@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
 import { Button } from "@/components/ui/button";
@@ -303,12 +304,22 @@ export default function CompetitionPage() {
         <div className="max-w-4xl mx-auto px-6 py-5 space-y-2.5">
           <div className="flex items-start gap-4">
             {c.logoUrl ? (
-              <img
-                src={c.logoUrl}
-                alt={`${c.name} logo`}
-                className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl object-contain bg-white/90 p-1.5 shrink-0"
-                data-testid="img-competition-logo"
-              />
+              <AvatarLightbox
+                avatarUrl={c.logoUrl}
+                displayName={c.name}
+                ariaLabel={`View ${c.name} logo`}
+                triggerClassName="rounded-xl shrink-0 cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                triggerTestId="btn-competition-logo"
+                dialogTestId="dialog-competition-logo"
+                imageTestId="img-competition-logo-expanded"
+              >
+                <img
+                  src={c.logoUrl}
+                  alt={`${c.name} logo`}
+                  className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl object-contain bg-white/90 p-1.5"
+                  data-testid="img-competition-logo"
+                />
+              </AvatarLightbox>
             ) : null}
             <div className="min-w-0 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
