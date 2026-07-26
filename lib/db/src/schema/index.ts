@@ -385,6 +385,11 @@ export const organizations = pgTable("organizations", {
   // default generic gradient and no team-page strip.
   brandPrimaryColor: text("brand_primary_color"),
   brandSecondaryColor: text("brand_secondary_color"),
+  // Task #801 — org-level "Require recap approval" toggle. When FALSE (the
+  // default), coach/staff-authored game recaps publish immediately; when TRUE,
+  // non-admin recaps enter the pending_approval queue for org admins to
+  // approve/decline (the pre-#801 behavior).
+  requireRecapApproval: boolean("require_recap_approval").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { db, highlightTags, rosterEntries, users } from "@workspace/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { db, highlightTags, organizations, rosterEntries, users } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 import {
@@ -21,7 +21,22 @@ async function getOrgAndTeam(name = "Varsity Football") {
   return { org, team };
 }
 
+// Task #801 — recap approval is opt-in per org (default OFF: coach recaps
+// publish immediately). Tests that exercise the pending-approval queue flip
+// the org's toggle ON first; this reset keeps every test starting from the
+// real-world default.
+async function setRequireRecapApproval(orgId: string, on: boolean) {
+  await db
+    .update(organizations)
+    .set({ requireRecapApproval: on })
+    .where(eq(organizations.id, orgId));
+}
+
 describe("posts", () => {
+  beforeEach(async () => {
+    await db.update(organizations).set({ requireRecapApproval: false });
+  });
+
   it("requires authentication for the feed", async () => {
     const res = await request(app).get("/api/v1/feed");
     expect(res.status).toBe(401);
@@ -141,6 +156,7 @@ describe("posts", () => {
   it("non-admin author publish flows through pending_approval and admin can approve", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
     const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
     const marcus = (usersList.body.data ?? usersList.body)[0];
@@ -205,6 +221,7 @@ describe("posts", () => {
   it("non-admin POSTing a long-form recap fans out a pending-approval bell to every org owner/admin", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
 
     const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
@@ -296,6 +313,7 @@ describe("posts", () => {
   it("publishing a non-admin draft into pending_approval also fans out the bell", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
 
     const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
@@ -353,6 +371,7 @@ describe("posts", () => {
   it("re-publishing an already-pending recap does NOT fan out a duplicate pending-approval bell", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
 
     const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
@@ -404,6 +423,7 @@ describe("posts", () => {
   it("a minor actor's last name is masked in the pending-approval bell", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
 
     const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
@@ -462,6 +482,7 @@ describe("posts", () => {
   it("author receives a bell notification when an admin approves or declines their pending recap", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
 
     const usersList = await adminLogin.agent.get("/api/v1/users?q=Marcus");
@@ -545,6 +566,7 @@ describe("posts", () => {
   it("authors can list pending recaps for their team; non-authors get 403; pending recaps don't leak into the public team feed; PATCH preserves pending status; admin queue reflects edits", async () => {
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeam();
+    await setRequireRecapApproval(org.id, true);
     const { team: jv } = await getOrgAndTeam("JV Football");
 
     // Add Marcus as roster `author` so he has recap-create rights.
@@ -671,6 +693,143 @@ describe("posts", () => {
         (p: { id: string }) => p.id === draft.body.id,
       ),
     ).toBeUndefined();
+  });
+
+  // ----------------------------------------------------------------
+  // Task #801 — Auto-approve coach recaps; org opt-in approval toggle
+  // ----------------------------------------------------------------
+
+  it("non-admin author recap publishes immediately when the org toggle is OFF (default)", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const addRes = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcusLogin.user.id, position: "author" });
+    expect(addRes.status).toBe(201);
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${addRes.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    const create = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Auto-approved coach recap",
+      body: "Should go live immediately.",
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.approvalStatus).toBe("published");
+    expect(create.body.requiresApproval).toBe(false);
+
+    // Live on the public team feed, absent from the admin queue.
+    const teamPosts = await marcusLogin.agent.get(`/api/v1/teams/${jv.id}/posts`);
+    expect(
+      teamPosts.body.data.find((p: { id: string }) => p.id === create.body.id),
+    ).toBeDefined();
+    const queue = await adminLogin.agent.get(
+      `/api/v1/organizations/${org.id}/post-approvals`,
+    );
+    expect(
+      queue.body.data.find(
+        (e: { post: { id: string } }) => e.post.id === create.body.id,
+      ),
+    ).toBeUndefined();
+
+    // No pending-approval bell fans out for a direct publish.
+    const ownerInbox = await adminLogin.agent.get("/api/v1/notifications");
+    expect(
+      ownerInbox.body.data.find(
+        (n: { type: string; title: string }) =>
+          n.type === "team_post_pending_approval" &&
+          n.title.includes("Auto-approved coach recap"),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("org admin can flip requireRecapApproval via PATCH and coach recaps go pending again; non-admins can't touch it", async () => {
+    const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { org } = await getOrgAndTeam();
+    const { team: jv } = await getOrgAndTeam("JV Football");
+
+    // Admin-only surface: an org manager sees the field on GET…
+    const adminView = await adminLogin.agent.get(
+      `/api/v1/organizations/${org.id}`,
+    );
+    expect(adminView.body.requireRecapApproval).toBe(false);
+    // …a non-member does not.
+    const marcusLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const outsiderView = await marcusLogin.agent.get(
+      `/api/v1/organizations/${org.id}`,
+    );
+    expect(outsiderView.body.requireRecapApproval).toBeUndefined();
+
+    // Non-admins cannot change the setting (org PATCH is admin-only).
+    const forbidden = await marcusLogin.agent
+      .patch(`/api/v1/organizations/${org.id}`)
+      .send({ requireRecapApproval: true });
+    expect(forbidden.status).toBe(403);
+
+    // Non-boolean values are rejected.
+    const badType = await adminLogin.agent
+      .patch(`/api/v1/organizations/${org.id}`)
+      .send({ requireRecapApproval: "true" });
+    expect(badType.status).toBe(400);
+
+    // Admin flips it ON; the PATCH echo carries the new value.
+    const flipOn = await adminLogin.agent
+      .patch(`/api/v1/organizations/${org.id}`)
+      .send({ requireRecapApproval: true });
+    expect(flipOn.status).toBe(200);
+    expect(flipOn.body.requireRecapApproval).toBe(true);
+
+    // With the toggle ON, a non-admin author's recap goes pending.
+    const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const add2 = await coachLogin.agent
+      .post(`/api/v1/teams/${jv.id}/members`)
+      .send({ userId: marcusLogin.user.id, position: "author" });
+    expect(add2.status).toBe(201);
+    const accept = await marcusLogin.agent.post(
+      `/api/v1/teams/${jv.id}/members/${add2.body.id}/accept`,
+    );
+    expect(accept.status).toBe(200);
+
+    const create = await marcusLogin.agent.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: org.id,
+      teamId: jv.id,
+      title: "Toggle-on pending recap",
+      body: "Back to the review queue.",
+    });
+    expect(create.status).toBe(201);
+    expect(create.body.approvalStatus).toBe("pending_approval");
+    expect(create.body.requiresApproval).toBe(true);
+
+    // Admin flips it back OFF; the already-pending recap is NOT
+    // auto-published but remains approvable from the queue.
+    const flipOff = await adminLogin.agent
+      .patch(`/api/v1/organizations/${org.id}`)
+      .send({ requireRecapApproval: false });
+    expect(flipOff.status).toBe(200);
+    expect(flipOff.body.requireRecapApproval).toBe(false);
+
+    const queue = await adminLogin.agent.get(
+      `/api/v1/organizations/${org.id}/post-approvals`,
+    );
+    const legacyPending = queue.body.data.find(
+      (e: { post: { id: string } }) => e.post.id === create.body.id,
+    );
+    expect(legacyPending).toBeDefined();
+
+    const approve = await adminLogin.agent.post(
+      `/api/v1/organizations/${org.id}/post-approvals/${create.body.id}/approve`,
+    );
+    expect(approve.status).toBe(200);
+    expect(approve.body.status).toBe("approved");
   });
 
   it("forbids non-admins from viewing or transitioning the approval queue", async () => {

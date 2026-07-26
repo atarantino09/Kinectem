@@ -657,8 +657,21 @@ router.patch(
         return apiError(res, 400, `${key} must be a string or null`);
       }
     }
+    // Task #801 — org-level "Require recap approval" toggle. Admin-only by
+    // construction (the whole PATCH is behind canManageOrganization). Extra
+    // field beyond the locked spec (recapKind precedent). Strict boolean so
+    // a stray string like "false" can't silently enable the queue.
+    if (body.requireRecapApproval !== undefined) {
+      if (typeof body.requireRecapApproval !== "boolean") {
+        return apiError(res, 400, "requireRecapApproval must be a boolean");
+      }
+      patch.requireRecapApproval = body.requireRecapApproval;
+    }
+    // Serialize with the caller's real role so the admin-only
+    // `requireRecapApproval` field is present on the PATCH echo.
+    const myRole = await getOrgRole(me.id, req.params.orgId);
     if (Object.keys(patch).length === 0) {
-      return res.json(toOrganization(existing));
+      return res.json(toOrganization(existing, { isMember: true, role: myRole }));
     }
     const [updated] = await db
       .update(organizations)
@@ -666,7 +679,7 @@ router.patch(
       .where(eq(organizations.id, req.params.orgId))
       .returning();
     if (!updated) return notFound(res);
-    res.json(toOrganization(updated));
+    res.json(toOrganization(updated, { isMember: true, role: myRole }));
   }),
 );
 

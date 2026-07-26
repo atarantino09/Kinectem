@@ -623,7 +623,18 @@ router.post(
     const [teamRow] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
     if (!teamRow) return notFound(res);
     const isAdmin = await canManageOrganization(me.id, teamRow.organizationId);
-    const newStatus = isAdmin ? "published" : "pending_approval";
+    // Task #801 — recap approval is opt-in per org: non-admin publishes go
+    // pending only when the org's "Require recap approval" toggle is ON.
+    const [orgSetting] = teamRow.organizationId
+      ? await db
+          .select({ requireRecapApproval: organizations.requireRecapApproval })
+          .from(organizations)
+          .where(eq(organizations.id, teamRow.organizationId))
+          .limit(1)
+      : [null];
+    const requireApproval = orgSetting?.requireRecapApproval === true;
+    const newStatus =
+      isAdmin || !requireApproval ? "published" : "pending_approval";
     const [updated] = await db
       .update(articles)
       .set({

@@ -2039,9 +2039,15 @@ router.post(
       const isAdmin = isSoloTeam(team)
         ? await canManageTeam(me.id, team)
         : await canManageOrganization(me.id, team.organizationId);
+      // Task #801 — recap approval is now opt-in per org. Non-admin authors
+      // publish directly unless the org has switched "Require recap
+      // approval" ON, in which case the pre-#801 pending-approval queue
+      // applies. Admin/owner authors (and solo teams, org null) always
+      // publish directly.
+      const requireApproval = org?.requireRecapApproval === true;
       const status: "draft" | "pending_approval" | "published" = isDraft
         ? "draft"
-        : isAdmin
+        : isAdmin || !requireApproval
           ? "published"
           : "pending_approval";
       const photoUrls: string[] = Array.isArray(body.photoUrls)

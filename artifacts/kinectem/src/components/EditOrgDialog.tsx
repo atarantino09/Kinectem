@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +59,9 @@ type OrgLike = {
   // Task #733 — extra fields beyond the locked spec (recapKind precedent).
   brandPrimaryColor?: string | null;
   brandSecondaryColor?: string | null;
+  // Task #801 — admin-only org setting: when true, coach recaps go through
+  // the pending-approval queue instead of publishing immediately.
+  requireRecapApproval?: boolean;
 };
 
 export function EditOrgDialog({
@@ -85,6 +89,11 @@ export function EditOrgDialog({
   const [brandSecondary, setBrandSecondary] = useState<string | null>(
     organization.brandSecondaryColor ?? null,
   );
+  // Task #801 — "Require recap approval" toggle. OFF by default: coach
+  // recaps publish immediately; ON restores the admin review queue.
+  const [requireRecapApproval, setRequireRecapApproval] = useState<boolean>(
+    organization.requireRecapApproval === true,
+  );
   const [errors, setErrors] = useState<{
     name?: string;
     city?: string;
@@ -109,6 +118,7 @@ export function EditOrgDialog({
       setZipCode(organization.zipCode ?? "");
       setBrandPrimary(organization.brandPrimaryColor ?? null);
       setBrandSecondary(organization.brandSecondaryColor ?? null);
+      setRequireRecapApproval(organization.requireRecapApproval === true);
       setErrors({});
     }
     // Only re-seed the form when the dialog transitions to open, or when
@@ -210,7 +220,7 @@ export function EditOrgDialog({
     }
     setSaving(true);
     try {
-      const payload: Record<string, string | null> = {
+      const payload: Record<string, string | boolean | null> = {
         name: trimmedName,
         description,
         city: trimmedCity,
@@ -224,6 +234,8 @@ export function EditOrgDialog({
       // (null) actually clears a previously-saved pair.
       payload.brandPrimaryColor = brandPrimary;
       payload.brandSecondaryColor = brandSecondary;
+      // Task #801 — org-wide recap approval mode.
+      payload.requireRecapApproval = requireRecapApproval;
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -531,6 +543,27 @@ export function EditOrgDialog({
                   </p>
                 )}
               </div>
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="edit-org-require-recap-approval"
+                  className="font-bold"
+                >
+                  Require recap approval
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {requireRecapApproval
+                    ? "Coach and staff game recaps wait in the Admin Queue until an admin approves them."
+                    : "Coach and staff game recaps publish immediately. Turn this on to review each recap in the Admin Queue first."}
+                </p>
+              </div>
+              <Switch
+                id="edit-org-require-recap-approval"
+                checked={requireRecapApproval}
+                onCheckedChange={setRequireRecapApproval}
+                data-testid="switch-require-recap-approval"
+              />
             </div>
           </div>
 

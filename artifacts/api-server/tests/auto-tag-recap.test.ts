@@ -1014,6 +1014,16 @@ describe("auto-tag rostered players on game-recap articles", () => {
   });
 
   it("admin approval fans out the roster when an author added gameDate after submitting (task #242)", async () => {
+    // Task #801 — the pending-approval queue is now opt-in per org;
+    // switch it ON so the non-admin submission below actually goes
+    // pending. Reset in the finally at the end of this test.
+    {
+      const { orgId } = await getFootballTeam();
+      await db
+        .update(organizations)
+        .set({ requireRecapApproval: true })
+        .where(eq(organizations.id, orgId));
+    }
     // Regression for task #242. Path:
     //   1) Non-admin author creates a long-form post WITHOUT a gameDate.
     //      It enters the approval queue as "pending_approval" and the
@@ -1168,6 +1178,12 @@ describe("auto-tag rostered players on game-recap articles", () => {
       .from(articleTags)
       .where(eq(articleTags.articleId, articleId));
     expect(after.length).toBe(tagRows.length);
+
+    // Task #801 — restore the org default (approval not required).
+    await db
+      .update(organizations)
+      .set({ requireRecapApproval: false })
+      .where(eq(organizations.id, orgId));
   });
 
   it("rejects organizationId-only recap creation by an org admin with multiple teams (task #242)", async () => {

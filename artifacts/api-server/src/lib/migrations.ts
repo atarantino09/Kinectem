@@ -1892,6 +1892,17 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
          );
     `,
   },
+  {
+    // Task #801 — org-level "Require recap approval" toggle. Default FALSE:
+    // coach recaps now publish immediately unless the org opts back into the
+    // review-queue workflow. Existing pending_approval rows are untouched
+    // (they stay approvable from the admin queue).
+    name: "2026-07-26-task-801-org-require-recap-approval",
+    sql: `
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS require_recap_approval boolean NOT NULL DEFAULT false;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

@@ -694,6 +694,12 @@ export function toOrganization(
     // reads them via a narrow cast. NULL = default generic gradient.
     brandPrimaryColor: o.brandPrimaryColor ?? null,
     brandSecondaryColor: o.brandSecondaryColor ?? null,
+    // Task #801 — "Require recap approval" org setting. Admin-only surface:
+    // only serialized when the viewer is an owner/admin of the org (extra
+    // field beyond the locked spec, recapKind precedent).
+    ...(opts.role === "owner" || opts.role === "admin"
+      ? { requireRecapApproval: o.requireRecapApproval === true }
+      : {}),
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.createdAt.toISOString(),
   };
