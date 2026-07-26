@@ -141,8 +141,8 @@ export function ChildRow({
               <p className="font-bold">Require tag consent</p>
               <p className="text-muted-foreground">
                 {c.requireTagConsent
-                  ? "Coaches must ask first"
-                  : "Anyone may tag"}
+                  ? "You approve each tag"
+                  : "Tags go live automatically (default)"}
               </p>
               <p
                 className="text-[10px] text-muted-foreground mt-0.5"
@@ -150,7 +150,7 @@ export function ChildRow({
               >
                 {c.requireTagConsent
                   ? "New tags will arrive as Pending and require your Approve to be visible."
-                  : "New tags appear automatically. You can still Remove anything you don't want."}
+                  : "Recaps that tag your child appear right away and you're notified. Switch on to approve each tag first — you can always Remove a tag."}
               </p>
             </div>
             <Switch

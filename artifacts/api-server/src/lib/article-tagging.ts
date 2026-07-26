@@ -39,6 +39,71 @@ async function notifyGuardiansOfPendingTags(args: {
   }
 }
 
+// Task #800 — tags now auto-approve by default, so guardians no longer
+// see a "please review" prompt for most recap tags. To keep parents in
+// the loop we drop a plain informational bell on every active guardian
+// of a tagged minor whose tag went live immediately. Dedupe mirrors the
+// highlight guardian fan-out: one row per (guardian, child, post) inside
+// the throttle window, keyed on the `?asChild=` link. The actor is
+// skipped (a parent tagging their own child doesn't need a ping).
+async function notifyGuardiansOfApprovedTags(args: {
+  approvedUserIds: string[];
+  postTitle: string;
+  link: string;
+  actorUserId: string | null;
+}): Promise<void> {
+  if (args.approvedUserIds.length === 0) return;
+  const childRows = await db
+    .select({ id: users.id, isMinor: users.isMinor, name: users.name })
+    .from(users)
+    .where(inArray(users.id, args.approvedUserIds));
+  const minors = childRows.filter((c) => c.isMinor);
+  if (minors.length === 0) return;
+  const guardianIdsByChild = await getActiveGuardianIdsForChildren(
+    minors.map((c) => c.id),
+  );
+  const targets = minors.flatMap((c) =>
+    (guardianIdsByChild.get(c.id) ?? [])
+      .filter((gid) => !args.actorUserId || gid !== args.actorUserId)
+      .map((gid) => ({
+        guardianId: gid,
+        childId: c.id,
+        childFirst: c.name?.trim().split(/\s+/)[0] || "Your child",
+      })),
+  );
+  if (targets.length === 0) return;
+  const since = new Date(Date.now() - TAG_NOTIF_THROTTLE_MS);
+  const links = targets.map((t) => `${args.link}?asChild=${t.childId}`);
+  const recent = await db
+    .select({ userId: notifications.userId, link: notifications.link })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.kind, "post_tag"),
+        inArray(notifications.link, links),
+        inArray(
+          notifications.userId,
+          targets.map((t) => t.guardianId),
+        ),
+        gt(notifications.createdAt, since),
+      ),
+    );
+  const seen = new Set(recent.map((r) => `${r.userId}|${r.link}`));
+  const toInsert = targets.filter(
+    (t) => !seen.has(`${t.guardianId}|${args.link}?asChild=${t.childId}`),
+  );
+  if (toInsert.length === 0) return;
+  await db.insert(notifications).values(
+    toInsert.map((t) => ({
+      userId: t.guardianId,
+      kind: "post_tag",
+      message: `${t.childFirst} was tagged in "${args.postTitle}"`,
+      link: `${args.link}?asChild=${t.childId}`,
+      actorUserId: args.actorUserId,
+    })),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
 // ---------------------------------------------------------------------------
@@ -457,6 +522,14 @@ export async function notifyNewlyTaggedInRecap(args: {
   await notifyGuardiansOfPendingTags({
     pendingUserIds: target.filter((u) => statusByUser.get(u) === "pending"),
     postTitle: title,
+  });
+  // Task #800 — informational guardian bell for auto-approved tags on
+  // minors, so parents keep visibility now that approval is opt-in.
+  await notifyGuardiansOfApprovedTags({
+    approvedUserIds: target.filter((u) => statusByUser.get(u) === "approved"),
+    postTitle: title,
+    link,
+    actorUserId: args.actorUserId,
   });
 }
 

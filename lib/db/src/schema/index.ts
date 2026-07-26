@@ -258,6 +258,14 @@ export const users = pgTable("users", {
     .notNull()
     .default(false),
   requireTagConsent: boolean("require_tag_consent").notNull().default(false),
+  // Task #800 — true once a guardian/user/admin DELIBERATELY set
+  // `requireTagConsent` via a toggle endpoint. Distinguishes explicit
+  // choices from the legacy signup auto-set so the auto-approve backfill
+  // never overrides a parent who opted in on purpose (and stays
+  // idempotent across boots).
+  tagConsentSetExplicitly: boolean("tag_consent_set_explicitly")
+    .notNull()
+    .default(false),
   // Task #520 — Adult-only "private account" toggle. When true, new
   // incoming follow edges land as `pending` (same enum + column used
   // by the COPPA minor-gating flow) and the followed user reviews

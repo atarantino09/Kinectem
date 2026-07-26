@@ -316,12 +316,11 @@ CREATE INDEX IF NOT EXISTS consent_audit_log_child_idx
 CREATE INDEX IF NOT EXISTS consent_audit_log_created_idx
   ON consent_audit_log(created_at);
 
--- COPPA default: every minor (newly flagged above or already on file)
--- must approve tags one-by-one. Adults keep whatever they chose.
-UPDATE users
-   SET require_tag_consent = true
- WHERE is_minor = true
-   AND require_tag_consent = false;
+-- (Task #800 removed the old "flip require_tag_consent on for every
+-- minor" statement that used to live here. Migrations re-run on every
+-- boot, so it kept re-asserting per-tag consent for all minors — the
+-- product default is now auto-approve with an explicit opt-in from the
+-- Family dashboard; see TASK_800_AUTO_APPROVE_TAGS below.)
 `;
 
 // Task #363 — COPPA Phase 2. Adds the gating status columns on
@@ -1838,6 +1837,59 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       FROM organizations o
       WHERE o.id = s.organization_id
         AND s.billing_starts_at = '2026-11-01T00:00:00Z';
+    `,
+  },
+  {
+    // Task #800 — recap tags now auto-approve by default; per-tag review
+    // is an explicit guardian opt-in from the Family dashboard.
+    //   1. Adds `tag_consent_set_explicitly` — stamped true whenever a
+    //      toggle endpoint deliberately writes `require_tag_consent`.
+    //   2. Flips `require_tag_consent` off for accounts where it was only
+    //      set by the legacy signup/COPPA auto-default (no explicit
+    //      choice recorded). Guardians who opted in via the toggle keep
+    //      their setting (flag stamped by the same-deploy code before any
+    //      subsequent boot re-runs this).
+    //   3. Approves recap (article) tags stuck `pending` for users whose
+    //      effective gate is now off — i.e. the tag would be inserted as
+    //      `approved` today: the user doesn't require consent AND no
+    //      active guardian does. Declined tags are untouched; highlight
+    //      tags are untouched (they are pending-by-design).
+    // Idempotent: step 2's WHERE only matches non-explicit rows and step 3
+    // only matches rows that current insert logic would approve anyway.
+    name: "2026-07-26-task-800-auto-approve-recap-tags",
+    sql: `
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS tag_consent_set_explicitly boolean NOT NULL DEFAULT false;
+
+      UPDATE users
+         SET require_tag_consent = false
+       WHERE require_tag_consent = true
+         AND tag_consent_set_explicitly = false
+         AND (
+           is_minor = true
+           OR parent_id IS NOT NULL
+           OR EXISTS (
+             SELECT 1 FROM guardian_links gl
+              WHERE gl.child_id = users.id AND gl.status = 'active'
+           )
+         );
+
+      UPDATE article_tags at
+         SET status = 'approved', updated_at = NOW()
+       WHERE at.status = 'pending'
+         AND EXISTS (
+           SELECT 1 FROM users u
+            WHERE u.id = at.user_id
+              AND u.require_tag_consent = false
+         )
+         AND NOT EXISTS (
+           SELECT 1
+             FROM guardian_links gl
+             JOIN users g ON g.id = gl.guardian_id
+            WHERE gl.child_id = at.user_id
+              AND gl.status = 'active'
+              AND g.require_tag_consent = true
+         );
     `,
   },
 ];

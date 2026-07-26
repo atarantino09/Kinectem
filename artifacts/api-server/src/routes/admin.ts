@@ -563,8 +563,11 @@ router.patch(
     // link. Route admin edits through the links table (below) instead of
     // writing the column directly, so the invariant holds.
     if (body.guardianEmail !== undefined) updates.guardianEmail = body.guardianEmail;
-    if (body.requireTagConsent !== undefined)
+    if (body.requireTagConsent !== undefined) {
       updates.requireTagConsent = body.requireTagConsent;
+      // Task #800 — admin edits count as deliberate choices too.
+      updates.tagConsentSetExplicitly = true;
+    }
     if (body.clearGuardianConfirmation === true) {
       updates.guardianConfirmedAt = null;
       updates.guardianConfirmedByUserId = null;

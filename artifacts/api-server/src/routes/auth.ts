@@ -445,11 +445,11 @@ router.post(
         // minor, or a guardian-approved follower can resolve the
         // profile. Adults keep the legacy `public` default.
         profileVisibility: guardianRequired ? "followers" : undefined,
-        // COPPA defaults: under-13 accounts must approve every tag the
-        // first time, so we flip `requireTagConsent` on at creation. An
-        // adult account keeps the legacy default (off) and can opt in
-        // from settings.
-        requireTagConsent: guardianRequired ? true : undefined,
+        // Task #800 — tags now auto-approve by default for everyone,
+        // including under-13 accounts. Guardians who want per-tag review
+        // opt in from the Family dashboard ("Require tag consent"), which
+        // stamps `tagConsentSetExplicitly`. Column default is false, so
+        // nothing to set here.
       })
       .returning();
 

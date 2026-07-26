@@ -283,7 +283,9 @@ router.patch(
     const requireTagConsent = !!req.body?.requireTagConsent;
     const [updated] = await db
       .update(users)
-      .set({ requireTagConsent })
+      // Task #800 — stamp the explicit-choice flag so the auto-approve
+      // backfill never overrides a deliberate guardian setting.
+      .set({ requireTagConsent, tagConsentSetExplicitly: true })
       .where(eq(users.id, child.id))
       .returning();
     res.json({

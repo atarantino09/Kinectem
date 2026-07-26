@@ -2033,7 +2033,8 @@ router.post(
           role: "athlete",
           email: null,
           parentId: me.id,
-          requireTagConsent: true,
+          // Task #800 — auto-approve by default; the parent can flip
+          // "Require tag consent" on from the Family dashboard.
         })
         .returning();
       child = created;

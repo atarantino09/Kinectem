@@ -78,10 +78,11 @@ export default function GuardianPage() {
         title: "Tagging made simple",
         body: (
           <>
-            By default you approve every tag before it appears. Switch{" "}
-            <strong>Require tag consent</strong> off and posts get tagged to
-            your child automatically — no approving each notification. You can
-            still remove any tag you don't want afterward.
+            By default, game recaps that tag your child appear on their
+            profile automatically — and you get a notification each time.
+            Want to review first? Switch <strong>Require tag consent</strong>{" "}
+            on and every new tag waits for your approval before it goes live.
+            Either way, you can remove any tag you don't want.
           </>
         ),
       },
