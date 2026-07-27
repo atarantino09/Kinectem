@@ -18,6 +18,22 @@ export function formatDate(iso?: string): string {
   }
 }
 
+// Game dates are stored as UTC-midnight timestamps; format using UTC
+// parts so the date never shifts by one day in western timezones.
+export function formatDateUTC(iso?: string | null): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return format(
+      new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+      "MMM d, yyyy",
+    );
+  } catch {
+    return "";
+  }
+}
+
 export function friendlyAgeLabel(
   dob: Date,
   now: Date = new Date(),

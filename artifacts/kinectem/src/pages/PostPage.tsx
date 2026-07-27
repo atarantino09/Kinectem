@@ -37,7 +37,12 @@ import {
   Trash2,
   Trophy,
 } from "lucide-react";
-import { timeAgo, formatOrgName } from "@/lib/format";
+import {
+  timeAgo,
+  formatDate,
+  formatDateUTC,
+  formatOrgName,
+} from "@/lib/format";
 import { linkify } from "@/lib/linkify";
 import { renderBodyWithMentions } from "@/lib/mentions";
 import { PostInteractions } from "@/components/PostInteractions";
@@ -653,9 +658,19 @@ export default function PostPage() {
         </div>
       ) : (
         post.title && (
-          <h1 className="text-4xl font-black tracking-tight leading-tight">
-            {post.title}
-          </h1>
+          <div className="space-y-1">
+            <h1 className="text-4xl font-black tracking-tight leading-tight">
+              {post.title}
+            </h1>
+            {post.gameDate && (
+              <p
+                className="text-sm text-muted-foreground font-medium"
+                data-testid={`text-post-game-date-${post.id}`}
+              >
+                Game date: {formatDateUTC(post.gameDate)}
+              </p>
+            )}
+          </div>
         )
       )}
       {((editing && isAdminOnPending) || post.title) && !isShort && (
@@ -699,7 +714,7 @@ export default function PostPage() {
             </p>
           </Link>
           <p className="text-xs text-muted-foreground font-medium">
-            {timeAgo(post.createdAt)}
+            {isShort ? timeAgo(post.createdAt) : formatDate(post.createdAt)}
             {post.isEdited && " • edited"}
           </p>
         </div>
