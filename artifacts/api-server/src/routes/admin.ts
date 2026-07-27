@@ -2543,4 +2543,32 @@ router.patch(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Lightweight team list for the admin console's "assign user to team"
+// picker. Returns every non-archived team with its parent org name (null
+// for independent teams).
+// ---------------------------------------------------------------------------
+router.get(
+  "/teams",
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query["q"] === "string" ? req.query["q"].trim() : "";
+    const conds = [isNull(teams.archivedAt)];
+    if (q) conds.push(ilike(teams.name, `%${q}%`));
+    const rows = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        sport: teams.sport,
+        organizationId: teams.organizationId,
+        organizationName: organizations.name,
+      })
+      .from(teams)
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(and(...conds))
+      .orderBy(asc(teams.name))
+      .limit(500);
+    res.json({ data: rows });
+  }),
+);
+
 export default router;

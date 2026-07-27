@@ -468,7 +468,8 @@ router.post(
     if (!userId) return apiError(res, 400, "userId required");
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
-    if (!(await canManageTeam(me.id, t)))
+    // Platform admins may assign users to any team from the admin console.
+    if (me.role !== "admin" && !(await canManageTeam(me.id, t)))
       return apiError(res, 403, "Team coaches or org admins only");
     // Task #472 — archived teams are read-only. Block roster additions
     // so managers don't accidentally invite someone to a team that's
@@ -941,7 +942,8 @@ router.post(
     const teamId = req.params.teamId;
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
-    if (!(await canManageTeam(me.id, t)))
+    // Platform admins may invite users to any team from the admin console.
+    if (me.role !== "admin" && !(await canManageTeam(me.id, t)))
       return apiError(res, 403, "Team coaches or org admins only");
     // Task #472 — block new email invites on an archived team. Mirrors
     // the direct-add block above; an archived team should not be able

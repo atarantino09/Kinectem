@@ -78,6 +78,8 @@ export default function AdminUsers() {
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [page, setPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [assigning, setAssigning] = useState<AdminUser | null>(null);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [permDeleting, setPermDeleting] = useState<AdminUser | null>(null);
   const qc = useQueryClient();
@@ -171,9 +173,18 @@ export default function AdminUsers() {
     <AdminLayout>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <h1 className="text-2xl font-black">Users</h1>
-        <Button onClick={() => setCreateOpen(true)} data-testid="btn-new-user">
-          New user
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setInviteOpen(true)}
+            data-testid="btn-invite-user"
+          >
+            Invite user
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} data-testid="btn-new-user">
+            New user
+          </Button>
+        </div>
       </div>
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <Input
@@ -306,6 +317,14 @@ export default function AdminUsers() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => setAssigning(u)}
+                        data-testid={`btn-assign-${u.email}`}
+                      >
+                        Assign
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => masquerade(u.id)}
                         data-testid={`btn-masquerade-${u.email}`}
                       >
@@ -363,6 +382,11 @@ export default function AdminUsers() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={refetch}
+      />
+      <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      <AssignUserDialog
+        user={assigning}
+        onOpenChange={(v) => !v && setAssigning(null)}
       />
       <EditUserDialog
         user={editing}
@@ -790,6 +814,436 @@ function EditUserDialog({
           </Button>
           <Button onClick={submit} disabled={submitting} data-testid="btn-submit-edit-user">
             {submitting ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Platform-admin org/team pickers + assign & invite dialogs.
+// ---------------------------------------------------------------------------
+
+type AdminOrgRow = { organizationId: string; organizationName: string };
+type AdminTeamRow = {
+  id: string;
+  name: string;
+  sport: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+};
+
+function useAdminOrgs(enabled: boolean) {
+  return useQuery<{ data: AdminOrgRow[] }>({
+    queryKey: ["admin", "organizations"],
+    queryFn: () =>
+      customFetch<{ data: AdminOrgRow[] }>("/api/v1/admin/organizations", {
+        method: "GET",
+      }),
+    enabled,
+  });
+}
+
+function useAdminTeams(enabled: boolean) {
+  return useQuery<{ data: AdminTeamRow[] }>({
+    queryKey: ["admin", "teams"],
+    queryFn: () =>
+      customFetch<{ data: AdminTeamRow[] }>("/api/v1/admin/teams", {
+        method: "GET",
+      }),
+    enabled,
+  });
+}
+
+function teamLabel(t: AdminTeamRow): string {
+  return t.organizationName ? `${t.name} — ${t.organizationName}` : t.name;
+}
+
+function AssignUserDialog({
+  user,
+  onOpenChange,
+}: {
+  user: AdminUser | null;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const open = !!user;
+  const [target, setTarget] = useState<"org" | "team">("org");
+  const [orgId, setOrgId] = useState("");
+  const [orgRole, setOrgRole] = useState<"admin" | "member">("member");
+  const [teamId, setTeamId] = useState("");
+  const [position, setPosition] = useState<"player" | "coach">("player");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+  const orgs = useAdminOrgs(open);
+  const teams = useAdminTeams(open);
+
+  useEffect(() => {
+    setTarget("org");
+    setOrgId("");
+    setOrgRole("member");
+    setTeamId("");
+    setPosition("player");
+  }, [user]);
+
+  const canSubmit = target === "org" ? !!orgId : !!teamId;
+
+  const submit = async () => {
+    if (!user || !canSubmit) return;
+    setSubmitting(true);
+    try {
+      if (target === "org") {
+        await customFetch(`/api/v1/organizations/${orgId}/members`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ userId: user.id, role: orgRole }),
+        });
+        toast({
+          title: "Assigned to organization",
+          description: `${user.displayName} is now a ${orgRole}.`,
+        });
+      } else {
+        await customFetch(`/api/v1/teams/${teamId}/members`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ userId: user.id, position }),
+        });
+        toast({
+          title: "Added to team",
+          description: `${user.displayName} was added as a ${position} (pending until they accept).`,
+        });
+      }
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        title: "Assignment failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="dialog-assign-user">
+        <DialogHeader>
+          <DialogTitle>Assign {user?.displayName ?? "user"}</DialogTitle>
+          <DialogDescription>
+            Add this user to an organization or a team.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Assign to</Label>
+            <Select
+              value={target}
+              onValueChange={(v) => setTarget(v as "org" | "team")}
+            >
+              <SelectTrigger data-testid="select-assign-target">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="org">Organization</SelectItem>
+                <SelectItem value="team">Team</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {target === "org" ? (
+            <>
+              <div className="space-y-2">
+                <Label>Organization</Label>
+                <Select value={orgId} onValueChange={setOrgId}>
+                  <SelectTrigger data-testid="select-assign-org">
+                    <SelectValue placeholder="Choose an organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(orgs.data?.data ?? []).map((o) => (
+                      <SelectItem key={o.organizationId} value={o.organizationId}>
+                        {o.organizationName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select
+                  value={orgRole}
+                  onValueChange={(v) => setOrgRole(v as "admin" | "member")}
+                >
+                  <SelectTrigger data-testid="select-assign-org-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="member">Member</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Team</Label>
+                <Select value={teamId} onValueChange={setTeamId}>
+                  <SelectTrigger data-testid="select-assign-team">
+                    <SelectValue placeholder="Choose a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(teams.data?.data ?? []).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {teamLabel(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Position</Label>
+                <Select
+                  value={position}
+                  onValueChange={(v) => setPosition(v as "player" | "coach")}
+                >
+                  <SelectTrigger data-testid="select-assign-position">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="player">Player</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={!canSubmit || submitting}
+            data-testid="btn-assign-submit"
+          >
+            {submitting ? "Assigning…" : "Assign"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InviteUserDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const [target, setTarget] = useState<"org" | "team">("org");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [orgRole, setOrgRole] = useState<"admin" | "member">("member");
+  const [teamId, setTeamId] = useState("");
+  const [position, setPosition] = useState<"player" | "coach">("player");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+  const orgs = useAdminOrgs(open);
+  const teams = useAdminTeams(open);
+
+  useEffect(() => {
+    if (open) return;
+    setTarget("org");
+    setEmail("");
+    setName("");
+    setOrgId("");
+    setOrgRole("member");
+    setTeamId("");
+    setPosition("player");
+  }, [open]);
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const canSubmit = emailOk && (target === "org" ? !!orgId : !!teamId);
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      if (target === "org") {
+        const r = await customFetch<{ emailSent?: boolean }>(
+          `/api/v1/organizations/${orgId}/invites`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email: email.trim(), role: orgRole }),
+          },
+        );
+        toast({
+          title: "Invite created",
+          description:
+            r?.emailSent === false
+              ? "Invite saved, but the email could not be sent. Manage it from the organization page."
+              : `Invite email sent to ${email.trim()}.`,
+        });
+      } else {
+        const r = await customFetch<{ emailSent?: boolean | null }>(
+          `/api/v1/teams/${teamId}/invites`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: email.trim(),
+              name: name.trim() || undefined,
+              position,
+            }),
+          },
+        );
+        toast({
+          title: "Invite created",
+          description:
+            r?.emailSent === false
+              ? "Invite saved, but the email could not be sent. Manage it from the team roster."
+              : `Invite sent to ${email.trim()}.`,
+        });
+      }
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        title: "Invite failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="dialog-invite-user">
+        <DialogHeader>
+          <DialogTitle>Invite a user</DialogTitle>
+          <DialogDescription>
+            Send an email invite to join an organization or a team. Works for
+            people who don't have an account yet.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="person@example.com"
+              data-testid="input-invite-email"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Invite to</Label>
+            <Select
+              value={target}
+              onValueChange={(v) => setTarget(v as "org" | "team")}
+            >
+              <SelectTrigger data-testid="select-invite-target">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="org">Organization</SelectItem>
+                <SelectItem value="team">Team</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {target === "org" ? (
+            <>
+              <div className="space-y-2">
+                <Label>Organization</Label>
+                <Select value={orgId} onValueChange={setOrgId}>
+                  <SelectTrigger data-testid="select-invite-org">
+                    <SelectValue placeholder="Choose an organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(orgs.data?.data ?? []).map((o) => (
+                      <SelectItem key={o.organizationId} value={o.organizationId}>
+                        {o.organizationName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select
+                  value={orgRole}
+                  onValueChange={(v) => setOrgRole(v as "admin" | "member")}
+                >
+                  <SelectTrigger data-testid="select-invite-org-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="member">Member</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Team</Label>
+                <Select value={teamId} onValueChange={setTeamId}>
+                  <SelectTrigger data-testid="select-invite-team">
+                    <SelectValue placeholder="Choose a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(teams.data?.data ?? []).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {teamLabel(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Invitee name (optional)</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Jordan Smith"
+                  data-testid="input-invite-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Position</Label>
+                <Select
+                  value={position}
+                  onValueChange={(v) => setPosition(v as "player" | "coach")}
+                >
+                  <SelectTrigger data-testid="select-invite-position">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="player">Player</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={!canSubmit || submitting}
+            data-testid="btn-invite-submit"
+          >
+            {submitting ? "Sending…" : "Send invite"}
           </Button>
         </DialogFooter>
       </DialogContent>

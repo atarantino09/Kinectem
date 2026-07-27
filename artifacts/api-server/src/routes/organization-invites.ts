@@ -80,7 +80,8 @@ router.post(
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const { orgId } = req.params;
-    if (!(await canManageOrganization(me.id, orgId))) {
+    // Platform admins may assign users to any org from the admin console.
+    if (me.role !== "admin" && !(await canManageOrganization(me.id, orgId))) {
       return apiError(res, 403, "Org admins only");
     }
     const targetUserId = String(req.body?.userId ?? "").trim();
@@ -180,7 +181,8 @@ router.post(
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const { orgId } = req.params;
-    if (!(await canManageOrganization(me.id, orgId))) {
+    // Platform admins may invite users to any org from the admin console.
+    if (me.role !== "admin" && !(await canManageOrganization(me.id, orgId))) {
       return apiError(res, 403, "Org admins only");
     }
     const [org] = await db
