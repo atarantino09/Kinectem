@@ -68,7 +68,21 @@ export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> 
 // approve content, etc.). Plain "member" is intentionally excluded.
 const MANAGE_ROLES = ["owner", "admin"] as const;
 
+// Platform admins (users.role === 'admin') manage every org and team from
+// the admin console and the regular UI. Masquerade is unaffected: these
+// checks run against the session user, which during masquerade is the
+// viewed (non-admin) user.
+async function isPlatformAdmin(userId: string): Promise<boolean> {
+  const [u] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return u?.role === "admin";
+}
+
 export async function canManageTeam(userId: string, team: Team): Promise<boolean> {
+  if (await isPlatformAdmin(userId)) return true;
   // Org-backed teams: owners/admins of the parent org manage every team.
   if (team.organizationId) {
     const [orgAdmin] = await db
@@ -109,6 +123,7 @@ export async function canManageOrganization(
 ): Promise<boolean> {
   // Task #628 — solo teams pass a null org here; nobody "manages" a null org.
   if (!organizationId) return false;
+  if (await isPlatformAdmin(userId)) return true;
   const [row] = await db
     .select()
     .from(organizationAdmins)
@@ -238,6 +253,10 @@ export const canApproveTeamHighlight = canCreateRecap;
 // requiring a target team — used by the web client (via /auth/whoami) to
 // decide whether to show the "Game Recap" Create-menu item at all.
 export async function canAuthorRecapAnywhere(userId: string): Promise<boolean> {
+  // Platform admins manage every org/team (see canManageTeam), so they can
+  // author recaps — and pass the AI-assist gates — everywhere too. Keeping
+  // this aligned with canManageTeam avoids manager UI whose AI actions 403.
+  if (await isPlatformAdmin(userId)) return true;
   // Org admins can always author recaps for any team in their org. Plain
   // members (added in task #208) are excluded.
   const [orgAdminRow] = await db

@@ -85,6 +85,7 @@ import { formatOrgName } from "@/lib/format";
 import { readOrgBrandColors, orgHeroGradient } from "@/lib/orgBrand";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
+import { useWhoami } from "@/hooks/useWhoami";
 
 type TeamRailItem = {
   id: string;
@@ -155,6 +156,13 @@ export default function OrganizationPage() {
   }, [orgId]);
   const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
+  const { data: who } = useWhoami();
+  // Platform admins manage every org — mirrors the server's
+  // canManageOrganization bypass. Session-user semantics: during
+  // masquerade the viewed user's role applies, matching the server.
+  const isPlatformAdmin =
+    (who?.isMasquerading ? who?.viewingAs?.role : who?.realUser?.role) ===
+    "admin";
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
   const { data: archivedTeamsResp } = useListArchivedOrgTeams(
@@ -164,7 +172,9 @@ export default function OrganizationPage() {
       query: queryOpts({
         enabled:
           !!orgId &&
-          (organization?.role === "owner" || organization?.role === "admin"),
+          (isPlatformAdmin ||
+            organization?.role === "owner" ||
+            organization?.role === "admin"),
       }),
     },
   );
@@ -204,7 +214,9 @@ export default function OrganizationPage() {
     queryKey: ["org-plan-usage", orgId],
     enabled:
       !!orgId &&
-      (organization?.role === "owner" || organization?.role === "admin"),
+      (isPlatformAdmin ||
+        organization?.role === "owner" ||
+        organization?.role === "admin"),
     queryFn: () =>
       customFetch<{ usage: OrgPlanUsage }>(
         `/api/v1/organizations/${orgId}/subscription`,
@@ -212,7 +224,9 @@ export default function OrganizationPage() {
       ),
   });
   const isManagerRole =
-    organization?.role === "owner" || organization?.role === "admin";
+    isPlatformAdmin ||
+    organization?.role === "owner" ||
+    organization?.role === "admin";
   const { data: joinReqResp } = useListOrgJoinRequests(orgId, undefined, {
     query: queryOpts({ enabled: !!orgId && isManagerRole }),
   });
@@ -354,7 +368,9 @@ export default function OrganizationPage() {
   const posts = postPages?.pages.flatMap((p) => p.data) ?? [];
   const members = membersResp?.data ?? [];
   const isOrgManager =
-    organization.role === "admin" || organization.role === "owner";
+    isPlatformAdmin ||
+    organization.role === "admin" ||
+    organization.role === "owner";
   const planUsage = planUsageResp?.usage;
   const atTeamLimit =
     !!planUsage &&

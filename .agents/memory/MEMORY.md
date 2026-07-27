@@ -45,6 +45,7 @@
 - [Draft autosave field clobber](draft-autosave-field-clobber.md) — new draft-PATCH fields must be touch-gated or the first autosave nulls server-derived values (absent=unchanged, null=clear).
 - [Recap @-mentions](recap-mentions.md) — inline `@[Name](user:uuid)` tokens in body (spec locked); publish must notify `mentioned` not `inserted`; previews need mention-safe truncation.
 - [Multi-guardian links & parentId mirror](guardian-links-multi-parent.md) — guardian_links is source of truth; users.parentId mirrors the primary ACTIVE guardian (locked coppa.ts reads it); trigger covers legacy writes; claim/accept must be idempotent vs live-pair index.
+- [Platform-admin manager bypass](platform-admin-manager-bypass.md) — role admin passes canManageTeam/Org/canAuthorRecapAnywhere everywhere; masquerade drops powers; client mirrors via useWhoami.
 - [Tag consent default](tag-consent-default.md) — recap tags auto-approve for all (COPPA default reversed by owner); any require_tag_consent write MUST stamp tag_consent_set_explicitly or boot backfill reverts it.
 - [Recap approval opt-in toggle](recap-approval-toggle.md) — coach recaps publish directly by default; org `require_recap_approval` restores the queue; pending-flow tests must flip it ON first.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.

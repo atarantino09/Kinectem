@@ -34,6 +34,7 @@ import {
   type RosterInvite,
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
+import { useWhoami } from "@/hooks/useWhoami";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
 import { AdoptLinkCard } from "@/components/team-page/AdoptLinkCard";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
@@ -125,13 +126,22 @@ export default function TeamPage() {
     query: queryOpts({ enabled: !!orgRef?.id }),
   });
   const { data: me } = useGetLoggedInUser();
+  const { data: who } = useWhoami();
 
   // Mirrors `canManageTeam` on the server: org admins/owners always
   // can, and so can anyone whose accepted roster entry has a coach-
   // level position. We compute this here so the invites list query is
   // only fired for managers — non-managers would get a 403 since
   // pending-invite emails are PII restricted to staff.
-  const isAdmin = org?.role === "owner" || org?.role === "admin";
+  // Platform admins manage every team; the server's canManageTeam /
+  // canManageOrganization grant them the same powers, so mirror it here.
+  // During masquerade the effective (session) user is the viewed user,
+  // matching the server's sessionUser-based check.
+  const isPlatformAdmin =
+    (who?.isMasquerading ? who?.viewingAs?.role : who?.realUser?.role) ===
+    "admin";
+  const isAdmin =
+    org?.role === "owner" || org?.role === "admin" || isPlatformAdmin;
   const isOwner = org?.role === "owner";
   const COACH_LEVEL_POSITIONS = ["coach", "assistant_coach", "admin"];
   const allMembersForGate = (membersResp?.data ?? []) as RosterMember[];
