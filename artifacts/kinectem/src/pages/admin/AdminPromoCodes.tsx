@@ -425,7 +425,7 @@ export default function AdminPromoCodes() {
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Discount applies as long as they stay a member.
+                    The code stays redeemable at checkout. The discount itself only covers the first year — renewals bill at full price.
                   </p>
                 )}
               </div>
@@ -535,7 +535,7 @@ export default function AdminPromoCodes() {
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Discount applies as long as they stay a member.
+                    The code stays redeemable at checkout. The discount itself only covers the first year — renewals bill at full price.
                   </p>
                 )}
               </div>
