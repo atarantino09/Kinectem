@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateTeam,
   getListOrgTeamsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -19,7 +20,11 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { PLANS, nextPlan, type OrgPlanUsage } from "@/lib/plans";
-import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import {
+  STAGED_EMAIL_RE,
+  type StagedCoachRow,
+} from "@/components/StageCoachesDialog";
+import { CheckCircle2, XCircle, AlertTriangle, Mail, Clock } from "lucide-react";
 
 // Mirrors CreateTeamDialog's slugify so bulk-created teams get the same
 // URL handles as ones made one-at-a-time.
@@ -32,28 +37,64 @@ function slugify(s: string) {
     .slice(0, 50);
 }
 
-// Parse the textarea into a clean, de-duplicated list of team names.
-// Blank / whitespace-only lines are dropped; surrounding whitespace is
-// trimmed; case-insensitive duplicates collapse to the first occurrence
-// (keeping the original casing the user typed).
-function parseNames(raw: string): string[] {
+// Task #814 — the dialog now carries two line-paired columns: team names and
+// optional coach emails. Pairing is strictly by visual line number, so we
+// parse both textareas by raw line index (no pre-filtering) and only then
+// drop empty / duplicate rows. Each parsed row keeps its original 1-based
+// line number for error messages.
+export type BulkRow = {
+  line: number;
+  name: string;
+  email: string; // "" = no coach for this line
+};
+
+export type BulkLineError = { line: number; message: string };
+
+export function parseBulkRows(
+  teamsRaw: string,
+  coachesRaw: string,
+): { rows: BulkRow[]; errors: BulkLineError[] } {
+  const teamLines = teamsRaw.split("\n");
+  const coachLines = coachesRaw.split("\n");
+  const total = Math.max(teamLines.length, coachLines.length);
+  const rows: BulkRow[] = [];
+  const errors: BulkLineError[] = [];
   const seen = new Set<string>();
-  const names: string[] = [];
-  for (const line of raw.split("\n")) {
-    const name = line.trim();
-    if (!name) continue;
+  for (let i = 0; i < total; i++) {
+    const name = (teamLines[i] ?? "").trim();
+    const email = (coachLines[i] ?? "").trim().toLowerCase();
+    if (!name && !email) continue; // fully blank line — ignore
+    if (!name) {
+      errors.push({
+        line: i + 1,
+        message: `Line ${i + 1}: coach email has no team name on the same line`,
+      });
+      continue;
+    }
     const key = name.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) continue; // duplicate team name — collapse to first, as before
     seen.add(key);
-    names.push(name);
+    if (email && !STAGED_EMAIL_RE.test(email)) {
+      errors.push({
+        line: i + 1,
+        message: `Line ${i + 1}: "${email}" doesn't look like an email`,
+      });
+      // Still keep the row visible in counts, but block submission via errors.
+    }
+    rows.push({ line: i + 1, name, email });
   }
-  return names;
+  return { rows, errors };
 }
 
 type LineResult = {
   name: string;
+  email: string;
   status: "success" | "error";
   reason?: string;
+  // Outcome for the paired coach (only set when the team was created and an
+  // email was given).
+  coach?: "invited" | "staged" | "failed";
+  coachReason?: string;
 };
 
 export function BulkAddTeamsDialog({
@@ -61,25 +102,42 @@ export function BulkAddTeamsDialog({
   open,
   onOpenChange,
   usage,
+  staging = false,
 }: {
   orgId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   usage?: OrgPlanUsage | null;
+  // Task #814 — true when a platform admin is bulk-adding on an UNCLAIMED
+  // org: coach emails are saved as staged drafts (nothing sent) instead of
+  // being invited immediately.
+  staging?: boolean;
 }) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [text, setText] = useState("");
+  const [coachText, setCoachText] = useState("");
+  const [step, setStep] = useState<"input" | "preview">("input");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<LineResult[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(
     null,
   );
+  const teamsRef = useRef<HTMLTextAreaElement | null>(null);
+  const coachesRef = useRef<HTMLTextAreaElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
 
   const createTeam = useCreateTeam();
 
-  const names = useMemo(() => parseNames(text), [text]);
+  const { rows, errors: lineErrors } = useMemo(
+    () => parseBulkRows(text, coachText),
+    [text, coachText],
+  );
+  const names = rows; // valid team rows (may still carry email errors above)
+  const coachCount = rows.filter(
+    (r) => r.email && STAGED_EMAIL_RE.test(r.email),
+  ).length;
 
   // Plan-limit awareness. `usage` is undefined until the parent loads it; in
   // that case no limit UI renders and nothing is blocked client-side — the
@@ -108,16 +166,32 @@ export function BulkAddTeamsDialog({
       // Reset transient UI when fully closing so a reopen starts clean.
       setResults([]);
       setProgress(null);
+      setStep("input");
     }
     onOpenChange(v);
   };
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (busy) return;
+  // Keep the number gutter and both textareas scroll-locked so line
+  // pairing stays visually unmistakable while scrolling.
+  const syncScroll = (from: "teams" | "coaches") => {
+    const src = from === "teams" ? teamsRef.current : coachesRef.current;
+    const dst = from === "teams" ? coachesRef.current : teamsRef.current;
+    if (!src) return;
+    if (dst) dst.scrollTop = src.scrollTop;
+    if (gutterRef.current) gutterRef.current.scrollTop = src.scrollTop;
+  };
+
+  const validateForReview = (): boolean => {
     if (names.length === 0) {
       toast({ title: "Enter at least one team name", variant: "destructive" });
-      return;
+      return false;
+    }
+    if (lineErrors.length > 0) {
+      toast({
+        title: lineErrors[0].message,
+        variant: "destructive",
+      });
+      return false;
     }
     if (atLimit) {
       toast({
@@ -125,7 +199,7 @@ export function BulkAddTeamsDialog({
         description: "Upgrade your plan to add more teams.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
     if (wouldExceed) {
       toast({
@@ -133,40 +207,127 @@ export function BulkAddTeamsDialog({
         description: "Upgrade your plan to add the rest.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const runCreate = async () => {
+    if (busy) return;
+    if (!validateForReview()) return;
     setBusy(true);
     setResults([]);
-    setProgress({ done: 0, total: names.length });
+    setProgress({ done: 0, total: rows.length });
     const collected: LineResult[] = [];
-    const failedNames: string[] = [];
+    const failedRows: BulkRow[] = [];
+    // teamId → email pairs to stage after the loop (platform-admin path).
+    const toStage: Array<{ teamId: string; email: string; index: number }> = [];
     // Sequential on purpose: keeps slug-collision and rate-limit behavior
     // predictable, and lets a mid-list failure not lose the rest.
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       const season = `Season ${new Date().getFullYear()}`;
       try {
-        await createTeam.mutateAsync({
+        const team = await createTeam.mutateAsync({
           orgId,
           data: {
-            name,
-            slug: slugify(name),
+            name: row.name,
+            slug: slugify(row.name),
             season: { name: season },
           },
         });
-        collected.push({ name, status: "success" });
+        const result: LineResult = {
+          name: row.name,
+          email: row.email,
+          status: "success",
+        };
+        if (row.email) {
+          if (staging) {
+            // Defer: staged drafts are saved in one merged PUT after the
+            // loop (the endpoint has replace-all semantics).
+            toStage.push({
+              teamId: (team as { id: string }).id,
+              email: row.email,
+              index: collected.length,
+            });
+          } else {
+            // Same behavior as inviting a coach from the team page: email
+            // invite for new accounts, in-app pending membership for
+            // existing accounts. A failed invite never undoes the team.
+            try {
+              await customFetch(
+                `/api/v1/teams/${(team as { id: string }).id}/invites`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({ email: row.email, position: "coach" }),
+                },
+              );
+              result.coach = "invited";
+            } catch (err) {
+              result.coach = "failed";
+              result.coachReason =
+                apiErrorMessage(err) ?? "Couldn't send the coach invite";
+            }
+          }
+        }
+        collected.push(result);
       } catch (err) {
         collected.push({
-          name,
+          name: row.name,
+          email: row.email,
           status: "error",
           reason: apiErrorMessage(err) ?? "Failed to create team",
         });
-        failedNames.push(name);
+        failedRows.push(row);
       }
-      setProgress({ done: i + 1, total: names.length });
+      setProgress({ done: i + 1, total: rows.length });
       setResults([...collected]);
     }
+
+    // Platform-admin staging: merge the new pairs with any coaches already
+    // staged for other teams (the save endpoint replaces everything, so we
+    // must read-modify-write the full picture).
+    if (staging && toStage.length > 0) {
+      try {
+        const existing = await customFetch<{ data: StagedCoachRow[] }>(
+          `/api/v1/organizations/${orgId}/staged-coaches`,
+          { method: "GET" },
+        );
+        const byTeam = new Map<string, string[]>();
+        for (const r of existing.data) {
+          const list = byTeam.get(r.teamId) ?? [];
+          list.push(r.email);
+          byTeam.set(r.teamId, list);
+        }
+        for (const s of toStage) {
+          const list = byTeam.get(s.teamId) ?? [];
+          if (!list.includes(s.email)) list.push(s.email);
+          byTeam.set(s.teamId, list);
+        }
+        await customFetch(`/api/v1/organizations/${orgId}/staged-coaches`, {
+          method: "PUT",
+          body: JSON.stringify({
+            entries: Array.from(byTeam.entries()).map(([teamId, emails]) => ({
+              teamId,
+              emails,
+            })),
+          }),
+        });
+        for (const s of toStage) collected[s.index].coach = "staged";
+        await qc.invalidateQueries({ queryKey: ["staged-coaches", orgId] });
+      } catch (err) {
+        const reason =
+          apiErrorMessage(err) ?? "Couldn't save the staged coach drafts";
+        for (const s of toStage) {
+          collected[s.index].coach = "failed";
+          collected[s.index].coachReason = reason;
+        }
+      }
+      setResults([...collected]);
+    }
+
     setBusy(false);
+    setStep("input");
     await Promise.all([
       qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(orgId) }),
       qc.invalidateQueries({ queryKey: ["org-plan-usage", orgId] }),
@@ -174,15 +335,33 @@ export function BulkAddTeamsDialog({
 
     const succeeded = collected.filter((r) => r.status === "success").length;
     const failed = collected.length - succeeded;
-    // Keep only the failed lines in the textarea so the user can retry
-    // just those; clear it entirely when everything succeeded.
-    setText(failedNames.join("\n"));
-    if (failed === 0) {
+    const coachFailed = collected.filter((r) => r.coach === "failed").length;
+    // Keep only the failed lines (name + paired coach email) in the
+    // textareas so the user can retry just those; clear entirely when
+    // everything succeeded.
+    setText(failedRows.map((r) => r.name).join("\n"));
+    setCoachText(failedRows.map((r) => r.email).join("\n"));
+    if (failed === 0 && coachFailed === 0) {
+      const coachDone = collected.filter(
+        (r) => r.coach === "invited" || r.coach === "staged",
+      ).length;
       toast({
         title:
-          succeeded === 1
-            ? "Team created!"
-            : `${succeeded} teams created!`,
+          succeeded === 1 ? "Team created!" : `${succeeded} teams created!`,
+        description:
+          coachDone === 0
+            ? undefined
+            : staging
+              ? `${coachDone} coach${coachDone === 1 ? "" : "es"} staged for the owner to confirm.`
+              : `${coachDone} coach invite${coachDone === 1 ? "" : "s"} sent.`,
+      });
+    } else if (failed === 0) {
+      toast({
+        title: `${succeeded} teams created, but ${coachFailed} coach ${staging ? "draft" : "invite"}${coachFailed === 1 ? "" : "s"} failed`,
+        description: staging
+          ? "The teams exist — you can stage those coaches again from this page."
+          : "The teams exist — you can retry those invites from each team page.",
+        variant: "destructive",
       });
     } else {
       toast({
@@ -193,53 +372,190 @@ export function BulkAddTeamsDialog({
     }
   };
 
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (step === "input") {
+      if (validateForReview()) setStep("preview");
+      return;
+    }
+    await runCreate();
+  };
+
   // After a run where everything succeeded we clear the textarea, so
   // `names` is empty while `results` still holds the successes. In that
   // state, swap the primary action to a "Done" button that closes the
   // dialog instead of leaving a disabled "Create teams".
   const showDone = !busy && results.length > 0 && names.length === 0;
 
+  const gutterLines = Math.max(
+    text.split("\n").length,
+    coachText.split("\n").length,
+    8,
+  );
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle className="font-black tracking-tight">
               Bulk add teams
             </DialogTitle>
             <DialogDescription>
-              One team name per line. Each is created with just a name — you
-              can set sport, season, and photos later.
+              One team per line, with an optional coach email on the same line
+              of the second column. Coaches are optional — leave any line (or
+              the whole column) blank and add them later.
+              {staging
+                ? " Coach emails will be staged as drafts for the owner to confirm after claiming this page — nothing is sent now."
+                : " Each coach gets an invite to that specific team."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="bulk-team-names" className="font-bold">
-              Team names
-            </Label>
-            <Textarea
-              id="bulk-team-names"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={"Westfield U14 Boys\nWestfield U12 Girls\nWestfield U10 Coed"}
-              rows={8}
-              disabled={busy || atLimit}
-              autoFocus
-              data-testid="textarea-bulk-team-names"
-            />
-            <p
-              className="text-xs font-medium text-muted-foreground"
-              data-testid="text-bulk-team-count"
-            >
-              {unlimited
-                ? names.length === 0
-                  ? "No teams yet — add one name per line."
-                  : `${names.length} team${names.length === 1 ? "" : "s"} will be created`
-                : `${projected}/${limit} teams${names.length > 0 ? ` · adding ${names.length}` : ""}`}
-            </p>
-          </div>
+          {step === "input" && (
+            <>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <div className="w-7 shrink-0" aria-hidden />
+                  <div className="flex-1 min-w-0">
+                    <Label htmlFor="bulk-team-names" className="font-bold">
+                      Team names
+                    </Label>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Label htmlFor="bulk-coach-emails" className="font-bold">
+                      Coach email{" "}
+                      <span className="font-medium text-muted-foreground">
+                        (optional)
+                      </span>
+                    </Label>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {/* Shared line-number gutter — makes the row pairing
+                      unmistakable and stays scroll-locked to both columns. */}
+                  <div
+                    ref={gutterRef}
+                    className="w-7 shrink-0 overflow-hidden rounded-md border border-transparent pt-2 text-right text-xs leading-6 text-muted-foreground select-none"
+                    style={{ maxHeight: "13rem" }}
+                    aria-hidden
+                    data-testid="bulk-line-gutter"
+                  >
+                    {Array.from({ length: gutterLines }, (_, i) => (
+                      <div key={i} className="pr-1 h-6">
+                        {i + 1}
+                      </div>
+                    ))}
+                  </div>
+                  <Textarea
+                    id="bulk-team-names"
+                    ref={teamsRef}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onScroll={() => syncScroll("teams")}
+                    placeholder={"Westfield U14 Boys\nWestfield U12 Girls\nWestfield U10 Coed"}
+                    rows={8}
+                    wrap="off"
+                    className="flex-1 min-w-0 whitespace-pre leading-6 max-h-52"
+                    disabled={busy || atLimit}
+                    autoFocus
+                    data-testid="textarea-bulk-team-names"
+                  />
+                  <Textarea
+                    id="bulk-coach-emails"
+                    ref={coachesRef}
+                    value={coachText}
+                    onChange={(e) => setCoachText(e.target.value)}
+                    onScroll={() => syncScroll("coaches")}
+                    placeholder={"coach@example.com\n\nsmith@example.com"}
+                    rows={8}
+                    wrap="off"
+                    className="flex-1 min-w-0 whitespace-pre leading-6 max-h-52"
+                    disabled={busy || atLimit}
+                    data-testid="textarea-bulk-coach-emails"
+                  />
+                </div>
+                <p
+                  className="text-xs font-medium text-muted-foreground"
+                  data-testid="text-bulk-team-count"
+                >
+                  {unlimited
+                    ? names.length === 0
+                      ? "No teams yet — add one name per line."
+                      : `${names.length} team${names.length === 1 ? "" : "s"} will be created${coachCount > 0 ? ` · ${coachCount} coach${coachCount === 1 ? "" : "es"} ${staging ? "will be staged" : "will be invited"}` : ""}`
+                    : `${projected}/${limit} teams${names.length > 0 ? ` · adding ${names.length}` : ""}${coachCount > 0 ? ` · ${coachCount} coach${coachCount === 1 ? "" : "es"} ${staging ? "will be staged" : "will be invited"}` : ""}`}
+                </p>
+              </div>
 
-          {usage && (atLimit || wouldExceed) && (
+              {lineErrors.length > 0 && (
+                <div
+                  className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-1"
+                  data-testid="bulk-line-errors"
+                >
+                  {lineErrors.slice(0, 4).map((e) => (
+                    <p
+                      key={e.line}
+                      className="text-xs font-medium text-destructive"
+                    >
+                      {e.message}
+                    </p>
+                  ))}
+                  {lineErrors.length > 4 && (
+                    <p className="text-xs font-medium text-destructive">
+                      …and {lineErrors.length - 4} more
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {step === "preview" && !busy && (
+            <div className="space-y-2">
+              <p className="text-sm font-bold">
+                Review pairings before creating
+              </p>
+              <div
+                className="max-h-56 overflow-y-auto rounded-lg border border-border divide-y divide-border"
+                data-testid="list-bulk-preview"
+              >
+                {rows.map((r, i) => (
+                  <div
+                    key={`${r.name}-${i}`}
+                    className="flex items-center gap-2 px-3 py-2 text-xs"
+                    data-testid={`row-bulk-preview-${i}`}
+                  >
+                    <span className="w-5 shrink-0 text-right text-muted-foreground">
+                      {i + 1}.
+                    </span>
+                    <span className="font-bold truncate">{r.name}</span>
+                    <span className="text-muted-foreground shrink-0">→</span>
+                    {r.email ? (
+                      <span className="truncate">
+                        {r.email}
+                        <span className="text-muted-foreground">
+                          {staging
+                            ? " (staged for owner confirmation)"
+                            : " (will be invited)"}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground italic">
+                        no coach yet
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs font-medium text-muted-foreground">
+                {staging
+                  ? "Coach emails are saved as drafts only — the owner confirms and sends invites after claiming the page."
+                  : "Each coach is invited to their team the same way as from the team page."}
+              </p>
+            </div>
+          )}
+
+          {usage && (atLimit || wouldExceed) && step === "input" && (
             <div
               className={`rounded-lg border p-3 space-y-2 ${
                 atLimit
@@ -308,6 +624,25 @@ export function BulkAddTeamsDialog({
                     {r.status === "error" && r.reason && (
                       <p className="text-muted-foreground">{r.reason}</p>
                     )}
+                    {r.coach === "invited" && (
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <Mail className="w-3 h-3 shrink-0" />
+                        Coach invited: {r.email}
+                      </p>
+                    )}
+                    {r.coach === "staged" && (
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        Coach staged for owner confirmation: {r.email}
+                      </p>
+                    )}
+                    {r.coach === "failed" && (
+                      <p className="text-destructive">
+                        Coach {staging ? "staging" : "invite"} failed for{" "}
+                        {r.email}
+                        {r.coachReason ? ` — ${r.coachReason}` : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -324,6 +659,28 @@ export function BulkAddTeamsDialog({
               >
                 Done
               </Button>
+            ) : step === "preview" ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setStep("input")}
+                  disabled={busy}
+                  data-testid="btn-bulk-back"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="submit"
+                  variant="brand"
+                  disabled={busy}
+                  data-testid="btn-bulk-create-teams"
+                >
+                  {busy
+                    ? "Creating..."
+                    : `Create ${names.length} team${names.length === 1 ? "" : "s"}${coachCount > 0 ? ` & ${staging ? "stage" : "invite"} ${coachCount} coach${coachCount === 1 ? "" : "es"}` : ""}`}
+                </Button>
+              </>
             ) : (
               <>
                 <Button
@@ -337,14 +694,16 @@ export function BulkAddTeamsDialog({
                 <Button
                   type="submit"
                   variant="brand"
-                  disabled={busy || names.length === 0 || atLimit || wouldExceed}
-                  data-testid="btn-bulk-create-teams"
+                  disabled={
+                    busy ||
+                    names.length === 0 ||
+                    atLimit ||
+                    wouldExceed ||
+                    lineErrors.length > 0
+                  }
+                  data-testid="btn-bulk-review"
                 >
-                  {busy
-                    ? "Creating..."
-                    : names.length > 0
-                      ? `Create ${names.length} team${names.length === 1 ? "" : "s"}`
-                      : "Create teams"}
+                  {busy ? "Creating..." : "Review & create"}
                 </Button>
               </>
             )}

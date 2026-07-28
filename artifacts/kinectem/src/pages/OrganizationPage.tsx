@@ -432,6 +432,7 @@ export default function OrganizationPage() {
         open={bulkTeamsOpen}
         onOpenChange={setBulkTeamsOpen}
         usage={planUsage}
+        staging={isPlatformAdmin && isUnclaimed}
       />
       {/* Task #808 — platform-admin draft staging on an unclaimed org. */}
       {isPlatformAdmin && isUnclaimed && (
