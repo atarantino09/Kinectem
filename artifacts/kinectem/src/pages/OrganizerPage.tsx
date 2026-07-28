@@ -48,6 +48,9 @@ type OrganizerMeta = {
   tertiaryColor: string | null;
   bannerUrl: string | null;
   websiteUrl: string | null;
+  // Task #818 — referral promo code; server includes it only for hub
+  // owners/admins.
+  promoCode?: string | null;
   isFollowing?: boolean;
   // Task #745 — server-derived management flags: admins get the manage
   // surface, only the owner sees owner-only controls (admin removal).
@@ -132,6 +135,7 @@ function EditHubPanel({ organizer }: { organizer: OrganizerMeta }) {
   );
   const [logoUrl, setLogoUrl] = useState(organizer.logoUrl ?? "");
   const [bannerUrl, setBannerUrl] = useState(organizer.bannerUrl ?? "");
+  const [promoCode, setPromoCode] = useState(organizer.promoCode ?? "");
 
   useEffect(() => {
     setName(organizer.name);
@@ -142,6 +146,7 @@ function EditHubPanel({ organizer }: { organizer: OrganizerMeta }) {
     setTertiaryColor(organizer.tertiaryColor ?? "");
     setLogoUrl(organizer.logoUrl ?? "");
     setBannerUrl(organizer.bannerUrl ?? "");
+    setPromoCode(organizer.promoCode ?? "");
   }, [organizer]);
 
   const save = useMutation({
@@ -158,6 +163,7 @@ function EditHubPanel({ organizer }: { organizer: OrganizerMeta }) {
           tertiaryColor: tertiaryColor.trim() || null,
           logoUrl: logoUrl.trim() || null,
           bannerUrl: bannerUrl.trim() || null,
+          promoCode: promoCode.trim() || null,
         }),
       }),
     onSuccess: () => {
@@ -260,6 +266,27 @@ function EditHubPanel({ organizer }: { organizer: OrganizerMeta }) {
               placeholder="https://mycompany.com"
               data-testid="input-hub-website"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="hub-promo-code" className="text-xs font-bold">
+              Promo code{" "}
+              <span className="font-normal text-muted-foreground">
+                (if you have one)
+              </span>
+            </Label>
+            <Input
+              id="hub-promo-code"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              maxLength={64}
+              placeholder="e.g. MYEVENTS25"
+              data-testid="input-hub-promo-code"
+            />
+            <p className="text-xs text-muted-foreground">
+              Auto-fills the ready-made referral messages on all of your
+              competitions (each competition can override it with its own
+              code).
+            </p>
           </div>
         </div>
         <Button

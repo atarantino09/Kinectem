@@ -1575,6 +1575,10 @@ export const competitionOrganizers = pgTable("competition_organizers", {
   tertiaryColor: text("tertiary_color"),
   bannerUrl: text("banner_url"),
   websiteUrl: text("website_url"),
+  // Task #818 — organizer's referral promo code (free text, issued by
+  // platform admins; NOT validated against promo_codes). Auto-fills the
+  // ready-made outreach messages. Admin-only visible.
+  promoCode: text("promo_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({
@@ -1679,6 +1683,9 @@ export const tournaments = pgTable("tournaments", {
   tertiaryColor: text("tertiary_color"),
   bannerUrl: text("banner_url"),
   websiteUrl: text("website_url"),
+  // Task #818 — per-competition promo code override; falls back to the hub's
+  // code when NULL. Free text, admin-only visible (see organizer note).
+  promoCode: text("promo_code"),
   // Per-competition secret claim-invite token (mirrors organizations.claim_token).
   // Stored in plaintext (a shareable invite link, NOT a password) so the admin
   // claim-links screen can re-display it on demand. Only ever issued for

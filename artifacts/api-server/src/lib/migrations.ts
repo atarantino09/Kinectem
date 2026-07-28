@@ -1228,6 +1228,7 @@ const COMPETITIONS_STEP1 = `
   ALTER TABLE tournament_participants ADD COLUMN IF NOT EXISTS pending_claimed_at timestamp;
 `;
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -1975,6 +1976,19 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
           VALUES ('2026-07-28-task-819-remove-platform-admin-handoff-listings');
         END IF;
       END$migration$;
+    `,
+  },
+  {
+    // Task #818 — organizer promo code that auto-fills outreach messages.
+    // Hub-level code with an optional per-competition override (competition
+    // falls back to its hub's code when NULL). Free text; issued by platform
+    // admins out of band.
+    name: "2026-07-28-task-818-organizer-promo-code",
+    sql: `
+      ALTER TABLE competition_organizers
+        ADD COLUMN IF NOT EXISTS promo_code text;
+      ALTER TABLE tournaments
+        ADD COLUMN IF NOT EXISTS promo_code text;
     `,
   },
 ];

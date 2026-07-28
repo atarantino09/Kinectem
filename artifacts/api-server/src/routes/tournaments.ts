@@ -682,6 +682,9 @@ const UpdateCompetitionBody = z.object({
   tertiaryColor: BrandColor.nullable().optional(),
   bannerUrl: ImageUrl.nullable().optional(),
   websiteUrl: HttpUrl.nullable().optional(),
+  // Task #818 — per-competition promo code override (free text; empty string
+  // clears it so the hub's code applies again).
+  promoCode: z.string().trim().max(64).nullable().optional(),
 });
 
 router.patch(
@@ -758,6 +761,9 @@ router.patch(
           : {}),
         ...(body.bannerUrl !== undefined ? { bannerUrl: body.bannerUrl } : {}),
         ...(body.websiteUrl !== undefined ? { websiteUrl: body.websiteUrl } : {}),
+        ...(body.promoCode !== undefined
+          ? { promoCode: body.promoCode || null }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(tournaments.id, competition.id))
@@ -779,6 +785,7 @@ router.patch(
       tertiaryColor: row.tertiaryColor,
       bannerUrl: row.bannerUrl,
       websiteUrl: row.websiteUrl,
+      promoCode: row.promoCode,
     });
   }),
 );
@@ -866,6 +873,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
             slug: competitionOrganizers.slug,
             name: competitionOrganizers.name,
             logoUrl: competitionOrganizers.logoUrl,
+            promoCode: competitionOrganizers.promoCode,
           })
           .from(competitionOrganizers)
           .where(eq(competitionOrganizers.id, tournament.organizerId))
@@ -963,8 +971,19 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       // True only for the competition operator (owner/creator or platform
       // admin) — drives the "Edit competition" button on the public page.
       canManage,
+      // Task #818 — promo code is admin-only (never in the public payload).
+      // The hub's code rides along so the console can show the fallback.
+      ...(canManage ? { promoCode: tournament.promoCode } : {}),
       // Parent-company hub (null when the competition is standalone).
-      organizer: organizerRow ?? null,
+      organizer: organizerRow
+        ? {
+            id: organizerRow.id,
+            slug: organizerRow.slug,
+            name: organizerRow.name,
+            logoUrl: organizerRow.logoUrl,
+            ...(canManage ? { promoCode: organizerRow.promoCode } : {}),
+          }
+        : null,
     };
 
     res.json({

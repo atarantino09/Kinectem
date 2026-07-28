@@ -13,6 +13,26 @@ export interface CompetitionInviteInput {
   autoApproveClaims: boolean;
   /** Absolute public competition URL (with the /app prefix). */
   url: string;
+  /**
+   * Task #818 — effective promo code (competition's own, else the hub's).
+   * When present the message mentions the 25% first-year discount; when
+   * null/absent the message reads normally without any promo mention.
+   */
+  promoCode?: string | null;
+}
+
+/**
+ * Task #818 — resolve the code that should auto-fill outreach messages:
+ * the competition's own code wins, otherwise the hub's code, else null.
+ */
+export function resolveEffectivePromoCode(
+  competitionCode: string | null | undefined,
+  hubCode: string | null | undefined,
+): string | null {
+  const comp = competitionCode?.trim();
+  if (comp) return comp;
+  const hub = hubCode?.trim();
+  return hub || null;
 }
 
 const MONTHS = [
@@ -74,6 +94,14 @@ export function buildCompetitionInviteMessage(
     `5. Pick your existing Kinectem team — or create a new one just for this ${typeLabel}`,
     `6. That's it! Your games are added to your team page automatically.`,
   ];
+
+  const promoCode = c.promoCode?.trim();
+  if (promoCode) {
+    lines.push(
+      ``,
+      `One more thing: if your club isn't on Kinectem yet, use our promo code ${promoCode} when you pick your organization's plan — it takes 25% off your first year on Kinectem.`,
+    );
+  }
 
   if (!c.autoApproveClaims) {
     lines.push(

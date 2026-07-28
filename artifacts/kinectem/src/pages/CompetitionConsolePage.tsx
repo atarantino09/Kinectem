@@ -15,7 +15,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { buildCompetitionInviteMessage } from "@/lib/competition-invite-message";
+import {
+  buildCompetitionInviteMessage,
+  resolveEffectivePromoCode,
+} from "@/lib/competition-invite-message";
 import { PLANS } from "@/lib/plans";
 import {
   SpotlightTour,
@@ -100,6 +103,9 @@ interface CompetitionDetail {
     tertiaryColor: string | null;
     bannerUrl: string | null;
     websiteUrl: string | null;
+    // Task #818 — admin-only fields (server includes them only for managers).
+    promoCode?: string | null;
+    organizer?: { promoCode?: string | null } | null;
   };
 }
 
@@ -641,6 +647,7 @@ function InviteTeamsPanel({
   location,
   autoApproveClaims,
   slug,
+  promoCode,
 }: {
   name: string;
   type: "tournament" | "league";
@@ -649,6 +656,7 @@ function InviteTeamsPanel({
   location: string | null;
   autoApproveClaims: boolean;
   slug: string;
+  promoCode: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
@@ -665,6 +673,7 @@ function InviteTeamsPanel({
     location,
     autoApproveClaims,
     url: publicUrl,
+    promoCode,
   });
 
   const copyMessage = () =>
@@ -745,7 +754,10 @@ function formatUsdExact(amount: number): string {
   })}`;
 }
 
-function buildPromoReferralMessage(competitionName: string): string {
+function buildPromoReferralMessage(
+  competitionName: string,
+  promoCode: string | null,
+): string {
   const cheapest = PLANS.reduce((a, b) =>
     b.priceYearly < a.priceYearly ? b : a,
   );
@@ -759,7 +771,7 @@ Every new organization gets its first 90 days on Kinectem completely free — yo
 Here's how to claim it:
 1. Go to Kinectem and create your organization — your 90-day free period starts right away.
 2. Pick the plan that fits your club's size.
-3. Enter promo code [YOUR PROMO CODE] when you pick your plan — it's applied automatically at checkout, and the 25% discount comes off your first charge.
+3. Enter promo code ${promoCode ?? "[YOUR PROMO CODE]"} when you pick your plan — it's applied automatically at checkout, and the 25% discount comes off your first charge.
 
 Feel free to reach out if you have any questions — we'd love to see your club on Kinectem.
 
@@ -767,9 +779,44 @@ Thanks,
 The ${competitionName} team`;
 }
 
-function PromoReferralPanel({ competitionName }: { competitionName: string }) {
+function PromoReferralPanel({
+  competitionId,
+  competitionName,
+  promoCode,
+  hubPromoCode,
+}: {
+  competitionId: string;
+  competitionName: string;
+  promoCode: string | null;
+  hubPromoCode: string | null;
+}) {
   const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
   const { toast } = useToast();
+
+  // Task #818 — per-competition code override; blank falls back to the hub's.
+  const [codeInput, setCodeInput] = useState(promoCode ?? "");
+  useEffect(() => setCodeInput(promoCode ?? ""), [promoCode]);
+  const effectiveCode = resolveEffectivePromoCode(promoCode, hubPromoCode);
+
+  const saveCode = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/v1/competitions/${competitionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promoCode: codeInput.trim() || null }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["competition"] });
+      toast({ title: "Promo code saved" });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't save the promo code",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
+  });
 
   const rows = PLANS.map((plan) => {
     const discounted = plan.priceYearly * (1 - REFERRAL_DISCOUNT);
@@ -788,7 +835,7 @@ function PromoReferralPanel({ competitionName }: { competitionName: string }) {
     .map((r) => `${REFERRAL_EXAMPLE_MIX[r.plan.id] ?? 0} ${r.plan.name}`)
     .join(" + ");
 
-  const message = buildPromoReferralMessage(competitionName);
+  const message = buildPromoReferralMessage(competitionName, effectiveCode);
 
   const copyMessage = () =>
     navigator.clipboard
@@ -877,10 +924,73 @@ function PromoReferralPanel({ competitionName }: { competitionName: string }) {
           <span className="font-bold">{formatUsdExact(exampleTotal)}</span>.
         </div>
 
+        {/* Task #818 — save a per-competition code; blank uses the hub's. */}
+        <div className="space-y-1.5">
+          <Label htmlFor="promo-code" className="text-xs font-bold">
+            Your promo code{" "}
+            <span className="font-normal text-muted-foreground">
+              (if you have one)
+            </span>
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id="promo-code"
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value)}
+              maxLength={64}
+              placeholder={
+                hubPromoCode
+                  ? `Uses your hub's code (${hubPromoCode}) when empty`
+                  : "e.g. SUMMERCUP25"
+              }
+              data-testid="input-competition-promo-code"
+            />
+            <Button
+              variant="brand"
+              onClick={() => saveCode.mutate()}
+              disabled={saveCode.isPending || codeInput.trim() === (promoCode ?? "")}
+              data-testid="btn-save-competition-promo-code"
+            >
+              {saveCode.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          {hubPromoCode ? (
+            <p className="text-xs text-muted-foreground">
+              Leave this blank to use your hub's code ({hubPromoCode}).
+            </p>
+          ) : null}
+        </div>
+
+        {!effectiveCode ? (
+          <p
+            className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground"
+            data-testid="text-promo-add-code-prompt"
+          >
+            <span className="font-bold text-foreground">
+              No promo code saved yet.
+            </span>{" "}
+            Add your code above (or on your hub page) and it will be filled
+            into the message below automatically.
+          </p>
+        ) : null}
+
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Copy this ready-made message, swap in your promo code, and send it
-            to the teams and clubs in your competition.
+            {effectiveCode ? (
+              <>
+                Copy this ready-made message — your promo code (
+                <span className="font-bold text-foreground">
+                  {effectiveCode}
+                </span>
+                ) is already filled in — and send it to the teams and clubs in
+                your competition.
+              </>
+            ) : (
+              <>
+                Copy this ready-made message, swap in your promo code, and send
+                it to the teams and clubs in your competition.
+              </>
+            )}
           </p>
           <pre
             className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-sans text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]"
@@ -3033,7 +3143,12 @@ function ConsoleWithTour({
       ) : (
         <Skeleton className="h-48 rounded-xl" />
       )}
-      <PromoReferralPanel competitionName={detail?.name ?? row.name} />
+      <PromoReferralPanel
+        competitionId={row.id}
+        competitionName={detail?.name ?? row.name}
+        promoCode={detail?.promoCode ?? null}
+        hubPromoCode={detail?.organizer?.promoCode ?? null}
+      />
       <SchedulePanel
         competitionId={row.id}
         matchCount={row.matchCount}
@@ -3048,6 +3163,10 @@ function ConsoleWithTour({
         location={detail ? detail.location : row.location}
         autoApproveClaims={detail?.autoApproveClaims ?? row.autoApproveClaims}
         slug={row.slug}
+        promoCode={resolveEffectivePromoCode(
+          detail?.promoCode,
+          detail?.organizer?.promoCode,
+        )}
       />
       <ClaimsPanel
         competitionId={row.id}

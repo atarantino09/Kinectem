@@ -183,6 +183,9 @@ router.get(
     res.json({
       data: rows.map((o) => ({
         ...organizerToJson(o),
+        // Task #818 — every row here is owner/admin-visible, so the promo
+        // code is safe to include (organizerToJson stays public-safe).
+        promoCode: o.promoCode,
         competitionCount: countById.get(o.id) ?? 0,
         accessRole: o.ownerUserId === me.id ? "owner" : "admin",
       })),
@@ -203,6 +206,8 @@ const UpdateOrganizerBody = z.object({
   tertiaryColor: BrandColor.nullable().optional(),
   bannerUrl: ImageUrl.nullable().optional(),
   websiteUrl: HttpUrl.nullable().optional(),
+  // Task #818 — referral promo code (free text; empty string clears it).
+  promoCode: z.string().trim().max(64).nullable().optional(),
 });
 
 router.patch(
@@ -261,11 +266,16 @@ router.patch(
           : {}),
         ...(body.bannerUrl !== undefined ? { bannerUrl: body.bannerUrl } : {}),
         ...(body.websiteUrl !== undefined ? { websiteUrl: body.websiteUrl } : {}),
+        // Normalize: trimmed by Zod; empty string means "clear the code".
+        ...(body.promoCode !== undefined
+          ? { promoCode: body.promoCode || null }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(competitionOrganizers.id, organizer.id))
       .returning();
-    res.json(organizerToJson(updated));
+    // Caller is a hub owner/admin (checked above) — safe to include the code.
+    res.json({ ...organizerToJson(updated), promoCode: updated.promoCode });
   }),
 );
 
@@ -432,6 +442,9 @@ router.get(
     res.json({
       organizer: {
         ...organizerToJson(organizer),
+        // Task #818 — the promo code is admin-only: never in the public
+        // payload, only when the viewer can manage this hub.
+        ...(viewerCanManage ? { promoCode: organizer.promoCode } : {}),
         isFollowing,
         viewerCanManage,
         viewerIsOwner,
