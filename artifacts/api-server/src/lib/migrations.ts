@@ -1979,6 +1979,43 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
+    // Follow-up to task #819: production has hand-off orgs/teams created
+    // BEFORE created_by_id was recorded (both NULL — e.g. "FC BERNA -
+    // LEGACY"), which the creator-matching cleanup above cannot catch. A
+    // platform admin listed as roster staff on a team whose org is
+    // UNCLAIMED (no owner row) is a hand-off artifact, not a real
+    // membership — platform admins retain manage powers via the
+    // permissions bypass, so nothing is lost. Marker-gated one-shot, same
+    // rationale as above.
+    name: "2026-07-28-task-819b-remove-admin-roster-on-unclaimed-orgs",
+    sql: `
+      CREATE TABLE IF NOT EXISTS one_time_migration_markers (
+        name       text PRIMARY KEY,
+        applied_at timestamp NOT NULL DEFAULT now()
+      );
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM one_time_migration_markers
+          WHERE name = '2026-07-28-task-819b-remove-admin-roster-on-unclaimed-orgs'
+        ) THEN
+          DELETE FROM roster_entries re
+          USING users u, teams t, organizations o
+          WHERE re.user_id = u.id AND u.role = 'admin'
+            AND t.id = re.team_id
+            AND o.id = t.organization_id
+            AND NOT EXISTS (
+              SELECT 1 FROM organization_admins oa
+              WHERE oa.organization_id = o.id AND oa.role = 'owner'
+            );
+
+          INSERT INTO one_time_migration_markers (name)
+          VALUES ('2026-07-28-task-819b-remove-admin-roster-on-unclaimed-orgs');
+        END IF;
+      END$migration$;
+    `,
+  },
+  {
     // Task #818 — organizer promo code that auto-fills outreach messages.
     // Hub-level code with an optional per-competition override (competition
     // falls back to its hub's code when NULL). Free text; issued by platform

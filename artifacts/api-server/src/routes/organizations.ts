@@ -2733,31 +2733,35 @@ async function computeOrgSetupStatus(orgId: string, userId: string) {
         where ${organizationInvites.organizationId} = ${orgId}
           and ${organizationInvites.status} = 'pending'
       )`,
+      // NOTE: drizzle renders \`\${table.column}\` UNQUALIFIED inside raw
+      // sql\`\` templates, so joins between tables sharing column names
+      // ("id", "status", ...) become ambiguous and the whole query 500s.
+      // These subqueries must use literal table-qualified identifiers.
       rosterCount: sql<number>`(
-        select count(*)::int from ${rosterEntries}
-        inner join ${teams} on ${teams.id} = ${rosterEntries.teamId}
-        where ${teams.organizationId} = ${orgId}
-          and ${teams.archivedAt} is null
+        select count(*)::int from roster_entries re
+        inner join teams t on t.id = re.team_id
+        where t.organization_id = ${orgId}
+          and t.archived_at is null
       )`,
       guardianLinkCount: sql<number>`(
-        select count(*)::int from ${rosterEntries}
-        inner join ${teams} on ${teams.id} = ${rosterEntries.teamId}
-        inner join ${users} on ${users.id} = ${rosterEntries.userId}
-        where ${teams.organizationId} = ${orgId}
-          and ${teams.archivedAt} is null
+        select count(*)::int from roster_entries re
+        inner join teams t on t.id = re.team_id
+        inner join users u on u.id = re.user_id
+        where t.organization_id = ${orgId}
+          and t.archived_at is null
           -- Task #755: linked = any ACTIVE guardian link, not just parentId
           and exists (
-            select 1 from ${guardianLinks}
-            where ${guardianLinks.childId} = ${users.id}
-              and ${guardianLinks.status} = 'active'
+            select 1 from guardian_links gl
+            where gl.child_id = u.id
+              and gl.status = 'active'
           )
       )`,
       pendingRosterInviteCount: sql<number>`(
-        select count(*)::int from ${rosterInvites}
-        inner join ${teams} on ${teams.id} = ${rosterInvites.teamId}
-        where ${teams.organizationId} = ${orgId}
-          and ${teams.archivedAt} is null
-          and ${rosterInvites.status} = 'pending'
+        select count(*)::int from roster_invites ri
+        inner join teams t on t.id = ri.team_id
+        where t.organization_id = ${orgId}
+          and t.archived_at is null
+          and ri.status = 'pending'
       )`,
     })
     .from(sql`(select 1) as _one`);

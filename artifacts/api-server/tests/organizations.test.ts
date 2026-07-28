@@ -68,6 +68,33 @@ describe("organizations", () => {
     ).toBeDefined();
   });
 
+  it("setup-status works on an org with teams and roster rows (ambiguous-column regression)", async () => {
+    // Regression: drizzle renders ${table.column} UNQUALIFIED inside raw
+    // sql`` templates, so the setup-status count subqueries 500ed with
+    // 'column reference "id" is ambiguous' on any org that actually had
+    // teams + roster entries. Exercise the endpoint with joined data.
+    const { agent } = await loginAs((u) => u.role === "parent");
+    const created = await agent.post("/api/v1/organizations").send({
+      name: "Setup Status Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090",
+    });
+    expect(created.status).toBe(201);
+    // Creating a team auto-adds the creator to the roster, giving the
+    // rosterCount/guardianLinkCount subqueries real joined rows.
+    const team = await agent
+      .post(`/api/v1/organizations/${created.body.id}/teams`)
+      .send({ name: "Setup Status Team", sport: "Soccer" });
+    expect(team.status).toBe(201);
+    const status = await agent.get(
+      `/api/v1/organizations/${created.body.id}/setup-status`,
+    );
+    expect(status.status).toBe(200);
+    expect(status.body.steps.hasTeam).toBe(true);
+    expect(status.body.steps.hasRosterEntry).toBe(true);
+  });
+
   it("creates an UNCLAIMED org (no owner/member rows) when a platform admin creates it", async () => {
     // Platform admins set orgs up to hand off; they must not be listed as
     // owner, admin, or follower anywhere. The org stays unclaimed until
