@@ -542,8 +542,8 @@ export default function AdminCompetitionClaimLinks() {
             <TableHead className="w-[110px]">Emailed</TableHead>
             <TableHead className="w-[70px]">Logo</TableHead>
             <TableHead>Competition</TableHead>
-            <TableHead>Dates</TableHead>
-            <TableHead className="w-[150px]">Promo code</TableHead>
+            <TableHead className="w-[130px]">Dates</TableHead>
+            <TableHead className="min-w-[220px]">Promo code</TableHead>
             <TableHead>Claim link</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -606,14 +606,16 @@ export default function AdminCompetitionClaimLinks() {
                     {r.type}
                   </span>
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                  {r.startDate} → {r.endDate}
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                  {r.startDate.slice(5).replace("-", "/")} →{" "}
+                  {r.endDate.slice(5).replace("-", "/")}
+                  <span className="block text-[10px]">{r.startDate.slice(0, 4)}</span>
                 </TableCell>
                 <TableCell>
                   <Input
                     value={promoDrafts[r.id] ?? r.promoCode ?? ""}
                     placeholder="e.g. LEGACY25"
-                    className="h-8 text-xs font-mono uppercase"
+                    className="h-8 min-w-[200px] text-sm font-mono uppercase"
                     maxLength={64}
                     disabled={promoSavingId === r.id}
                     onChange={(e) =>
