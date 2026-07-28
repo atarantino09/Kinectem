@@ -24,26 +24,36 @@ import {
   Shield,
   UserPlus,
   ClipboardList,
-  Heart,
   X,
   RotateCcw,
 } from "lucide-react";
 
+// "addPlayersAndParents" merges the server's `hasRosterEntry` and
+// `hasGuardianLinkOrInvite` booleans — adding players IS inviting the
+// parents (roster invites go to the guardian email), so it's one step.
 type StepKey =
   | "logoSet"
   | "hasTeam"
   | "hasStaffOrInvite"
   | "hasCoAdmin"
-  | "hasRosterEntry"
-  | "hasGuardianLinkOrInvite";
+  | "addPlayersAndParents";
+
+function isStepDone(
+  key: StepKey,
+  steps: OrgSetupStatusResponse["steps"],
+): boolean {
+  if (key === "addPlayersAndParents") {
+    return steps.hasRosterEntry || steps.hasGuardianLinkOrInvite;
+  }
+  return steps[key];
+}
 
 type StepAction =
   | "editLogo"
   | "createTeam"
   | "manageMembers"
   | "promoteAdmin"
-  | "viewTeams"
-  | "viewTeamsForGuardian";
+  | "viewTeams";
 
 type StepDef = {
   key: StepKey;
@@ -89,21 +99,13 @@ const STEPS: StepDef[] = [
     actionLabel: "Promote a member",
   },
   {
-    key: "hasRosterEntry",
-    title: "Add players to a roster",
-    description: "Open a team to invite or add players to its roster.",
+    key: "addPlayersAndParents",
+    title: "Add players & invite parents",
+    description:
+      "Add players to a team roster — the invite goes to their parent/guardian's email so families can follow along.",
     Icon: Users,
     action: "viewTeams",
     actionLabel: "Go to teams",
-  },
-  {
-    key: "hasGuardianLinkOrInvite",
-    title: "Invite parents / guardians",
-    description:
-      "Send roster invites with a guardian email so families can follow along.",
-    Icon: Heart,
-    action: "viewTeamsForGuardian",
-    actionLabel: "Open a team",
   },
 ];
 
@@ -123,6 +125,7 @@ export function OrgSetupChecklist({
   actions: OrgSetupChecklistActions;
 }) {
   const qc = useQueryClient();
+  const [expanded, setExpanded] = useState(true);
   const { data, isLoading } = useGetOrgSetupStatus(orgId);
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getGetOrgSetupStatusQueryKey(orgId) });
@@ -184,7 +187,6 @@ export function OrgSetupChecklist({
         actions.onPromoteAdmin();
         return;
       case "viewTeams":
-      case "viewTeamsForGuardian":
         actions.onGoToTeams();
         return;
     }
@@ -195,51 +197,65 @@ export function OrgSetupChecklist({
       className="rounded-xl border border-border shadow-sm overflow-hidden"
       data-testid="card-org-setup-checklist"
     >
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <ClipboardList className="w-5 h-5 text-primary shrink-0" />
-          <h2 className="text-base font-black tracking-tight truncate">
-            Get your org set up
-          </h2>
-          <Badge
-            variant="outline"
-            className="text-[10px] uppercase tracking-wider font-bold"
-            data-testid="badge-org-setup-progress"
-          >
-            {status.completedCount} of {status.totalSteps} done
-          </Badge>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="font-bold"
-          onClick={() => dismiss.mutate({ orgId })}
-          disabled={dismiss.isPending}
-          data-testid="btn-org-setup-checklist-dismiss"
-          aria-label="Dismiss setup checklist"
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <div
+          className={`px-4 py-3 flex items-center justify-between gap-2 ${
+            expanded ? "border-b border-border" : ""
+          }`}
         >
-          <X className="w-4 h-4" />
-        </Button>
-      </div>
-
-      {status.allComplete ? (
-        <CardContent className="p-4">
-          <div
-            className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-400"
-            data-testid="text-org-setup-complete"
+          <CollapsibleTrigger
+            className="flex items-center gap-2 min-w-0 flex-1 text-left hover:opacity-80 transition-opacity"
+            data-testid="btn-org-setup-checklist-toggle"
           >
-            <CheckCircle2 className="w-5 h-5" />
-            Setup complete ✓
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            You've finished the first-run setup. You can dismiss this card.
-          </p>
-        </CardContent>
-      ) : (
-        <CardContent className="p-0">
-          <ul className="divide-y divide-border">
-            {STEPS.map((step) => {
-              const done = status.steps[step.key];
+            <ClipboardList className="w-5 h-5 text-primary shrink-0" />
+            <h2 className="text-base font-black tracking-tight truncate">
+              Get your org set up
+            </h2>
+            <Badge
+              variant="outline"
+              className="text-[10px] uppercase tracking-wider font-bold"
+              data-testid="badge-org-setup-progress"
+            >
+              {status.completedCount} of {status.totalSteps} done
+            </Badge>
+            <ChevronDown
+              className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${
+                expanded ? "rotate-180" : ""
+              }`}
+            />
+          </CollapsibleTrigger>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="font-bold"
+            onClick={() => dismiss.mutate({ orgId })}
+            disabled={dismiss.isPending}
+            data-testid="btn-org-setup-checklist-dismiss"
+            aria-label="Dismiss setup checklist"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <CollapsibleContent>
+          {status.allComplete ? (
+            <CardContent className="p-4">
+              <div
+                className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-400"
+                data-testid="text-org-setup-complete"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+                Setup complete ✓
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                You've finished the first-run setup. You can dismiss this card.
+              </p>
+            </CardContent>
+          ) : (
+            <CardContent className="p-0">
+              <ul className="divide-y divide-border">
+                {STEPS.map((step) => {
+                  const done = isStepDone(step.key, status.steps);
               return (
                 <li
                   key={step.key}
@@ -280,12 +296,14 @@ export function OrgSetupChecklist({
                       {step.actionLabel}
                     </Button>
                   )}
-                </li>
-              );
-            })}
-          </ul>
-        </CardContent>
-      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       <RolesPermissionsAccordion />
     </Card>

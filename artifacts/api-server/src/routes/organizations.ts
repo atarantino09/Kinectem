@@ -2778,9 +2778,20 @@ async function computeOrgSetupStatus(orgId: string, userId: string) {
       (counts?.guardianLinkCount ?? 0) >= 1 ||
       (counts?.pendingRosterInviteCount ?? 0) >= 1,
   };
-  const stepValues = Object.values(steps);
-  const completedCount = stepValues.filter(Boolean).length;
-  const totalSteps = stepValues.length;
+  // "Add players" and "Invite parents/guardians" are one logical step —
+  // adding a player sends the roster invite to the guardian email. The
+  // locked spec still requires both booleans in `steps`, but progress
+  // counts treat them as a single merged step (done if either signal
+  // fired).
+  const logicalSteps = [
+    steps.logoSet,
+    steps.hasTeam,
+    steps.hasStaffOrInvite,
+    steps.hasCoAdmin,
+    steps.hasRosterEntry || steps.hasGuardianLinkOrInvite,
+  ];
+  const completedCount = logicalSteps.filter(Boolean).length;
+  const totalSteps = logicalSteps.length;
   return {
     orgId,
     steps,

@@ -31,6 +31,17 @@ const ALL_STEPS: StepKey[] = [
   "hasGuardianLinkOrInvite",
 ];
 
+// The UI merges hasRosterEntry + hasGuardianLinkOrInvite into a single
+// "Add players & invite parents" row keyed `addPlayersAndParents`.
+const UI_STEPS = [
+  "logoSet",
+  "hasTeam",
+  "hasStaffOrInvite",
+  "hasCoAdmin",
+  "addPlayersAndParents",
+] as const;
+const UI_TOTAL = UI_STEPS.length;
+
 function buildStatus(opts: {
   done?: Partial<Record<StepKey, boolean>>;
   dismissedAt?: string | null;
@@ -44,13 +55,21 @@ function buildStatus(opts: {
     hasGuardianLinkOrInvite: false,
     ...opts.done,
   };
-  const completedCount = Object.values(steps).filter(Boolean).length;
+  // Mirror the server: roster + guardian booleans count as ONE merged step.
+  const logical = [
+    steps.logoSet,
+    steps.hasTeam,
+    steps.hasStaffOrInvite,
+    steps.hasCoAdmin,
+    steps.hasRosterEntry || steps.hasGuardianLinkOrInvite,
+  ];
+  const completedCount = logical.filter(Boolean).length;
   return {
     orgId: ORG_ID,
     steps,
     completedCount,
-    totalSteps: ALL_STEPS.length,
-    allComplete: completedCount === ALL_STEPS.length,
+    totalSteps: UI_TOTAL,
+    allComplete: completedCount === UI_TOTAL,
     dismissedAt: opts.dismissedAt ?? null,
   };
 }
@@ -110,7 +129,7 @@ beforeEach(() => {
 });
 
 describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
-  it("renders all six steps with an action button when nothing is done", async () => {
+  it("renders all five steps with an action button when nothing is done", async () => {
     const actions = makeActions();
     renderWithProviders(
       <OrgSetupChecklist orgId={ORG_ID} actions={actions} />,
@@ -119,11 +138,11 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     // Card shell + progress badge.
     await screen.findByTestId("card-org-setup-checklist");
     expect(screen.getByTestId("badge-org-setup-progress")).toHaveTextContent(
-      `0 of ${ALL_STEPS.length} done`,
+      `0 of ${UI_TOTAL} done`,
     );
 
     // Every step has a row, an empty Circle, and an action button.
-    for (const key of ALL_STEPS) {
+    for (const key of UI_STEPS) {
       expect(screen.getByTestId(`row-org-setup-${key}`)).toBeInTheDocument();
       expect(
         screen.getByTestId(`icon-org-setup-todo-${key}`),
@@ -146,7 +165,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     await screen.findByTestId("card-org-setup-checklist");
 
     expect(screen.getByTestId("badge-org-setup-progress")).toHaveTextContent(
-      `2 of ${ALL_STEPS.length} done`,
+      `2 of ${UI_TOTAL} done`,
     );
     expect(screen.getByTestId("icon-org-setup-done-logoSet")).toBeInTheDocument();
     expect(
@@ -259,11 +278,57 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     await user.click(screen.getByTestId("btn-org-setup-action-hasCoAdmin"));
     expect(actions.onPromoteAdmin).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByTestId("btn-org-setup-action-hasRosterEntry"));
     await user.click(
-      screen.getByTestId("btn-org-setup-action-hasGuardianLinkOrInvite"),
+      screen.getByTestId("btn-org-setup-action-addPlayersAndParents"),
     );
-    expect(actions.onGoToTeams).toHaveBeenCalledTimes(2);
+    expect(actions.onGoToTeams).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the merged players/parents step done when either boolean is set", async () => {
+    // Guardian invite sent but no accepted roster entry yet — the merged
+    // step must still read as done.
+    currentStatus = buildStatus({
+      done: { hasGuardianLinkOrInvite: true },
+    });
+    renderWithProviders(
+      <OrgSetupChecklist orgId={ORG_ID} actions={makeActions()} />,
+    );
+
+    await screen.findByTestId("card-org-setup-checklist");
+    expect(
+      screen.getByTestId("icon-org-setup-done-addPlayersAndParents"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("btn-org-setup-action-addPlayersAndParents"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("badge-org-setup-progress")).toHaveTextContent(
+      `1 of ${UI_TOTAL} done`,
+    );
+  });
+
+  it("collapses and expands the checklist from the header toggle", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <OrgSetupChecklist orgId={ORG_ID} actions={makeActions()} />,
+    );
+
+    await screen.findByTestId("card-org-setup-checklist");
+    // Expanded by default.
+    expect(screen.getByTestId("row-org-setup-logoSet")).toBeVisible();
+
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("row-org-setup-logoSet"),
+      ).not.toBeInTheDocument();
+    });
+    // Header (title + progress badge) stays visible while collapsed.
+    expect(screen.getByTestId("badge-org-setup-progress")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
+    await waitFor(() => {
+      expect(screen.getByTestId("row-org-setup-logoSet")).toBeVisible();
+    });
   });
 
   it("expands and collapses the roles & permissions accordion", async () => {

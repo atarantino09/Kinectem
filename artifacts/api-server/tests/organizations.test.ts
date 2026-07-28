@@ -93,6 +93,11 @@ describe("organizations", () => {
     expect(status.status).toBe(200);
     expect(status.body.steps.hasTeam).toBe(true);
     expect(status.body.steps.hasRosterEntry).toBe(true);
+    // Roster + guardian booleans count as ONE merged logical step, so the
+    // spec-required 6 booleans report progress out of 5.
+    expect(status.body.totalSteps).toBe(5);
+    expect(status.body.completedCount).toBeGreaterThanOrEqual(1);
+    expect(status.body.allComplete).toBe(false);
   });
 
   it("creates an UNCLAIMED org (no owner/member rows) when a platform admin creates it", async () => {
