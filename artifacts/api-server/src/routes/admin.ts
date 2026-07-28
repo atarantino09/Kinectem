@@ -2049,6 +2049,8 @@ router.get(
         startDate: tournaments.startDate,
         endDate: tournaments.endDate,
         logoUrl: tournaments.logoUrl,
+        brandColor: tournaments.brandColor,
+        secondaryColor: tournaments.secondaryColor,
         promoCode: tournaments.promoCode,
         claimToken: tournaments.claimToken,
         outreachMessagedAt: tournaments.outreachMessagedAt,
@@ -2068,6 +2070,8 @@ router.get(
       startDate: string;
       endDate: string;
       logoUrl: string | null;
+      brandColor: string | null;
+      secondaryColor: string | null;
       promoCode: string | null;
       token: string;
       messagedAt: string | null;
@@ -2101,6 +2105,8 @@ router.get(
         startDate: r.startDate,
         endDate: r.endDate,
         logoUrl: r.logoUrl,
+        brandColor: r.brandColor,
+        secondaryColor: r.secondaryColor,
         promoCode: r.promoCode,
         token,
         messagedAt: r.outreachMessagedAt
@@ -2286,6 +2292,67 @@ router.patch(
       });
     }
     return res.json({ data: { id: row.id, logoUrl: row.logoUrl } });
+  }),
+);
+
+// Set / clear brand colors on an ownerless competition so its page (and
+// claim landing card) is already branded when the organizer claims it.
+// Body: { brandColor?, secondaryColor? } — #rrggbb hex or null/"" to clear;
+// omitted fields are left untouched.
+router.patch(
+  "/competition-claim-links/:id/branding",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const HEX = /^#[0-9a-fA-F]{6}$/;
+    const parseColor = (
+      raw: unknown,
+      field: string,
+    ): { ok: true; value: string | null } | { ok: false; error: string } => {
+      if (raw === null || raw === "") return { ok: true, value: null };
+      if (typeof raw !== "string" || !HEX.test(raw.trim())) {
+        return { ok: false, error: `${field} must be a #rrggbb hex color` };
+      }
+      return { ok: true, value: raw.trim() };
+    };
+    const updates: { brandColor?: string | null; secondaryColor?: string | null } = {};
+    if (req.body && "brandColor" in req.body) {
+      const p = parseColor(req.body.brandColor, "brandColor");
+      if (!p.ok) return res.status(400).json({ error: p.error, code: "INVALID_COLOR" });
+      updates.brandColor = p.value;
+    }
+    if (req.body && "secondaryColor" in req.body) {
+      const p = parseColor(req.body.secondaryColor, "secondaryColor");
+      if (!p.ok) return res.status(400).json({ error: p.error, code: "INVALID_COLOR" });
+      updates.secondaryColor = p.value;
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        error: "Provide brandColor and/or secondaryColor",
+        code: "INVALID_BODY",
+      });
+    }
+    const [row] = await db
+      .update(tournaments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tournaments.id, id),
+          isNull(tournaments.ownerUserId),
+          isNull(tournaments.createdById),
+        ),
+      )
+      .returning({
+        id: tournaments.id,
+        brandColor: tournaments.brandColor,
+        secondaryColor: tournaments.secondaryColor,
+      });
+    if (!row) {
+      return res.status(404).json({
+        error: "Ownerless competition not found (it may already be claimed)",
+        code: "COMPETITION_NOT_FOUND",
+      });
+    }
+    return res.json({ data: row });
   }),
 );
 

@@ -22,6 +22,14 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { BrandImageField } from "@/components/BrandImageField";
+import { BrandColorField } from "@/components/BrandColorField";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   shrinkImageToDataUrl,
   isUnsupportedHeicImage,
@@ -44,6 +52,8 @@ type ClaimLinkRow = {
   startDate: string;
   endDate: string;
   logoUrl: string | null;
+  brandColor: string | null;
+  secondaryColor: string | null;
   promoCode: string | null;
   token: string;
   messagedAt: string | null;
@@ -329,6 +339,54 @@ export default function AdminCompetitionClaimLinks() {
     }
   };
 
+  // Branding dialog: click a competition's name to set its brand colors so
+  // the page + claim landing card are already branded when it's claimed.
+  const [brandingTarget, setBrandingTarget] = useState<ClaimLinkRow | null>(null);
+  const [brandDraft, setBrandDraft] = useState("");
+  const [secondaryDraft, setSecondaryDraft] = useState("");
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+
+  const openBranding = (r: ClaimLinkRow) => {
+    setBrandingTarget(r);
+    setBrandDraft(r.brandColor ?? "");
+    setSecondaryDraft(r.secondaryColor ?? "");
+  };
+
+  const brandingValid =
+    (brandDraft.trim() === "" || HEX.test(brandDraft.trim())) &&
+    (secondaryDraft.trim() === "" || HEX.test(secondaryDraft.trim()));
+
+  const saveBranding = async () => {
+    if (!brandingTarget || !brandingValid) return;
+    setBrandingSaving(true);
+    try {
+      await customFetch(
+        `/api/v1/admin/competition-claim-links/${brandingTarget.id}/branding`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            brandColor: brandDraft.trim() || null,
+            secondaryColor: secondaryDraft.trim() || null,
+          }),
+        },
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "competition-claim-links"],
+      });
+      toast({ title: `Branding updated for ${brandingTarget.name}` });
+      setBrandingTarget(null);
+    } catch (err) {
+      toast({
+        title: "Couldn't save branding",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setBrandingSaving(false);
+    }
+  };
+
   const copyLink = async (token: string) => {
     try {
       await navigator.clipboard.writeText(claimUrl(token));
@@ -601,10 +659,36 @@ export default function AdminCompetitionClaimLinks() {
                   </button>
                 </TableCell>
                 <TableCell className="font-medium">
-                  {r.name}
+                  <button
+                    type="button"
+                    onClick={() => openBranding(r)}
+                    className="text-left hover:underline underline-offset-2"
+                    title="Set branding colors"
+                    data-testid={`btn-competition-branding-${r.id}`}
+                  >
+                    {r.name}
+                  </button>
                   <span className="ml-2 text-xs text-muted-foreground capitalize">
                     {r.type}
                   </span>
+                  {(r.brandColor || r.secondaryColor) && (
+                    <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                      {r.brandColor && (
+                        <span
+                          className="inline-block w-3 h-3 rounded-full border border-border"
+                          style={{ backgroundColor: r.brandColor }}
+                          title={r.brandColor}
+                        />
+                      )}
+                      {r.secondaryColor && (
+                        <span
+                          className="inline-block w-3 h-3 rounded-full border border-border"
+                          style={{ backgroundColor: r.secondaryColor }}
+                          title={r.secondaryColor}
+                        />
+                      )}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                   {r.startDate.slice(5).replace("-", "/")} →{" "}
@@ -646,6 +730,71 @@ export default function AdminCompetitionClaimLinks() {
           )}
         </TableBody>
       </Table>
+
+      <Dialog
+        open={brandingTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setBrandingTarget(null);
+        }}
+      >
+        <DialogContent data-testid="dialog-competition-branding">
+          <DialogHeader>
+            <DialogTitle>
+              Branding — {brandingTarget?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">
+            These colors brand the competition page and claim card before the
+            organizer takes over. Leave blank to clear.
+          </p>
+          <div className="space-y-4">
+            <BrandColorField
+              value={brandDraft}
+              onChange={setBrandDraft}
+              logoUrl={brandingTarget?.logoUrl}
+              idPrefix="competition-brand"
+              label="Primary color"
+            />
+            <BrandColorField
+              value={secondaryDraft}
+              onChange={setSecondaryDraft}
+              logoUrl={brandingTarget?.logoUrl}
+              idPrefix="competition-secondary"
+              label="Secondary color"
+            />
+            {(brandDraft.trim() || secondaryDraft.trim()) && (
+              <div
+                className="h-10 rounded-lg border border-border"
+                style={{
+                  background: brandDraft.trim()
+                    ? secondaryDraft.trim()
+                      ? `linear-gradient(135deg, ${brandDraft.trim()} 0%, ${secondaryDraft.trim()} 100%)`
+                      : brandDraft.trim()
+                    : secondaryDraft.trim(),
+                }}
+                title="Preview"
+                data-testid="preview-competition-branding"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBrandingTarget(null)}
+              disabled={brandingSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={saveBranding}
+              disabled={!brandingValid || brandingSaving}
+              data-testid="btn-save-competition-branding"
+            >
+              {brandingSaving ? "Saving…" : "Save branding"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
