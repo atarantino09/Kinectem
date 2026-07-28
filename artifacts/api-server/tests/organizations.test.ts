@@ -6,7 +6,7 @@ describe("organizations", () => {
     // The discover list must exclude ownerless, bulk-imported org pages.
     // A freshly created org has the creator as owner, so it should appear;
     // the seeded ownerless "Westfield" page must not.
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     const created = await agent.post("/api/v1/organizations").send({
       name: "Owned List Org",
       city: "Westfield",
@@ -45,7 +45,7 @@ describe("organizations", () => {
   });
 
   it("creates an organization for the current user", async () => {
-    const { agent, user } = await loginAs((u) => u.role === "admin");
+    const { agent, user } = await loginAs((u) => u.role === "parent");
     const res = await agent
       .post("/api/v1/organizations")
       .send({
@@ -68,14 +68,36 @@ describe("organizations", () => {
     ).toBeDefined();
   });
 
+  it("creates an UNCLAIMED org (no owner/member rows) when a platform admin creates it", async () => {
+    // Platform admins set orgs up to hand off; they must not be listed as
+    // owner, admin, or follower anywhere. The org stays unclaimed until
+    // the real admin claims it.
+    const { agent, user } = await loginAs((u) => u.role === "admin");
+    const created = await agent.post("/api/v1/organizations").send({
+      name: "Handoff Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.isMember).toBe(false);
+    expect(created.body.role ?? null).toBeNull();
+    const members = await agent.get(
+      `/api/v1/organizations/${created.body.id}/members`,
+    );
+    expect(members.status).toBe(200);
+    const rows = members.body.data as Array<{ userId?: string; id?: string }>;
+    expect(rows.length).toBe(0);
+  });
+
   it("rejects creating an organization with an empty name", async () => {
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     const res = await agent.post("/api/v1/organizations").send({ name: "  " });
     expect(res.status).toBe(400);
   });
 
   it("rejects creating an organization without city/state/zipCode (task #230)", async () => {
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     const noCity = await agent.post("/api/v1/organizations").send({
       name: "Test Org",
       state: "NJ",
@@ -97,7 +119,7 @@ describe("organizations", () => {
   });
 
   it("rejects creating an organization with an invalid state code or zip (task #230)", async () => {
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     const badState = await agent.post("/api/v1/organizations").send({
       name: "Test Org",
       city: "Westfield",
@@ -124,7 +146,7 @@ describe("organizations", () => {
   });
 
   it("PATCH applies the same city/state/zipCode rules on edit (task #237)", async () => {
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     const created = await agent.post("/api/v1/organizations").send({
       name: "Editable Org",
       city: "Westfield",
@@ -171,7 +193,7 @@ describe("organizations", () => {
   });
 
   it("normalizes a bare-domain website on create and edit (task #290)", async () => {
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     // Create with a bare domain — server should prepend https://.
     const created = await agent.post("/api/v1/organizations").send({
       name: "Bare Domain Org",
@@ -264,7 +286,7 @@ describe("organization member roles (task #208)", () => {
   }
 
   it("creator becomes owner and is the only owner", async () => {
-    const { agent } = await loginAs((u) => u.role === "admin");
+    const { agent } = await loginAs((u) => u.role === "parent");
     const created = await agent
       .post("/api/v1/organizations")
       .send({
@@ -285,7 +307,7 @@ describe("organization member roles (task #208)", () => {
   });
 
   it("approving a join request as 'member' creates a member, not an admin", async () => {
-    const { agent: owner } = await loginAs((u) => u.role === "admin");
+    const { agent: owner } = await loginAs((u) => u.role === "parent");
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
     );
@@ -308,7 +330,7 @@ describe("organization member roles (task #208)", () => {
   });
 
   it("PATCH promotes a member to admin and demotes back", async () => {
-    const { agent: owner } = await loginAs((u) => u.role === "admin");
+    const { agent: owner } = await loginAs((u) => u.role === "parent");
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
     );
@@ -332,7 +354,7 @@ describe("organization member roles (task #208)", () => {
 
   it("PATCH refuses to change the owner's role", async () => {
     const { agent: owner, user: ownerUser } = await loginAs(
-      (u) => u.role === "admin",
+      (u) => u.role === "parent",
     );
     const created = await owner
       .post("/api/v1/organizations")
@@ -351,7 +373,7 @@ describe("organization member roles (task #208)", () => {
   });
 
   it("PATCH and DELETE require manage permissions", async () => {
-    const { agent: owner } = await loginAs((u) => u.role === "admin");
+    const { agent: owner } = await loginAs((u) => u.role === "parent");
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
     );
@@ -373,7 +395,7 @@ describe("organization member roles (task #208)", () => {
 
   it("DELETE removes a non-owner member but refuses to remove the owner", async () => {
     const { agent: owner, user: ownerUser } = await loginAs(
-      (u) => u.role === "admin",
+      (u) => u.role === "parent",
     );
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
@@ -403,7 +425,7 @@ describe("organization member roles (task #208)", () => {
 
   it("transfer-ownership swaps owner with target and demotes the previous owner to admin", async () => {
     const { agent: owner, user: ownerUser } = await loginAs(
-      (u) => u.role === "admin",
+      (u) => u.role === "parent",
     );
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
@@ -428,7 +450,7 @@ describe("organization member roles (task #208)", () => {
 
   it("transfer-ownership rejects non-owners and self-transfer", async () => {
     const { agent: owner, user: ownerUser } = await loginAs(
-      (u) => u.role === "admin",
+      (u) => u.role === "parent",
     );
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
@@ -461,7 +483,7 @@ describe("organization member roles (task #208)", () => {
     // succeed with 200 (the other should be 200 OR 409, never both
     // 200 leaving two owners).
     const { agent: owner, user: ownerUser } = await loginAs(
-      (u) => u.role === "admin",
+      (u) => u.role === "parent",
     );
     const { agent: joinerA, user: joinerAUser } = await loginAs(
       (u) => u.role === "coach",
@@ -528,7 +550,7 @@ describe("organization member roles (task #208)", () => {
   });
 
   it("/users/:id/organizations reports the user's stored role per org", async () => {
-    const { agent: owner } = await loginAs((u) => u.role === "admin");
+    const { agent: owner } = await loginAs((u) => u.role === "parent");
     const { agent: joiner, user: joinerUser } = await loginAs(
       (u) => u.role === "coach",
     );

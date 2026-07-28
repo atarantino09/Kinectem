@@ -45,6 +45,7 @@ import {
   computeArticleCanEditMap,
   computeArticleAuthorRoleMap,
   getOrgRole,
+  isPlatformAdmin,
 } from "../lib/permissions";
 import {
   generateNewsletterText,
@@ -292,17 +293,37 @@ router.post(
       // The creator becomes the org's sole owner. The role column was
       // added in task #208; before that the table held only admins and
       // "owner" was implicit (first row in the admins table).
-      await db
-        .insert(organizationAdmins)
-        .values({ organizationId: org.id, userId: me.id, role: "owner" })
-        .onConflictDoNothing();
-      await db
-        .insert(organizationFollowers)
-        .values({ organizationId: org.id, userId: me.id })
-        .onConflictDoNothing();
-      return res
-        .status(201)
-        .json(toOrganization(org, { isMember: true, role: "owner", isFollowing: true }));
+      //
+      // EXCEPTION — platform admins setting up an org to hand off: they
+      // must not be listed as owner/admin/follower anywhere. The org is
+      // created UNCLAIMED (no owner row) and the real admin takes it over
+      // via a claim link/request. Platform admins keep full management
+      // powers through the canManageOrganization bypass, so no membership
+      // row is needed.
+      const creatorIsPlatformAdmin = await isPlatformAdmin(me.id);
+      if (!creatorIsPlatformAdmin) {
+        await db
+          .insert(organizationAdmins)
+          .values({ organizationId: org.id, userId: me.id, role: "owner" })
+          .onConflictDoNothing();
+        await db
+          .insert(organizationFollowers)
+          .values({ organizationId: org.id, userId: me.id })
+          .onConflictDoNothing();
+      }
+      return res.status(201).json(
+        creatorIsPlatformAdmin
+          ? toOrganization(org, {
+              isMember: false,
+              role: null,
+              isFollowing: false,
+            })
+          : toOrganization(org, {
+              isMember: true,
+              role: "owner",
+              isFollowing: true,
+            }),
+      );
     } catch (err) {
       req.log.error(
         {

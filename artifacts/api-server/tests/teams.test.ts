@@ -88,13 +88,14 @@ describe("teams", () => {
   });
 
   it("auto-adds the team creator to the roster as an active Admin", async () => {
-    // Sam is an org admin who can create teams. We verify that creating
-    // the team also lands Sam on the roster as an accepted coach with
-    // position "admin", and that Sam can immediately manage the team
-    // (e.g. invite another roster member) — proving the existing
-    // canManageTeam check picks up the new entry.
+    // Coach Davis is an org admin (but NOT a platform admin) who can
+    // create teams. We verify that creating the team also lands him on the
+    // roster as an accepted coach with position "admin", and that he can
+    // immediately manage the team (e.g. invite another roster member) —
+    // proving the existing canManageTeam check picks up the new entry.
+    // (Platform admins are deliberately NOT auto-added — see below.)
     const { agent, user } = await loginAs(
-      (u) => u.email === "sam@kinectem.demo",
+      (u) => u.email === "coach@kinectem.demo",
     );
     const { org } = await getOrgAndTeams();
     const create = await agent
@@ -125,6 +126,30 @@ describe("teams", () => {
     const add = await agent
       .post(`/api/v1/teams/${newTeamId}/members`)
       .send({ userId: targetUserId, position: "player" });
+    expect(add.status).toBe(201);
+  });
+
+  it("does NOT add a platform admin to the roster when they create a team", async () => {
+    // Platform admins set up teams to hand off to the real org staff; they
+    // must not appear on any roster (they keep manage powers through the
+    // canManageTeam bypass instead).
+    const { agent, user } = await loginAs((u) => u.role === "admin");
+    const { org } = await getOrgAndTeams();
+    const create = await agent
+      .post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Handoff Setup Team", sport: "Track" });
+    expect(create.status).toBe(201);
+    const members = await agent.get(
+      `/api/v1/teams/${create.body.id}/members`,
+    );
+    expect(members.status).toBe(200);
+    const roster = members.body.data as Array<{ userId: string }>;
+    expect(roster.find((m) => m.userId === user.id)).toBeUndefined();
+    // The platform admin can still manage the team via the bypass.
+    const targets = await request(app).get("/api/v1/users?q=Daniela");
+    const add = await agent
+      .post(`/api/v1/teams/${create.body.id}/members`)
+      .send({ userId: targets.body.data?.[0]?.id, position: "player" });
     expect(add.status).toBe(201);
   });
 
@@ -205,11 +230,14 @@ describe("teams", () => {
     expect(res.status).toBe(403);
   });
 
-  // Helper: create a fresh team owned by Sam (so the auto-added creator
-  // is the only Admin) so each edit/remove test has its own isolated
-  // roster and doesn't drift the seeded data shared by other tests.
+  // Helper: create a fresh team owned by Coach Davis (an org admin who is
+  // not a platform admin, so the auto-added creator is the only Admin) so
+  // each edit/remove test has its own isolated roster and doesn't drift
+  // the seeded data shared by other tests.
   async function freshTeam(name: string) {
-    const { agent, user } = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const { agent, user } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
     const { org } = await getOrgAndTeams();
     const create = await agent
       .post(`/api/v1/organizations/${org.id}/teams`)

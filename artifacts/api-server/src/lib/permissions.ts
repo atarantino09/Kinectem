@@ -72,7 +72,7 @@ const MANAGE_ROLES = ["owner", "admin"] as const;
 // the admin console and the regular UI. Masquerade is unaffected: these
 // checks run against the session user, which during masquerade is the
 // viewed (non-admin) user.
-async function isPlatformAdmin(userId: string): Promise<boolean> {
+export async function isPlatformAdmin(userId: string): Promise<boolean> {
   const [u] = await db
     .select({ role: users.role })
     .from(users)

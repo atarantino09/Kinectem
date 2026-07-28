@@ -12,3 +12,8 @@ Platform admins (users.role === "admin") are treated as managers of EVERY org an
 **Client:** TeamPage and OrganizationPage OR `isPlatformAdmin` into their isAdmin/isManagerRole gates so manage UI (roster Invite, org member tools) appears. Owner-only actions (ownership transfer, archive) intentionally stay owner-only via getOrgRole — do not "fix" that.
 
 **How to apply:** any new manager-gated feature gets platform-admin access for free via the permission helpers; if you add a NEW capability gate (like canAuthorRecapAnywhere was), decide explicitly whether platform admins pass and keep client gates mirrored.
+
+## Platform admins are never auto-listed as creators
+Creating an org or team as a platform admin does NOT insert the owner/follower or roster rows other users get — the org is born UNCLAIMED and teams start with an empty roster (hand-off model; real staff claim/join later).
+**Why:** operators setting up pages for customers must not appear as org owner or team admin anywhere.
+**How to apply:** never "fix" a missing creator-membership row for a role-admin user; tests exercising owner/roster-creator flows must log in as a NON-admin seed user (e.g. parent or coach@kinectem.demo), not sam@/andrew@ (both role admin).

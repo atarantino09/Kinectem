@@ -42,6 +42,7 @@ import {
   canCreateRecap,
   canAuthorRecapAnywhere,
   getOrgRole,
+  isPlatformAdmin,
 } from "../lib/permissions";
 import { generateSeasonRecapText, AiNotConfiguredError } from "../lib/ai";
 import { getOrgPlan, teamLimitForPlan } from "../lib/plan-limits";
@@ -138,6 +139,9 @@ router.post(
       if (!websiteResult.ok) return apiError(res, 400, websiteResult.error);
       website = websiteResult.value || null;
     }
+    // Platform admins setting up teams for a hand-off never join the
+    // roster themselves (see the roster insert below).
+    const creatorIsPlatformAdmin = await isPlatformAdmin(me.id);
     // Wrap the team insert and the creator's auto-staff entry in a single
     // transaction so a team is never persisted without its creator on the
     // roster as Admin. We deliberately skip the "you were invited to a
@@ -179,14 +183,19 @@ router.post(
               : undefined,
         })
         .returning();
-      await tx.insert(rosterEntries).values({
-        teamId: t.id,
-        userId: me.id,
-        role: "coach",
-        status: "accepted",
-        position: "admin",
-        invitedById: me.id,
-      });
+      // Platform admins bulk-creating teams for an org hand-off must not
+      // appear on any roster (they manage via the canManageTeam bypass);
+      // everyone else joins their new team as its admin coach.
+      if (!creatorIsPlatformAdmin) {
+        await tx.insert(rosterEntries).values({
+          teamId: t.id,
+          userId: me.id,
+          role: "coach",
+          status: "accepted",
+          position: "admin",
+          invitedById: me.id,
+        });
+      }
       return { limited: false as const, team: t };
     });
     if (result.limited) {
@@ -197,7 +206,11 @@ router.post(
         { code: "TEAM_LIMIT_REACHED", extras: { limit: teamLimit, plan } },
       );
     }
-    res.status(201).json(toTeam(result.team, org, { memberCount: 1 }));
+    res.status(201).json(
+      toTeam(result.team, org, {
+        memberCount: creatorIsPlatformAdmin ? 0 : 1,
+      }),
+    );
   }),
 );
 
