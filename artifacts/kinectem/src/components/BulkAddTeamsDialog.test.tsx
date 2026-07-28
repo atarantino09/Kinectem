@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseBulkRows } from "./BulkAddTeamsDialog";
+import { parseBulkRows, parseCsv, isCsvHeaderRow } from "./BulkAddTeamsDialog";
 
 // Task #814 — line-paired parsing of the two bulk-add columns.
 describe("parseBulkRows", () => {
@@ -54,5 +54,57 @@ describe("parseBulkRows", () => {
   it("lowercases and trims coach emails", () => {
     const { rows } = parseBulkRows("Alpha", "  Coach@X.COM ");
     expect(rows[0].email).toBe("coach@x.com");
+  });
+});
+
+// Task #817 — CSV upload into the bulk-add dialog.
+describe("parseCsv", () => {
+  it("parses simple two-column rows with \\n and \\r\\n endings", () => {
+    expect(parseCsv("Alpha,a@x.com\r\nBravo,b@x.com\nCharlie,")).toEqual([
+      ["Alpha", "a@x.com"],
+      ["Bravo", "b@x.com"],
+      ["Charlie", ""],
+    ]);
+  });
+
+  it("handles quoted fields with commas and escaped quotes", () => {
+    expect(parseCsv('"Westfield, U14 ""Boys""",coach@x.com')).toEqual([
+      ['Westfield, U14 "Boys"', "coach@x.com"],
+    ]);
+  });
+
+  it("drops fully blank rows including the trailing newline", () => {
+    expect(parseCsv("Alpha,a@x.com\n\n,\n")).toEqual([["Alpha", "a@x.com"]]);
+  });
+
+  it("treats a mid-cell quote as a literal character", () => {
+    expect(parseCsv(`5'10" Team,a@x.com`)).toEqual([['5\'10" Team', "a@x.com"]]);
+  });
+
+  it("handles lone \\r line endings", () => {
+    expect(parseCsv("Alpha,a@x.com\rBravo,b@x.com")).toEqual([
+      ["Alpha", "a@x.com"],
+      ["Bravo", "b@x.com"],
+    ]);
+  });
+
+  it("keeps extra columns without disturbing the first two", () => {
+    expect(parseCsv("Alpha,a@x.com,extra,cols")).toEqual([
+      ["Alpha", "a@x.com", "extra", "cols"],
+    ]);
+  });
+});
+
+describe("isCsvHeaderRow", () => {
+  it("detects common header rows", () => {
+    expect(isCsvHeaderRow(["Team", "Coach Email"])).toBe(true);
+    expect(isCsvHeaderRow(["team name", "email"])).toBe(true);
+  });
+
+  it("does not treat a real data row as a header", () => {
+    expect(isCsvHeaderRow(["Westfield U14 Boys", "coach@example.com"])).toBe(
+      false,
+    );
+    expect(isCsvHeaderRow(["Coach Academy FC", ""])).toBe(false);
   });
 });
