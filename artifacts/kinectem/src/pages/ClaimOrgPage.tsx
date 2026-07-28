@@ -61,6 +61,18 @@ export default function ClaimOrgPage() {
         { method: "POST" },
       );
       toast({ title: `You now own ${formatOrgName(orgName) || "this page"}!` });
+      // Task #808 — flag the post-claim coach-setup prompt. OrganizationPage
+      // consumes this on mount and, when the org already has teams, offers a
+      // one-time "add coaches to your teams" dialog pre-filled with any
+      // coach emails the platform admin staged before the claim.
+      try {
+        sessionStorage.setItem(
+          `kinectem:coach-setup:${res.organizationId}`,
+          "1",
+        );
+      } catch {
+        // sessionStorage unavailable — the owner can invite coaches later.
+      }
       navigate(`/organizations/${res.organizationId}`);
     } catch (err) {
       toast({

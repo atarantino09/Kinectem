@@ -70,6 +70,8 @@ import {
 } from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { BulkAddTeamsDialog } from "@/components/BulkAddTeamsDialog";
+import { StageCoachesDialog } from "@/components/StageCoachesDialog";
+import { CoachSetupDialog } from "@/components/CoachSetupDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
@@ -126,8 +128,27 @@ export default function OrganizationPage() {
   // Gate the first-run tour until the post-create welcome / bulk-add popups
   // have been resolved on mount, so the tour never flashes on top of them.
   const [firstRunResolved, setFirstRunResolved] = useState(false);
+  // Task #808 — post-claim coach setup. ClaimOrgPage stashes this flag right
+  // after a successful claim; when the org already has teams we open the
+  // one-time "add coaches to your teams" prompt (pre-filled with any drafts
+  // the platform admin staged before the claim).
+  const [coachSetupPending, setCoachSetupPending] = useState(false);
+  const [stageCoachesOpen, setStageCoachesOpen] = useState(false);
   useEffect(() => {
     if (!orgId) return;
+    try {
+      const coachKey = `kinectem:coach-setup:${orgId}`;
+      if (sessionStorage.getItem(coachKey) === "1") {
+        sessionStorage.removeItem(coachKey);
+        sessionStorage.removeItem(`kinectem:bulk-add-org:${orgId}`);
+        sessionStorage.removeItem(`kinectem:welcome-org:${orgId}`);
+        setCoachSetupPending(true);
+        setFirstRunResolved(true);
+        return;
+      }
+    } catch {
+      // sessionStorage unavailable; fall through to the other popups.
+    }
     // After checkout, OrgSubscribePage stashes a bulk-add flag so we land
     // straight on the "Bulk add teams" popup. It takes priority over the
     // org-create welcome popup so the user never sees two modals at once.
@@ -165,6 +186,14 @@ export default function OrganizationPage() {
     "admin";
   const { data: organization, isLoading } = useGetOrganizationById(orgId);
   const { data: teamsResp } = useListOrgTeams(orgId);
+  // Task #808 — teamless orgs skip the post-claim coach prompt silently:
+  // clear the pending flag once team data resolves empty so it can't linger
+  // and keep suppressing the org tour for the rest of the session.
+  useEffect(() => {
+    if (coachSetupPending && teamsResp && teamsResp.data.length === 0) {
+      setCoachSetupPending(false);
+    }
+  }, [coachSetupPending, teamsResp]);
   const { data: archivedTeamsResp } = useListArchivedOrgTeams(
     orgId,
     undefined,
@@ -311,7 +340,13 @@ export default function OrganizationPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!orgId || !firstRunResolved || !isManagerRole) return;
-    if (welcomeOrgName !== null || createTeamOpen || bulkTeamsOpen) return;
+    if (
+      welcomeOrgName !== null ||
+      createTeamOpen ||
+      bulkTeamsOpen ||
+      coachSetupPending
+    )
+      return;
     let alreadySeen = false;
     try {
       alreadySeen = localStorage.getItem(ORG_TOUR_KEY) === "1";
@@ -326,6 +361,7 @@ export default function OrganizationPage() {
     welcomeOrgName,
     createTeamOpen,
     bulkTeamsOpen,
+    coachSetupPending,
   ]);
 
   const finishOrgTour = () => {
@@ -396,6 +432,25 @@ export default function OrganizationPage() {
         open={bulkTeamsOpen}
         onOpenChange={setBulkTeamsOpen}
         usage={planUsage}
+      />
+      {/* Task #808 — platform-admin draft staging on an unclaimed org. */}
+      {isPlatformAdmin && isUnclaimed && (
+        <StageCoachesDialog
+          orgId={orgId}
+          teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+          open={stageCoachesOpen}
+          onOpenChange={setStageCoachesOpen}
+        />
+      )}
+      {/* Task #808 — one-time post-claim coach setup prompt. Only opens when
+          the org actually has teams; a teamless org skips it silently. */}
+      <CoachSetupDialog
+        orgId={orgId}
+        teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+        open={coachSetupPending && isOrgManager && teams.length > 0}
+        onOpenChange={(v) => {
+          if (!v) setCoachSetupPending(false);
+        }}
       />
       <Dialog
         open={welcomeOrgName !== null && isOrgManager}
@@ -622,6 +677,16 @@ export default function OrganizationPage() {
                   >
                     Unclaimed
                   </Badge>
+                )}
+                {isUnclaimed && isPlatformAdmin && (
+                  <Button
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    onClick={() => setStageCoachesOpen(true)}
+                    data-testid="btn-stage-coaches"
+                  >
+                    Stage coaches
+                  </Button>
                 )}
                 {isOrgManager && planUsage && (
                   <Button

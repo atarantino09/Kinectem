@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { formatOrgName } from "@/lib/format";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -360,7 +361,18 @@ export default function AdminOrgClaimLinks() {
                       data-testid={`checkbox-messaged-${r.id}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{formatOrgName(r.name)}</TableCell>
+                  <TableCell className="font-medium">
+                    {/* Task #808 — link straight to the unclaimed org page so
+                        the operator can set it up (logo, teams, staged
+                        coaches) before sending the claim link. */}
+                    <Link
+                      href={`/organizations/${r.id}`}
+                      className="hover:underline"
+                      data-testid={`link-claim-org-${r.id}`}
+                    >
+                      {formatOrgName(r.name)}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {location || "—"}
                   </TableCell>

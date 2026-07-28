@@ -1903,6 +1903,26 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS require_recap_approval boolean NOT NULL DEFAULT false;
     `,
   },
+  {
+    // Task #808 — draft coach emails a platform admin stages per team on an
+    // unclaimed org. Nothing is sent from this table; the post-claim owner
+    // confirmation converts rows into real team invites and deletes them.
+    name: "2026-07-28-task-808-staged-coach-invites",
+    sql: `
+      CREATE TABLE IF NOT EXISTS staged_coach_invites (
+        id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        team_id         uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        email           text NOT NULL,
+        created_by_id   uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at      timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS staged_coach_invites_team_email_uniq
+        ON staged_coach_invites (team_id, email);
+      CREATE INDEX IF NOT EXISTS staged_coach_invites_org_idx
+        ON staged_coach_invites (organization_id);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

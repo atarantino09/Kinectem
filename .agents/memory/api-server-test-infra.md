@@ -29,3 +29,5 @@ description: How api-server vitest builds its DB, which tests fail pre-existing,
 ---
 
 - Seed-user pitfall: sam@kinectem.demo has users.role="admin" (PLATFORM admin) and bypasses all ownership/permission checks — permission tests must use regular athletes (e.g. daniela@, marcus@). Demo login password lives in `DEMO_PASSWORD` in seed.ts — look it up there, never store it here.
+
+- Global test `beforeEach` (tests/setupFile.ts) TRUNCATEs all tables and reseeds — data created in `beforeAll` is wiped before the first test. Each test must build its own fixtures; the test DB is schema-only (pg_dump --schema-only), seed users come from seedIfEmpty (admin login: the @kinectem.com admin seed email).

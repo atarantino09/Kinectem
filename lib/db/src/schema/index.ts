@@ -646,6 +646,27 @@ export const rosterInvites = pgTable("roster_invites", {
   invitedEmailIdx: index("roster_invites_invited_email_idx").on(t.invitedEmail),
 }));
 
+// Task #808 — coach emails a platform admin pre-stages on an unclaimed
+// org's teams while setting the org up. Pure drafts: no invite email,
+// roster entry, or roster_invite row exists until the new owner claims
+// the org and confirms — the confirmation fans out through the normal
+// team-invite endpoint and then deletes the consumed rows here.
+export const stagedCoachInvites = pgTable("staged_coach_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .references(() => organizations.id, { onDelete: "cascade" })
+    .notNull(),
+  teamId: uuid("team_id")
+    .references(() => teams.id, { onDelete: "cascade" })
+    .notNull(),
+  email: text("email").notNull(),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  teamEmailUniq: uniqueIndex("staged_coach_invites_team_email_uniq").on(t.teamId, t.email),
+  orgIdx: index("staged_coach_invites_org_idx").on(t.organizationId),
+}));
+
 export const articles = pgTable("articles", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),

@@ -20,6 +20,7 @@ import {
   organizationJoinRequests,
   organizationClaimRequests,
   guardianLinks,
+  stagedCoachInvites,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -551,6 +552,118 @@ router.post(
       }
       throw err;
     }
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #808 — Staged coach drafts. A platform admin setting up an unclaimed
+// org can pre-stage coach emails per team. These are pure drafts: no email,
+// notification, roster entry, or roster_invite exists until the post-claim
+// owner reviews and confirms (the client then fans out to the normal
+// POST /teams/:teamId/invites and clears the drafts). All three endpoints are
+// gated on canManageOrganization, which platform admins and the (post-claim)
+// owner both pass.
+// ---------------------------------------------------------------------------
+
+const STAGED_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const STAGED_COACH_MAX_PER_ORG = 500;
+
+router.get(
+  "/organizations/:orgId/staged-coaches",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    const rows = await db
+      .select({
+        teamId: stagedCoachInvites.teamId,
+        email: stagedCoachInvites.email,
+      })
+      .from(stagedCoachInvites)
+      .where(eq(stagedCoachInvites.organizationId, req.params.orgId))
+      .orderBy(asc(stagedCoachInvites.createdAt));
+    res.json({ data: rows });
+  }),
+);
+
+router.put(
+  "/organizations/:orgId/staged-coaches",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const orgId = req.params.orgId;
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    const entriesRaw = req.body?.entries;
+    if (!Array.isArray(entriesRaw)) {
+      return apiError(res, 400, "entries array required");
+    }
+    // Validate every referenced team belongs to this org.
+    const orgTeams = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(eq(teams.organizationId, orgId));
+    const orgTeamIds = new Set(orgTeams.map((t) => t.id));
+    const values: Array<{ organizationId: string; teamId: string; email: string; createdById: string }> = [];
+    const seen = new Set<string>();
+    for (const entry of entriesRaw) {
+      const teamId = String(entry?.teamId ?? "");
+      if (!orgTeamIds.has(teamId)) {
+        return apiError(res, 400, "teamId does not belong to this organization");
+      }
+      const emailsRaw = entry?.emails;
+      if (!Array.isArray(emailsRaw)) {
+        return apiError(res, 400, "emails array required per entry");
+      }
+      for (const raw of emailsRaw) {
+        const email = String(raw ?? "").trim().toLowerCase();
+        if (!STAGED_EMAIL_RE.test(email)) {
+          return apiError(res, 400, `Invalid email: ${String(raw ?? "")}`);
+        }
+        const key = `${teamId}:${email}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        values.push({ organizationId: orgId, teamId, email, createdById: me.id });
+      }
+    }
+    if (values.length > STAGED_COACH_MAX_PER_ORG) {
+      return apiError(res, 400, `Too many staged coaches (max ${STAGED_COACH_MAX_PER_ORG})`);
+    }
+    // Replace-all semantics: the client always sends the full picture for
+    // the org, so a save can both add and remove drafts atomically.
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(stagedCoachInvites)
+        .where(eq(stagedCoachInvites.organizationId, orgId));
+      if (values.length > 0) {
+        await tx.insert(stagedCoachInvites).values(values);
+      }
+    });
+    res.json({ ok: true, count: values.length });
+  }),
+);
+
+router.delete(
+  "/organizations/:orgId/staged-coaches",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    await db
+      .delete(stagedCoachInvites)
+      .where(eq(stagedCoachInvites.organizationId, req.params.orgId));
+    res.json({ ok: true });
   }),
 );
 
