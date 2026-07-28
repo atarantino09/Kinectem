@@ -34,6 +34,8 @@ import {
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { useWhoami } from "@/hooks/useWhoami";
+import { extractLogoColors } from "@/components/BrandColorField";
 import {
   readOrgBrandColors,
   orgHeroGradient,
@@ -105,8 +107,17 @@ export function EditOrgDialog({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Task #812 — platform admins manage every org (incl. unclaimed ones with
+  // no org role); mirror the server's canManageOrganization bypass with the
+  // same whoami semantics used on OrganizationPage (masquerade drops powers).
+  const { data: who } = useWhoami();
+  const isPlatformAdmin =
+    (who?.isMasquerading ? who?.viewingAs?.role : who?.realUser?.role) ===
+    "admin";
   const canManageLogo =
-    organization.role === "admin" || organization.role === "owner";
+    organization.role === "admin" ||
+    organization.role === "owner" ||
+    isPlatformAdmin;
 
   useEffect(() => {
     if (open) {
@@ -167,15 +178,46 @@ export function EditOrgDialog({
     setUploading(true);
     try {
       const dataUrl = await shrinkImageToDataUrl(file);
+      // Task #812 — auto-pick brand colors from the new logo. Extraction is
+      // best-effort: we need at least two distinct usable colors (transparent
+      // / near-white / near-gray pixels are already skipped) or we leave the
+      // existing brand colors untouched. The pickers stay fully editable —
+      // this only pre-fills a suggestion.
+      let extracted: string[] = [];
+      try {
+        extracted = await extractLogoColors(dataUrl);
+      } catch {
+        // tainted canvas / decode failure — skip color suggestion
+      }
+      const autoColors = extracted.length >= 2 ? extracted.slice(0, 2) : null;
+      const patch: Record<string, string> = { logoUrl: dataUrl };
+      if (autoColors) {
+        patch.brandPrimaryColor = autoColors[0];
+        patch.brandSecondaryColor = autoColors[1];
+      }
       await customFetch(`/api/v1/organizations/${organization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logoUrl: dataUrl }),
+        body: JSON.stringify(patch),
       });
+      if (autoColors) {
+        // Keep the open dialog's pickers in sync with what was just saved
+        // so "Save changes" doesn't write stale colors back.
+        setBrandPrimary(autoColors[0]);
+        setBrandSecondary(autoColors[1]);
+      }
       await qc.invalidateQueries({
         queryKey: getGetOrganizationByIdQueryKey(organization.id),
       });
-      toast({ title: "Logo updated" });
+      toast(
+        autoColors
+          ? {
+              title: "Logo updated",
+              description:
+                "Brand colors updated from the logo — you can change them below.",
+            }
+          : { title: "Logo updated" },
+      );
     } catch (err) {
       toast({
         title: apiErrorMessage(err) ?? "Failed to upload logo",

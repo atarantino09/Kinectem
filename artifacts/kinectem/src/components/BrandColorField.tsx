@@ -11,7 +11,9 @@ function componentToHex(n: number): string {
   return n.toString(16).padStart(2, "0");
 }
 
-async function extractLogoColors(url: string): Promise<string[]> {
+// Exported for the logo-upload flow (Task #812): after an org logo upload,
+// the top two colors auto-fill the org's Primary/Secondary brand colors.
+export async function extractLogoColors(url: string): Promise<string[]> {
   const img = new Image();
   img.crossOrigin = "anonymous";
   await new Promise<void>((resolve, reject) => {
