@@ -616,21 +616,11 @@ export function BulkAddTeamsDialog({
           {step === "input" && (
             <>
               <div className="space-y-1.5">
-                <div className="flex items-end gap-2">
-                  <div className="w-7 shrink-0" aria-hidden />
-                  <div className="flex-1 min-w-0">
-                    <Label className="font-bold">Team names</Label>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <Label className="font-bold">
-                      Coach email{" "}
-                      <span className="font-medium text-muted-foreground">
-                        (optional)
-                      </span>
-                    </Label>
-                  </div>
-                  {/* Task #817 — CSV upload: team name in column 1, coach
-                      email in column 2; optional header row is skipped. */}
+                {/* Task #817 — CSV upload: team name in column 1, coach
+                    email in column 2; optional header row is skipped. Kept on
+                    its own row so the column labels line up exactly with the
+                    columns below. */}
+                <div className="flex justify-end">
                   <input
                     ref={csvInputRef}
                     type="file"
@@ -651,6 +641,22 @@ export function BulkAddTeamsDialog({
                     <Upload className="w-3.5 h-3.5 mr-1.5" />
                     Upload CSV
                   </Button>
+                </div>
+                {/* Mirrors the row layout below (number gutter + two equal
+                    columns) so each label sits directly over its column. */}
+                <div className="flex gap-2">
+                  <div className="w-7 shrink-0" aria-hidden />
+                  <div className="flex-1 min-w-0 px-2">
+                    <Label className="font-bold">Team names</Label>
+                  </div>
+                  <div className="flex-1 min-w-0 px-2">
+                    <Label className="font-bold">
+                      Coach email{" "}
+                      <span className="font-medium text-muted-foreground">
+                        (optional)
+                      </span>
+                    </Label>
+                  </div>
                 </div>
                 {/* Task #817 — zebra-striped rows. The stripe sits on the row
                     container, so it spans number + both columns and grows when
