@@ -16,6 +16,7 @@
 - [Inline image upload body limit](inline-image-body-limit.md) — banners/logos are inline base64 data: URLs; global express.json is 1MB, so image PATCH routes need a dedicated 21MB parser + 20MB cap kept in lockstep client/server.
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.
 - [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769/`string|string[]`/AuthorRoleLabel noise; rateLimit needs `name`.
+- [One-time data migrations](one-time-migrations.md) — MIGRATIONS re-run every boot; one-shot data cleanups must be gated on a one_time_migration_markers row or they re-delete future rows.
 - [Startup migration registration](startup-migration-registration.md) — schema changes need a registered entry in migrations.ts MIGRATIONS array; dev push/raw SQL alone never reaches production.
 - [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.
 - [Stripe org billing](stripe-org-billing.md) — card-on-file now, first charge Oct 1 via Checkout trial_end; connector has NO webhook secret so reconcile-on-return is source of truth; Sept-15 reminder is a standalone non-idempotent script.

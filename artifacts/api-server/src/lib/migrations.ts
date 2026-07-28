@@ -1923,6 +1923,60 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON staged_coach_invites (organization_id);
     `,
   },
+  {
+    // Task #819 — one-time cleanup: platform admins (users.role='admin') who
+    // created orgs/teams for hand-off were historically auto-listed as org
+    // owner, org follower, and team coach. Remove those legacy rows so
+    // handed-off pages only show real staff. Removing an admin 'owner' row
+    // intentionally returns the org to UNCLAIMED (no 'owner' row) so real
+    // staff can claim it; platform admins lose no capability (permissions
+    // bypass). Allowlist of genuinely admin-operated org names reviewed
+    // 2026-07-28: empty — no such orgs exist. Guarded by a marker row so the
+    // deletes run exactly ONCE (migrations re-run every boot, and future
+    // legitimate admin memberships must not be silently deleted). Mirrors
+    // scripts/src/cleanup-platform-admin-handoff.ts (dev dry-run tool) —
+    // keep the criteria and allowlist in sync.
+    name: "2026-07-28-task-819-remove-platform-admin-handoff-listings",
+    sql: `
+      CREATE TABLE IF NOT EXISTS one_time_migration_markers (
+        name       text PRIMARY KEY,
+        applied_at timestamp NOT NULL DEFAULT now()
+      );
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM one_time_migration_markers
+          WHERE name = '2026-07-28-task-819-remove-platform-admin-handoff-listings'
+        ) THEN
+          DELETE FROM organization_admins oa
+          USING users u, organizations o
+          WHERE oa.user_id = u.id AND u.role = 'admin'
+            AND o.id = oa.organization_id AND o.created_by_id = oa.user_id;
+
+          DELETE FROM organization_followers f
+          USING users u, organizations o
+          WHERE f.user_id = u.id AND u.role = 'admin'
+            AND o.id = f.organization_id AND o.created_by_id = f.user_id;
+
+          DELETE FROM roster_entries re
+          USING users u, teams t
+          WHERE re.user_id = u.id AND u.role = 'admin'
+            AND t.id = re.team_id
+            AND (
+              t.created_by_id = re.user_id
+              OR EXISTS (
+                SELECT 1 FROM organizations o
+                WHERE o.id = t.organization_id
+                  AND o.created_by_id = re.user_id
+              )
+            );
+
+          INSERT INTO one_time_migration_markers (name)
+          VALUES ('2026-07-28-task-819-remove-platform-admin-handoff-listings');
+        END IF;
+      END$migration$;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

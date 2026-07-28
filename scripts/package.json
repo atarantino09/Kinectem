@@ -14,6 +14,7 @@
     "backfill-org-claim-links": "tsx ./src/backfill-org-claim-links.ts",
     "bulk-import-organizations": "tsx ./src/bulk-import-organizations.ts",
     "burn-walkthrough-captions": "tsx ./src/burn-walkthrough-captions.ts",
+    "cleanup-platform-admin-handoff": "tsx ./src/cleanup-platform-admin-handoff.ts",
     "coppa:delete": "tsx ./src/coppa-hard-delete.ts",
     "db:load-check": "tsx ./src/db-load-check.ts",
     "export-founding-100": "tsx ./src/export-founding-100.ts",
