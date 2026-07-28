@@ -28,6 +28,7 @@ type ClaimResolve = {
     logoUrl: string | null;
     brandColor: string | null;
     secondaryColor: string | null;
+    promoCode: string | null;
   };
   alreadyClaimed: boolean;
 };
@@ -63,11 +64,20 @@ export default function ClaimCompetitionPage() {
         ok: boolean;
         competitionId: string;
         slug: string;
+        promoCode: string | null;
       }>(
         `/api/v1/competition-claim-links/${encodeURIComponent(token)}/claim`,
         { method: "POST" },
       );
-      toast({ title: `You now run ${competitionName || "this competition"}!` });
+      toast({
+        title: `You now run ${competitionName || "this competition"}!`,
+        ...(res.promoCode
+          ? {
+              description: `Your promo code ${res.promoCode} is ready — it's already filled into your team invite message, so it goes out automatically when you send your invites.`,
+              duration: 10000,
+            }
+          : {}),
+      });
       // Land the new operator on their console (not the public page) so the
       // first-run "show me around" walkthrough can greet them there.
       navigate(`/competitions/${encodeURIComponent(res.competitionId)}`);
@@ -167,6 +177,23 @@ export default function ClaimCompetitionPage() {
               </p>
             </div>
           </div>
+
+          {!alreadyClaimed && competition.promoCode && (
+            <div
+              className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-3 text-sm"
+              data-testid="text-competition-claim-promo"
+            >
+              <p className="font-bold text-emerald-800 dark:text-emerald-300">
+                Promo code included:{" "}
+                <span className="font-mono">{competition.promoCode}</span>
+              </p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+                Once you claim this {competition.type}, this code is already
+                filled into your team invite message — no setup needed when
+                you send out your invites.
+              </p>
+            </div>
+          )}
 
           {alreadyClaimed ? (
             <div className="space-y-2">

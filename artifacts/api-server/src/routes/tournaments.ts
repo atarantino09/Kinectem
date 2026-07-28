@@ -455,6 +455,11 @@ router.get(
         logoUrl: row.logoUrl,
         brandColor: row.brandColor,
         secondaryColor: row.secondaryColor,
+        // Promo code the platform admin pre-loaded for this competition —
+        // shown to the claimer so they know it's already wired into their
+        // invite message (tournaments.promo_code is what the console's
+        // outreach message auto-fills from).
+        promoCode: row.promoCode,
       },
       alreadyClaimed: row.ownerUserId != null || row.createdById != null,
     });
@@ -473,7 +478,11 @@ router.post(
     const token = String(req.params.token ?? "");
     if (!token) return apiError(res, 404, "Not found");
     const [row] = await db
-      .select({ id: tournaments.id, slug: tournaments.slug })
+      .select({
+        id: tournaments.id,
+        slug: tournaments.slug,
+        promoCode: tournaments.promoCode,
+      })
       .from(tournaments)
       .where(eq(tournaments.claimToken, token))
       .limit(1);
@@ -499,7 +508,12 @@ router.post(
       .insert(competitionFollowers)
       .values({ competitionId: row.id, userId: me.id })
       .onConflictDoNothing();
-    res.status(201).json({ ok: true, competitionId: row.id, slug: row.slug });
+    res.status(201).json({
+      ok: true,
+      competitionId: row.id,
+      slug: row.slug,
+      promoCode: row.promoCode,
+    });
   }),
 );
 

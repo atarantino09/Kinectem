@@ -2049,6 +2049,7 @@ router.get(
         startDate: tournaments.startDate,
         endDate: tournaments.endDate,
         logoUrl: tournaments.logoUrl,
+        promoCode: tournaments.promoCode,
         claimToken: tournaments.claimToken,
         outreachMessagedAt: tournaments.outreachMessagedAt,
         outreachFacebookAddedAt: tournaments.outreachFacebookAddedAt,
@@ -2067,6 +2068,7 @@ router.get(
       startDate: string;
       endDate: string;
       logoUrl: string | null;
+      promoCode: string | null;
       token: string;
       messagedAt: string | null;
       facebookAddedAt: string | null;
@@ -2099,6 +2101,7 @@ router.get(
         startDate: r.startDate,
         endDate: r.endDate,
         logoUrl: r.logoUrl,
+        promoCode: r.promoCode,
         token,
         messagedAt: r.outreachMessagedAt
           ? r.outreachMessagedAt.toISOString()
@@ -2283,6 +2286,60 @@ router.patch(
       });
     }
     return res.json({ data: { id: row.id, logoUrl: row.logoUrl } });
+  }),
+);
+
+// Set / clear the promo code on an ownerless competition. The code lands in
+// tournaments.promo_code, which is exactly the field the operator's invite
+// message auto-fills from (Task #818 resolveEffectivePromoCode), so once
+// they claim the competition their outreach message already carries it.
+// Body: { promoCode } where null/"" clears.
+router.patch(
+  "/competition-claim-links/:id/promo-code",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    // Require the key explicitly — a body missing `promoCode` must not
+    // silently clear an existing code.
+    if (!req.body || !("promoCode" in req.body)) {
+      return res
+        .status(400)
+        .json({ error: "promoCode is required (null/\"\" clears)", code: "INVALID_BODY" });
+    }
+    const raw = req.body.promoCode;
+    let promoCode: string | null = null;
+    if (raw !== undefined && raw !== null && raw !== "") {
+      if (typeof raw !== "string") {
+        return res
+          .status(400)
+          .json({ error: "promoCode must be a string", code: "INVALID_BODY" });
+      }
+      promoCode = raw.trim();
+      if (!promoCode) promoCode = null;
+      else if (promoCode.length > 64) {
+        return res.status(400).json({
+          error: "promoCode must be 64 characters or fewer",
+          code: "PROMO_CODE_TOO_LONG",
+        });
+      }
+    }
+    const [row] = await db
+      .update(tournaments)
+      .set({ promoCode, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tournaments.id, id),
+          isNull(tournaments.ownerUserId),
+          isNull(tournaments.createdById),
+        ),
+      )
+      .returning({ id: tournaments.id, promoCode: tournaments.promoCode });
+    if (!row) {
+      return res.status(404).json({
+        error: "Ownerless competition not found (it may already be claimed)",
+        code: "COMPETITION_NOT_FOUND",
+      });
+    }
+    return res.json({ data: { id: row.id, promoCode: row.promoCode } });
   }),
 );
 

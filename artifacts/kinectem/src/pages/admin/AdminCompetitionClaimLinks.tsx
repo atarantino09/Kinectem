@@ -44,6 +44,7 @@ type ClaimLinkRow = {
   startDate: string;
   endDate: string;
   logoUrl: string | null;
+  promoCode: string | null;
   token: string;
   messagedAt: string | null;
   facebookAddedAt: string | null;
@@ -81,6 +82,7 @@ function rowsToCsv(rows: ClaimLinkRow[]): string {
     "start_date",
     "end_date",
     "location",
+    "promo_code",
     "claim_link",
     "competition_id",
   ];
@@ -93,6 +95,7 @@ function rowsToCsv(rows: ClaimLinkRow[]): string {
         r.startDate,
         r.endDate,
         r.location ?? "",
+        r.promoCode ?? "",
         claimUrl(r.token),
         r.id,
       ]
@@ -274,6 +277,55 @@ export default function AdminCompetitionClaimLinks() {
     } finally {
       setLogoUploadingId(null);
       setLogoTargetId(null);
+    }
+  };
+
+  // Per-row promo code editor: local draft, saved on blur / Enter. The code
+  // lands in the competition's promo_code field, which the organizer's
+  // invite message auto-fills from once they claim it.
+  const [promoDrafts, setPromoDrafts] = useState<Record<string, string>>({});
+  const [promoSavingId, setPromoSavingId] = useState<string | null>(null);
+
+  const savePromoCode = async (id: string, current: string | null) => {
+    const draft = promoDrafts[id];
+    if (draft === undefined) return; // never touched
+    const next = draft.trim();
+    if (next === (current ?? "")) {
+      // Unchanged (incl. trim-equal) — drop the draft so it stops shadowing
+      // the canonical server value on future refreshes.
+      setPromoDrafts((d) => {
+        const { [id]: _, ...rest } = d;
+        return rest;
+      });
+      return;
+    }
+    setPromoSavingId(id);
+    try {
+      await customFetch(
+        `/api/v1/admin/competition-claim-links/${id}/promo-code`,
+        { method: "PATCH", body: JSON.stringify({ promoCode: next || null }) },
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "competition-claim-links"],
+      });
+      setPromoDrafts((d) => {
+        const { [id]: _, ...rest } = d;
+        return rest;
+      });
+      toast({
+        title: next ? `Promo code set to ${next}` : "Promo code cleared",
+        description: next
+          ? "It'll be pre-filled in the organizer's invite message when they claim."
+          : undefined,
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't save promo code",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setPromoSavingId(null);
     }
   };
 
@@ -491,6 +543,7 @@ export default function AdminCompetitionClaimLinks() {
             <TableHead className="w-[70px]">Logo</TableHead>
             <TableHead>Competition</TableHead>
             <TableHead>Dates</TableHead>
+            <TableHead className="w-[150px]">Promo code</TableHead>
             <TableHead>Claim link</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -499,7 +552,7 @@ export default function AdminCompetitionClaimLinks() {
           {isLoading ? (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={7}
                 className="text-center py-6 text-muted-foreground"
               >
                 Loading…
@@ -508,7 +561,7 @@ export default function AdminCompetitionClaimLinks() {
           ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={7}
                 className="text-center py-6 text-muted-foreground"
               >
                 No ownerless competitions.
@@ -555,6 +608,23 @@ export default function AdminCompetitionClaimLinks() {
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                   {r.startDate} → {r.endDate}
+                </TableCell>
+                <TableCell>
+                  <Input
+                    value={promoDrafts[r.id] ?? r.promoCode ?? ""}
+                    placeholder="e.g. LEGACY25"
+                    className="h-8 text-xs font-mono uppercase"
+                    maxLength={64}
+                    disabled={promoSavingId === r.id}
+                    onChange={(e) =>
+                      setPromoDrafts((d) => ({ ...d, [r.id]: e.target.value }))
+                    }
+                    onBlur={() => void savePromoCode(r.id, r.promoCode)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    data-testid={`input-competition-promo-code-${r.id}`}
+                  />
                 </TableCell>
                 <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
                   {claimUrl(r.token)}
