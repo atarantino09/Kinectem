@@ -77,6 +77,10 @@ function buildPrompt(input: AssistInput): { system: string; user: string } {
     "Audience: players, parents, and fans. Tone: positive, energetic, encouraging, and age-appropriate for youth sports.",
     "Celebrate effort and teamwork. Never criticize or negatively single out a child.",
     "Do not invent specific scores, stats, or player names that were not provided.",
+    // Mentions: the composer converts "@First Last" back into tagged,
+    // clickable mentions only when the AI keeps the exact form the
+    // author used — so preserve it verbatim.
+    "If the notes mention players with an @ prefix (e.g. \"@Jordan Smith\"), keep every such name in exactly that form — the @ followed by the exact same name, character for character — everywhere you reference that player.",
     input.postType === "short"
       ? "Keep it to 1-3 sentences."
       : "Use 2-4 short paragraphs. Do not write a headline or title — only the body text.",

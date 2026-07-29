@@ -3,7 +3,10 @@ import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { MentionTextarea } from "./MentionTextarea";
-import { mentionTokensToDisplay } from "@/lib/mentions";
+import {
+  displayToMentionTokens,
+  mentionTokensToDisplay,
+} from "@/lib/mentions";
 import type { RosterPickerMember } from "./RosterTagPicker";
 import {
   Dialog,
@@ -110,7 +113,11 @@ export function AiAssistButton({
           gameDate: gameDate || undefined,
         }),
       });
-      setResult(res.text);
+      // The AI is instructed to keep "@First Last" mentions verbatim.
+      // Convert any exact "@RosterName" matches in its draft back into
+      // canonical mention tokens so they publish as clickable, tagged
+      // mentions (names not on the roster stay plain text).
+      setResult(displayToMentionTokens(res.text, rosterMembers));
     } catch (err) {
       toast({
         title: "AI Assist failed",

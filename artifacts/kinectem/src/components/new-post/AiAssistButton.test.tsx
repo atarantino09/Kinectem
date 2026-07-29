@@ -73,6 +73,26 @@ describe("AiAssistButton mentions", () => {
     expect(body.notes).not.toContain("](user:");
   });
 
+  it("tokenizes @RosterName mentions in the AI's draft so they publish clickable", async () => {
+    const user = userEvent.setup();
+    customFetchMock.mockResolvedValue({
+      text: "Huge win! Shoutout to @Avery Tarantino for the OT goal. @Someone Else hustled too.",
+    });
+    const onInsert = setup();
+    await user.click(screen.getByTestId("button-ai-assist"));
+    await user.type(screen.getByTestId("textarea-ai-notes"), "won 3-2 in OT");
+    await user.click(screen.getByTestId("button-ai-generate"));
+    const result = await screen.findByTestId("textarea-ai-result");
+    // Author sees the friendly display form.
+    expect((result as HTMLTextAreaElement).value).toContain("@Avery Tarantino");
+    await user.click(screen.getByTestId("button-ai-insert"));
+    // Roster match became a canonical token; non-roster name stayed plain.
+    const inserted = onInsert.mock.calls[0][0] as string;
+    expect(inserted).toContain(`@[Avery Tarantino](user:${AVERY_ID})`);
+    expect(inserted).toContain("@Someone Else hustled");
+    expect(inserted.match(/\]\(user:/g)?.length).toBe(1);
+  });
+
   it("locks the notes box while a generate request is in flight", async () => {
     const user = userEvent.setup();
     let release: (v: { text: string }) => void = () => {};
