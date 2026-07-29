@@ -438,6 +438,9 @@ async function sendTagEmails(args: {
   postTitle: string;
   postLink: string;
   actorUserId: string | null;
+  // Task #828 — recap emails invite recipients to add photos to the
+  // recap's fan album (highlights don't get the line).
+  isRecap: boolean;
 }): Promise<void> {
   if (args.userIds.length === 0) return;
   // Skip the entire DB roundtrip when SendGrid isn't wired up — keeps
@@ -454,7 +457,12 @@ async function sendTagEmails(args: {
     // is also the tagger (e.g. a guardian tagging their own child).
     excludeRecipientUserId: args.actorUserId ?? undefined,
     category: "social_tag",
-    build: (ctx) => buildTagEmail(ctx, { postTitle: args.postTitle, postUrl }),
+    build: (ctx) =>
+      buildTagEmail(ctx, {
+        postTitle: args.postTitle,
+        postUrl,
+        isRecap: args.isRecap,
+      }),
   });
 }
 
@@ -517,6 +525,7 @@ export async function notifyNewlyTaggedInRecap(args: {
     postTitle: title,
     postLink: link,
     actorUserId: args.actorUserId,
+    isRecap: true,
   });
   // Task #363 Phase 2 — guardian bell for pending recap tags on minors.
   await notifyGuardiansOfPendingTags({
@@ -610,6 +619,7 @@ export async function notifyNewlyTaggedInHighlight(args: {
     postTitle: title,
     postLink: link,
     actorUserId: args.actorUserId,
+    isRecap: false,
   });
 
   // ---- Guardian fan-out for pending consent (task #323) --------------------

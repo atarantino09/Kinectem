@@ -801,13 +801,13 @@ export function buildFirstRecapMilestoneEmail(
 "${args.recapTitle}"
 
 See it here:
-${args.recapUrl}
+${args.recapUrl}${ALBUM_INVITE_TEXT}
 
 Keep them coming — every recap helps families relive the season.
 — The Kinectem Team${foot.text}`,
     html: `<p>Congratulations — ${whoseHtml} first recap is published on Kinectem!</p>
 <p><strong>${titleHtml}</strong></p>
-<p><a href="${args.recapUrl}">See it →</a></p>
+<p><a href="${args.recapUrl}">See it →</a></p>${ALBUM_INVITE_HTML}
 <p>Keep them coming — every recap helps families relive the season.<br/>— The Kinectem Team</p>${foot.html}`,
   };
 }
@@ -883,16 +883,28 @@ ${args.postUrl}${foot.text}`,
   };
 }
 
+// Task #828 — one-line invitation to contribute photos to a recap's fan
+// album. Only attached to RECAP emails: parents of active roster athletes
+// (and roster members themselves) have album upload rights on team recap
+// posts (`canContributeToAlbum` in routes/album.ts), and the album lives
+// on the same post page the email already links to.
+const ALBUM_INVITE_TEXT =
+  "\n\nHave photos from the game? You can add them to the recap's photo album on the same page.";
+const ALBUM_INVITE_HTML =
+  "\n<p>Have photos from the game? You can add them to the recap's photo album on the same page.</p>";
+
 // Social — the user was tagged in a published recap/highlight.
 export function buildTagEmail(
   ctx: DispatchBuildContext,
-  args: { postTitle: string; postUrl: string },
+  args: { postTitle: string; postUrl: string; isRecap?: boolean },
 ): EmailMessage {
   const foot = manageFooter(ctx);
   const titleHtml = escapeHtml(args.postTitle);
   const who = ctx.isGuardianCopy ? ctx.subjectName : "You";
   const whoHtml = ctx.isGuardianCopy ? escapeHtml(ctx.subjectName) : "You";
   const wasWere = ctx.isGuardianCopy ? "was" : "were";
+  const albumText = args.isRecap ? ALBUM_INVITE_TEXT : "";
+  const albumHtml = args.isRecap ? ALBUM_INVITE_HTML : "";
   return {
     to: ctx.to,
     kind: "social_tag",
@@ -900,9 +912,9 @@ export function buildTagEmail(
     text: `${who} ${wasWere} tagged in "${args.postTitle}" on Kinectem.
 
 Open the post:
-${args.postUrl}${foot.text}`,
+${args.postUrl}${albumText}${foot.text}`,
     html: `<p>${whoHtml} ${wasWere} tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
-<p><a href="${args.postUrl}">Open the post →</a></p>${foot.html}`,
+<p><a href="${args.postUrl}">Open the post →</a></p>${albumHtml}${foot.html}`,
   };
 }
 
@@ -922,6 +934,10 @@ export function buildTeamContentEmail(
   const teamHtml = escapeHtml(team);
   const titleHtml = escapeHtml(args.title);
   const actorHtml = escapeHtml(args.actorName);
+  // Task #828 — recaps carry a fan photo album; invite the team
+  // community (incl. parents of active roster athletes) to contribute.
+  const albumText = args.contentLabel === "recap" ? ALBUM_INVITE_TEXT : "";
+  const albumHtml = args.contentLabel === "recap" ? ALBUM_INVITE_HTML : "";
   return {
     to: ctx.to,
     kind: "team_recap",
@@ -931,10 +947,10 @@ export function buildTeamContentEmail(
 "${args.title}"
 
 See it:
-${args.postUrl}${foot.text}`,
+${args.postUrl}${albumText}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> posted a new ${escapeHtml(args.contentLabel)} for <strong>${teamHtml}</strong> on Kinectem.</p>
 <p><strong>${titleHtml}</strong></p>
-<p><a href="${args.postUrl}">See it →</a></p>${foot.html}`,
+<p><a href="${args.postUrl}">See it →</a></p>${albumHtml}${foot.html}`,
   };
 }
 
