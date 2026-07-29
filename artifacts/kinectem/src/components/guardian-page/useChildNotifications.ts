@@ -13,6 +13,14 @@ import type { ChildNotificationsState, DecisionInFlight } from "./types";
 // enough to register, short enough to not feel sticky.
 const DECIDED_BADGE_MS = 1500;
 
+// Extra-spec server flag (locked openapi): `requiresAction === false`
+// marks informational rows (auto-approved tag bells) that the server
+// excludes from unreadCount and Approve-all. Optimistic updates must
+// mirror that or the badge drifts after Remove/Undo on such rows.
+function needsDecision(item: ChildNotificationItem): boolean {
+  return (item as { requiresAction?: boolean }).requiresAction !== false;
+}
+
 // State + actions for the per-child notifications strip on the family
 // dashboard. Hoisted out of GuardianPage so the page can stay focused
 // on layout while this hook owns optimistic updates, refetches, and
@@ -150,7 +158,9 @@ export function useChildNotifications() {
               ? { ...i, decision: null, isRead: false }
               : i,
           ),
-          unreadCount: cur.unreadCount + 1,
+          unreadCount: needsDecision(item)
+            ? cur.unreadCount + 1
+            : cur.unreadCount,
         },
       };
     });
@@ -182,7 +192,9 @@ export function useChildNotifications() {
                 ? { ...i, decision: previousDecision }
                 : i,
             ),
-            unreadCount: Math.max(0, cur.unreadCount - 1),
+            unreadCount: needsDecision(item)
+              ? Math.max(0, cur.unreadCount - 1)
+              : cur.unreadCount,
           },
         };
       });
@@ -222,9 +234,10 @@ export function useChildNotifications() {
           items: cur.items.map((i) =>
             i.itemKey === item.itemKey ? { ...i, decision } : i,
           ),
-          unreadCount: item.isRead
-            ? cur.unreadCount
-            : Math.max(0, cur.unreadCount - 1),
+          unreadCount:
+            item.isRead || !needsDecision(item)
+              ? cur.unreadCount
+              : Math.max(0, cur.unreadCount - 1),
         },
       };
     });
@@ -272,7 +285,10 @@ export function useChildNotifications() {
             items: cur.items.map((i) =>
               i.itemKey === item.itemKey ? { ...i, decision: null } : i,
             ),
-            unreadCount: item.isRead ? cur.unreadCount : cur.unreadCount + 1,
+            unreadCount:
+              item.isRead || !needsDecision(item)
+                ? cur.unreadCount
+                : cur.unreadCount + 1,
           },
         };
       });
@@ -298,7 +314,14 @@ export function useChildNotifications() {
       if (!cur) return prev;
       return {
         ...prev,
-        [childId]: { ...cur, items: [], unreadCount: 0 },
+        [childId]: {
+          ...cur,
+          // Approve-all only touches actionable rows server-side —
+          // informational (auto-approved) rows and already-decided
+          // history must stay visible locally too.
+          items: cur.items.filter((i) => !!i.decision || !needsDecision(i)),
+          unreadCount: 0,
+        },
       };
     });
     try {
@@ -317,7 +340,9 @@ export function useChildNotifications() {
           [childId]: {
             ...cur,
             items: prevItems,
-            unreadCount: prevItems.filter((i) => !i.isRead).length,
+            unreadCount: prevItems.filter(
+              (i) => !i.isRead && !i.decision && needsDecision(i),
+            ).length,
           },
         };
       });

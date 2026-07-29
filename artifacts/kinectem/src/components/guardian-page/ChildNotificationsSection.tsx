@@ -51,6 +51,16 @@ interface RowProps {
   onRevert: (childId: string, item: ChildNotificationItem) => void;
 }
 
+// `requiresAction` is an extra-spec server flag (locked openapi): false
+// marks informational items — e.g. a tag bell for a tag that already
+// went live because consent is off — which get no Approve button and
+// no pending styling, but keep Remove as the safety hatch.
+function needsDecision(item: ChildNotificationItem): boolean {
+  return (
+    (item as { requiresAction?: boolean }).requiresAction !== false
+  );
+}
+
 function ChildNotificationRow({
   child,
   item,
@@ -81,16 +91,17 @@ function ChildNotificationRow({
     decidingItem.decision === "removed";
   const decisionInFlight = isApproving || isRemoving;
   const decided = item.decision;
+  const informational = !decided && !needsDecision(item);
   const isReverting = revertingItemKey === item.itemKey;
   return (
     <div
       data-testid={`row-child-notif-${item.itemKey}`}
       data-read={item.isRead ? "true" : "false"}
-      data-decision={decided ?? "pending"}
+      data-decision={decided ?? (informational ? "informational" : "pending")}
       className={`flex items-start gap-2 p-2 rounded-md border transition-opacity ${
         decided ? "opacity-60" : ""
       } ${
-        item.isRead
+        item.isRead || informational
           ? "border-border bg-background"
           : "border-primary/30 bg-primary/5"
       }`}
@@ -166,6 +177,30 @@ function ChildNotificationRow({
               data-testid={`btn-undo-decision-${item.itemKey}`}
             >
               {isReverting ? "…" : "Undo"}
+            </Button>
+          </>
+        ) : informational ? (
+          <>
+            {/* Already live — nothing to approve. Remove stays as the
+                undo hatch (declines the tag / hides the item). */}
+            <Badge
+              variant="outline"
+              className="h-6 px-2 text-[11px] font-bold text-muted-foreground"
+              data-testid={`badge-live-${item.itemKey}`}
+            >
+              Live
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[11px] font-bold border-destructive text-destructive hover:bg-destructive/10"
+              disabled={decisionInFlight}
+              onClick={() => onDecide(child.id, item, "removed")}
+              aria-label={removeAriaLabel(item)}
+              title={removeAriaLabel(item)}
+              data-testid={`btn-remove-${item.itemKey}`}
+            >
+              {isRemoving ? "…" : "Remove"}
             </Button>
           </>
         ) : (
@@ -254,7 +289,11 @@ export function ChildNotificationsSection({
   // can render the optional history strip below the actionable list.
   // Pending items are always visible; decided items only render when
   // the parent has flipped the toggle on for this child.
-  const pendingItems = items.filter((i) => !i.decision);
+  const pendingItems = items.filter((i) => !i.decision && needsDecision(i));
+  // Informational rows (auto-approved tags — already live, nothing to
+  // approve) render below the actionable list, outside the pending
+  // group and the Approve-all flow.
+  const infoItems = items.filter((i) => !i.decision && !needsDecision(i));
   const decidedItems = items.filter((i) => !!i.decision);
   // Once the notifs state has loaded for this child we always render
   // the section so the "Show decided" toggle stays discoverable —
@@ -336,6 +375,14 @@ export function ChildNotificationsSection({
         </p>
       ) : (
         <div className="space-y-1.5">{pendingItems.slice(0, 8).map(renderRow)}</div>
+      )}
+      {infoItems.length > 0 && (
+        <div className="space-y-1.5" data-testid={`section-informational-${c.id}`}>
+          <p className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+            Already live — no approval needed
+          </p>
+          {infoItems.slice(0, 8).map(renderRow)}
+        </div>
       )}
       {showDecided && (
         <div

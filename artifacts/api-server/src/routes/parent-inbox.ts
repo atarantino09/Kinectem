@@ -125,6 +125,13 @@ interface ChildItem {
   // null if it's still awaiting their decision (or was only ever marked
   // as seen via the legacy read overlay).
   decision: ChildItemDecision | null;
+  // false when the item is purely informational — e.g. a "You were
+  // tagged" bell for a tag that auto-approved because consent is off.
+  // The client hides the Approve button and pending styling, and the
+  // server excludes these from the unread badge and "Approve all".
+  // Extra beyond the locked spec (like canUpload/canDelete on albums);
+  // omitted (undefined) means actionable, preserving old behavior.
+  requiresAction?: boolean;
   createdAt: string;
   actor: {
     id: string;
@@ -158,7 +165,58 @@ async function loadChildNotificationItems(
     )
     .orderBy(desc(notifications.createdAt))
     .limit(CHILD_ITEM_PER_SOURCE_LIMIT);
+  // Tag bells for already-approved tags are informational: when consent
+  // is off the tag went live at publish, so there is nothing for the
+  // parent to approve (task #826). Resolve each post_tag bell's link
+  // back to the underlying tag row and check its REAL status — pending
+  // tags (consent on) keep the actionable Approve/Remove treatment.
+  const tagNotifArticleIds = new Map<string, string>(); // notifId -> articleId
+  const tagNotifHighlightIds = new Map<string, string>(); // notifId -> highlightId
   for (const n of childNotifs) {
+    if (n.kind !== "post_tag" || !n.link) continue;
+    const m = /^\/posts\/(article|highlight)-([0-9a-f-]{36})$/i.exec(n.link);
+    if (!m) continue;
+    if (m[1] === "article") tagNotifArticleIds.set(n.id, m[2]);
+    else tagNotifHighlightIds.set(n.id, m[2]);
+  }
+  const approvedArticleIds = new Set<string>();
+  if (tagNotifArticleIds.size > 0) {
+    const rows = await db
+      .select({ articleId: articleTags.articleId })
+      .from(articleTags)
+      .where(
+        and(
+          eq(articleTags.userId, childId),
+          eq(articleTags.status, "approved"),
+          inArray(articleTags.articleId, [
+            ...new Set(tagNotifArticleIds.values()),
+          ]),
+        ),
+      );
+    for (const r of rows) approvedArticleIds.add(r.articleId);
+  }
+  const approvedHighlightIds = new Set<string>();
+  if (tagNotifHighlightIds.size > 0) {
+    const rows = await db
+      .select({ highlightId: highlightTags.highlightId })
+      .from(highlightTags)
+      .where(
+        and(
+          eq(highlightTags.userId, childId),
+          eq(highlightTags.status, "approved"),
+          inArray(highlightTags.highlightId, [
+            ...new Set(tagNotifHighlightIds.values()),
+          ]),
+        ),
+      );
+    for (const r of rows) approvedHighlightIds.add(r.highlightId);
+  }
+  for (const n of childNotifs) {
+    const articleId = tagNotifArticleIds.get(n.id);
+    const highlightId = tagNotifHighlightIds.get(n.id);
+    const tagAlreadyLive =
+      (!!articleId && approvedArticleIds.has(articleId)) ||
+      (!!highlightId && approvedHighlightIds.has(highlightId));
     items.push({
       itemKey: `notification:${n.id}`,
       kind: "notification",
@@ -167,6 +225,7 @@ async function loadChildNotificationItems(
       link: n.link ?? null,
       isRead: false, // overlaid below from parent's read table
       decision: null, // overlaid below
+      ...(tagAlreadyLive ? { requiresAction: false } : {}),
       createdAt: n.createdAt.toISOString(),
       actor: null,
     });
@@ -887,7 +946,11 @@ router.get(
     // Default behavior is unchanged: only items still awaiting the
     // parent's attention. The unread count always reflects the default
     // feed so the bell badge is not inflated by historical decisions.
-    const unreadCount = visible.filter((i) => !i.isRead).length;
+    // Informational items (auto-approved tag bells) don't await any
+    // decision, so they never inflate the "new" badge.
+    const unreadCount = visible.filter(
+      (i) => !i.isRead && i.requiresAction !== false,
+    ).length;
     if (!includeDecided) {
       res.json({ data: visible, unreadCount });
       return;
@@ -971,7 +1034,11 @@ router.post(
     const me = req.sessionUser!;
     const raw = await loadChildNotificationItems(child);
     const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
-    const visible = visibleAfterDecision(overlaid);
+    // Informational items (auto-approved tag bells) need no approval —
+    // bulk-approving them would just create meaningless decision rows.
+    const visible = visibleAfterDecision(overlaid).filter(
+      (i) => i.requiresAction !== false,
+    );
     if (visible.length === 0) return res.json({ approvedCount: 0 });
     const now = new Date();
     for (const item of visible) {
@@ -1860,7 +1927,9 @@ router.get(
       const raw = await loadChildNotificationItems(child);
       const overlaid = await applyParentReadOverlay(me.id, child.id, raw);
       const visible = visibleAfterDecision(overlaid);
-      const unread = visible.filter((i) => !i.isRead).length;
+      const unread = visible.filter(
+        (i) => !i.isRead && i.requiresAction !== false,
+      ).length;
       perChild.push({ childId: child.id, unreadCount: unread });
       totalUnreadCount += unread;
     }
