@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { MentionTextarea } from "./MentionTextarea";
+import { mentionTokensToDisplay } from "@/lib/mentions";
+import type { RosterPickerMember } from "./RosterTagPicker";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,13 @@ interface AiAssistButtonProps {
   gameDate?: string;
   teamName?: string | null;
   onInsert: (text: string) => void;
+  /**
+   * Active roster players for the @-mention picker (same list the recap
+   * body uses). Empty for post kinds without mentions — the picker just
+   * never opens.
+   */
+  rosterMembers?: RosterPickerMember[];
+  rosterLoading?: boolean;
   /**
    * Pop the dialog open automatically once, right when the composer mounts.
    * The parent passes true only for a brand-new game recap (not highlights,
@@ -43,6 +52,8 @@ export function AiAssistButton({
   gameDate,
   teamName,
   onInsert,
+  rosterMembers = [],
+  rosterLoading = false,
   autoOpen = false,
 }: AiAssistButtonProps) {
   const { toast } = useToast();
@@ -56,7 +67,6 @@ export function AiAssistButton({
   // whoami resolves (the dialog is author-gated). A ref (not state) guards
   // against re-opening when the user dismisses and whoami refetches.
   const autoOpened = useRef(false);
-  const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const canUse = !!whoami?.canAuthorRecap;
   useEffect(() => {
     if (autoOpen && canUse && !autoOpened.current) {
@@ -91,7 +101,10 @@ export function AiAssistButton({
         body: JSON.stringify({
           mode: "draft",
           postType,
-          notes: notes.trim(),
+          // Notes may contain @[Name](user:id) mention tokens — send the
+          // AI the readable "@Name" form so it can reference the right
+          // players without leaking raw token syntax into the prompt.
+          notes: mentionTokensToDisplay(notes).trim(),
           title: title?.trim() || undefined,
           teamName: teamName || undefined,
           gameDate: gameDate || undefined,
@@ -156,7 +169,11 @@ export function AiAssistButton({
           // the Recap section, hiding the header behind the popup).
           onOpenAutoFocus={(e) => {
             e.preventDefault();
-            notesRef.current?.focus({ preventScroll: true });
+            // MentionTextarea doesn't forward refs — grab the inner
+            // textarea by id instead.
+            document
+              .getElementById("ai-notes")
+              ?.focus({ preventScroll: true });
           }}
         >
           <DialogHeader>
@@ -178,14 +195,18 @@ export function AiAssistButton({
               >
                 Your notes
               </Label>
-              <Textarea
+              {/* Mention-capable: typing @ opens the roster picker, same
+                  as the recap body. Tokens are collapsed to "@Name" for
+                  the AI prompt in run(). */}
+              <MentionTextarea
                 id="ai-notes"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Won 3-2 in OT, great team defense, big second-half comeback, everyone hustled…"
+                onChange={setNotes}
+                placeholder="e.g. Won 3-2 in OT, great team defense, big second-half comeback… Type @ to mention a player"
                 className="mt-1.5 min-h-[100px]"
                 disabled={loading}
-                ref={notesRef}
+                members={rosterMembers}
+                membersLoading={rosterLoading}
                 data-testid="textarea-ai-notes"
               />
             </div>
@@ -213,11 +234,17 @@ export function AiAssistButton({
                 >
                   Suggestion (edit before inserting)
                 </Label>
-                <Textarea
+                {/* Mention-capable too: the author can tag players while
+                    editing the suggestion; `result` holds the canonical
+                    tokenized form, so onInsert carries tokens into the
+                    recap body intact. */}
+                <MentionTextarea
                   id="ai-result"
                   value={result}
-                  onChange={(e) => setResult(e.target.value)}
+                  onChange={setResult}
                   className="mt-1.5 min-h-[160px]"
+                  members={rosterMembers}
+                  membersLoading={rosterLoading}
                   data-testid="textarea-ai-result"
                 />
               </div>

@@ -338,6 +338,11 @@ export function PostFormFields({
             gameDate={gameDate}
             teamName={aiTeamName}
             onInsert={onBodyChange}
+            // Same roster the recap body uses — enables @-mentions inside
+            // the AI Assist dialog (notes + suggestion). Empty for shorts/
+            // org updates, where the picker simply never opens.
+            rosterMembers={rosterMembers}
+            rosterLoading={rosterLoading}
             // Greet authors with AI Assist the moment they start a brand-new
             // game recap. Never for highlights, org updates, edits, or
             // reopened drafts that already have text — those are mid-flow.

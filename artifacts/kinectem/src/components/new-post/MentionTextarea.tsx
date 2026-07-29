@@ -22,6 +22,7 @@ interface MentionTextareaProps {
   className?: string;
   members: RosterPickerMember[];
   membersLoading?: boolean;
+  disabled?: boolean;
   "data-testid"?: string;
 }
 
@@ -88,6 +89,7 @@ export function MentionTextarea({
   className,
   members,
   membersLoading = false,
+  disabled = false,
   "data-testid": testId,
 }: MentionTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -215,6 +217,7 @@ export function MentionTextarea({
         }}
         placeholder={placeholder}
         className={className}
+        disabled={disabled}
         data-testid={testId}
       />
       {open && (
