@@ -93,6 +93,7 @@ export function ManageMembersDialog({
   orgName,
   myUserId,
   myRole,
+  onBulkAddCoaches,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -102,6 +103,9 @@ export function ManageMembersDialog({
   // The viewer's role in this org. Only owner/admin should ever open
   // this dialog; we still defensively gate write actions below.
   myRole: Role;
+  // Optional shortcut to the bulk coach invite flow. When provided we show
+  // a "Bulk add coach" button; clicking it closes this dialog first.
+  onBulkAddCoaches?: () => void;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -335,7 +339,22 @@ export function ManageMembersDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
+            {onBulkAddCoaches && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold h-8 gap-1"
+                onClick={() => {
+                  onOpenChange(false);
+                  onBulkAddCoaches();
+                }}
+                data-testid="btn-manage-members-bulk-add-coaches"
+              >
+                <UserPlus className="w-3 h-3" />
+                Bulk add coach
+              </Button>
+            )}
             <Button
               size="sm"
               className="font-bold h-8 gap-1"

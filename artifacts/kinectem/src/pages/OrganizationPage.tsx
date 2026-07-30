@@ -586,6 +586,7 @@ export default function OrganizationPage() {
           orgName={organization.name}
           myUserId={me.id}
           myRole={organization.role!}
+          onBulkAddCoaches={() => setBulkCoachesOpen(true)}
         />
       )}
       {isOrgManager && (
