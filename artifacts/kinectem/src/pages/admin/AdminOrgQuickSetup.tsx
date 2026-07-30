@@ -24,9 +24,9 @@ import {
   trimTrailingEmpty,
   type BulkPair,
 } from "@/components/BulkPairEditor";
-import { PLANS } from "@/lib/plans";
+import { PLANS, type PlanTier } from "@/lib/plans";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, ChevronDown } from "lucide-react";
 
 // Task #829 — One-page org quick setup for platform admins. Org info, bulk
 // team rows, and per-team coach emails all live on one scrollable form with a
@@ -88,9 +88,14 @@ export function pairsToTeamRows(
   return { teams, errors };
 }
 
-// The new-org tier's team cap (same source of truth the server enforces —
-// a quick-setup org starts on the entry plan until the owner upgrades).
-const STARTER_TEAM_CAP = PLANS.find((p) => p.id === "starter")?.maxTeams ?? null;
+// How many team rows each tier shows up front. Elite is open-ended, so it
+// starts at 45 and expands 15 rows at a time via the "show more" control.
+const TIER_INITIAL_ROWS: Record<PlanTier, number> = {
+  starter: 15,
+  pro: 40,
+  elite: 45,
+};
+const ELITE_EXPAND_STEP = 15;
 
 type QuickSetupResult = {
   id: string;
@@ -125,7 +130,13 @@ export default function AdminOrgQuickSetup() {
   const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
   const [bulkPairs, setBulkPairs] = useState<BulkPair[]>([]);
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
-  const [teamRows, setTeamRows] = useState<TeamRow[]>([emptyTeam()]);
+  const [tier, setTier] = useState<PlanTier>("starter");
+  // Rendered row floor: the selected tier's row count, plus any "show 15
+  // more" expansions on Elite. Filled rows always render even beyond this.
+  const [rowFloor, setRowFloor] = useState(TIER_INITIAL_ROWS.starter);
+  const [teamRows, setTeamRows] = useState<TeamRow[]>(() =>
+    Array.from({ length: TIER_INITIAL_ROWS.starter }, emptyTeam),
+  );
   const [saving, setSaving] = useState(false);
   const [errorTeamIndex, setErrorTeamIndex] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -147,6 +158,35 @@ export default function AdminOrgQuickSetup() {
   });
   const matches = useMemo(() => nameCheck?.data ?? [], [nameCheck]);
   const exactMatch = useMemo(() => matches.find((m) => m.exact) ?? null, [matches]);
+
+  // Pad with blank rows up to `target`; trim trailing blank rows beyond it.
+  // Never drops a row with any content.
+  const fitRowsTo = (rows: TeamRow[], target: number): TeamRow[] => {
+    const next = [...rows];
+    while (
+      next.length > target &&
+      !next[next.length - 1].name.trim() &&
+      next[next.length - 1].coachEmails.every((e) => !e.trim())
+    ) {
+      next.pop();
+    }
+    while (next.length < target) next.push(emptyTeam());
+    return next;
+  };
+
+  const selectTier = (id: PlanTier) => {
+    setTier(id);
+    setRowFloor(TIER_INITIAL_ROWS[id]);
+    setTeamRows((rows) => fitRowsTo(rows, TIER_INITIAL_ROWS[id]));
+  };
+
+  const showMoreRows = () => {
+    setRowFloor((f) => {
+      const target = Math.max(f, teamRows.length) + ELITE_EXPAND_STEP;
+      setTeamRows((rows) => fitRowsTo(rows, target));
+      return target;
+    });
+  };
 
   const updateTeam = (key: number, patch: Partial<TeamRow>) => {
     setTeamRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -284,7 +324,7 @@ export default function AdminOrgQuickSetup() {
           });
         }
       }
-      return next.length ? next : [emptyTeam()];
+      return fitRowsTo(next, rowFloor);
     });
     toast({
       title: `Added ${parsed.length} team${parsed.length === 1 ? "" : "s"} to the list`,
@@ -310,6 +350,7 @@ export default function AdminOrgQuickSetup() {
     return parsed.filter((t) => !existing.has(t.name.toLowerCase())).length;
   }, [bulkPairs, validTeams]);
   const projectedTeams = validTeams.length + bulkNewCount;
+  const selectedPlan = useMemo(() => PLANS.find((p) => p.id === tier), [tier]);
   const canSave =
     orgName.trim().length > 0 && !exactMatch && !saving && !logoBusy;
 
@@ -393,7 +434,9 @@ export default function AdminOrgQuickSetup() {
     setSecondaryColor(null);
     setBulkPairs([]);
     setBulkErrors([]);
-    setTeamRows([emptyTeam()]);
+    setTier("starter");
+    setRowFloor(TIER_INITIAL_ROWS.starter);
+    setTeamRows(Array.from({ length: TIER_INITIAL_ROWS.starter }, emptyTeam));
     setResult(null);
     setSaveError(null);
     setErrorTeamIndex(null);
@@ -590,6 +633,41 @@ export default function AdminOrgQuickSetup() {
           </div>
         </section>
 
+        {/* ---- Plan tier (sets how many team rows are shown) ---- */}
+        <section className="rounded-lg border bg-card p-4 mb-5">
+          <h2 className="text-sm font-bold mb-1">How many teams?</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Tiers differ only in the number of teams. Pick one to size the
+            team list below — you can still add or remove rows afterward.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {PLANS.map((p) => {
+              const selected = tier === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectTier(p.id)}
+                  aria-pressed={selected}
+                  className={`rounded-md border p-3 text-left transition-colors ${
+                    selected
+                      ? "border-primary ring-2 ring-primary/40 bg-primary/5"
+                      : "hover:border-muted-foreground/40"
+                  }`}
+                  data-testid={`btn-qs-tier-${p.id}`}
+                >
+                  <div className="text-sm font-bold">{p.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {p.maxTeams != null
+                      ? `Up to ${p.maxTeams} teams`
+                      : "41+ teams (unlimited)"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
         {/* ---- Teams + coaches ---- */}
         <section className="rounded-lg border bg-card p-4 mb-5">
           <div className="flex items-center justify-between mb-3">
@@ -638,8 +716,8 @@ export default function AdminOrgQuickSetup() {
                 className="text-xs font-medium text-muted-foreground"
                 data-testid="text-qs-team-count"
               >
-                {STARTER_TEAM_CAP != null
-                  ? `${projectedTeams}/${STARTER_TEAM_CAP} teams`
+                {selectedPlan?.maxTeams != null
+                  ? `${projectedTeams}/${selectedPlan.maxTeams} teams`
                   : `${projectedTeams} team${projectedTeams === 1 ? "" : "s"}`}
               </span>
             </div>
@@ -677,7 +755,10 @@ export default function AdminOrgQuickSetup() {
                     variant="ghost"
                     onClick={() =>
                       setTeamRows((rows) =>
-                        rows.length === 1 ? [emptyTeam()] : rows.filter((r) => r.key !== t.key),
+                        fitRowsTo(
+                          rows.filter((r) => r.key !== t.key),
+                          rowFloor,
+                        ),
                       )
                     }
                     aria-label="Remove team"
@@ -728,6 +809,19 @@ export default function AdminOrgQuickSetup() {
               </div>
             ))}
           </div>
+          {tier === "elite" && (
+            <div className="mt-3 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={showMoreRows}
+                data-testid="btn-qs-show-more-rows"
+              >
+                <ChevronDown className="h-4 w-4 mr-1" />
+                Show {ELITE_EXPAND_STEP} more rows
+              </Button>
+            </div>
+          )}
         </section>
 
         {/* ---- Save ---- */}

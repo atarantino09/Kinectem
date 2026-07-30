@@ -86,15 +86,18 @@ describe("AdminOrgQuickSetup", () => {
       "coach@example.com",
     );
 
-    // Second team row.
-    await user.click(screen.getByTestId("btn-qs-add-team"));
+    // Second team goes into the next pre-rendered blank row (starter tier
+    // shows 15 rows up front).
     await user.type(screen.getByTestId("input-qs-team-name-1"), "10U Gold");
+    expect(screen.getByTestId("qs-team-row-14")).toBeInTheDocument();
+    expect(screen.queryByTestId("qs-team-row-15")).not.toBeInTheDocument();
 
-    // Third row added then removed again.
+    // Add team appends a 16th row; removing a blank row trims back to the
+    // tier's 15-row floor.
     await user.click(screen.getByTestId("btn-qs-add-team"));
-    expect(screen.getByTestId("qs-team-row-2")).toBeInTheDocument();
-    await user.click(screen.getByTestId("btn-qs-remove-team-2"));
-    expect(screen.queryByTestId("qs-team-row-2")).not.toBeInTheDocument();
+    expect(screen.getByTestId("qs-team-row-15")).toBeInTheDocument();
+    await user.click(screen.getByTestId("btn-qs-remove-team-15"));
+    expect(screen.queryByTestId("qs-team-row-15")).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("btn-qs-save"));
 
@@ -164,8 +167,9 @@ describe("AdminOrgQuickSetup", () => {
       "orphan@example.com",
     );
     expect(screen.getByTestId("input-qs-bulk-team-name-1")).toHaveValue("8U Red");
-    // The team on the bad-email row was NOT added (whole row flagged).
-    expect(screen.queryByTestId("input-qs-team-name-2")).not.toBeInTheDocument();
+    // The team on the bad-email row was NOT added (whole row flagged) —
+    // the next pre-rendered row is still blank.
+    expect(screen.getByTestId("input-qs-team-name-2")).toHaveValue("");
   });
 
   it("shows a running team count against the starter cap", async () => {
