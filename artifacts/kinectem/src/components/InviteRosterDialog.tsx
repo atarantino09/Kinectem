@@ -14,7 +14,12 @@ import {
   queryOpts,
   type AddTeamMemberRequestPosition,
 } from "@workspace/api-client-react";
-import { buildCoachInviteText } from "@workspace/invite-copy";
+import {
+  buildCoachInviteText,
+  buildStaffInviteText,
+  isStaffInvitePosition,
+  staffInviteRoleLabel,
+} from "@workspace/invite-copy";
 import {
   Dialog,
   DialogContent,
@@ -124,6 +129,9 @@ export function InviteRosterDialog({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [position, setPosition] = useState<AddTeamMemberRequestPosition>("player");
+  // Task #837 — which invite tab is active; drives whether the shared
+  // copy-to-clipboard message uses the staff or parent wording.
+  const [activeTab, setActiveTab] = useState("search");
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -227,10 +235,29 @@ export function InviteRosterDialog({
   // Task #634 — ready-to-paste "join Kinectem" outreach message. Same
   // wording as the invite email (shared from @workspace/invite-copy), with
   // the coach's name and the shareable join link substituted in.
+  //
+  // Task #837 — in lockstep with the emails, the message switches to the
+  // staff wording when the currently selected role (on the active tab) is a
+  // staff role (coach / assistant coach / manager); parent wording otherwise.
   const coachName = me ? `${me.firstName} ${me.lastName}`.trim() : "";
+  const selectedPosition =
+    activeTab === "email"
+      ? emailPosition
+      : activeTab === "bulk"
+        ? bulkPosition
+        : activeTab === "search"
+          ? position
+          : "player";
   const inviteMessage =
     fullLink && coachName
-      ? buildCoachInviteText({ coachName, link: fullLink })
+      ? isStaffInvitePosition(selectedPosition)
+        ? buildStaffInviteText({
+            inviterName: coachName,
+            teamName,
+            roleLabel: staffInviteRoleLabel(selectedPosition),
+            link: fullLink,
+          })
+        : buildCoachInviteText({ coachName, link: fullLink })
       : null;
 
   const onCopyMessage = () => {
@@ -299,6 +326,7 @@ export function InviteRosterDialog({
       setCsvResults(null);
       csvAbortRef.current = false;
       setShowFullMessage(false);
+      setActiveTab("search");
       setInviteResult(null);
       setResultCopied(false);
       setResultMsgCopied(false);
@@ -789,7 +817,11 @@ export function InviteRosterDialog({
           </div>
         )}
 
-        <Tabs defaultValue="search" className="mt-2 min-w-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="mt-2 min-w-0"
+        >
           <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="search" className="font-bold text-xs sm:text-sm">
               <UserCheck className="w-4 h-4 mr-1.5 hidden sm:inline" /> Existing

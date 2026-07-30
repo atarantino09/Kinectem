@@ -22,6 +22,10 @@ import {
   sql,
 } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
+import {
+  isStaffInvitePosition,
+  staffInviteRoleLabel,
+} from "@workspace/invite-copy";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { getActiveGuardianIds, getActiveGuardianIdsForChildren, isActiveGuardian } from "../lib/guardian-links";
@@ -32,6 +36,7 @@ import {
   appBaseUrl,
   buildRosterEmail,
   sendCoachInviteEmail,
+  sendStaffInviteEmail,
   buildInviteAcceptUrl,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
@@ -1141,11 +1146,24 @@ router.post(
       // the invite creation (the pending token is already persisted).
       const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
       try {
-        await sendCoachInviteEmail(email, {
-          coachName: actorName,
-          token: invite.token,
-          inviteId: invite.id,
-        });
+        // Task #837 — staff invitees (coach / assistant coach / manager) get
+        // the staff-oriented invite email; everyone else keeps the
+        // parent-oriented copy verbatim.
+        if (isStaffInvitePosition(positionRaw)) {
+          await sendStaffInviteEmail(email, {
+            inviterName: actorName,
+            teamName: t.name,
+            roleLabel: staffInviteRoleLabel(positionRaw),
+            token: invite.token,
+            inviteId: invite.id,
+          });
+        } else {
+          await sendCoachInviteEmail(email, {
+            coachName: actorName,
+            token: invite.token,
+            inviteId: invite.id,
+          });
+        }
         emailSent = true;
         // Task #666 — record the successful hand-off to SendGrid. Later Event
         // Webhook events (delivered/bounced/etc) supersede this.
@@ -1398,11 +1416,26 @@ router.post(
       // existing token. Best-effort: a delivery failure is reported (not
       // fatal) so the coach can fall back to copying the link.
       try {
-        await sendCoachInviteEmail(email, {
-          coachName: actorName,
-          token: invite.token,
-          inviteId: invite.id,
-        });
+        // Task #837 — mirror the create path's role branching: a pending
+        // staff invite re-sends the staff email, not the parent one. A null
+        // position with role "coach" means plain head coach.
+        const invitePosition =
+          invite.position ?? (invite.role === "coach" ? "coach" : "player");
+        if (isStaffInvitePosition(invitePosition)) {
+          await sendStaffInviteEmail(email, {
+            inviterName: actorName,
+            teamName: t.name,
+            roleLabel: staffInviteRoleLabel(invitePosition),
+            token: invite.token,
+            inviteId: invite.id,
+          });
+        } else {
+          await sendCoachInviteEmail(email, {
+            coachName: actorName,
+            token: invite.token,
+            inviteId: invite.id,
+          });
+        }
         emailSent = true;
         // Task #666 — record the successful hand-off to SendGrid. Later Event
         // Webhook events (delivered/bounced/etc) supersede this.

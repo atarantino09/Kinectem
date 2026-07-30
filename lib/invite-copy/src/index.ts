@@ -58,6 +58,123 @@ export const COACH_INVITE_CONTENT = {
   ctaLabel: CTA_LABEL,
 } as const;
 
+// Task #837 — staff variant of the invite. Sent (and shown in the in-app
+// copy block) when the invitee is being brought on as team staff — coach,
+// assistant coach, or manager — instead of a parent/player. One shared
+// wording for all three staff roles; the team name and role label are
+// substituted per invite. Parent/player invites keep the copy above
+// verbatim.
+
+/** Spec-level positions that get the staff invite wording. */
+export const STAFF_INVITE_POSITIONS = [
+  "coach",
+  "assistant_coach",
+  "manager",
+] as const;
+
+export type StaffInvitePosition = (typeof STAFF_INVITE_POSITIONS)[number];
+
+export function isStaffInvitePosition(
+  position: string | null | undefined,
+): position is StaffInvitePosition {
+  return (
+    position === "coach" ||
+    position === "assistant_coach" ||
+    position === "manager"
+  );
+}
+
+/** Human-readable role label used in the staff invite ("as an Assistant Coach"). */
+export function staffInviteRoleLabel(position: string | null | undefined): string {
+  switch (position) {
+    case "assistant_coach":
+      return "Assistant Coach";
+    case "manager":
+      return "Team Manager";
+    default:
+      return "Coach";
+  }
+}
+
+/** "a Coach" / "an Assistant Coach" — indefinite article for the role label. */
+function withArticle(roleLabel: string): string {
+  return /^[aeiou]/i.test(roleLabel) ? `an ${roleLabel}` : `a ${roleLabel}`;
+}
+
+export function staffInviteSubject(teamName: string): string {
+  return `You're invited to join ${teamName} on Kinectem`;
+}
+
+export interface StaffInviteVars {
+  /** Inviter's display name; fills the sign-off. */
+  inviterName: string;
+  /** Team the invitee is joining. */
+  teamName: string;
+  /** Human-readable role label, e.g. "Assistant Coach". */
+  roleLabel: string;
+  /** Set-up / accept link. */
+  link: string;
+}
+
+const STAFF_GREETING = "Hi there,";
+
+function staffInviteLine({ inviterName, teamName, roleLabel }: StaffInviteVars): string {
+  return `${inviterName} has invited you to join ${teamName} on Kinectem as ${withArticle(roleLabel)}.`;
+}
+
+const STAFF_ABOUT =
+  "Kinectem is where teams share game recaps — not box scores, but the story of the season: the effort, the turning points, and the plays that never show up on a stat sheet. Every player on the roster gets tagged in every recap, so the whole team is part of the story.";
+
+const STAFF_SETUP =
+  "Accept the invite below to set up your account and take your spot on the team.";
+
+const STAFF_LEARN_MORE =
+  "Check out www.kinectem.com to learn even more prior to signing up.";
+
+const STAFF_CTA_LABEL = "Accept your invite →";
+
+export const STAFF_INVITE_CONTENT = {
+  greeting: STAFF_GREETING,
+  about: STAFF_ABOUT,
+  setup: STAFF_SETUP,
+  learnMore: STAFF_LEARN_MORE,
+  ctaLabel: STAFF_CTA_LABEL,
+} as const;
+
+/**
+ * Plain-text body of the staff invite message. Used verbatim for the in-app
+ * copy-to-clipboard block and for the email's text part.
+ */
+export function buildStaffInviteText(vars: StaffInviteVars): string {
+  return [
+    STAFF_GREETING,
+    staffInviteLine(vars),
+    STAFF_ABOUT,
+    STAFF_SETUP,
+    STAFF_LEARN_MORE,
+    `${STAFF_CTA_LABEL} ${vars.link}`,
+    `— ${vars.inviterName}`,
+  ].join("\n\n");
+}
+
+/**
+ * HTML body of the staff invite message for the email's html part. Inviter
+ * name, team name, and role label are escaped (user-controlled); the link is
+ * system-generated.
+ */
+export function buildStaffInviteHtml(vars: StaffInviteVars): string {
+  const linkAttr = escapeHtml(vars.link);
+  return [
+    `<p>${escapeHtml(STAFF_GREETING)}</p>`,
+    `<p>${escapeHtml(staffInviteLine(vars))}</p>`,
+    `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
+    `<p>${escapeHtml(STAFF_SETUP)}</p>`,
+    `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
+    `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,
+    `<p>— ${escapeHtml(vars.inviterName)}</p>`,
+  ].join("\n");
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")

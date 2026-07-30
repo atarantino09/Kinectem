@@ -2,6 +2,9 @@ import {
   COACH_INVITE_SUBJECT,
   buildCoachInviteText,
   buildCoachInviteHtml,
+  staffInviteSubject,
+  buildStaffInviteText,
+  buildStaffInviteHtml,
 } from "@workspace/invite-copy";
 import { db, emailProviderKeys } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -349,6 +352,42 @@ export async function sendCoachInviteEmail(
     subject: COACH_INVITE_SUBJECT,
     text: buildCoachInviteText({ coachName: args.coachName, link }),
     html: buildCoachInviteHtml({ coachName: args.coachName, link }),
+  });
+}
+
+// Task #837 — staff variant of the roster invite email. Sent instead of the
+// parent-oriented coach invite when the invitee is being brought on as team
+// staff (coach, assistant coach, or manager) and no Kinectem account exists
+// for the address yet. Wording is the shared staff copy from
+// `@workspace/invite-copy` (lockstep with the in-app copy block); the team
+// name, role label, inviter name, and accept link are substituted. Delivery
+// tracking (customArgs) mirrors sendCoachInviteEmail exactly.
+export async function sendStaffInviteEmail(
+  to: string,
+  args: {
+    inviterName: string;
+    teamName: string;
+    roleLabel: string;
+    token: string;
+    inviteId?: string;
+  },
+): Promise<void> {
+  const link = buildInviteAcceptUrl(args.token);
+  const vars = {
+    inviterName: args.inviterName,
+    teamName: args.teamName,
+    roleLabel: args.roleLabel,
+    link,
+  };
+  await sendEmail({
+    to,
+    kind: "staff_invite",
+    ...(args.inviteId
+      ? { customArgs: { kinectem_invite_id: args.inviteId, kinectem_invite_kind: "roster" } }
+      : {}),
+    subject: staffInviteSubject(args.teamName),
+    text: buildStaffInviteText(vars),
+    html: buildStaffInviteHtml(vars),
   });
 }
 

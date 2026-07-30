@@ -5,6 +5,10 @@ import {
   COACH_INVITE_SUBJECT,
   buildCoachInviteHtml,
   buildCoachInviteText,
+  buildStaffInviteHtml,
+  buildStaffInviteText,
+  staffInviteRoleLabel,
+  staffInviteSubject,
 } from "@workspace/invite-copy";
 import { buildInviteAcceptUrl } from "../src/lib/email";
 import { app, loginAs, request } from "./helpers";
@@ -121,6 +125,80 @@ describe("coach invite email (task #636)", () => {
       .where(eq(users.email, lowered))
       .limit(1);
     expect(orphan).toBeUndefined();
+  });
+
+  // Task #837 — staff invitees (coach / assistant coach / manager) get the
+  // staff-oriented invite email with the team name and role label substituted;
+  // player/parent invites keep the parent copy (locked verbatim above).
+  for (const [positionValue, roleLabel] of [
+    ["coach", "Coach"],
+    ["assistant_coach", "Assistant Coach"],
+    ["manager", "Team Manager"],
+  ] as const) {
+    it(`emails the staff invite copy for a ${positionValue} invite`, async () => {
+      const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const teamId = await getFootballTeamId();
+      const email = `staff-${positionValue}-${Date.now()}@example.com`;
+
+      fetchMock.mockClear();
+      const res = await agent
+        .post(`/api/v1/teams/${teamId}/invites`)
+        .send({ email, position: positionValue, name: "Staff Invitee" });
+      expect(res.status).toBe(201);
+      expect(res.body.emailSent).toBe(true);
+
+      const sent = lastSentEmail();
+      expect(sent.to).toBe(email);
+      expect(staffInviteRoleLabel(positionValue)).toBe(roleLabel);
+      const vars = {
+        inviterName: "Coach Mike Davis",
+        teamName: "Varsity Football",
+        roleLabel,
+        link: buildInviteAcceptUrl(res.body.token as string),
+      };
+      expect(sent.subject).toBe(staffInviteSubject("Varsity Football"));
+      expect(sent.text).toBe(buildStaffInviteText(vars));
+      expect(sent.html).toBe(buildStaffInviteHtml(vars));
+      // Staff copy must speak to the invitee as staff, not a parent.
+      expect(sent.text).toContain("Varsity Football");
+      expect(sent.text).toContain(roleLabel);
+      expect(sent.text).not.toContain("your player's account");
+    });
+  }
+
+  it("re-sends the staff copy for a pending staff invite", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    const email = `staff-resend-${Date.now()}@example.com`;
+
+    fetchMock.mockClear();
+    const created = await agent
+      .post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email, position: "assistant_coach" });
+    expect(created.status).toBe(201);
+
+    fetchMock.mockClear();
+    const [invite] = await db
+      .select()
+      .from(rosterInvites)
+      .where(eq(rosterInvites.token, created.body.token as string))
+      .limit(1);
+    const res = await agent.post(
+      `/api/v1/teams/${teamId}/invites/${invite.id}/resend`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.emailSent).toBe(true);
+
+    const sent = lastSentEmail();
+    const vars = {
+      inviterName: "Coach Mike Davis",
+      teamName: "Varsity Football",
+      roleLabel: "Assistant Coach",
+      link: buildInviteAcceptUrl(invite.token),
+    };
+    expect(sent.subject).toBe(staffInviteSubject("Varsity Football"));
+    expect(sent.text).toBe(buildStaffInviteText(vars));
+    expect(sent.html).toBe(buildStaffInviteHtml(vars));
   });
 
   it("uses the in-app notification fan-out (and sends no email) for a known address", async () => {
