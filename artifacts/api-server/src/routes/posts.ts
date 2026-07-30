@@ -2192,6 +2192,7 @@ router.post(
           ? body.taggedUserIds.filter((u: unknown): u is string => typeof u === "string")
           : [],
         gameDate,
+        recapKind,
       });
       const newlyTagged = Array.from(
         new Set([...mentionResult.inserted, ...fanoutTagged]),

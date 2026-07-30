@@ -1229,6 +1229,41 @@ const COMPETITIONS_STEP1 = `
 `;
 
 // hint: Logic changed on both sides. Requires understanding intent of each change.
+// Task #833 — backfill roster auto-tags on already-published combined
+// recaps. Exported so the test suite can exercise the exact SQL the
+// marker-gated migration runs (the marker is already set in dev/test DBs
+// by the time tests run). Inserts only missing rows: NOT EXISTS skips
+// every user who already has a tag on the article (approved, pending,
+// declined, or removed alike), so re-running never flips a status.
+export const COMBINED_RECAP_TAG_BACKFILL_SQL = `
+          INSERT INTO article_tags (article_id, user_id, tagger_user_id, status, source)
+          SELECT
+            a.id,
+            re.user_id,
+            a.author_id,
+            (CASE WHEN u.require_tag_consent OR EXISTS (
+              SELECT 1 FROM guardian_links gl
+              JOIN users g ON g.id = gl.guardian_id
+              WHERE gl.child_id = re.user_id
+                AND gl.status = 'active'
+                AND g.require_tag_consent
+            ) THEN 'pending' ELSE 'approved' END)::tag_status,
+            'auto'::tag_source
+          FROM articles a
+          JOIN roster_entries re
+            ON re.team_id = a.team_id
+           AND re.role = 'player'
+           AND re.status = 'accepted'
+          JOIN users u ON u.id = re.user_id
+          WHERE a.recap_kind = 'combined'
+            AND a.status = 'published'
+            AND NOT EXISTS (
+              SELECT 1 FROM article_tags t
+              WHERE t.article_id = a.id AND t.user_id = re.user_id
+            )
+          ON CONFLICT DO NOTHING;
+`;
+
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -2026,6 +2061,37 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS promo_code text;
       ALTER TABLE tournaments
         ADD COLUMN IF NOT EXISTS promo_code text;
+    `,
+  },
+  {
+    // Task #833 — combined recaps historically skipped the roster auto-tag
+    // fan-out (it was gated on gameDate, which combined recaps never set),
+    // so already-published combined recaps never surface on players'
+    // profile pages. One-shot backfill: insert missing `auto` tags for
+    // every accepted rostered player on published combined recaps,
+    // respecting consent (pending when the player OR any active guardian
+    // requires tag consent). Existing rows — including declined ones —
+    // are never touched (NOT EXISTS + ON CONFLICT), and no notifications
+    // are sent (SQL-only path, mirrors "notify only on publish moments").
+    // Marker-gated so future declines/removals aren't re-inserted on boot.
+    name: "2026-07-30-task-833-backfill-combined-recap-roster-tags",
+    sql: `
+      CREATE TABLE IF NOT EXISTS one_time_migration_markers (
+        name       text PRIMARY KEY,
+        applied_at timestamp NOT NULL DEFAULT now()
+      );
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM one_time_migration_markers
+          WHERE name = '2026-07-30-task-833-backfill-combined-recap-roster-tags'
+        ) THEN
+          ${COMBINED_RECAP_TAG_BACKFILL_SQL}
+
+          INSERT INTO one_time_migration_markers (name)
+          VALUES ('2026-07-30-task-833-backfill-combined-recap-roster-tags');
+        END IF;
+      END$migration$;
     `,
   },
 ];

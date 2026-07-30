@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { COMBINED_RECAP_TAG_BACKFILL_SQL } from "../src/lib/migrations";
 import {
   db,
   articles,
@@ -1923,7 +1924,223 @@ describe("GET /users/:userId/posts merges authored + tagged", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Task #833 — combined (multi-game) recaps tag the roster too
+// ---------------------------------------------------------------------------
+describe("combined recap roster auto-tag (task #833)", () => {
+  beforeEach(async () => {
+    await db
+      .update(users)
+      .set({ requireTagConsent: false })
+      .where(eq(users.email, "marcus@kinectem.demo"));
+  });
+
+  it("auto-tags the roster when a combined recap is published without a gameDate", async () => {
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach, user: coachUser } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const res = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "2025 Season Recap",
+      body: "A season to remember, woven from every game.",
+      recapKind: "combined",
+      // No gameDate — the combined-recap composer never sends one.
+    });
+    expect(res.status).toBe(201);
+    const articleId = res.body.id.replace(/^article-/, "");
+    const [a] = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    expect(a.recapKind).toBe("combined");
+    expect(a.gameDate).toBeNull();
+
+    const tags = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const taggedIds = new Set(tags.map((t) => t.userId));
+    const accepted = await db
+      .select({ userId: rosterEntries.userId, role: rosterEntries.role })
+      .from(rosterEntries)
+      .where(
+        and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.status, "accepted")),
+      );
+    const expectedPlayers = accepted
+      .filter((r) => r.role === "player")
+      .map((r) => r.userId);
+    expect(expectedPlayers.length).toBeGreaterThan(0);
+    for (const uid of expectedPlayers) expect(taggedIds.has(uid)).toBe(true);
+    for (const r of accepted.filter((x) => x.role !== "player")) {
+      expect(taggedIds.has(r.userId)).toBe(false);
+    }
+    for (const t of tags) {
+      expect(t.source).toBe("auto");
+      expect(t.taggerUserId).toBe(coachUser.id);
+    }
+  });
+
+  it("tags the roster when a pending combined recap is approved by an org admin", async () => {
+    const { orgId } = await getFootballTeam();
+    await db
+      .update(organizations)
+      .set({ requireRecapApproval: true })
+      .where(eq(organizations.id, orgId));
+    try {
+      const [jv] = await db
+        .select()
+        .from(teams)
+        .where(and(eq(teams.organizationId, orgId), eq(teams.name, "JV Football")))
+        .limit(1);
+      if (!jv) throw new Error("JV Football missing from seed");
+      const teamId = jv.id;
+      const marcusId = await findUserId("marcus@kinectem.demo");
+      await ensureRosterPlayer(teamId, marcusId);
+      await db
+        .update(rosterEntries)
+        .set({ position: "author" })
+        .where(
+          and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, marcusId)),
+        );
+      const jordanId = await findUserId("jordan@kinectem.demo");
+      await ensureRosterPlayer(teamId, jordanId);
+
+      const { agent: marcus } = await loginAs(
+        (u) => u.email === "marcus@kinectem.demo",
+      );
+      const created = await marcus.post("/api/v1/posts").send({
+        postType: "long",
+        organizationId: orgId,
+        teamId,
+        title: "JV midseason recap",
+        body: "Halfway through, undefeated at home.",
+        recapKind: "combined",
+      });
+      expect(created.status).toBe(201);
+      expect(created.body.approvalStatus).toBe("pending_approval");
+      const postId = created.body.id;
+      const articleId = postId.replace(/^article-/, "");
+
+      // 3) Admin approves — this must run the roster fan-out even
+      //    though the article has no gameDate.
+      const { agent: admin } = await loginAs(
+        (u) => u.email === "sam@kinectem.demo",
+      );
+      const approve = await admin.post(
+        `/api/v1/organizations/${orgId}/post-approvals/${postId}/approve`,
+      );
+      expect(approve.status).toBe(200);
+
+      const tagRows = await db
+        .select()
+        .from(articleTags)
+        .where(eq(articleTags.articleId, articleId));
+      const taggedSet = new Set(tagRows.map((t) => t.userId));
+      const accepted = await db
+        .select({ userId: rosterEntries.userId })
+        .from(rosterEntries)
+        .where(
+          and(
+            eq(rosterEntries.teamId, teamId),
+            eq(rosterEntries.role, "player"),
+            eq(rosterEntries.status, "accepted"),
+          ),
+        );
+      expect(accepted.length).toBeGreaterThan(0);
+      for (const r of accepted) expect(taggedSet.has(r.userId)).toBe(true);
+      expect(tagRows.length).toBe(taggedSet.size);
+    } finally {
+      await db
+        .update(organizations)
+        .set({ requireRecapApproval: false })
+        .where(eq(organizations.id, orgId));
+    }
+  });
+
+  it("backfill SQL tags published combined recaps but never touches existing/declined tags", async () => {
+    const { teamId, orgId } = await getFootballTeam();
+    const { agent: coach } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    // Create a combined recap, then wipe its tags to simulate a recap
+    // published before task #833 (no roster fan-out ran).
+    const res = await coach.post("/api/v1/posts").send({
+      postType: "long",
+      organizationId: orgId,
+      title: "Legacy season recap",
+      body: "Published before roster tagging existed for combined recaps.",
+      recapKind: "combined",
+    });
+    expect(res.status).toBe(201);
+    const articleId = res.body.id.replace(/^article-/, "");
+    await db.delete(articleTags).where(eq(articleTags.articleId, articleId));
+
+    // One rostered player already declined a tag on this article — the
+    // backfill must not resurrect or flip it.
+    const accepted = await db
+      .select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(
+        and(
+          eq(rosterEntries.teamId, teamId),
+          eq(rosterEntries.role, "player"),
+          eq(rosterEntries.status, "accepted"),
+        ),
+      );
+    expect(accepted.length).toBeGreaterThan(1);
+    const declinedUserId = accepted[0].userId;
+    await db.insert(articleTags).values({
+      articleId,
+      userId: declinedUserId,
+      taggerUserId: null,
+      status: "declined",
+      source: "auto",
+    });
+
+    // Notification baseline — the SQL backfill must not notify anyone.
+    const notifBefore = await db.select().from(notifications);
+
+    await db.execute(sql.raw(COMBINED_RECAP_TAG_BACKFILL_SQL));
+
+    const tagRows = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    const byUser = new Map(tagRows.map((t) => [t.userId, t]));
+    // Declined row untouched.
+    expect(byUser.get(declinedUserId)?.status).toBe("declined");
+    expect(tagRows.filter((t) => t.userId === declinedUserId)).toHaveLength(1);
+    // Everyone else backfilled exactly once as auto.
+    for (const r of accepted) {
+      const row = byUser.get(r.userId);
+      expect(row).toBeTruthy();
+      if (r.userId !== declinedUserId) {
+        expect(row!.status).toBe("approved");
+        expect(row!.source).toBe("auto");
+      }
+    }
+    expect(tagRows.length).toBe(byUser.size);
+
+    // Idempotent: a second run inserts nothing new.
+    await db.execute(sql.raw(COMBINED_RECAP_TAG_BACKFILL_SQL));
+    const again = await db
+      .select()
+      .from(articleTags)
+      .where(eq(articleTags.articleId, articleId));
+    expect(again.length).toBe(tagRows.length);
+
+    // No notifications were produced by the backfill.
+    const notifAfter = await db.select().from(notifications);
+    expect(notifAfter.length).toBe(notifBefore.length);
+  });
+});
+
 // Reference unused imports so the test file still typechecks even if
 // Vitest's tree-shaking changes; harmless at runtime.
 void app;
 void request;
+void articleAuthors;
+void organizationAdmins;

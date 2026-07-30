@@ -107,24 +107,27 @@ async function notifyGuardiansOfApprovedTags(args: {
 // ---------------------------------------------------------------------------
 // Article auto-tag fan-out (game recaps)
 // ---------------------------------------------------------------------------
-// When an article has `gameDate` set, every accepted player on the
-// team's roster is auto-tagged. Called from POST /posts (initial
-// create) and POST /posts/:postId/publish (draft → publish path) so
-// drafts that get a game date added later still tag everyone at
-// publish time. ON CONFLICT DO NOTHING keeps re-runs idempotent.
+// When an article has `gameDate` set — or is a combined multi-game
+// recap (`recapKind === "combined"`, which publishes with no gameDate;
+// task #833) — every accepted player on the team's roster is
+// auto-tagged. Called from POST /posts (initial create) and
+// POST /posts/:postId/publish (draft → publish path) so drafts that
+// get a game date added later still tag everyone at publish time.
+// ON CONFLICT DO NOTHING keeps re-runs idempotent.
 export async function applyArticleTagFanout(args: {
   articleId: string;
   teamId: string;
   taggerUserId: string;
   explicitUserIds: string[];
   gameDate: Date | null;
+  recapKind?: string | null;
 }): Promise<string[]> {
   type Entry = { status: "approved" | "pending"; source: "manual" | "auto" };
   const tagMap = new Map<string, Entry>();
   for (const uid of args.explicitUserIds) {
     tagMap.set(uid, { status: "approved", source: "manual" });
   }
-  if (args.gameDate) {
+  if (args.gameDate || args.recapKind === "combined") {
     const players = await db
       .select({
         userId: rosterEntries.userId,

@@ -666,7 +666,9 @@ router.post(
     // members get inserted, and existing tag statuses (approved /
     // pending / declined) are preserved untouched.
     let fanoutTagged: string[] = [];
-    if (updated.gameDate) {
+    // Combined recaps publish with no gameDate but still fan out to the
+    // roster (task #833).
+    if (updated.gameDate || updated.recapKind === "combined") {
       fanoutTagged = await applyArticleTagFanout({
         articleId: updated.id,
         teamId: updated.teamId,
@@ -677,6 +679,7 @@ router.post(
         taggerUserId: updated.authorId ?? me.id,
         explicitUserIds: [],
         gameDate: updated.gameDate,
+        recapKind: updated.recapKind,
       });
     }
     // Notify the players this publish tagged. For mentions we use the

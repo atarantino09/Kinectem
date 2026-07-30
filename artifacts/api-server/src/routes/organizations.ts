@@ -2328,15 +2328,19 @@ async function transitionApproval(
     if (mentionResult.sanitizedBody !== null) {
       a.body = mentionResult.sanitizedBody;
     }
-    const fanoutTagged = a.gameDate
-      ? await applyArticleTagFanout({
-          articleId: a.id,
-          teamId: a.teamId,
-          taggerUserId,
-          explicitUserIds: [],
-          gameDate: a.gameDate,
-        })
-      : [];
+    // Combined recaps carry no gameDate but still fan out to the roster
+    // (task #833).
+    const fanoutTagged =
+      a.gameDate || a.recapKind === "combined"
+        ? await applyArticleTagFanout({
+            articleId: a.id,
+            teamId: a.teamId,
+            taggerUserId,
+            explicitUserIds: [],
+            gameDate: a.gameDate,
+            recapKind: a.recapKind,
+          })
+        : [];
     const notifyIds = Array.from(
       new Set([...mentionResult.mentioned, ...fanoutTagged]),
     );
