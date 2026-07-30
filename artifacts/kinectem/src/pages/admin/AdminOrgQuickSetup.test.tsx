@@ -3,10 +3,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
-import AdminOrgQuickSetup, {
-  pairsToTeamRows,
-  parsePastedPairs,
-} from "./AdminOrgQuickSetup";
+import AdminOrgQuickSetup, { pairsToTeamRows } from "./AdminOrgQuickSetup";
 
 // Task #829 — one-page org quick setup: add/remove team + coach rows and a
 // single save that shows the claim-link hand-off view. Fetch is stubbed at
@@ -121,19 +118,33 @@ describe("AdminOrgQuickSetup", () => {
     expect(body.teams[0]).not.toHaveProperty("website");
   });
 
-  it("fills team rows from a pasted bulk list, flagging bad lines", async () => {
+  it("fills team rows from the bulk row editor, keeping bad rows behind", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminOrgQuickSetup />);
     await user.type(await screen.findByTestId("input-qs-org-name"), "Bulk Org");
 
-    const paste =
-      "12U Blue, coach1@example.com\n" +
-      "12U Blue, coach2@example.com\n" +
-      "10U Gold\n" +
-      ", orphan@example.com\n" + // no team name → flagged
-      "8U Red, not-an-email"; // bad email → flagged
-    await user.click(screen.getByTestId("textarea-qs-bulk-paste"));
-    await user.paste(paste);
+    // Multi-line paste into the name column splits down that column
+    // (row 4 gets no name — its email will make it a flagged row).
+    await user.click(screen.getByTestId("input-qs-bulk-team-name-0"));
+    await user.paste("12U Blue\n12U Blue\n10U Gold\n\n8U Red");
+    // Coach emails on rows 1, 2, 4 (line 4 has email but no name), and a
+    // bad email on row 5.
+    await user.type(
+      screen.getByTestId("input-qs-bulk-coach-email-0"),
+      "coach1@example.com",
+    );
+    await user.type(
+      screen.getByTestId("input-qs-bulk-coach-email-1"),
+      "coach2@example.com",
+    );
+    await user.type(
+      screen.getByTestId("input-qs-bulk-coach-email-3"),
+      "orphan@example.com",
+    );
+    await user.type(
+      screen.getByTestId("input-qs-bulk-coach-email-4"),
+      "not-an-email",
+    );
     await user.click(screen.getByTestId("btn-qs-bulk-apply"));
 
     // Two coach emails merged onto one 12U Blue row; blank starter dropped.
@@ -145,12 +156,29 @@ describe("AdminOrgQuickSetup", () => {
       "coach2@example.com",
     );
     expect(screen.getByTestId("input-qs-team-name-1")).toHaveValue("10U Gold");
-    // Bad lines flagged with their line numbers, not silently dropped.
+    // The bad rows stayed in the editor (renumbered) with errors listed.
     const errors = screen.getByTestId("qs-bulk-errors");
-    expect(errors).toHaveTextContent("Line 4");
-    expect(errors).toHaveTextContent("Line 5");
-    // The valid team on the bad-email line is NOT added (whole line flagged).
+    expect(errors).toHaveTextContent("Line 1");
+    expect(errors).toHaveTextContent("Line 2");
+    expect(screen.getByTestId("input-qs-bulk-coach-email-0")).toHaveValue(
+      "orphan@example.com",
+    );
+    expect(screen.getByTestId("input-qs-bulk-team-name-1")).toHaveValue("8U Red");
+    // The team on the bad-email row was NOT added (whole row flagged).
     expect(screen.queryByTestId("input-qs-team-name-2")).not.toBeInTheDocument();
+  });
+
+  it("shows a running team count against the starter cap", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrgQuickSetup />);
+    await screen.findByTestId("input-qs-org-name");
+    expect(screen.getByTestId("text-qs-team-count")).toHaveTextContent("0/15 teams");
+    await user.type(screen.getByTestId("input-qs-team-name-0"), "12U Blue");
+    // A NEW name in the bulk editor counts; a duplicate of an existing row
+    // does not.
+    await user.click(screen.getByTestId("input-qs-bulk-team-name-0"));
+    await user.paste("12U Blue\n10U Gold");
+    expect(screen.getByTestId("text-qs-team-count")).toHaveTextContent("2/15 teams");
   });
 
   it("sends brand colors when set", async () => {
@@ -189,18 +217,6 @@ describe("AdminOrgQuickSetup", () => {
 });
 
 describe("bulk parsing helpers", () => {
-  it("parsePastedPairs handles comma, tab, quoted CSV, and name-only lines", () => {
-    const pairs = parsePastedPairs(
-      'A Team, a@x.com\nB Team\tb@x.com\n"C, Team",c@x.com\nD Team\n\n',
-    );
-    expect(pairs).toEqual([
-      { line: 1, name: "A Team", email: "a@x.com" },
-      { line: 2, name: "B Team", email: "b@x.com" },
-      { line: 3, name: "C, Team", email: "c@x.com" },
-      { line: 4, name: "D Team", email: "" },
-    ]);
-  });
-
   it("pairsToTeamRows merges duplicate teams, dedupes emails, reports errors", () => {
     const { teams, errors } = pairsToTeamRows([
       { line: 1, name: "Blue", email: "a@x.com" },

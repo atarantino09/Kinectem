@@ -19,12 +19,13 @@ import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  parseCsv,
-  isCsvHeaderRow,
-} from "@/components/BulkAddTeamsDialog";
-import { X, Plus, Trash2, Upload } from "lucide-react";
+  BulkPairEditor,
+  trimTrailingEmpty,
+  type BulkPair,
+} from "@/components/BulkPairEditor";
+import { PLANS } from "@/lib/plans";
+import { X, Plus, Trash2 } from "lucide-react";
 
 // Task #829 — One-page org quick setup for platform admins. Org info, bulk
 // team rows, and per-team coach emails all live on one scrollable form with a
@@ -86,32 +87,9 @@ export function pairsToTeamRows(
   return { teams, errors };
 }
 
-// Pasted text: one team per line, optionally followed by a coach email —
-// separated by comma or tab (spreadsheet paste). Quoted CSV also works.
-export function parsePastedPairs(
-  raw: string,
-): Array<{ line: number; name: string; email: string }> {
-  const lines = raw.split("\n");
-  const pairs: Array<{ line: number; name: string; email: string }> = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) continue;
-    let cells: string[];
-    if (line.includes("\t")) {
-      cells = line.split("\t");
-    } else if (line.includes(",")) {
-      cells = parseCsv(line)[0] ?? [];
-    } else {
-      cells = [line];
-    }
-    pairs.push({
-      line: i + 1,
-      name: (cells[0] ?? "").trim(),
-      email: (cells[1] ?? "").trim(),
-    });
-  }
-  return pairs;
-}
+// The new-org tier's team cap (same source of truth the server enforces —
+// a quick-setup org starts on the entry plan until the owner upgrades).
+const STARTER_TEAM_CAP = PLANS.find((p) => p.id === "starter")?.maxTeams ?? null;
 
 type QuickSetupResult = {
   id: string;
@@ -142,7 +120,7 @@ export default function AdminOrgQuickSetup() {
   const [logoBusy, setLogoBusy] = useState(false);
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
-  const [bulkText, setBulkText] = useState("");
+  const [bulkPairs, setBulkPairs] = useState<BulkPair[]>([]);
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const [teamRows, setTeamRows] = useState<TeamRow[]>([emptyTeam()]);
   const [saving, setSaving] = useState(false);
@@ -216,19 +194,36 @@ export default function AdminOrgQuickSetup() {
     }
   };
 
-  // Task #831 — merge parsed bulk pairs into the editable team rows. Teams
-  // that already exist (by name, case-insensitive) get the new coach emails
-  // appended; new teams are added as rows. Blank starter rows are dropped.
-  const applyBulkPairs = (
-    pairs: Array<{ line: number; name: string; email: string }>,
-    sourceLabel: string,
-  ) => {
-    const { teams: parsed, errors } = pairsToTeamRows(pairs);
-    setBulkErrors(errors);
+  // Task #831/#832 — merge the row-list editor's pairs into the editable
+  // team rows. Teams that already exist (by name, case-insensitive) get the
+  // new coach emails appended; new teams are added as rows. Blank starter
+  // rows are dropped. Bad rows STAY in the editor (renumbered) with their
+  // errors listed, so nothing is silently lost.
+  const applyBulk = () => {
+    const numbered = trimTrailingEmpty(bulkPairs).map((p, i) => ({
+      line: i + 1,
+      name: p.name,
+      email: p.email,
+    }));
+    const { teams: parsed, errors } = pairsToTeamRows(numbered);
+    const badLines = new Set(
+      errors
+        .map((e) => parseInt(/^Line (\d+)/.exec(e)?.[1] ?? "0", 10))
+        .filter(Boolean),
+    );
+    // Keep only the failing rows in the editor, renumbered from 1, and
+    // regenerate the error messages so line numbers match what's shown.
+    const kept = numbered
+      .filter((p) => badLines.has(p.line))
+      .map((p) => ({ name: p.name, email: p.email }));
+    setBulkPairs(kept);
+    setBulkErrors(
+      pairsToTeamRows(kept.map((p, i) => ({ line: i + 1, ...p }))).errors,
+    );
     if (parsed.length === 0) {
       if (errors.length === 0) {
         toast({
-          title: `No rows found in ${sourceLabel}`,
+          title: "No rows to add",
           description:
             "Expected a team name first, then an optional coach email.",
           variant: "destructive",
@@ -268,51 +263,29 @@ export default function AdminOrgQuickSetup() {
       return next.length ? next : [emptyTeam()];
     });
     toast({
-      title: `Added ${parsed.length} team${parsed.length === 1 ? "" : "s"} from ${sourceLabel}`,
+      title: `Added ${parsed.length} team${parsed.length === 1 ? "" : "s"} to the list`,
       description:
         errors.length > 0
-          ? `${errors.length} line${errors.length === 1 ? "" : "s"} skipped — see below.`
+          ? `${errors.length} row${errors.length === 1 ? "" : "s"} kept above — see the errors below.`
           : "Review the rows below, then Save.",
       variant: errors.length > 0 ? "destructive" : undefined,
     });
-  };
-
-  const applyBulkText = () => {
-    applyBulkPairs(parsePastedPairs(bulkText), "the pasted list");
-    setBulkText("");
-  };
-
-  const onBulkCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    let raw = "";
-    try {
-      raw = await file.text();
-    } catch {
-      toast({ title: "Couldn't read that file", variant: "destructive" });
-      return;
-    }
-    let csvRows = parseCsv(raw);
-    let offset = 0;
-    if (csvRows.length > 0 && isCsvHeaderRow(csvRows[0])) {
-      csvRows = csvRows.slice(1);
-      offset = 1;
-    }
-    applyBulkPairs(
-      csvRows.map((r, i) => ({
-        line: i + 1 + offset,
-        name: (r[0] ?? "").trim(),
-        email: (r[1] ?? "").trim(),
-      })),
-      "the CSV",
-    );
   };
 
   const validTeams = useMemo(
     () => teamRows.filter((t) => t.name.trim().length > 0),
     [teamRows],
   );
+  // Live projected total against the entry-tier cap: teams already in the
+  // list plus NEW names currently sitting in the bulk editor.
+  const bulkNewCount = useMemo(() => {
+    const parsed = pairsToTeamRows(
+      trimTrailingEmpty(bulkPairs).map((p, i) => ({ line: i + 1, ...p })),
+    ).teams;
+    const existing = new Set(validTeams.map((t) => t.name.trim().toLowerCase()));
+    return parsed.filter((t) => !existing.has(t.name.toLowerCase())).length;
+  }, [bulkPairs, validTeams]);
+  const projectedTeams = validTeams.length + bulkNewCount;
   const canSave =
     orgName.trim().length > 0 && !exactMatch && !saving && !logoBusy;
 
@@ -394,7 +367,7 @@ export default function AdminOrgQuickSetup() {
     setLogoDataUrl(null);
     setPrimaryColor(null);
     setSecondaryColor(null);
-    setBulkText("");
+    setBulkPairs([]);
     setBulkErrors([]);
     setTeamRows([emptyTeam()]);
     setResult(null);
@@ -611,52 +584,41 @@ export default function AdminOrgQuickSetup() {
             admin reviews and sends them after claiming the page.
           </p>
 
-          {/* ---- Bulk add (Task #831) ---- */}
+          {/* ---- Bulk add (Task #831/#832) — shared row-list editor ---- */}
           <div className="rounded-md border border-dashed p-3 mb-4 bg-muted/30">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-bold">Bulk add</div>
-              <div>
-                <input
-                  id="qs-bulk-csv"
-                  type="file"
-                  accept=".csv,text/csv,text/plain"
-                  className="hidden"
-                  onChange={onBulkCsvChange}
-                  data-testid="input-qs-bulk-csv"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => document.getElementById("qs-bulk-csv")?.click()}
-                  data-testid="btn-qs-bulk-csv"
-                >
-                  <Upload className="h-3.5 w-3.5 mr-1" /> Upload CSV
-                </Button>
-              </div>
-            </div>
+            <div className="text-xs font-bold mb-1">Bulk add</div>
             <p className="text-xs text-muted-foreground mb-2">
-              One team per line, optionally followed by a coach email
-              (comma&#8209;, tab&#8209;, or CSV&#8209;separated). Repeat a team
-              name to add more coaches to it. Example:{" "}
-              <code className="font-mono">12U Blue, coach@example.com</code>
+              One team per line, with an optional coach email on the same line
+              of the second column. Repeat a team name on another line to add
+              more coaches to it. Paste a multi-line list into either column
+              or upload a CSV.
             </p>
-            <Textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              placeholder={"12U Blue, coach1@example.com\n12U Blue, coach2@example.com\n10U Gold"}
-              rows={4}
-              className="text-sm font-mono mb-2"
-              data-testid="textarea-qs-bulk-paste"
+            <BulkPairEditor
+              pairs={bulkPairs}
+              onPairsChange={setBulkPairs}
+              idPrefix="qs-bulk"
+              minRows={5}
+              listMaxHeightClass="max-h-64"
             />
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={applyBulkText}
-              disabled={!bulkText.trim()}
-              data-testid="btn-qs-bulk-apply"
-            >
-              Add to list
-            </Button>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={applyBulk}
+                disabled={trimTrailingEmpty(bulkPairs).length === 0}
+                data-testid="btn-qs-bulk-apply"
+              >
+                Add to list
+              </Button>
+              <span
+                className="text-xs font-medium text-muted-foreground"
+                data-testid="text-qs-team-count"
+              >
+                {STARTER_TEAM_CAP != null
+                  ? `${projectedTeams}/${STARTER_TEAM_CAP} teams`
+                  : `${projectedTeams} team${projectedTeams === 1 ? "" : "s"}`}
+              </span>
+            </div>
             {bulkErrors.length > 0 && (
               <ul
                 className="mt-2 space-y-0.5 text-xs text-destructive"

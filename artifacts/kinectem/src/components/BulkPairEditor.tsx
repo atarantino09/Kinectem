@@ -1,0 +1,336 @@
+import { useEffect, useRef } from "react";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Upload } from "lucide-react";
+import { STAGED_EMAIL_RE } from "@/components/StageCoachesDialog";
+
+// Task #832 — the numbered two-column (team name + optional coach email)
+// row-list editor, factored out of BulkAddTeamsDialog so the admin org
+// quick-setup page shares the exact same input UI. Zebra stripes span the
+// number gutter and both columns; cells auto-grow when a long value wraps;
+// Enter jumps to the same column of the next row; a multi-line paste into
+// either column splits down that column; Upload CSV replaces the list.
+
+export type BulkPair = { name: string; email: string };
+
+export function trimTrailingEmpty(pairs: BulkPair[]): BulkPair[] {
+  let end = pairs.length;
+  while (end > 0 && !pairs[end - 1].name.trim() && !pairs[end - 1].email.trim())
+    end--;
+  return pairs.slice(0, end);
+}
+
+// Task #817 — tiny dependency-free CSV parser (quoted-field aware, handles
+// \r\n and \n, escaped quotes ""). Returns rows of cells; no type coercion.
+export function parseCsv(input: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  let atFieldStart = true;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+      continue;
+    }
+    if (ch === '"' && atFieldStart) {
+      // Quote mode only opens at the start of a field; a quote appearing
+      // mid-cell (e.g. 5'10" Team) is a literal character.
+      inQuotes = true;
+      atFieldStart = false;
+      continue;
+    }
+    atFieldStart = ch === "," || ch === "\n" || ch === "\r";
+    if (ch === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && input[i + 1] === "\n") i++;
+      row.push(cell);
+      cell = "";
+      rows.push(row);
+      row = [];
+    } else {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  rows.push(row);
+  // Drop rows where every cell is blank (incl. the trailing newline row).
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+// Task #817 — detect an optional CSV header row like "Team,Coach Email":
+// col 1 mentions team/name, or col 2 mentions email/coach without BEING an
+// email address itself.
+export function isCsvHeaderRow(row: string[]): boolean {
+  const c1 = (row[0] ?? "").trim();
+  const c2 = (row[1] ?? "").trim();
+  if (/^teams?(\s*names?)?$/i.test(c1) || /^names?$/i.test(c1)) return true;
+  if (c2 && /(email|coach)/i.test(c2) && !STAGED_EMAIL_RE.test(c2.toLowerCase()))
+    return true;
+  return false;
+}
+
+// Task #817 — one auto-growing cell of the row list. A 1-row textarea that
+// wraps long values and resizes to fit, so the row's zebra stripe grows with
+// it (the stripe lives on the row container, which stretches both columns).
+function GrowCell({
+  value,
+  onChange,
+  onEnter,
+  placeholder,
+  disabled,
+  testId,
+  refKey,
+  cellRefs,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onEnter: () => void;
+  placeholder?: string;
+  disabled?: boolean;
+  testId: string;
+  refKey: string;
+  cellRefs: React.MutableRefObject<Map<string, HTMLTextAreaElement>>;
+  autoFocus?: boolean;
+}) {
+  const innerRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={(el) => {
+        innerRef.current = el;
+        if (el) cellRefs.current.set(refKey, el);
+        else cellRefs.current.delete(refKey);
+      }}
+      rows={1}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          onEnter();
+        }
+      }}
+      placeholder={placeholder}
+      disabled={disabled}
+      autoFocus={autoFocus}
+      className="w-full min-w-0 resize-none overflow-hidden break-words bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-ring rounded-sm disabled:opacity-50"
+      data-testid={testId}
+    />
+  );
+}
+
+export function BulkPairEditor({
+  pairs,
+  onPairsChange,
+  disabled,
+  idPrefix,
+  minRows = 8,
+  autoFocusFirst = false,
+  listMaxHeightClass = "max-h-52",
+}: {
+  pairs: BulkPair[];
+  onPairsChange: (next: BulkPair[]) => void;
+  disabled?: boolean;
+  // Test-id prefix — "bulk" reproduces BulkAddTeamsDialog's historical ids
+  // (input-bulk-team-name-0, btn-bulk-upload-csv, ...).
+  idPrefix: string;
+  minRows?: number;
+  autoFocusFirst?: boolean;
+  listMaxHeightClass?: string;
+}) {
+  const { toast } = useToast();
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
+  const cellRefs = useRef(new Map<string, HTMLTextAreaElement>());
+
+  // A multi-line paste into either column splits down that column (line k
+  // lands on row i+k).
+  const updateCell = (i: number, col: "name" | "email", value: string) => {
+    const next = pairs.map((p) => ({ ...p }));
+    const lines = value.split("\n");
+    const ensure = (j: number) => {
+      while (next.length <= j) next.push({ name: "", email: "" });
+    };
+    for (let k = 0; k < lines.length; k++) {
+      ensure(i + k);
+      next[i + k][col] = lines[k];
+    }
+    onPairsChange(trimTrailingEmpty(next));
+  };
+
+  const focusCell = (i: number, col: "name" | "email") => {
+    // Rendered rows always include one empty trailing row, so the target
+    // exists on the next paint.
+    requestAnimationFrame(() => {
+      cellRefs.current.get(`${col}-${i}`)?.focus();
+    });
+  };
+
+  const onCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    let raw = "";
+    try {
+      raw = await file.text();
+    } catch {
+      toast({ title: "Couldn't read that file", variant: "destructive" });
+      return;
+    }
+    let csvRows = parseCsv(raw);
+    if (csvRows.length > 0 && isCsvHeaderRow(csvRows[0])) {
+      csvRows = csvRows.slice(1);
+    }
+    const imported = trimTrailingEmpty(
+      csvRows.map((r) => ({
+        name: (r[0] ?? "").trim(),
+        email: (r[1] ?? "").trim(),
+      })),
+    );
+    if (imported.length === 0) {
+      toast({
+        title: "No rows found in that CSV",
+        description:
+          "Expected team name in the first column and an optional coach email in the second.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (
+      trimTrailingEmpty(pairs).length > 0 &&
+      !window.confirm(
+        "Replace what's currently in the list with the CSV contents?",
+      )
+    ) {
+      return;
+    }
+    onPairsChange(imported);
+    toast({
+      title: `Loaded ${imported.length} row${imported.length === 1 ? "" : "s"} from CSV`,
+      description: "Review the pairings below.",
+    });
+  };
+
+  // Always render at least `minRows` rows plus one empty trailing row so
+  // there is always somewhere to keep typing.
+  const renderedRows = Math.max(minRows, pairs.length + 1);
+
+  return (
+    <div className="space-y-1.5">
+      {/* CSV upload: team name in column 1, coach email in column 2; an
+          optional header row is skipped. Kept on its own row so the column
+          labels line up exactly with the columns below. */}
+      <div className="flex justify-end">
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={onCsvChange}
+          data-testid={`input-${idPrefix}-csv`}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0 font-bold rounded-full"
+          onClick={() => csvInputRef.current?.click()}
+          disabled={disabled}
+          data-testid={`btn-${idPrefix}-upload-csv`}
+        >
+          <Upload className="w-3.5 h-3.5 mr-1.5" />
+          Upload CSV
+        </Button>
+      </div>
+      {/* Mirrors the row layout below (number gutter + two equal columns)
+          so each label sits directly over its column. */}
+      <div className="flex gap-2">
+        <div className="w-7 shrink-0" aria-hidden />
+        <div className="flex-1 min-w-0 px-2">
+          <Label className="font-bold">Team names</Label>
+        </div>
+        <div className="flex-1 min-w-0 px-2">
+          <Label className="font-bold">
+            Coach email{" "}
+            <span className="font-medium text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
+        </div>
+      </div>
+      {/* Zebra-striped rows. The stripe sits on the row container, so it
+          spans number + both columns and grows when a long value wraps;
+          later row numbers shift down with it. */}
+      <div
+        className={`${listMaxHeightClass} overflow-y-auto rounded-md border border-input`}
+        data-testid={`list-${idPrefix}-rows`}
+      >
+        {Array.from({ length: renderedRows }, (_, i) => {
+          const pair = pairs[i] ?? { name: "", email: "" };
+          return (
+            <div
+              key={i}
+              className={`flex items-start gap-2 px-1 py-0.5 ${
+                i % 2 === 1
+                  ? "bg-purple-50 dark:bg-purple-950/30"
+                  : "bg-background"
+              }`}
+              data-testid={`row-${idPrefix}-input-${i}`}
+            >
+              <div
+                className="w-7 shrink-0 pr-1 pt-1 text-right text-xs leading-6 text-muted-foreground select-none"
+                aria-hidden
+              >
+                {i + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <GrowCell
+                  value={pair.name}
+                  onChange={(v) => updateCell(i, "name", v)}
+                  onEnter={() => focusCell(i + 1, "name")}
+                  placeholder={i === 0 ? "Westfield U14 Boys" : undefined}
+                  disabled={disabled}
+                  testId={`input-${idPrefix}-team-name-${i}`}
+                  refKey={`name-${i}`}
+                  cellRefs={cellRefs}
+                  autoFocus={autoFocusFirst && i === 0}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <GrowCell
+                  value={pair.email}
+                  onChange={(v) => updateCell(i, "email", v)}
+                  onEnter={() => focusCell(i + 1, "email")}
+                  placeholder={i === 0 ? "coach@example.com" : undefined}
+                  disabled={disabled}
+                  testId={`input-${idPrefix}-coach-email-${i}`}
+                  refKey={`email-${i}`}
+                  cellRefs={cellRefs}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

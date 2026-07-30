@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,8 +29,8 @@ import {
   AlertTriangle,
   Mail,
   Clock,
-  Upload,
 } from "lucide-react";
+import { BulkPairEditor, type BulkPair } from "@/components/BulkPairEditor";
 
 // Mirrors CreateTeamDialog's slugify so bulk-created teams get the same
 // URL handles as ones made one-at-a-time.
@@ -92,132 +92,12 @@ export function parseBulkRows(
   return { rows, errors };
 }
 
-// Task #817 — tiny dependency-free CSV parser (quoted-field aware, handles
-// \r\n and \n, escaped quotes ""). Returns rows of cells; no type coercion.
-export function parseCsv(input: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let inQuotes = false;
-  let atFieldStart = true;
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (input[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cell += ch;
-      }
-      continue;
-    }
-    if (ch === '"' && atFieldStart) {
-      // Quote mode only opens at the start of a field; a quote appearing
-      // mid-cell (e.g. 5'10" Team) is a literal character.
-      inQuotes = true;
-      atFieldStart = false;
-      continue;
-    }
-    atFieldStart = ch === "," || ch === "\n" || ch === "\r";
-    if (ch === ",") {
-      row.push(cell);
-      cell = "";
-    } else if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && input[i + 1] === "\n") i++;
-      row.push(cell);
-      cell = "";
-      rows.push(row);
-      row = [];
-    } else {
-      cell += ch;
-    }
-  }
-  row.push(cell);
-  rows.push(row);
-  // Drop rows where every cell is blank (incl. the trailing newline row).
-  return rows.filter((r) => r.some((c) => c.trim() !== ""));
-}
+// Task #832 — the CSV helpers and the row-list editor itself moved to the
+// shared BulkPairEditor component (also used by admin org quick setup).
+// Re-exported here so existing imports keep working.
+export { parseCsv, isCsvHeaderRow } from "@/components/BulkPairEditor";
 
-// Task #817 — detect an optional CSV header row like "Team,Coach Email":
-// col 1 mentions team/name, or col 2 mentions email/coach without BEING an
-// email address itself.
-export function isCsvHeaderRow(row: string[]): boolean {
-  const c1 = (row[0] ?? "").trim();
-  const c2 = (row[1] ?? "").trim();
-  if (/^teams?(\s*names?)?$/i.test(c1) || /^names?$/i.test(c1)) return true;
-  if (c2 && /(email|coach)/i.test(c2) && !STAGED_EMAIL_RE.test(c2.toLowerCase()))
-    return true;
-  return false;
-}
-
-type Pair = { name: string; email: string };
-
-function trimTrailingEmpty(pairs: Pair[]): Pair[] {
-  let end = pairs.length;
-  while (end > 0 && !pairs[end - 1].name.trim() && !pairs[end - 1].email.trim())
-    end--;
-  return pairs.slice(0, end);
-}
-
-// Task #817 — one auto-growing cell of the row list. A 1-row textarea that
-// wraps long values and resizes to fit, so the row's zebra stripe grows with
-// it (the stripe lives on the row container, which stretches both columns).
-function GrowCell({
-  value,
-  onChange,
-  onEnter,
-  placeholder,
-  disabled,
-  testId,
-  refKey,
-  cellRefs,
-  autoFocus,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onEnter: () => void;
-  placeholder?: string;
-  disabled?: boolean;
-  testId: string;
-  refKey: string;
-  cellRefs: React.MutableRefObject<Map<string, HTMLTextAreaElement>>;
-  autoFocus?: boolean;
-}) {
-  const innerRef = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    el.style.height = "0px";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
-  return (
-    <textarea
-      ref={(el) => {
-        innerRef.current = el;
-        if (el) cellRefs.current.set(refKey, el);
-        else cellRefs.current.delete(refKey);
-      }}
-      rows={1}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          onEnter();
-        }
-      }}
-      placeholder={placeholder}
-      disabled={disabled}
-      autoFocus={autoFocus}
-      className="w-full min-w-0 resize-none overflow-hidden break-words bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-ring rounded-sm disabled:opacity-50"
-      data-testid={testId}
-    />
-  );
-}
+type Pair = BulkPair;
 
 type LineResult = {
   name: string;
@@ -260,9 +140,6 @@ export function BulkAddTeamsDialog({
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(
     null,
   );
-  const csvInputRef = useRef<HTMLInputElement | null>(null);
-  const cellRefs = useRef(new Map<string, HTMLTextAreaElement>());
-
   const text = useMemo(() => pairs.map((p) => p.name).join("\n"), [pairs]);
   const coachText = useMemo(
     () => pairs.map((p) => p.email).join("\n"),
@@ -310,79 +187,6 @@ export function BulkAddTeamsDialog({
       setStep("input");
     }
     onOpenChange(v);
-  };
-
-  // Task #817 — cell editing. A multi-line paste into either column splits
-  // down that column (line k lands on row i+k), preserving today's
-  // bulk-paste workflow from the old textareas.
-  const updateCell = (i: number, col: "name" | "email", value: string) => {
-    setPairs((prev) => {
-      const next = prev.map((p) => ({ ...p }));
-      const lines = value.split("\n");
-      const ensure = (j: number) => {
-        while (next.length <= j) next.push({ name: "", email: "" });
-      };
-      for (let k = 0; k < lines.length; k++) {
-        ensure(i + k);
-        next[i + k][col] = lines[k];
-      }
-      return trimTrailingEmpty(next);
-    });
-  };
-
-  const focusCell = (i: number, col: "name" | "email") => {
-    // Rendered rows always include one empty trailing row, so the target
-    // exists on the next paint.
-    requestAnimationFrame(() => {
-      cellRefs.current.get(`${col}-${i}`)?.focus();
-    });
-  };
-
-  const onPickCsv = () => csvInputRef.current?.click();
-
-  const onCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    let raw = "";
-    try {
-      raw = await file.text();
-    } catch {
-      toast({ title: "Couldn't read that file", variant: "destructive" });
-      return;
-    }
-    let csvRows = parseCsv(raw);
-    if (csvRows.length > 0 && isCsvHeaderRow(csvRows[0])) {
-      csvRows = csvRows.slice(1);
-    }
-    const imported = trimTrailingEmpty(
-      csvRows.map((r) => ({
-        name: (r[0] ?? "").trim(),
-        email: (r[1] ?? "").trim(),
-      })),
-    );
-    if (imported.length === 0) {
-      toast({
-        title: "No rows found in that CSV",
-        description:
-          "Expected team name in the first column and an optional coach email in the second.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (
-      trimTrailingEmpty(pairs).length > 0 &&
-      !window.confirm(
-        "Replace what's currently in the list with the CSV contents?",
-      )
-    ) {
-      return;
-    }
-    setPairs(imported);
-    toast({
-      title: `Loaded ${imported.length} row${imported.length === 1 ? "" : "s"} from CSV`,
-      description: "Review the pairings below, then Review & create.",
-    });
   };
 
   const validateForReview = (): boolean => {
@@ -591,10 +395,6 @@ export function BulkAddTeamsDialog({
   // dialog instead of leaving a disabled "Create teams".
   const showDone = !busy && results.length > 0 && names.length === 0;
 
-  // Always render at least 8 rows plus one empty trailing row so there is
-  // always somewhere to keep typing.
-  const renderedRows = Math.max(8, pairs.length + 1);
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -616,106 +416,16 @@ export function BulkAddTeamsDialog({
           {step === "input" && (
             <>
               <div className="space-y-1.5">
-                {/* Task #817 — CSV upload: team name in column 1, coach
-                    email in column 2; optional header row is skipped. Kept on
-                    its own row so the column labels line up exactly with the
-                    columns below. */}
-                <div className="flex justify-end">
-                  <input
-                    ref={csvInputRef}
-                    type="file"
-                    accept=".csv,text/csv"
-                    className="hidden"
-                    onChange={onCsvChange}
-                    data-testid="input-bulk-csv"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 font-bold rounded-full"
-                    onClick={onPickCsv}
-                    disabled={busy || atLimit}
-                    data-testid="btn-bulk-upload-csv"
-                  >
-                    <Upload className="w-3.5 h-3.5 mr-1.5" />
-                    Upload CSV
-                  </Button>
-                </div>
-                {/* Mirrors the row layout below (number gutter + two equal
-                    columns) so each label sits directly over its column. */}
-                <div className="flex gap-2">
-                  <div className="w-7 shrink-0" aria-hidden />
-                  <div className="flex-1 min-w-0 px-2">
-                    <Label className="font-bold">Team names</Label>
-                  </div>
-                  <div className="flex-1 min-w-0 px-2">
-                    <Label className="font-bold">
-                      Coach email{" "}
-                      <span className="font-medium text-muted-foreground">
-                        (optional)
-                      </span>
-                    </Label>
-                  </div>
-                </div>
-                {/* Task #817 — zebra-striped rows. The stripe sits on the row
-                    container, so it spans number + both columns and grows when
-                    a long value wraps; later row numbers shift down with it. */}
-                <div
-                  className="max-h-52 overflow-y-auto rounded-md border border-input"
-                  data-testid="list-bulk-rows"
-                >
-                  {Array.from({ length: renderedRows }, (_, i) => {
-                    const pair = pairs[i] ?? { name: "", email: "" };
-                    return (
-                      <div
-                        key={i}
-                        className={`flex items-start gap-2 px-1 py-0.5 ${
-                          i % 2 === 1
-                            ? "bg-purple-50 dark:bg-purple-950/30"
-                            : "bg-background"
-                        }`}
-                        data-testid={`row-bulk-input-${i}`}
-                      >
-                        <div
-                          className="w-7 shrink-0 pr-1 pt-1 text-right text-xs leading-6 text-muted-foreground select-none"
-                          aria-hidden
-                        >
-                          {i + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <GrowCell
-                            value={pair.name}
-                            onChange={(v) => updateCell(i, "name", v)}
-                            onEnter={() => focusCell(i + 1, "name")}
-                            placeholder={
-                              i === 0 ? "Westfield U14 Boys" : undefined
-                            }
-                            disabled={busy || atLimit}
-                            testId={`input-bulk-team-name-${i}`}
-                            refKey={`name-${i}`}
-                            cellRefs={cellRefs}
-                            autoFocus={i === 0}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <GrowCell
-                            value={pair.email}
-                            onChange={(v) => updateCell(i, "email", v)}
-                            onEnter={() => focusCell(i + 1, "email")}
-                            placeholder={
-                              i === 0 ? "coach@example.com" : undefined
-                            }
-                            disabled={busy || atLimit}
-                            testId={`input-bulk-coach-email-${i}`}
-                            refKey={`email-${i}`}
-                            cellRefs={cellRefs}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* Task #832 — shared row-list editor (also used by admin
+                    org quick setup). idPrefix "bulk" keeps the historical
+                    test ids. */}
+                <BulkPairEditor
+                  pairs={pairs}
+                  onPairsChange={setPairs}
+                  disabled={busy || atLimit}
+                  idPrefix="bulk"
+                  autoFocusFirst
+                />
                 <p
                   className="text-xs font-medium text-muted-foreground"
                   data-testid="text-bulk-team-count"
