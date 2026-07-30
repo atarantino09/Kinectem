@@ -70,8 +70,14 @@ import {
 } from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { BulkAddTeamsDialog } from "@/components/BulkAddTeamsDialog";
-import { StageCoachesDialog } from "@/components/StageCoachesDialog";
-import { CoachSetupDialog } from "@/components/CoachSetupDialog";
+import {
+  StageCoachesDialog,
+  useStagedCoaches,
+} from "@/components/StageCoachesDialog";
+import {
+  CoachSetupDialog,
+  canReopenCoachSetup,
+} from "@/components/CoachSetupDialog";
 import { EditOrgDialog } from "@/components/EditOrgDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { NewOrgPostDialog } from "@/components/NewOrgPostDialog";
@@ -133,6 +139,9 @@ export default function OrganizationPage() {
   // one-time "add coaches to your teams" prompt (pre-filled with any drafts
   // the platform admin staged before the claim).
   const [coachSetupPending, setCoachSetupPending] = useState(false);
+  // Task #836 — manual re-entry into the coach setup dialog (persistent
+  // banner below) so staged coaches aren't a one-time-only prompt.
+  const [coachSetupOpen, setCoachSetupOpen] = useState(false);
   const [stageCoachesOpen, setStageCoachesOpen] = useState(false);
   useEffect(() => {
     if (!orgId) return;
@@ -256,6 +265,11 @@ export default function OrganizationPage() {
     isPlatformAdmin ||
     organization?.role === "owner" ||
     organization?.role === "admin";
+  // Task #836 — staged coaches persist until invited or removed; managers
+  // see a persistent banner to reopen the coach setup dialog while any
+  // staged entries remain.
+  const stagedCoachesQuery = useStagedCoaches(orgId, isManagerRole);
+  const stagedCoachCount = stagedCoachesQuery.data?.data.length ?? 0;
   const { data: joinReqResp } = useListOrgJoinRequests(orgId, undefined, {
     query: queryOpts({ enabled: !!orgId && isManagerRole }),
   });
@@ -448,9 +462,19 @@ export default function OrganizationPage() {
       <CoachSetupDialog
         orgId={orgId}
         teams={teams.map((t) => ({ id: t.id, name: t.name }))}
-        open={coachSetupPending && isOrgManager && teams.length > 0}
+        open={
+          (coachSetupPending || coachSetupOpen) &&
+          isOrgManager &&
+          // Staged drafts stay side-effect-free until the post-claim owner
+          // confirms — never surface the invite-sending dialog pre-claim.
+          !isUnclaimed &&
+          teams.length > 0
+        }
         onOpenChange={(v) => {
-          if (!v) setCoachSetupPending(false);
+          if (!v) {
+            setCoachSetupPending(false);
+            setCoachSetupOpen(false);
+          }
         }}
       />
       <Dialog
@@ -569,6 +593,38 @@ export default function OrganizationPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
         {/* Main column */}
         <div className="space-y-6 min-w-0">
+          {/* Task #836 — persistent re-entry into coach setup while staged
+              coach suggestions remain. Hidden while the dialog itself is
+              pending/open to avoid a redundant prompt. */}
+          {canReopenCoachSetup({
+            isOrgManager,
+            isUnclaimed,
+            stagedCount: stagedCoachCount,
+            teamsCount: teams.length,
+          }) &&
+            !coachSetupPending &&
+            !coachSetupOpen && (
+              <div
+                className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+                data-testid="banner-coach-setup"
+              >
+                <p className="flex-1 text-sm font-medium">
+                  {stagedCoachCount === 1
+                    ? "1 suggested coach is"
+                    : `${stagedCoachCount} suggested coaches are`}{" "}
+                  waiting to be invited to your teams.
+                </p>
+                <Button
+                  type="button"
+                  variant="brand"
+                  size="sm"
+                  onClick={() => setCoachSetupOpen(true)}
+                  data-testid="btn-open-coach-setup"
+                >
+                  Review &amp; invite
+                </Button>
+              </div>
+            )}
           {/* Hero */}
           <div className="relative rounded-xl border border-border shadow-sm overflow-hidden bg-card">
             <PersonaPill

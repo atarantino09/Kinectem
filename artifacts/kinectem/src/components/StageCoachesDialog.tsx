@@ -21,7 +21,7 @@ import { apiErrorMessage } from "@/lib/api-errors";
 // the post-claim CoachSetupDialog. Hand-written customFetch; these
 // endpoints are extra beyond the locked openapi.yaml.
 
-export type StagedCoachRow = { teamId: string; email: string };
+export type StagedCoachRow = { id: string; teamId: string; email: string };
 
 export function parseStagedEmails(raw: string): string[] {
   const seen = new Set<string>();

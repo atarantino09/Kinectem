@@ -630,6 +630,7 @@ router.get(
     }
     const rows = await db
       .select({
+        id: stagedCoachInvites.id,
         teamId: stagedCoachInvites.teamId,
         email: stagedCoachInvites.email,
       })
@@ -701,6 +702,31 @@ router.put(
       }
     });
     res.json({ ok: true, count: values.length });
+  }),
+);
+
+// Task #836 — per-entry removal. Staged coaches persist after handoff until
+// the owner invites them or removes them one by one; only the explicit
+// post-invite cleanup path (or a per-row remove) deletes rows.
+router.delete(
+  "/organizations/:orgId/staged-coaches/:entryId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (!(await canManageOrganization(me.id, req.params.orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+    const deleted = await db
+      .delete(stagedCoachInvites)
+      .where(
+        and(
+          eq(stagedCoachInvites.organizationId, req.params.orgId),
+          eq(stagedCoachInvites.id, req.params.entryId),
+        ),
+      )
+      .returning({ id: stagedCoachInvites.id });
+    if (deleted.length === 0) return notFound(res);
+    res.json({ ok: true });
   }),
 );
 

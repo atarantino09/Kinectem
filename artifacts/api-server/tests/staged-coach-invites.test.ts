@@ -139,11 +139,123 @@ describe("staged coach drafts", () => {
       `/api/v1/organizations/${orgId}/staged-coaches`,
     );
     expect(del.status).toBe(403);
+    // Task #836 — per-entry delete is gated the same way.
+    const delOne = await outsider.delete(
+      `/api/v1/organizations/${orgId}/staged-coaches/00000000-0000-0000-0000-000000000000`,
+    );
+    expect(delOne.status).toBe(403);
 
     const anon = await request(app).get(
       `/api/v1/organizations/${orgId}/staged-coaches`,
     );
     expect(anon.status).toBe(401);
+  });
+
+  // Task #836 — staged coaches persist until invited or removed one by one.
+  it("per-entry delete removes only that row and 404s on unknown/foreign ids", async () => {
+    const { adminAgent, orgId, teamAId, teamBId } = await setupUnclaimedOrg();
+
+    const put = await adminAgent
+      .put(`/api/v1/organizations/${orgId}/staged-coaches`)
+      .send({
+        entries: [
+          { teamId: teamAId, emails: ["one@example.com", "two@example.com"] },
+          { teamId: teamBId, emails: ["three@example.com"] },
+        ],
+      });
+    expect(put.status).toBe(200);
+
+    const get = await adminAgent.get(
+      `/api/v1/organizations/${orgId}/staged-coaches`,
+    );
+    const rows = get.body.data as Array<{
+      id: string;
+      teamId: string;
+      email: string;
+    }>;
+    expect(rows).toHaveLength(3);
+    // GET now returns row ids so the client can remove entries one by one.
+    expect(rows.every((r) => typeof r.id === "string" && r.id.length > 0)).toBe(
+      true,
+    );
+
+    const target = rows.find((r) => r.email === "two@example.com")!;
+    const del = await adminAgent.delete(
+      `/api/v1/organizations/${orgId}/staged-coaches/${target.id}`,
+    );
+    expect(del.status).toBe(200);
+
+    const after = await adminAgent.get(
+      `/api/v1/organizations/${orgId}/staged-coaches`,
+    );
+    const remaining = after.body.data as Array<{ id: string; email: string }>;
+    expect(remaining).toHaveLength(2);
+    expect(remaining.map((r) => r.email).sort()).toEqual([
+      "one@example.com",
+      "three@example.com",
+    ]);
+
+    // Deleting the same id again 404s (already gone).
+    const again = await adminAgent.delete(
+      `/api/v1/organizations/${orgId}/staged-coaches/${target.id}`,
+    );
+    expect(again.status).toBe(404);
+
+    // An id belonging to a different org 404s rather than deleting.
+    const otherOrg = await adminAgent
+      .post("/api/v1/admin/org-claim-links")
+      .send({ name: "Other Org For Delete" });
+    const foreign = await adminAgent.delete(
+      `/api/v1/organizations/${otherOrg.body.data.id}/staged-coaches/${remaining[0].id}`,
+    );
+    expect(foreign.status).toBe(404);
+    const still = await adminAgent.get(
+      `/api/v1/organizations/${orgId}/staged-coaches`,
+    );
+    expect(still.body.data).toHaveLength(2);
+  });
+
+  it("confirm clears only invited entries; failures stay staged", async () => {
+    const { adminAgent, orgId, claimToken, teamAId, teamBId } =
+      await setupUnclaimedOrg();
+
+    await adminAgent.put(`/api/v1/organizations/${orgId}/staged-coaches`).send({
+      entries: [
+        { teamId: teamAId, emails: ["sent@example.com"] },
+        { teamId: teamBId, emails: ["kept@example.com"] },
+      ],
+    });
+
+    const { agent: claimant } = await loginAs(
+      (u) => u.role === "coach" && !!u.email,
+    );
+    const claim = await claimant.post(
+      `/api/v1/org-claim-links/${claimToken}/claim`,
+    );
+    expect(claim.status).toBe(201);
+
+    const rows = (
+      await claimant.get(`/api/v1/organizations/${orgId}/staged-coaches`)
+    ).body.data as Array<{ id: string; email: string }>;
+    expect(rows).toHaveLength(2);
+
+    // Mirror the client's confirm path: invite one, delete only that entry.
+    const invite = await claimant
+      .post(`/api/v1/teams/${teamAId}/invites`)
+      .send({ email: "sent@example.com", position: "coach" });
+    expect([200, 201]).toContain(invite.status);
+    const sentRow = rows.find((r) => r.email === "sent@example.com")!;
+    const del = await claimant.delete(
+      `/api/v1/organizations/${orgId}/staged-coaches/${sentRow.id}`,
+    );
+    expect(del.status).toBe(200);
+
+    // The "failed" (never invited) entry survives for a later retry.
+    const after = await claimant.get(
+      `/api/v1/organizations/${orgId}/staged-coaches`,
+    );
+    expect(after.body.data).toHaveLength(1);
+    expect(after.body.data[0].email).toBe("kept@example.com");
   });
 
   it("claim preserves setup + drafts; owner confirms via normal invites then clears", async () => {
