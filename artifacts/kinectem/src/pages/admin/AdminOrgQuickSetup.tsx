@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -25,6 +25,7 @@ import {
   type BulkPair,
 } from "@/components/BulkPairEditor";
 import { PLANS } from "@/lib/plans";
+import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import { X, Plus, Trash2 } from "lucide-react";
 
 // Task #829 — One-page org quick setup for platform admins. Org info, bulk
@@ -118,6 +119,8 @@ export default function AdminOrgQuickSetup() {
   const [stateCode, setStateCode] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
+  // Monotonic token so results from a superseded logo upload never land.
+  const logoUploadSeq = useRef(0);
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
   const [bulkPairs, setBulkPairs] = useState<BulkPair[]>([]);
@@ -185,8 +188,29 @@ export default function AdminOrgQuickSetup() {
       return;
     }
     setLogoBusy(true);
+    const uploadSeq = ++logoUploadSeq.current;
     try {
-      setLogoDataUrl(await shrinkImageToDataUrl(file));
+      const dataUrl = await shrinkImageToDataUrl(file);
+      if (uploadSeq !== logoUploadSeq.current) return; // superseded upload
+      setLogoDataUrl(dataUrl);
+      // Auto-pick brand colors from the logo. The user can still change or
+      // clear them with the pickers below — this is just a starting point.
+      try {
+        const colors = await extractBrandColorsFromDataUrl(dataUrl);
+        if (uploadSeq !== logoUploadSeq.current) return; // superseded upload
+        if (colors) {
+          // Set BOTH so a one-color logo clears a stale secondary from a
+          // previous upload.
+          setPrimaryColor(colors.primary);
+          setSecondaryColor(colors.secondary);
+          toast({
+            title: "Brand colors picked from the logo",
+            description: "You can adjust or clear them below.",
+          });
+        }
+      } catch {
+        // Color extraction is best-effort; the logo itself still uploaded.
+      }
     } catch {
       toast({ title: "Couldn't read that image", variant: "destructive" });
     } finally {
