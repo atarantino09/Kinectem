@@ -56,6 +56,7 @@ import {
   Plus,
   Settings,
   Shield,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { PostCard } from "@/components/PostCard";
@@ -70,6 +71,7 @@ import {
 } from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { BulkAddTeamsDialog } from "@/components/BulkAddTeamsDialog";
+import { BulkAddCoachesDialog } from "@/components/BulkAddCoachesDialog";
 import {
   StageCoachesDialog,
   useStagedCoaches,
@@ -118,6 +120,7 @@ export default function OrganizationPage() {
   const { toast } = useToast();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [bulkTeamsOpen, setBulkTeamsOpen] = useState(false);
+  const [bulkCoachesOpen, setBulkCoachesOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
@@ -447,6 +450,13 @@ export default function OrganizationPage() {
         onOpenChange={setBulkTeamsOpen}
         usage={planUsage}
         staging={isPlatformAdmin && isUnclaimed}
+      />
+      {/* Task #835 — bulk coach invites across the org's existing teams. */}
+      <BulkAddCoachesDialog
+        orgId={orgId}
+        teams={teams.map((t) => ({ id: t.id, name: t.name, sport: t.sport }))}
+        open={bulkCoachesOpen}
+        onOpenChange={setBulkCoachesOpen}
       />
       {/* Task #808 — platform-admin draft staging on an unclaimed org. */}
       {isPlatformAdmin && isUnclaimed && (
@@ -926,6 +936,7 @@ export default function OrganizationPage() {
                 atLimit={atTeamLimit}
                 onAddTeam={() => setCreateTeamOpen(true)}
                 onBulkAddTeams={() => setBulkTeamsOpen(true)}
+                onBulkAddCoaches={() => setBulkCoachesOpen(true)}
                 defaultOpen={false}
               />
               {isOrgManager && archivedTeams.length > 0 && (
@@ -1034,6 +1045,7 @@ export default function OrganizationPage() {
               atLimit={atTeamLimit}
               onAddTeam={() => setCreateTeamOpen(true)}
               onBulkAddTeams={() => setBulkTeamsOpen(true)}
+              onBulkAddCoaches={() => setBulkCoachesOpen(true)}
             />
             {isOrgManager && archivedTeams.length > 0 && (
               <ArchivedTeamsCard teams={archivedTeams} />
@@ -1054,6 +1066,7 @@ function TeamsRail({
   atLimit = false,
   onAddTeam,
   onBulkAddTeams,
+  onBulkAddCoaches,
   defaultOpen = true,
 }: {
   teams: TeamRailItem[];
@@ -1061,6 +1074,7 @@ function TeamsRail({
   atLimit?: boolean;
   onAddTeam: () => void;
   onBulkAddTeams: () => void;
+  onBulkAddCoaches: () => void;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -1139,6 +1153,17 @@ function TeamsRail({
               data-testid="btn-bulk-add-teams"
             >
               <ListPlus className="w-4 h-4 mr-1" /> Bulk add
+            </Button>
+            {/* Task #835 — invite one coach per existing team. Not gated on
+                the team limit: it doesn't create teams. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="font-bold rounded-full"
+              onClick={onBulkAddCoaches}
+              data-testid="btn-bulk-add-coaches"
+            >
+              <UserPlus className="w-4 h-4 mr-1" /> Bulk add coach
             </Button>
             <Button
               variant="brand"

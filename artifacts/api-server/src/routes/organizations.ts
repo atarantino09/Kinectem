@@ -1144,6 +1144,74 @@ router.get(
   }),
 );
 
+// Task #835 — per-team coach status for the org's "Bulk add coach" dialog.
+// Org managers only (owner/admin, plus the platform-admin bypass inside
+// canManageOrganization). For every active (non-archived) team, reports
+// whether it already has an accepted coach and whether a coach invite is
+// still pending (either a pending email rosterInvite with the coach role or
+// a pending coach rosterEntry from an existing-account invite), so admins
+// don't double-invite. Extra endpoint outside the locked openapi.yaml —
+// consumed via customFetch, mirroring the staged-coaches pattern.
+router.get(
+  "/organizations/:orgId/coach-status",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Org owner or admin only");
+    }
+    const teamRows = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(and(eq(teams.organizationId, org.id), isNull(teams.archivedAt)));
+    const ids = teamRows.map((t) => t.id);
+    const coachTeams = new Set<string>();
+    const pendingTeams = new Set<string>();
+    if (ids.length > 0) {
+      const entryRows = await db
+        .select({ teamId: rosterEntries.teamId, status: rosterEntries.status })
+        .from(rosterEntries)
+        .where(
+          and(
+            inArray(rosterEntries.teamId, ids),
+            eq(rosterEntries.role, "coach"),
+          ),
+        );
+      for (const e of entryRows) {
+        if (e.status === "accepted") coachTeams.add(e.teamId);
+        else if (e.status === "pending") pendingTeams.add(e.teamId);
+      }
+      const inviteRows = await db
+        .select({ teamId: rosterInvites.teamId })
+        .from(rosterInvites)
+        .where(
+          and(
+            inArray(rosterInvites.teamId, ids),
+            eq(rosterInvites.role, "coach"),
+            eq(rosterInvites.status, "pending"),
+            // The email-less shareable join link is also a pending coach-role
+            // rosterInvite for some teams; only email invites count here.
+            isNotNull(rosterInvites.invitedEmail),
+          ),
+        );
+      for (const i of inviteRows) pendingTeams.add(i.teamId);
+    }
+    res.json({
+      data: ids.map((id) => ({
+        teamId: id,
+        hasCoach: coachTeams.has(id),
+        hasPendingCoachInvite: pendingTeams.has(id),
+      })),
+    });
+  }),
+);
+
 // Task #472 — Archived teams for the org. Owner/admin only; everyone
 // else gets 403. Used by the "Archived teams" section on the
 // Organization page so org managers can find and unarchive a team

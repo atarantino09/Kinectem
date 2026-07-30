@@ -1,0 +1,438 @@
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  customFetch,
+  getListTeamMembersQueryKey,
+  getListRosterInvitesQueryKey,
+} from "@workspace/api-client-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { apiErrorMessage } from "@/lib/api-errors";
+import {
+  Building2,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Mail,
+  Bell,
+  Clock,
+  Copy,
+  UserCheck,
+} from "lucide-react";
+
+// Task #835 — bulk-invite one coach per existing team from the org page.
+// Lists every active team with an email field; saving fans out to the
+// standard POST /teams/:teamId/invites endpoint with the coach role (email
+// invite for unknown addresses, in-app notification for existing accounts —
+// identical to the single-team flow), then shows per-row outcomes with a
+// copy-link fallback for failed email sends.
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type CoachStatusRow = {
+  teamId: string;
+  hasCoach: boolean;
+  hasPendingCoachInvite: boolean;
+};
+
+type RowResult = {
+  teamId: string;
+  teamName: string;
+  email: string;
+  // emailed: invite email handed to SendGrid; notified: existing account got
+  // an in-app notification (no email attempted); emailFailed: invite was
+  // created but the email couldn't be sent (copy-link fallback shown);
+  // error: the invite request itself failed.
+  status: "emailed" | "notified" | "emailFailed" | "error";
+  reason?: string;
+  acceptUrl?: string;
+};
+
+export function BulkAddCoachesDialog({
+  orgId,
+  teams,
+  open,
+  onOpenChange,
+}: {
+  orgId: string;
+  teams: Array<{ id: string; name: string; sport?: string | null }>;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const [results, setResults] = useState<RowResult[] | null>(null);
+
+  // Per-team coach status (extra endpoint outside the locked openapi.yaml).
+  // Best-effort: if it fails, the dialog still works, just without the
+  // "has coach / invite pending" indicators.
+  const coachStatus = useQuery({
+    queryKey: ["org-coach-status", orgId],
+    enabled: open && !!orgId,
+    queryFn: () =>
+      customFetch<{ data: CoachStatusRow[] }>(
+        `/api/v1/organizations/${orgId}/coach-status`,
+        { method: "GET" },
+      ),
+  });
+  const statusByTeam = useMemo(() => {
+    const m = new Map<string, CoachStatusRow>();
+    for (const r of coachStatus.data?.data ?? []) m.set(r.teamId, r);
+    return m;
+  }, [coachStatus.data]);
+
+  useEffect(() => {
+    if (!open) {
+      setDrafts({});
+      setResults(null);
+      setProgress(null);
+    }
+  }, [open]);
+
+  const invalidTeams = useMemo(
+    () =>
+      teams.filter((t) => {
+        const e = (drafts[t.id] ?? "").trim();
+        return e.length > 0 && !EMAIL_RE.test(e);
+      }),
+    [teams, drafts],
+  );
+  const filledCount = useMemo(
+    () =>
+      teams.filter((t) => (drafts[t.id] ?? "").trim().length > 0).length,
+    [teams, drafts],
+  );
+
+  const handleOpenChange = (v: boolean) => {
+    if (busy) return; // don't let the dialog close mid-run
+    onOpenChange(v);
+  };
+
+  const onSend = async () => {
+    if (busy) return;
+    if (invalidTeams.length > 0) {
+      toast({
+        title: "Fix the invalid emails before sending",
+        variant: "destructive",
+      });
+      return;
+    }
+    const rows = teams
+      .map((t) => ({ team: t, email: (drafts[t.id] ?? "").trim().toLowerCase() }))
+      .filter((r) => r.email.length > 0);
+    if (rows.length === 0) {
+      toast({
+        title: "Enter at least one coach email",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBusy(true);
+    setResults(null);
+    setProgress({ done: 0, total: rows.length });
+    const collected: RowResult[] = [];
+    // Sequential on purpose — keeps rate limiting predictable and lets a
+    // mid-run failure keep the successes.
+    for (let i = 0; i < rows.length; i++) {
+      const { team, email } = rows[i];
+      try {
+        const resp = await customFetch<Record<string, unknown>>(
+          `/api/v1/teams/${team.id}/invites`,
+          {
+            method: "POST",
+            body: JSON.stringify({ email, position: "coach" }),
+          },
+        );
+        // `emailSent` + `acceptUrl` are appended by the server outside the
+        // locked openapi.yaml (same pattern as the single-invite flow).
+        const extra = resp as {
+          emailSent?: boolean | null;
+          acceptUrl?: string;
+        };
+        collected.push({
+          teamId: team.id,
+          teamName: team.name,
+          email,
+          status:
+            extra.emailSent === true
+              ? "emailed"
+              : extra.emailSent === false
+                ? "emailFailed"
+                : "notified",
+          acceptUrl: extra.acceptUrl,
+        });
+      } catch (err) {
+        collected.push({
+          teamId: team.id,
+          teamName: team.name,
+          email,
+          status: "error",
+          reason: apiErrorMessage(err) ?? "Couldn't send the invite",
+        });
+      }
+      setProgress({ done: i + 1, total: rows.length });
+      setResults([...collected]);
+    }
+    setBusy(false);
+    // Refresh each touched team's staff/invite lists and the indicators.
+    await Promise.all([
+      ...rows.flatMap((r) => [
+        qc.invalidateQueries({ queryKey: getListTeamMembersQueryKey(r.team.id) }),
+        qc.invalidateQueries({ queryKey: getListRosterInvitesQueryKey(r.team.id) }),
+      ]),
+      qc.invalidateQueries({ queryKey: ["org-coach-status", orgId] }),
+    ]);
+    const failed = collected.filter((s) => s.status === "error").length;
+    const emailFailed = collected.filter((s) => s.status === "emailFailed").length;
+    const ok = collected.length - failed;
+    if (failed === 0 && emailFailed === 0) {
+      toast({
+        title: ok === 1 ? "Coach invite sent!" : `${ok} coach invites sent!`,
+      });
+    } else if (failed === 0) {
+      toast({
+        title: `${ok} invite${ok === 1 ? "" : "s"} created, ${emailFailed} email${emailFailed === 1 ? "" : "s"} didn't send`,
+        description: "Copy those invite links below and share them directly.",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: `${ok} sent, ${failed} failed`,
+        description: "Each row's outcome is listed below.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const copyLink = (url: string) =>
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast({ title: "Invite link copied" }))
+      .catch(() =>
+        toast({ title: "Couldn't copy link", variant: "destructive" }),
+      );
+
+  const done = !busy && results !== null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
+        data-testid="dialog-bulk-add-coaches"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-black tracking-tight">
+            Bulk add coaches
+          </DialogTitle>
+          <DialogDescription>
+            Add a coach email next to any team and send every invite at once.
+            Rows left blank are skipped. Each coach gets the standard invite
+            for that specific team.
+          </DialogDescription>
+        </DialogHeader>
+
+        {teams.length === 0 ? (
+          <div className="p-6 text-center" data-testid="bulk-coaches-empty">
+            <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              No teams yet — create your teams first, then come back to add
+              their coaches.
+            </p>
+          </div>
+        ) : !done ? (
+          <div className="space-y-3">
+            {teams.map((t) => {
+              const st = statusByTeam.get(t.id);
+              const value = drafts[t.id] ?? "";
+              const invalid =
+                value.trim().length > 0 && !EMAIL_RE.test(value.trim());
+              return (
+                <div
+                  key={t.id}
+                  className="space-y-1"
+                  data-testid={`row-bulk-coach-${t.id}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-sm truncate">{t.name}</span>
+                    {t.sport && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+                      >
+                        {t.sport}
+                      </Badge>
+                    )}
+                    {st?.hasCoach && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] uppercase tracking-wider font-bold shrink-0 gap-1"
+                        data-testid={`badge-has-coach-${t.id}`}
+                      >
+                        <UserCheck className="w-3 h-3" /> Has coach
+                      </Badge>
+                    )}
+                    {st?.hasPendingCoachInvite && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase tracking-wider font-bold shrink-0 gap-1"
+                        data-testid={`badge-pending-coach-${t.id}`}
+                      >
+                        <Clock className="w-3 h-3" /> Invite pending
+                      </Badge>
+                    )}
+                  </div>
+                  <Input
+                    type="email"
+                    placeholder="coach@example.com"
+                    value={value}
+                    onChange={(e) =>
+                      setDrafts((d) => ({ ...d, [t.id]: e.target.value }))
+                    }
+                    disabled={busy}
+                    aria-invalid={invalid || undefined}
+                    className={invalid ? "border-destructive" : undefined}
+                    data-testid={`input-bulk-coach-${t.id}`}
+                  />
+                  {invalid && (
+                    <p
+                      className="text-xs font-medium text-destructive"
+                      data-testid={`error-bulk-coach-${t.id}`}
+                    >
+                      "{value.trim()}" doesn't look like an email
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {busy && progress && (
+          <p
+            className="text-xs font-medium text-muted-foreground"
+            data-testid="text-bulk-coach-progress"
+          >
+            Sending {progress.done}/{progress.total}…
+          </p>
+        )}
+
+        {results && results.length > 0 && (
+          <div
+            className="max-h-56 overflow-y-auto rounded-lg border border-border divide-y divide-border"
+            data-testid="list-bulk-coach-results"
+          >
+            {results.map((r, i) => (
+              <div
+                key={`${r.teamId}-${i}`}
+                className="flex items-start gap-2 px-3 py-2 text-xs"
+                data-testid={`result-bulk-coach-${r.teamId}`}
+              >
+                {r.status === "error" ? (
+                  <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                ) : r.status === "emailFailed" ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                ) : r.status === "notified" ? (
+                  <Bell className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold truncate">
+                    {r.teamName}{" "}
+                    <span className="font-medium text-muted-foreground">
+                      → {r.email}
+                    </span>
+                  </p>
+                  {r.status === "emailed" && (
+                    <p className="text-muted-foreground flex items-center gap-1">
+                      <Mail className="w-3 h-3" /> Invite email sent
+                    </p>
+                  )}
+                  {r.status === "notified" && (
+                    <p className="text-muted-foreground">
+                      Has a Kinectem account — notified in-app
+                    </p>
+                  )}
+                  {r.status === "emailFailed" && (
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">
+                        Invite created, but the email didn't send — share the
+                        link directly:
+                      </p>
+                      {r.acceptUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[11px] font-bold"
+                          onClick={() => copyLink(r.acceptUrl!)}
+                          data-testid={`btn-copy-invite-link-${r.teamId}`}
+                        >
+                          <Copy className="w-3 h-3 mr-1" /> Copy invite link
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {r.status === "error" && r.reason && (
+                    <p className="text-muted-foreground">{r.reason}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <DialogFooter>
+          {done || teams.length === 0 ? (
+            <Button
+              type="button"
+              variant="brand"
+              onClick={() => onOpenChange(false)}
+              data-testid="btn-bulk-coaches-done"
+            >
+              Done
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={busy}
+                data-testid="btn-bulk-coaches-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="brand"
+                onClick={onSend}
+                disabled={busy || filledCount === 0 || invalidTeams.length > 0}
+                data-testid="btn-bulk-coaches-send"
+              >
+                {busy
+                  ? "Sending…"
+                  : `Send ${filledCount > 0 ? filledCount : ""} invite${filledCount === 1 ? "" : "s"}`}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
