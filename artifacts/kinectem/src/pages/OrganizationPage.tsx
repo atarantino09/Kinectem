@@ -1138,7 +1138,7 @@ function TeamsRail({
           />
         </button>
         {canManage && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <Button
               variant="outline"
               size="sm"
