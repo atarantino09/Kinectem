@@ -34,7 +34,6 @@ import { asyncHandler } from "../lib/async-handler";
 import { ensureActiveGuardianLink, syncParentIdMirror } from "../lib/guardian-links";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
-import { normalizeWebsite } from "../lib/normalize-website";
 import { DEFAULT_PLAN, teamLimitForPlan } from "../lib/plan-limits";
 import {
   splitName,
@@ -1955,7 +1954,7 @@ router.post(
 const QUICK_SETUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const QUICK_SETUP_MAX_TEAMS = 100;
 const QUICK_SETUP_MAX_COACHES = 500;
-const ALLOWED_TEAM_GENDERS = ["boys", "girls", "coed"] as const;
+const QUICK_SETUP_HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 router.post(
   "/org-quick-setup",
@@ -1987,6 +1986,25 @@ router.post(
       }
       logoUrl = body.logoUrl;
     }
+    // Task #831 — optional org brand colors, stored on the same columns the
+    // org branding editor uses.
+    let brandPrimaryColor: string | null = null;
+    let brandSecondaryColor: string | null = null;
+    for (const [key, assign] of [
+      ["brandPrimaryColor", (v: string) => (brandPrimaryColor = v)],
+      ["brandSecondaryColor", (v: string) => (brandSecondaryColor = v)],
+    ] as const) {
+      const raw = (body as Record<string, unknown>)[key];
+      if (raw == null || raw === "") continue;
+      const v = String(raw).trim();
+      if (!QUICK_SETUP_HEX_RE.test(v)) {
+        return res.status(400).json({
+          error: `${key} must be a #rrggbb hex color`,
+          code: "INVALID_COLOR",
+        });
+      }
+      assign(v.toLowerCase());
+    }
 
     const teamsRaw = Array.isArray(body.teams) ? body.teams : [];
     if (teamsRaw.length > QUICK_SETUP_MAX_TEAMS) {
@@ -2006,10 +2024,10 @@ router.post(
 
     // Validate every row BEFORE any write so a failure is all-or-nothing and
     // the client can highlight the offending row via `index`.
+    // Task #831 — gender and website were dropped from quick setup (org
+    // admins configure those later); any values sent are ignored.
     type TeamInput = {
       name: string;
-      gender: "boys" | "girls" | "coed" | null;
-      website: string | null;
       coachEmails: string[];
     };
     const teamInputs: TeamInput[] = [];
@@ -2029,22 +2047,6 @@ router.post(
         return res.status(400).json({ error: `Team ${i + 1}: duplicate team name "${teamName}"`, code: "DUPLICATE_TEAM_NAME", index: i });
       }
       seenTeamNames.add(nameKey);
-      let gender: TeamInput["gender"] = null;
-      if (t.gender != null && t.gender !== "") {
-        const g = String(t.gender).toLowerCase();
-        if (!(ALLOWED_TEAM_GENDERS as readonly string[]).includes(g)) {
-          return res.status(400).json({ error: `Team ${i + 1}: invalid gender`, code: "INVALID_GENDER", index: i });
-        }
-        gender = g as "boys" | "girls" | "coed";
-      }
-      let website: string | null = null;
-      if (t.website != null && t.website !== "") {
-        const w = normalizeWebsite(t.website);
-        if (!w.ok) {
-          return res.status(400).json({ error: `Team ${i + 1}: ${w.error}`, code: "INVALID_WEBSITE", index: i });
-        }
-        website = w.value || null;
-      }
       const emailsRaw = Array.isArray(t.coachEmails) ? t.coachEmails : [];
       const emails: string[] = [];
       const seenEmails = new Set<string>();
@@ -2059,7 +2061,7 @@ router.post(
         emails.push(email);
       }
       totalCoaches += emails.length;
-      teamInputs.push({ name: teamName, gender, website, coachEmails: emails });
+      teamInputs.push({ name: teamName, coachEmails: emails });
     }
     if (totalCoaches > QUICK_SETUP_MAX_COACHES) {
       return res.status(400).json({ error: `too many coach emails (max ${QUICK_SETUP_MAX_COACHES})`, code: "TOO_MANY_COACHES" });
@@ -2090,6 +2092,8 @@ router.post(
           city: city ?? undefined,
           state: state ?? undefined,
           logoUrl: logoUrl ?? undefined,
+          brandPrimaryColor: brandPrimaryColor ?? undefined,
+          brandSecondaryColor: brandSecondaryColor ?? undefined,
           claimToken: token,
         })
         .returning();
@@ -2101,8 +2105,6 @@ router.post(
           .values({
             organizationId: org.id,
             name: t.name,
-            gender: t.gender ?? undefined,
-            website: t.website ?? undefined,
           })
           .returning({ id: teams.id, name: teams.name });
         createdTeams.push(team);

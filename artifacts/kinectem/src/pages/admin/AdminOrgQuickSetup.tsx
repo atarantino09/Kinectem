@@ -19,7 +19,12 @@ import {
   shrinkImageToDataUrl,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
-import { X, Plus, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  parseCsv,
+  isCsvHeaderRow,
+} from "@/components/BulkAddTeamsDialog";
+import { X, Plus, Trash2, Upload } from "lucide-react";
 
 // Task #829 — One-page org quick setup for platform admins. Org info, bulk
 // team rows, and per-team coach emails all live on one scrollable form with a
@@ -42,10 +47,71 @@ type NameCheckResponse = { data: NameMatch[] };
 type TeamRow = {
   key: number;
   name: string;
-  gender: "" | "boys" | "girls" | "coed";
-  website: string;
   coachEmails: string[];
 };
+
+// Task #831 — bulk entry. Each parsed line is a (team name, optional coach
+// email) pair; lines with the same team name merge their coach emails onto
+// one team row. Bad lines are reported by 1-based line number, never
+// silently dropped.
+export function pairsToTeamRows(
+  pairs: Array<{ line: number; name: string; email: string }>,
+): { teams: Array<{ name: string; coachEmails: string[] }>; errors: string[] } {
+  const teams: Array<{ name: string; coachEmails: string[] }> = [];
+  const byName = new Map<string, number>();
+  const errors: string[] = [];
+  for (const p of pairs) {
+    const name = p.name.trim();
+    const email = p.email.trim().toLowerCase();
+    if (!name && !email) continue;
+    if (!name) {
+      errors.push(`Line ${p.line}: coach email has no team name`);
+      continue;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push(`Line ${p.line}: "${p.email.trim()}" doesn't look like an email`);
+      continue;
+    }
+    const key = name.toLowerCase();
+    let idx = byName.get(key);
+    if (idx === undefined) {
+      idx = teams.length;
+      byName.set(key, idx);
+      teams.push({ name, coachEmails: [] });
+    }
+    if (email && !teams[idx].coachEmails.includes(email)) {
+      teams[idx].coachEmails.push(email);
+    }
+  }
+  return { teams, errors };
+}
+
+// Pasted text: one team per line, optionally followed by a coach email —
+// separated by comma or tab (spreadsheet paste). Quoted CSV also works.
+export function parsePastedPairs(
+  raw: string,
+): Array<{ line: number; name: string; email: string }> {
+  const lines = raw.split("\n");
+  const pairs: Array<{ line: number; name: string; email: string }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    let cells: string[];
+    if (line.includes("\t")) {
+      cells = line.split("\t");
+    } else if (line.includes(",")) {
+      cells = parseCsv(line)[0] ?? [];
+    } else {
+      cells = [line];
+    }
+    pairs.push({
+      line: i + 1,
+      name: (cells[0] ?? "").trim(),
+      email: (cells[1] ?? "").trim(),
+    });
+  }
+  return pairs;
+}
 
 type QuickSetupResult = {
   id: string;
@@ -61,7 +127,7 @@ function claimUrl(token: string): string {
 
 let nextKey = 1;
 function emptyTeam(): TeamRow {
-  return { key: nextKey++, name: "", gender: "", website: "", coachEmails: [""] };
+  return { key: nextKey++, name: "", coachEmails: [""] };
 }
 
 export default function AdminOrgQuickSetup() {
@@ -74,6 +140,10 @@ export default function AdminOrgQuickSetup() {
   const [stateCode, setStateCode] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [primaryColor, setPrimaryColor] = useState<string | null>(null);
+  const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const [teamRows, setTeamRows] = useState<TeamRow[]>([emptyTeam()]);
   const [saving, setSaving] = useState(false);
   const [errorTeamIndex, setErrorTeamIndex] = useState<number | null>(null);
@@ -146,6 +216,99 @@ export default function AdminOrgQuickSetup() {
     }
   };
 
+  // Task #831 — merge parsed bulk pairs into the editable team rows. Teams
+  // that already exist (by name, case-insensitive) get the new coach emails
+  // appended; new teams are added as rows. Blank starter rows are dropped.
+  const applyBulkPairs = (
+    pairs: Array<{ line: number; name: string; email: string }>,
+    sourceLabel: string,
+  ) => {
+    const { teams: parsed, errors } = pairsToTeamRows(pairs);
+    setBulkErrors(errors);
+    if (parsed.length === 0) {
+      if (errors.length === 0) {
+        toast({
+          title: `No rows found in ${sourceLabel}`,
+          description:
+            "Expected a team name first, then an optional coach email.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+    setTeamRows((rows) => {
+      const next = rows.filter(
+        (r) => r.name.trim() || r.coachEmails.some((e) => e.trim()),
+      );
+      const byName = new Map<string, number>();
+      next.forEach((r, i) => {
+        if (r.name.trim()) byName.set(r.name.trim().toLowerCase(), i);
+      });
+      for (const t of parsed) {
+        const key = t.name.toLowerCase();
+        const at = byName.get(key);
+        if (at !== undefined) {
+          const existing = next[at].coachEmails
+            .map((e) => e.trim().toLowerCase())
+            .filter(Boolean);
+          const merged = [
+            ...next[at].coachEmails.filter((e) => e.trim()),
+            ...t.coachEmails.filter((e) => !existing.includes(e)),
+          ];
+          next[at] = { ...next[at], coachEmails: merged.length ? merged : [""] };
+        } else {
+          byName.set(key, next.length);
+          next.push({
+            key: nextKey++,
+            name: t.name,
+            coachEmails: t.coachEmails.length ? t.coachEmails : [""],
+          });
+        }
+      }
+      return next.length ? next : [emptyTeam()];
+    });
+    toast({
+      title: `Added ${parsed.length} team${parsed.length === 1 ? "" : "s"} from ${sourceLabel}`,
+      description:
+        errors.length > 0
+          ? `${errors.length} line${errors.length === 1 ? "" : "s"} skipped — see below.`
+          : "Review the rows below, then Save.",
+      variant: errors.length > 0 ? "destructive" : undefined,
+    });
+  };
+
+  const applyBulkText = () => {
+    applyBulkPairs(parsePastedPairs(bulkText), "the pasted list");
+    setBulkText("");
+  };
+
+  const onBulkCsvChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    let raw = "";
+    try {
+      raw = await file.text();
+    } catch {
+      toast({ title: "Couldn't read that file", variant: "destructive" });
+      return;
+    }
+    let csvRows = parseCsv(raw);
+    let offset = 0;
+    if (csvRows.length > 0 && isCsvHeaderRow(csvRows[0])) {
+      csvRows = csvRows.slice(1);
+      offset = 1;
+    }
+    applyBulkPairs(
+      csvRows.map((r, i) => ({
+        line: i + 1 + offset,
+        name: (r[0] ?? "").trim(),
+        email: (r[1] ?? "").trim(),
+      })),
+      "the CSV",
+    );
+  };
+
   const validTeams = useMemo(
     () => teamRows.filter((t) => t.name.trim().length > 0),
     [teamRows],
@@ -178,10 +341,10 @@ export default function AdminOrgQuickSetup() {
             city: city.trim() || undefined,
             state: stateCode || undefined,
             logoUrl: logoDataUrl || undefined,
+            brandPrimaryColor: primaryColor || undefined,
+            brandSecondaryColor: secondaryColor || undefined,
             teams: validTeams.map((t) => ({
               name: t.name.trim(),
-              gender: t.gender || undefined,
-              website: t.website.trim() || undefined,
               coachEmails: t.coachEmails.map((e) => e.trim()).filter(Boolean),
             })),
           }),
@@ -229,6 +392,10 @@ export default function AdminOrgQuickSetup() {
     setCity("");
     setStateCode("");
     setLogoDataUrl(null);
+    setPrimaryColor(null);
+    setSecondaryColor(null);
+    setBulkText("");
+    setBulkErrors([]);
     setTeamRows([emptyTeam()]);
     setResult(null);
     setSaveError(null);
@@ -383,6 +550,46 @@ export default function AdminOrgQuickSetup() {
                 )}
               </div>
             </div>
+            <div className="sm:col-span-2">
+              <Label>Brand colors (optional)</Label>
+              <div className="flex flex-wrap items-center gap-5 mt-1">
+                {(
+                  [
+                    ["Primary", primaryColor, setPrimaryColor, "primary"],
+                    ["Secondary", secondaryColor, setSecondaryColor, "secondary"],
+                  ] as const
+                ).map(([label, value, set, id]) => (
+                  <div key={id} className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={value ?? "#888888"}
+                      onChange={(e) => set(e.target.value)}
+                      className="h-9 w-12 cursor-pointer rounded border bg-transparent p-0.5"
+                      aria-label={`${label} brand color`}
+                      data-testid={`input-qs-color-${id}`}
+                    />
+                    <div className="text-xs">
+                      <div className="font-medium">{label}</div>
+                      <div className="text-muted-foreground font-mono">
+                        {value ?? "not set"}
+                      </div>
+                    </div>
+                    {value && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => set(null)}
+                        aria-label={`Clear ${label.toLowerCase()} color`}
+                        data-testid={`btn-qs-clear-color-${id}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -403,6 +610,64 @@ export default function AdminOrgQuickSetup() {
             Coach emails are staged as drafts — no invites are sent. The org
             admin reviews and sends them after claiming the page.
           </p>
+
+          {/* ---- Bulk add (Task #831) ---- */}
+          <div className="rounded-md border border-dashed p-3 mb-4 bg-muted/30">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-bold">Bulk add</div>
+              <div>
+                <input
+                  id="qs-bulk-csv"
+                  type="file"
+                  accept=".csv,text/csv,text/plain"
+                  className="hidden"
+                  onChange={onBulkCsvChange}
+                  data-testid="input-qs-bulk-csv"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => document.getElementById("qs-bulk-csv")?.click()}
+                  data-testid="btn-qs-bulk-csv"
+                >
+                  <Upload className="h-3.5 w-3.5 mr-1" /> Upload CSV
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2">
+              One team per line, optionally followed by a coach email
+              (comma&#8209;, tab&#8209;, or CSV&#8209;separated). Repeat a team
+              name to add more coaches to it. Example:{" "}
+              <code className="font-mono">12U Blue, coach@example.com</code>
+            </p>
+            <Textarea
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={"12U Blue, coach1@example.com\n12U Blue, coach2@example.com\n10U Gold"}
+              rows={4}
+              className="text-sm font-mono mb-2"
+              data-testid="textarea-qs-bulk-paste"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={applyBulkText}
+              disabled={!bulkText.trim()}
+              data-testid="btn-qs-bulk-apply"
+            >
+              Add to list
+            </Button>
+            {bulkErrors.length > 0 && (
+              <ul
+                className="mt-2 space-y-0.5 text-xs text-destructive"
+                data-testid="qs-bulk-errors"
+              >
+                {bulkErrors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="space-y-4">
             {teamRows.map((t, i) => (
               <div
@@ -410,7 +675,7 @@ export default function AdminOrgQuickSetup() {
                 className={`rounded-md border p-3 ${errorTeamIndex === i ? "border-destructive" : ""}`}
                 data-testid={`qs-team-row-${i}`}
               >
-                <div className="grid gap-2 sm:grid-cols-[1fr_10rem_1fr_auto] items-end">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto] items-end">
                   <div>
                     <Label htmlFor={`qs-team-name-${t.key}`}>Team name</Label>
                     <Input
@@ -419,34 +684,6 @@ export default function AdminOrgQuickSetup() {
                       value={t.name}
                       onChange={(e) => updateTeam(t.key, { name: e.target.value })}
                       data-testid={`input-qs-team-name-${i}`}
-                    />
-                  </div>
-                  <div>
-                    <Label>Gender</Label>
-                    <Select
-                      value={t.gender}
-                      onValueChange={(v) =>
-                        updateTeam(t.key, { gender: v as TeamRow["gender"] })
-                      }
-                    >
-                      <SelectTrigger data-testid={`select-qs-team-gender-${i}`}>
-                        <SelectValue placeholder="—" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="boys">Boys</SelectItem>
-                        <SelectItem value="girls">Girls</SelectItem>
-                        <SelectItem value="coed">Coed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor={`qs-team-website-${t.key}`}>Website (optional)</Label>
-                    <Input
-                      id={`qs-team-website-${t.key}`}
-                      placeholder="example.com"
-                      value={t.website}
-                      onChange={(e) => updateTeam(t.key, { website: e.target.value })}
-                      data-testid={`input-qs-team-website-${i}`}
                     />
                   </div>
                   <Button

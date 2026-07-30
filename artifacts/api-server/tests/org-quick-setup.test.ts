@@ -15,11 +15,11 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
       name: "Quick Setup Org",
       city: "Denville",
       state: "nj",
+      brandPrimaryColor: "#1A2B3C",
+      brandSecondaryColor: "#ffcc00",
       teams: [
         {
           name: "12U Blue",
-          gender: "boys",
-          website: "example.com",
           coachEmails: ["coach1@example.com", "Coach1@Example.com", "coach2@example.com"],
         },
         { name: "10U Gold", coachEmails: [] },
@@ -29,6 +29,13 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
     const data = res.body.data;
     expect(data.name).toBe("Quick Setup Org");
     expect(data.state).toBe("NJ");
+
+    // Task #831 — brand colors land on the org (normalized to lowercase).
+    const orgPage = await agent.get(`/api/v1/organizations/${data.id}`);
+    expect(orgPage.status).toBe(200);
+    const orgBody = orgPage.body.data ?? orgPage.body;
+    expect(orgBody.brandPrimaryColor).toBe("#1a2b3c");
+    expect(orgBody.brandSecondaryColor).toBe("#ffcc00");
     expect(typeof data.token).toBe("string");
     expect(data.teams).toHaveLength(2);
     expect(data.stagedCoachCount).toBe(2); // dupe email deduped
@@ -83,7 +90,7 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
     expect(row).toBeUndefined();
   });
 
-  it("rejects duplicate team names, invalid gender, bad state, over-cap teams", async () => {
+  it("rejects duplicate team names, bad colors, bad state, over-cap teams", async () => {
     const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
     const dupTeams = await agent.post("/api/v1/admin/org-quick-setup").send({
       name: "Val Org A",
@@ -92,12 +99,21 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
     expect(dupTeams.status).toBe(400);
     expect(dupTeams.body.code).toBe("DUPLICATE_TEAM_NAME");
 
-    const badGender = await agent.post("/api/v1/admin/org-quick-setup").send({
+    // Task #831 — gender/website are no longer part of the payload; sending
+    // them is simply ignored (backward compatible), never a 400.
+    const legacyFields = await agent.post("/api/v1/admin/org-quick-setup").send({
       name: "Val Org B",
-      teams: [{ name: "T", gender: "mixed" }],
+      teams: [{ name: "T", gender: "mixed", website: "not a url" }],
     });
-    expect(badGender.status).toBe(400);
-    expect(badGender.body.code).toBe("INVALID_GENDER");
+    expect(legacyFields.status).toBe(201);
+
+    const badColor = await agent.post("/api/v1/admin/org-quick-setup").send({
+      name: "Val Org B2",
+      brandPrimaryColor: "red",
+      teams: [],
+    });
+    expect(badColor.status).toBe(400);
+    expect(badColor.body.code).toBe("INVALID_COLOR");
 
     const badState = await agent
       .post("/api/v1/admin/org-quick-setup")
