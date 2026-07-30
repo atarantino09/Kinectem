@@ -125,6 +125,12 @@ function staffInviteLine({ inviterName, teamName, roleLabel }: StaffInviteVars):
 const STAFF_ABOUT =
   "Kinectem is where teams share game recaps — not box scores, but the story of the season: the effort, the turning points, and the plays that never show up on a stat sheet. Every player on the roster gets tagged in every recap, so the whole team is part of the story.";
 
+// Task #843 — pitch the recap-authoring role + AI Assist. The role label is
+// substituted per invite ("As a Coach, …").
+function staffAiAssistParagraph({ roleLabel }: Pick<StaffInviteVars, "roleLabel">): string {
+  return `As ${withArticle(roleLabel)}, you'll be the one bringing those stories to life. And it couldn't be easier — jot down a few sentences about the game, hit the AI Assist button, and watch it become a beautifully written recap. You review it, make it yours, and post it. Minutes, not hours.`;
+}
+
 const STAFF_SETUP =
   "Accept the invite below to set up your account and take your spot on the team.";
 
@@ -150,6 +156,7 @@ export function buildStaffInviteText(vars: StaffInviteVars): string {
     STAFF_GREETING,
     staffInviteLine(vars),
     STAFF_ABOUT,
+    staffAiAssistParagraph(vars),
     STAFF_SETUP,
     STAFF_LEARN_MORE,
     `${STAFF_CTA_LABEL} ${vars.link}`,
@@ -168,6 +175,7 @@ export function buildStaffInviteHtml(vars: StaffInviteVars): string {
     `<p>${escapeHtml(STAFF_GREETING)}</p>`,
     `<p>${escapeHtml(staffInviteLine(vars))}</p>`,
     `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
+    `<p>${escapeHtml(staffAiAssistParagraph(vars))}</p>`,
     `<p>${escapeHtml(STAFF_SETUP)}</p>`,
     `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,

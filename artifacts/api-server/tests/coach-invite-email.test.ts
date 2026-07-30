@@ -163,6 +163,26 @@ describe("coach invite email (task #636)", () => {
       expect(sent.text).toContain("Varsity Football");
       expect(sent.text).toContain(roleLabel);
       expect(sent.text).not.toContain("your player's account");
+      // Task #843 — the recap-authoring + AI Assist pitch must appear in both
+      // variants, with the role label substituted (and HTML-escaped: the em
+      // dash sentence contains an apostrophe-free check, so match on the
+      // stable "AI Assist" phrasing plus role framing).
+      const article = /^[aeiou]/i.test(roleLabel) ? "an" : "a";
+      expect(sent.text).toContain(
+        `As ${article} ${roleLabel}, you&#39;ll`.replace("&#39;", "'"),
+      );
+      expect(sent.text).toContain("hit the AI Assist button");
+      expect(sent.text).toContain("Minutes, not hours.");
+      expect(sent.html).toContain(
+        `As ${article} ${roleLabel}, you&#39;ll`,
+      );
+      expect(sent.html).toContain("hit the AI Assist button");
+      expect(sent.html).toContain("Minutes, not hours.");
+      // The pitch sits between the "story of the season" paragraph and the
+      // accept line in both variants.
+      const textIdx = sent.text.indexOf("hit the AI Assist button");
+      expect(textIdx).toBeGreaterThan(sent.text.indexOf("story of the season"));
+      expect(textIdx).toBeLessThan(sent.text.indexOf("Accept the invite below"));
     });
   }
 
