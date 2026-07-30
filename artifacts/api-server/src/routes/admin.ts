@@ -25,6 +25,7 @@ import {
   tournaments,
   announcements,
   guardianLinks,
+  stagedCoachInvites,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -33,6 +34,8 @@ import { asyncHandler } from "../lib/async-handler";
 import { ensureActiveGuardianLink, syncParentIdMirror } from "../lib/guardian-links";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
+import { normalizeWebsite } from "../lib/normalize-website";
+import { DEFAULT_PLAN, teamLimitForPlan } from "../lib/plan-limits";
 import {
   splitName,
   toPrivateUser,
@@ -1934,6 +1937,208 @@ router.post(
         state: org.state,
         logoUrl: org.logoUrl,
         token,
+      },
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Task #829 — One-page org quick setup. A platform admin fills out org info,
+// bulk team rows, and per-team coach emails in one form and hits Save once.
+// Everything is validated up front and created in a SINGLE transaction: the
+// ownerless org (with claim token), its teams (no roster rows — hand-off
+// model, same as the #808 flow), and staged coach drafts (no emails sent).
+// Returns the org with its claim token so the operator can copy the link.
+// NOTE: app.ts gives this route the 21 MB image JSON parser so `logoUrl` can
+// be an inline base64 data: URL like the org PATCH route.
+// ---------------------------------------------------------------------------
+const QUICK_SETUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const QUICK_SETUP_MAX_TEAMS = 100;
+const QUICK_SETUP_MAX_COACHES = 500;
+const ALLOWED_TEAM_GENDERS = ["boys", "girls", "coed"] as const;
+
+router.post(
+  "/org-quick-setup",
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    const name = String(body.name ?? "").trim();
+    if (!name) {
+      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+    }
+    if (name.length > 200) {
+      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+    }
+    const city = typeof body.city === "string" ? body.city.trim().slice(0, 120) || null : null;
+    let state: string | null = null;
+    if (typeof body.state === "string" && body.state.trim()) {
+      const s = body.state.trim().toUpperCase();
+      if (!/^[A-Z]{2}$/.test(s)) {
+        return res.status(400).json({ error: "state must be a 2-letter code", code: "INVALID_STATE" });
+      }
+      state = s;
+    }
+    let logoUrl: string | null = null;
+    if (typeof body.logoUrl === "string" && body.logoUrl) {
+      if (!body.logoUrl.startsWith("data:image/")) {
+        return res.status(400).json({ error: "logoUrl must be an image data URL", code: "INVALID_LOGO" });
+      }
+      if (body.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+        return res.status(413).json({ error: "logo too large", code: "LOGO_TOO_LARGE" });
+      }
+      logoUrl = body.logoUrl;
+    }
+
+    const teamsRaw = Array.isArray(body.teams) ? body.teams : [];
+    if (teamsRaw.length > QUICK_SETUP_MAX_TEAMS) {
+      return res.status(400).json({ error: `too many teams (max ${QUICK_SETUP_MAX_TEAMS})`, code: "TOO_MANY_TEAMS" });
+    }
+    // A brand-new org has no subscription, so it sits on the default entry
+    // tier — enforce that cap up front (same source of truth as the normal
+    // team-create route). No advisory lock needed: the org doesn't exist
+    // until this transaction commits, so nothing can race its team count.
+    const teamCap = teamLimitForPlan(DEFAULT_PLAN);
+    if (teamCap != null && teamsRaw.length > teamCap) {
+      return res.status(400).json({
+        error: `The ${DEFAULT_PLAN} plan allows up to ${teamCap} teams. Remove some teams or have the org upgrade after claiming.`,
+        code: "TEAM_LIMIT_REACHED",
+      });
+    }
+
+    // Validate every row BEFORE any write so a failure is all-or-nothing and
+    // the client can highlight the offending row via `index`.
+    type TeamInput = {
+      name: string;
+      gender: "boys" | "girls" | "coed" | null;
+      website: string | null;
+      coachEmails: string[];
+    };
+    const teamInputs: TeamInput[] = [];
+    const seenTeamNames = new Set<string>();
+    let totalCoaches = 0;
+    for (let i = 0; i < teamsRaw.length; i++) {
+      const t = teamsRaw[i] ?? {};
+      const teamName = String(t.name ?? "").trim();
+      if (!teamName) {
+        return res.status(400).json({ error: `Team ${i + 1}: name required`, code: "TEAM_NAME_REQUIRED", index: i });
+      }
+      if (teamName.length > 200) {
+        return res.status(400).json({ error: `Team ${i + 1}: name too long`, code: "TEAM_NAME_TOO_LONG", index: i });
+      }
+      const nameKey = teamName.toLowerCase();
+      if (seenTeamNames.has(nameKey)) {
+        return res.status(400).json({ error: `Team ${i + 1}: duplicate team name "${teamName}"`, code: "DUPLICATE_TEAM_NAME", index: i });
+      }
+      seenTeamNames.add(nameKey);
+      let gender: TeamInput["gender"] = null;
+      if (t.gender != null && t.gender !== "") {
+        const g = String(t.gender).toLowerCase();
+        if (!(ALLOWED_TEAM_GENDERS as readonly string[]).includes(g)) {
+          return res.status(400).json({ error: `Team ${i + 1}: invalid gender`, code: "INVALID_GENDER", index: i });
+        }
+        gender = g as "boys" | "girls" | "coed";
+      }
+      let website: string | null = null;
+      if (t.website != null && t.website !== "") {
+        const w = normalizeWebsite(t.website);
+        if (!w.ok) {
+          return res.status(400).json({ error: `Team ${i + 1}: ${w.error}`, code: "INVALID_WEBSITE", index: i });
+        }
+        website = w.value || null;
+      }
+      const emailsRaw = Array.isArray(t.coachEmails) ? t.coachEmails : [];
+      const emails: string[] = [];
+      const seenEmails = new Set<string>();
+      for (const raw of emailsRaw) {
+        const email = String(raw ?? "").trim().toLowerCase();
+        if (!email) continue;
+        if (!QUICK_SETUP_EMAIL_RE.test(email)) {
+          return res.status(400).json({ error: `Team ${i + 1}: invalid email "${String(raw)}"`, code: "INVALID_EMAIL", index: i });
+        }
+        if (seenEmails.has(email)) continue;
+        seenEmails.add(email);
+        emails.push(email);
+      }
+      totalCoaches += emails.length;
+      teamInputs.push({ name: teamName, gender, website, coachEmails: emails });
+    }
+    if (totalCoaches > QUICK_SETUP_MAX_COACHES) {
+      return res.status(400).json({ error: `too many coach emails (max ${QUICK_SETUP_MAX_COACHES})`, code: "TOO_MANY_COACHES" });
+    }
+
+    const token = generateToken();
+    const result = await db.transaction(async (tx) => {
+      // Exact-name duplicate check (same rule as POST /org-claim-links),
+      // done INSIDE the transaction behind an advisory lock keyed on the
+      // lowercased name so two concurrent quick-setups with the same name
+      // serialize and the second one sees the first's insert (there is no
+      // DB unique index on lower(name) to fall back on).
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${"org-name:" + name.toLowerCase()}))`,
+      );
+      const existing = await tx
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(sql`lower(${organizations.name}) = ${name.toLowerCase()}`)
+        .limit(1);
+      if (existing.length > 0) {
+        return { taken: existing[0] } as const;
+      }
+      const [org] = await tx
+        .insert(organizations)
+        .values({
+          name,
+          city: city ?? undefined,
+          state: state ?? undefined,
+          logoUrl: logoUrl ?? undefined,
+          claimToken: token,
+        })
+        .returning();
+      const createdTeams: Array<{ id: string; name: string }> = [];
+      const staged: Array<{ organizationId: string; teamId: string; email: string; createdById: string }> = [];
+      for (const t of teamInputs) {
+        const [team] = await tx
+          .insert(teams)
+          .values({
+            organizationId: org.id,
+            name: t.name,
+            gender: t.gender ?? undefined,
+            website: t.website ?? undefined,
+          })
+          .returning({ id: teams.id, name: teams.name });
+        createdTeams.push(team);
+        for (const email of t.coachEmails) {
+          staged.push({
+            organizationId: org.id,
+            teamId: team.id,
+            email,
+            createdById: req.sessionUser!.id,
+          });
+        }
+      }
+      if (staged.length > 0) {
+        await tx.insert(stagedCoachInvites).values(staged);
+      }
+      return { org, createdTeams, stagedCount: staged.length } as const;
+    });
+
+    if ("taken" in result) {
+      return res.status(409).json({
+        error: "An organization with this name already exists",
+        code: "ORG_NAME_TAKEN",
+        existing: result.taken,
+      });
+    }
+
+    return res.status(201).json({
+      data: {
+        id: result.org.id,
+        name: result.org.name,
+        city: result.org.city,
+        state: result.org.state,
+        logoUrl: result.org.logoUrl,
+        token,
+        teams: result.createdTeams,
+        stagedCoachCount: result.stagedCount,
       },
     });
   }),

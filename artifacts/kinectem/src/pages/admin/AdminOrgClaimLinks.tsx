@@ -220,13 +220,20 @@ export default function AdminOrgClaimLinks() {
             to the right org — whoever signs up through it becomes the owner.
           </p>
         </div>
-        <Button
-          onClick={exportCsv}
-          disabled={rows.length === 0}
-          data-testid="btn-export-claim-links-csv"
-        >
-          Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Task #829 — one-page org setup: org info + teams + coaches, one save. */}
+          <Button asChild data-testid="btn-org-quick-setup">
+            <Link href="/admin/org-quick-setup">Quick setup</Link>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={exportCsv}
+            disabled={rows.length === 0}
+            data-testid="btn-export-claim-links-csv"
+          >
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card p-4 mb-5">

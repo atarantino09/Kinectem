@@ -59,6 +59,9 @@ const AdminFounding100 = lazy(() => import("@/pages/admin/AdminFounding100"));
 const AdminOrgClaimLinks = lazy(
   () => import("@/pages/admin/AdminOrgClaimLinks"),
 );
+const AdminOrgQuickSetup = lazy(
+  () => import("@/pages/admin/AdminOrgQuickSetup"),
+);
 const AdminCompetitionClaimLinks = lazy(
   () => import("@/pages/admin/AdminCompetitionClaimLinks"),
 );
@@ -183,6 +186,7 @@ function Router() {
             <Route path="/admin/activity" component={AdminActivity} />
             <Route path="/admin/founding-100" component={AdminFounding100} />
             <Route path="/admin/org-claim-links" component={AdminOrgClaimLinks} />
+            <Route path="/admin/org-quick-setup" component={AdminOrgQuickSetup} />
             <Route path="/admin/competition-claim-links" component={AdminCompetitionClaimLinks} />
             <Route path="/admin/ai-keys" component={AdminAiKeys} />
             <Route path="/admin/daily-digest" component={AdminDailyDigest} />
