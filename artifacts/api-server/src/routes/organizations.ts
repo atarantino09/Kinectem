@@ -21,6 +21,7 @@ import {
   organizationClaimRequests,
   guardianLinks,
   stagedCoachInvites,
+  promoCodes,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -496,6 +497,35 @@ router.get(
         ),
       )
       .limit(1);
+    // Staged promo (admin quick setup) — show the claimer their org already
+    // has a discount applied. Only surfaced while the code is still
+    // redeemable; never leaks anything beyond the public promo fields.
+    let promo: {
+      code: string;
+      description: string | null;
+      discountType: string;
+      discountValue: number;
+    } | null = null;
+    if (org.pendingPromoCodeId) {
+      const [p] = await db
+        .select()
+        .from(promoCodes)
+        .where(eq(promoCodes.id, org.pendingPromoCodeId))
+        .limit(1);
+      if (
+        p &&
+        p.active &&
+        (!p.expiresAt || p.expiresAt.getTime() > Date.now()) &&
+        (p.maxRedemptions == null || p.redemptionCount < p.maxRedemptions)
+      ) {
+        promo = {
+          code: p.code,
+          description: p.description,
+          discountType: p.discountType,
+          discountValue: p.discountValue,
+        };
+      }
+    }
     res.json({
       organization: {
         id: org.id,
@@ -505,6 +535,7 @@ router.get(
         logoUrl: org.logoUrl,
       },
       alreadyClaimed: !!owner,
+      promo,
     });
   }),
 );

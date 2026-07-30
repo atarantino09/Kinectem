@@ -26,14 +26,15 @@ import {
 } from "@/components/BulkPairEditor";
 import { PLANS, type PlanTier } from "@/lib/plans";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
-import { X, Plus, Trash2, ChevronDown } from "lucide-react";
+import { X } from "lucide-react";
 
-// Task #829 — One-page org quick setup for platform admins. Org info, bulk
-// team rows, and per-team coach emails all live on one scrollable form with a
-// single Save at the end. Saving hits the atomic quick-setup endpoint, which
-// creates the ownerless org + claim token + teams + staged coach drafts in
-// one transaction — a validation error creates nothing and highlights the
-// offending row. On success the operator gets the copyable claim link for
+// Task #829 — One-page org quick setup for platform admins. Org info and the
+// team/coach row list live on one scrollable form with a single Save at the
+// end. The numbered two-column row editor IS the team list (5 rows shown,
+// "show 5 more" to expand) — no separate per-team cards. Saving hits the
+// atomic quick-setup endpoint, which creates the ownerless org + claim token
+// + teams + staged coach drafts in one transaction — a validation error
+// creates nothing. On success the operator gets the copyable claim link for
 // the hand-off.
 
 type NameMatch = {
@@ -45,12 +46,6 @@ type NameMatch = {
   exact: boolean;
 };
 type NameCheckResponse = { data: NameMatch[] };
-
-type TeamRow = {
-  key: number;
-  name: string;
-  coachEmails: string[];
-};
 
 // Task #831 — bulk entry. Each parsed line is a (team name, optional coach
 // email) pair; lines with the same team name merge their coach emails onto
@@ -88,15 +83,6 @@ export function pairsToTeamRows(
   return { teams, errors };
 }
 
-// How many team rows each tier shows up front. Elite is open-ended, so it
-// starts at 45 and expands 15 rows at a time via the "show more" control.
-const TIER_INITIAL_ROWS: Record<PlanTier, number> = {
-  starter: 15,
-  pro: 40,
-  elite: 45,
-};
-const ELITE_EXPAND_STEP = 15;
-
 type QuickSetupResult = {
   id: string;
   name: string;
@@ -107,11 +93,6 @@ type QuickSetupResult = {
 
 function claimUrl(token: string): string {
   return `${window.location.origin}${import.meta.env.BASE_URL}claim/${token}`;
-}
-
-let nextKey = 1;
-function emptyTeam(): TeamRow {
-  return { key: nextKey++, name: "", coachEmails: [""] };
 }
 
 export default function AdminOrgQuickSetup() {
@@ -129,16 +110,19 @@ export default function AdminOrgQuickSetup() {
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
   const [bulkPairs, setBulkPairs] = useState<BulkPair[]>([]);
-  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const [tier, setTier] = useState<PlanTier>("starter");
-  // Rendered row floor: the selected tier's row count, plus any "show 15
-  // more" expansions on Elite. Filled rows always render even beyond this.
-  const [rowFloor, setRowFloor] = useState(TIER_INITIAL_ROWS.starter);
-  const [teamRows, setTeamRows] = useState<TeamRow[]>(() =>
-    Array.from({ length: TIER_INITIAL_ROWS.starter }, emptyTeam),
-  );
+  // Staged promo code — validated against the promo catalog, stored on the
+  // org, and auto-applied when the new owner sets up billing.
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    description: string | null;
+    discountType: string;
+    discountValue: number;
+  } | null>(null);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [errorTeamIndex, setErrorTeamIndex] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [result, setResult] = useState<QuickSetupResult | null>(null);
 
@@ -159,60 +143,26 @@ export default function AdminOrgQuickSetup() {
   const matches = useMemo(() => nameCheck?.data ?? [], [nameCheck]);
   const exactMatch = useMemo(() => matches.find((m) => m.exact) ?? null, [matches]);
 
-  // Pad with blank rows up to `target`; trim trailing blank rows beyond it.
-  // Never drops a row with any content.
-  const fitRowsTo = (rows: TeamRow[], target: number): TeamRow[] => {
-    const next = [...rows];
-    while (
-      next.length > target &&
-      !next[next.length - 1].name.trim() &&
-      next[next.length - 1].coachEmails.every((e) => !e.trim())
-    ) {
-      next.pop();
+  const applyPromoCode = async () => {
+    const code = promoInput.trim();
+    if (!code) return;
+    setPromoChecking(true);
+    setPromoError(null);
+    try {
+      const res = await customFetch<{
+        valid: boolean;
+        promo: NonNullable<typeof appliedPromo>;
+      }>(`/api/v1/promo-codes/validate`, {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      setAppliedPromo(res.promo);
+    } catch {
+      setAppliedPromo(null);
+      setPromoError("That promo code isn't valid.");
+    } finally {
+      setPromoChecking(false);
     }
-    while (next.length < target) next.push(emptyTeam());
-    return next;
-  };
-
-  const selectTier = (id: PlanTier) => {
-    setTier(id);
-    setRowFloor(TIER_INITIAL_ROWS[id]);
-    setTeamRows((rows) => fitRowsTo(rows, TIER_INITIAL_ROWS[id]));
-  };
-
-  const showMoreRows = () => {
-    setRowFloor((f) => {
-      const target = Math.max(f, teamRows.length) + ELITE_EXPAND_STEP;
-      setTeamRows((rows) => fitRowsTo(rows, target));
-      return target;
-    });
-  };
-
-  const updateTeam = (key: number, patch: Partial<TeamRow>) => {
-    setTeamRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  };
-  const updateCoachEmail = (key: number, idx: number, value: string) => {
-    setTeamRows((rows) =>
-      rows.map((r) =>
-        r.key === key
-          ? { ...r, coachEmails: r.coachEmails.map((e, i) => (i === idx ? value : e)) }
-          : r,
-      ),
-    );
-  };
-  const addCoachRow = (key: number) => {
-    setTeamRows((rows) =>
-      rows.map((r) => (r.key === key ? { ...r, coachEmails: [...r.coachEmails, ""] } : r)),
-    );
-  };
-  const removeCoachRow = (key: number, idx: number) => {
-    setTeamRows((rows) =>
-      rows.map((r) =>
-        r.key === key
-          ? { ...r, coachEmails: r.coachEmails.filter((_, i) => i !== idx) }
-          : r,
-      ),
-    );
   };
 
   const onLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -258,117 +208,32 @@ export default function AdminOrgQuickSetup() {
     }
   };
 
-  // Task #831/#832 — merge the row-list editor's pairs into the editable
-  // team rows. Teams that already exist (by name, case-insensitive) get the
-  // new coach emails appended; new teams are added as rows. Blank starter
-  // rows are dropped. Bad rows STAY in the editor (renumbered) with their
-  // errors listed, so nothing is silently lost.
-  const applyBulk = () => {
-    const numbered = trimTrailingEmpty(bulkPairs).map((p, i) => ({
-      line: i + 1,
-      name: p.name,
-      email: p.email,
-    }));
-    const { teams: parsed, errors } = pairsToTeamRows(numbered);
-    const badLines = new Set(
-      errors
-        .map((e) => parseInt(/^Line (\d+)/.exec(e)?.[1] ?? "0", 10))
-        .filter(Boolean),
-    );
-    // Keep only the failing rows in the editor, renumbered from 1, and
-    // regenerate the error messages so line numbers match what's shown.
-    const kept = numbered
-      .filter((p) => badLines.has(p.line))
-      .map((p) => ({ name: p.name, email: p.email }));
-    setBulkPairs(kept);
-    setBulkErrors(
-      pairsToTeamRows(kept.map((p, i) => ({ line: i + 1, ...p }))).errors,
-    );
-    if (parsed.length === 0) {
-      if (errors.length === 0) {
-        toast({
-          title: "No rows to add",
-          description:
-            "Expected a team name first, then an optional coach email.",
-          variant: "destructive",
-        });
-      }
-      return;
-    }
-    setTeamRows((rows) => {
-      const next = rows.filter(
-        (r) => r.name.trim() || r.coachEmails.some((e) => e.trim()),
-      );
-      const byName = new Map<string, number>();
-      next.forEach((r, i) => {
-        if (r.name.trim()) byName.set(r.name.trim().toLowerCase(), i);
-      });
-      for (const t of parsed) {
-        const key = t.name.toLowerCase();
-        const at = byName.get(key);
-        if (at !== undefined) {
-          const existing = next[at].coachEmails
-            .map((e) => e.trim().toLowerCase())
-            .filter(Boolean);
-          const merged = [
-            ...next[at].coachEmails.filter((e) => e.trim()),
-            ...t.coachEmails.filter((e) => !existing.includes(e)),
-          ];
-          next[at] = { ...next[at], coachEmails: merged.length ? merged : [""] };
-        } else {
-          byName.set(key, next.length);
-          next.push({
-            key: nextKey++,
-            name: t.name,
-            coachEmails: t.coachEmails.length ? t.coachEmails : [""],
-          });
-        }
-      }
-      return fitRowsTo(next, rowFloor);
-    });
-    toast({
-      title: `Added ${parsed.length} team${parsed.length === 1 ? "" : "s"} to the list`,
-      description:
-        errors.length > 0
-          ? `${errors.length} row${errors.length === 1 ? "" : "s"} kept above — see the errors below.`
-          : "Review the rows below, then Save.",
-      variant: errors.length > 0 ? "destructive" : undefined,
-    });
-  };
-
-  const validTeams = useMemo(
-    () => teamRows.filter((t) => t.name.trim().length > 0),
-    [teamRows],
+  // The row editor IS the team list — parse it live. Lines with the same
+  // team name merge their coach emails onto one team; bad lines surface as
+  // errors under the list and block Save.
+  const parsedBulk = useMemo(
+    () =>
+      pairsToTeamRows(
+        trimTrailingEmpty(bulkPairs).map((p, i) => ({ line: i + 1, ...p })),
+      ),
+    [bulkPairs],
   );
-  // Live projected total against the entry-tier cap: teams already in the
-  // list plus NEW names currently sitting in the bulk editor.
-  const bulkNewCount = useMemo(() => {
-    const parsed = pairsToTeamRows(
-      trimTrailingEmpty(bulkPairs).map((p, i) => ({ line: i + 1, ...p })),
-    ).teams;
-    const existing = new Set(validTeams.map((t) => t.name.trim().toLowerCase()));
-    return parsed.filter((t) => !existing.has(t.name.toLowerCase())).length;
-  }, [bulkPairs, validTeams]);
-  const projectedTeams = validTeams.length + bulkNewCount;
+  const validTeams = parsedBulk.teams;
+  const bulkErrors = parsedBulk.errors;
   const selectedPlan = useMemo(() => PLANS.find((p) => p.id === tier), [tier]);
   const canSave =
     orgName.trim().length > 0 && !exactMatch && !saving && !logoBusy;
 
   const save = async () => {
     if (!canSave) return;
-    // Ignore fully-blank team rows, but block a coach email on a blank team
-    // row (it would be silently dropped otherwise).
-    const orphan = teamRows.findIndex(
-      (t) => !t.name.trim() && t.coachEmails.some((e) => e.trim()),
-    );
-    if (orphan !== -1) {
-      setErrorTeamIndex(orphan);
-      setSaveError("This team has coach emails but no team name.");
+    // Bad rows (orphan coach emails, malformed emails) block Save — they're
+    // listed under the editor by line number, never silently dropped.
+    if (bulkErrors.length > 0) {
+      setSaveError("Fix the highlighted rows in the team list first.");
       return;
     }
     setSaving(true);
     setSaveError(null);
-    setErrorTeamIndex(null);
     try {
       const resp = await customFetch<{ data: QuickSetupResult }>(
         `/api/v1/admin/org-quick-setup`,
@@ -381,10 +246,8 @@ export default function AdminOrgQuickSetup() {
             logoUrl: logoDataUrl || undefined,
             brandPrimaryColor: primaryColor || undefined,
             brandSecondaryColor: secondaryColor || undefined,
-            teams: validTeams.map((t) => ({
-              name: t.name.trim(),
-              coachEmails: t.coachEmails.map((e) => e.trim()).filter(Boolean),
-            })),
+            promoCode: appliedPromo?.code || undefined,
+            teams: validTeams,
           }),
         },
       );
@@ -397,27 +260,9 @@ export default function AdminOrgQuickSetup() {
         toast({ title: `Created "${resp.data.name}"` });
       }
     } catch (err) {
-      // customFetch throws with the server's error message; the endpoint
-      // also returns `index` for per-team errors, surfaced when available.
-      const anyErr = err as { message?: string; index?: number; data?: { index?: number } };
-      const idx =
-        typeof anyErr?.index === "number"
-          ? anyErr.index
-          : typeof anyErr?.data?.index === "number"
-            ? anyErr.data.index
-            : null;
-      // Server messages are prefixed "Team N: ..." — recover N when the
-      // structured index didn't survive the client error path. The server
-      // index counts non-blank teams, so map back to the visible row.
-      let visibleIdx = idx;
-      if (visibleIdx === null && anyErr?.message) {
-        const m = /^Team (\d+):/.exec(anyErr.message);
-        if (m) visibleIdx = parseInt(m[1], 10) - 1;
-      }
-      if (visibleIdx !== null && validTeams[visibleIdx]) {
-        const key = validTeams[visibleIdx].key;
-        setErrorTeamIndex(teamRows.findIndex((t) => t.key === key));
-      }
+      // customFetch throws with the server's error message ("Team N: ...");
+      // team order matches the numbered rows in the editor.
+      const anyErr = err as { message?: string };
       setSaveError(anyErr?.message || "Couldn't save — please try again.");
     } finally {
       setSaving(false);
@@ -433,13 +278,12 @@ export default function AdminOrgQuickSetup() {
     setPrimaryColor(null);
     setSecondaryColor(null);
     setBulkPairs([]);
-    setBulkErrors([]);
     setTier("starter");
-    setRowFloor(TIER_INITIAL_ROWS.starter);
-    setTeamRows(Array.from({ length: TIER_INITIAL_ROWS.starter }, emptyTeam));
+    setPromoInput("");
+    setAppliedPromo(null);
+    setPromoError(null);
     setResult(null);
     setSaveError(null);
-    setErrorTeamIndex(null);
   };
 
   const copyLink = async (token: string) => {
@@ -633,12 +477,11 @@ export default function AdminOrgQuickSetup() {
           </div>
         </section>
 
-        {/* ---- Plan tier (sets how many team rows are shown) ---- */}
+        {/* ---- Plan tier (sets the team-count cap shown below) ---- */}
         <section className="rounded-lg border bg-card p-4 mb-5">
           <h2 className="text-sm font-bold mb-1">How many teams?</h2>
           <p className="text-xs text-muted-foreground mb-3">
-            Tiers differ only in the number of teams. Pick one to size the
-            team list below — you can still add or remove rows afterward.
+            Tiers differ only in the number of teams.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {PLANS.map((p) => {
@@ -647,7 +490,7 @@ export default function AdminOrgQuickSetup() {
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => selectTier(p.id)}
+                  onClick={() => setTier(p.id)}
                   aria-pressed={selected}
                   className={`rounded-md border p-3 text-left transition-colors ${
                     selected
@@ -666,161 +509,121 @@ export default function AdminOrgQuickSetup() {
               );
             })}
           </div>
-        </section>
 
-        {/* ---- Teams + coaches ---- */}
-        <section className="rounded-lg border bg-card p-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold">Teams &amp; coaches</h2>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setTeamRows((r) => [...r, emptyTeam()])}
-              data-testid="btn-qs-add-team"
-            >
-              <Plus className="h-4 w-4 mr-1" /> Add team
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            Coach emails are staged as drafts — no invites are sent. The org
-            admin reviews and sends them after claiming the page.
-          </p>
-
-          {/* ---- Bulk add (Task #831/#832) — shared row-list editor ---- */}
-          <div className="rounded-md border border-dashed p-3 mb-4 bg-muted/30">
-            <div className="text-xs font-bold mb-1">Bulk add</div>
+          {/* Promo code — staged on the org; auto-applied when the new owner
+              sets up billing, and shown on their claim page. */}
+          <div className="mt-4 border-t pt-3">
+            <Label htmlFor="qs-promo-code">Promo code (optional)</Label>
             <p className="text-xs text-muted-foreground mb-2">
-              One team per line, with an optional coach email on the same line
-              of the second column. Repeat a team name on another line to add
-              more coaches to it. Paste a multi-line list into either column
-              or upload a CSV.
+              Applied automatically when the org admin accepts the page and
+              sets up billing — they'll see it's already on their account.
             </p>
-            <BulkPairEditor
-              pairs={bulkPairs}
-              onPairsChange={setBulkPairs}
-              idPrefix="qs-bulk"
-              minRows={5}
-              listMaxHeightClass="max-h-64"
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={applyBulk}
-                disabled={trimTrailingEmpty(bulkPairs).length === 0}
-                data-testid="btn-qs-bulk-apply"
+            {appliedPromo ? (
+              <div
+                className="flex items-center gap-2 text-sm"
+                data-testid="qs-promo-applied"
               >
-                Add to list
-              </Button>
-              <span
-                className="text-xs font-medium text-muted-foreground"
-                data-testid="text-qs-team-count"
+                <span className="rounded-md border border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 px-2 py-1 font-bold uppercase">
+                  {appliedPromo.code}
+                </span>
+                <span className="text-muted-foreground">
+                  {appliedPromo.discountType === "percent"
+                    ? `${appliedPromo.discountValue}% off first year`
+                    : `$${appliedPromo.discountValue} off first year`}
+                  {appliedPromo.description ? ` — ${appliedPromo.description}` : ""}
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    setAppliedPromo(null);
+                    setPromoInput("");
+                    setPromoError(null);
+                  }}
+                  aria-label="Remove promo code"
+                  data-testid="btn-qs-promo-clear"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 max-w-sm">
+                <Input
+                  id="qs-promo-code"
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value);
+                    setPromoError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void applyPromoCode();
+                    }
+                  }}
+                  placeholder="e.g. FOUNDING50"
+                  className="h-9"
+                  data-testid="input-qs-promo-code"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void applyPromoCode()}
+                  disabled={promoChecking || !promoInput.trim()}
+                  data-testid="btn-qs-promo-apply"
+                >
+                  {promoChecking ? "Checking…" : "Apply"}
+                </Button>
+              </div>
+            )}
+            {promoError && (
+              <p
+                className="mt-1 text-xs text-destructive"
+                data-testid="qs-promo-error"
               >
-                {selectedPlan?.maxTeams != null
-                  ? `${projectedTeams}/${selectedPlan.maxTeams} teams`
-                  : `${projectedTeams} team${projectedTeams === 1 ? "" : "s"}`}
-              </span>
-            </div>
-            {bulkErrors.length > 0 && (
-              <ul
-                className="mt-2 space-y-0.5 text-xs text-destructive"
-                data-testid="qs-bulk-errors"
-              >
-                {bulkErrors.map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-              </ul>
+                {promoError}
+              </p>
             )}
           </div>
-          <div className="space-y-4">
-            {teamRows.map((t, i) => (
-              <div
-                key={t.key}
-                className={`rounded-md border p-3 ${errorTeamIndex === i ? "border-destructive" : ""}`}
-                data-testid={`qs-team-row-${i}`}
-              >
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto] items-end">
-                  <div>
-                    <Label htmlFor={`qs-team-name-${t.key}`}>Team name</Label>
-                    <Input
-                      id={`qs-team-name-${t.key}`}
-                      placeholder="e.g. 12U Blue"
-                      value={t.name}
-                      onChange={(e) => updateTeam(t.key, { name: e.target.value })}
-                      data-testid={`input-qs-team-name-${i}`}
-                    />
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() =>
-                      setTeamRows((rows) =>
-                        fitRowsTo(
-                          rows.filter((r) => r.key !== t.key),
-                          rowFloor,
-                        ),
-                      )
-                    }
-                    aria-label="Remove team"
-                    data-testid={`btn-qs-remove-team-${i}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="mt-2 pl-1">
-                  <div className="text-xs font-medium text-muted-foreground mb-1">
-                    Coach emails
-                  </div>
-                  <div className="space-y-1.5">
-                    {t.coachEmails.map((email, ei) => (
-                      <div key={ei} className="flex items-center gap-2">
-                        <Input
-                          type="email"
-                          placeholder="coach@example.com"
-                          value={email}
-                          onChange={(e) => updateCoachEmail(t.key, ei, e.target.value)}
-                          className="max-w-sm h-8 text-sm"
-                          data-testid={`input-qs-coach-email-${i}-${ei}`}
-                        />
-                        {t.coachEmails.length > 1 && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            onClick={() => removeCoachRow(t.key, ei)}
-                            aria-label="Remove coach email"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="mt-1 h-7 text-xs"
-                    onClick={() => addCoachRow(t.key)}
-                    data-testid={`btn-qs-add-coach-${i}`}
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Add coach
-                  </Button>
-                </div>
-              </div>
-            ))}
+        </section>
+
+        {/* ---- Teams + coaches — the row editor IS the team list ---- */}
+        <section className="rounded-lg border bg-card p-4 mb-5">
+          <h2 className="text-sm font-bold mb-1">Teams &amp; coaches</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            One team per line, with an optional coach email on the same line
+            of the second column. Repeat a team name on another line to add
+            more coaches to it. Paste a multi-line list into either column or
+            upload a CSV. Coach emails are staged as drafts — no invites are
+            sent; the org admin reviews and sends them after claiming the
+            page.
+          </p>
+          <BulkPairEditor
+            pairs={bulkPairs}
+            onPairsChange={setBulkPairs}
+            idPrefix="qs-bulk"
+            listMaxHeightClass="max-h-none"
+          />
+          <div className="mt-2 flex justify-end">
+            <span
+              className="text-xs font-medium text-muted-foreground"
+              data-testid="text-qs-team-count"
+            >
+              {selectedPlan?.maxTeams != null
+                ? `${validTeams.length}/${selectedPlan.maxTeams} teams`
+                : `${validTeams.length} team${validTeams.length === 1 ? "" : "s"}`}
+            </span>
           </div>
-          {tier === "elite" && (
-            <div className="mt-3 flex justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={showMoreRows}
-                data-testid="btn-qs-show-more-rows"
-              >
-                <ChevronDown className="h-4 w-4 mr-1" />
-                Show {ELITE_EXPAND_STEP} more rows
-              </Button>
-            </div>
+          {bulkErrors.length > 0 && (
+            <ul
+              className="mt-2 space-y-0.5 text-xs text-destructive"
+              data-testid="qs-bulk-errors"
+            >
+              {bulkErrors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
           )}
         </section>
 

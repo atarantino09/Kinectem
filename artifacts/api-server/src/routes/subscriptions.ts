@@ -118,7 +118,7 @@ const billingCheckoutLimiter = rateLimit({
 
 // Resolve a redeemable promo code by its (case-insensitive) code. Returns the
 // row only when it is active, not expired, and under its redemption cap.
-async function findRedeemablePromo(rawCode: string) {
+export async function findRedeemablePromo(rawCode: string) {
   const code = rawCode.trim().toLowerCase();
   if (!code) return null;
   const [row] = await db
@@ -234,6 +234,33 @@ router.get(
       }
     }
 
+    // Staged promo from admin quick setup — auto-applied client-side when
+    // the org hasn't already chosen a promo of its own. Only surfaced while
+    // still redeemable.
+    let pendingPromo: ReturnType<typeof publicPromo> | null = null;
+    if (!sub?.promoCodeId) {
+      const [org] = await db
+        .select({ pendingPromoCodeId: organizations.pendingPromoCodeId })
+        .from(organizations)
+        .where(eq(organizations.id, orgId))
+        .limit(1);
+      if (org?.pendingPromoCodeId) {
+        const [row] = await db
+          .select()
+          .from(promoCodes)
+          .where(eq(promoCodes.id, org.pendingPromoCodeId))
+          .limit(1);
+        if (
+          row &&
+          row.active &&
+          (!row.expiresAt || row.expiresAt.getTime() > Date.now()) &&
+          (row.maxRedemptions == null || row.redemptionCount < row.maxRedemptions)
+        ) {
+          pendingPromo = publicPromo(row);
+        }
+      }
+    }
+
     const plan = (sub?.plan as PlanTier | undefined) ?? DEFAULT_PLAN;
     const teamsLimit = teamLimitForPlan(plan);
     const teamsUsed = await countActiveTeams(orgId);
@@ -248,6 +275,8 @@ router.get(
 
     res.json({
       subscription: serializeSubscription(sub, promo),
+      // Extra-spec: staged promo from admin quick setup (see above).
+      pendingPromo,
       plans: PLAN_CATALOG,
       // The org's real charge date: creation + 90 days (Stripe-safe floor).
       billingStartsAt: billingStartsAt?.toISOString() ?? null,

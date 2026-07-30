@@ -26,7 +26,21 @@ type ClaimResolve = {
     logoUrl: string | null;
   };
   alreadyClaimed: boolean;
+  // Staged promo from admin quick setup — the org already has this discount
+  // applied when the new owner subscribes.
+  promo?: {
+    code: string;
+    description: string | null;
+    discountType: string;
+    discountValue: number;
+  } | null;
 };
+
+function promoDiscountLabel(promo: NonNullable<ClaimResolve["promo"]>): string {
+  return promo.discountType === "percent"
+    ? `${promo.discountValue}% off your first year`
+    : `$${promo.discountValue} off your first year`;
+}
 
 export default function ClaimOrgPage() {
   const [, params] = useRoute("/claim/:token");
@@ -159,6 +173,20 @@ export default function ClaimOrgPage() {
               ) : null}
             </div>
           </div>
+
+          {!alreadyClaimed && resolve.data.promo && (
+            <div
+              className="rounded-md border border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 px-3 py-2 text-sm"
+              data-testid="claim-promo-banner"
+            >
+              <span className="font-bold">
+                Promo code {resolve.data.promo.code.toUpperCase()} is already
+                applied
+              </span>{" "}
+              — {promoDiscountLabel(resolve.data.promo)} when you set up
+              billing.
+            </div>
+          )}
 
           {alreadyClaimed ? (
             <div className="space-y-2">

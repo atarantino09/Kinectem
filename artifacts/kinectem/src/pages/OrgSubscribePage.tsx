@@ -30,6 +30,9 @@ type SubscriptionResponse = {
     promo: AppliedPromo | null;
     hasCardOnFile?: boolean;
   } | null;
+  // Staged promo from admin quick setup — auto-applied when the org hasn't
+  // picked its own promo yet.
+  pendingPromo?: AppliedPromo | null;
   plans: Plan[];
   billingStartsAt: string | null;
   freePeriodDays?: number;
@@ -90,7 +93,17 @@ export default function OrgSubscribePage() {
         setPromoInput(data.subscription.promo.code);
       }
     }
-  }, [data]);
+    // Staged promo from admin quick setup — auto-apply it when the org
+    // hasn't chosen a promo of its own yet.
+    if (!data.subscription?.promo && data.pendingPromo) {
+      setPromo(data.pendingPromo);
+      setPromoInput(data.pendingPromo.code);
+      toast({
+        title: "Promo code already applied",
+        description: `Code ${data.pendingPromo.code.toUpperCase()} was set up for your organization.`,
+      });
+    }
+  }, [data, toast]);
 
   // Handle the return from Stripe Checkout. Success carries a session_id we
   // exchange (server-side) to persist the card-on-file; cancel just informs.

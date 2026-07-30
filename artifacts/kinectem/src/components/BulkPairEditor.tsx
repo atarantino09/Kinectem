@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Upload } from "lucide-react";
+import { Upload, ChevronDown } from "lucide-react";
 import { STAGED_EMAIL_RE } from "@/components/StageCoachesDialog";
 
 // Task #832 — the numbered two-column (team name + optional coach email)
@@ -144,7 +144,8 @@ export function BulkPairEditor({
   onPairsChange,
   disabled,
   idPrefix,
-  minRows = 8,
+  minRows = 5,
+  expandStep = 5,
   autoFocusFirst = false,
   listMaxHeightClass = "max-h-52",
 }: {
@@ -155,9 +156,13 @@ export function BulkPairEditor({
   // (input-bulk-team-name-0, btn-bulk-upload-csv, ...).
   idPrefix: string;
   minRows?: number;
+  // "Show N more rows" step for the expander under the list. Always shown,
+  // so there's always room for more rows.
+  expandStep?: number;
   autoFocusFirst?: boolean;
   listMaxHeightClass?: string;
 }) {
+  const [extraRows, setExtraRows] = useState(0);
   const { toast } = useToast();
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   const cellRefs = useRef(new Map<string, HTMLTextAreaElement>());
@@ -230,9 +235,10 @@ export function BulkPairEditor({
     });
   };
 
-  // Always render at least `minRows` rows plus one empty trailing row so
-  // there is always somewhere to keep typing.
-  const renderedRows = Math.max(minRows, pairs.length + 1);
+  // Render `minRows` up front (plus any expansions); filled rows always
+  // render, with one empty trailing row so there is always somewhere to
+  // keep typing.
+  const renderedRows = Math.max(minRows + extraRows, pairs.length + 1);
 
   return (
     <div className="space-y-1.5">
@@ -330,6 +336,24 @@ export function BulkPairEditor({
             </div>
           );
         })}
+      </div>
+      {/* Always available — expands the list `expandStep` rows at a time so
+          there's always room for a longer list. */}
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs text-muted-foreground"
+          onClick={() =>
+            setExtraRows((n) => renderedRows - minRows + expandStep)
+          }
+          disabled={disabled}
+          data-testid={`btn-${idPrefix}-show-more`}
+        >
+          <ChevronDown className="w-3.5 h-3.5 mr-1" />
+          Show {expandStep} more rows
+        </Button>
       </div>
     </div>
   );

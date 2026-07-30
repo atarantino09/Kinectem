@@ -35,6 +35,7 @@ import { ensureActiveGuardianLink, syncParentIdMirror } from "../lib/guardian-li
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
 import { DEFAULT_PLAN, teamLimitForPlan } from "../lib/plan-limits";
+import { findRedeemablePromo } from "./subscriptions";
 import {
   splitName,
   toPrivateUser,
@@ -2006,6 +2007,20 @@ router.post(
       assign(v.toLowerCase());
     }
 
+    // Optional staged promo code — validated as redeemable now, stored on the
+    // org, surfaced on the claim page, and auto-applied on the subscribe page.
+    let pendingPromoCodeId: string | null = null;
+    if (typeof body.promoCode === "string" && body.promoCode.trim()) {
+      const promo = await findRedeemablePromo(body.promoCode);
+      if (!promo) {
+        return res.status(400).json({
+          error: "That promo code isn't valid (inactive, expired, or fully redeemed).",
+          code: "INVALID_PROMO_CODE",
+        });
+      }
+      pendingPromoCodeId = promo.id;
+    }
+
     const teamsRaw = Array.isArray(body.teams) ? body.teams : [];
     if (teamsRaw.length > QUICK_SETUP_MAX_TEAMS) {
       return res.status(400).json({ error: `too many teams (max ${QUICK_SETUP_MAX_TEAMS})`, code: "TOO_MANY_TEAMS" });
@@ -2094,6 +2109,7 @@ router.post(
           logoUrl: logoUrl ?? undefined,
           brandPrimaryColor: brandPrimaryColor ?? undefined,
           brandSecondaryColor: brandSecondaryColor ?? undefined,
+          pendingPromoCodeId: pendingPromoCodeId ?? undefined,
           claimToken: token,
         })
         .returning();

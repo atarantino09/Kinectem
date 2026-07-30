@@ -5,9 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test";
 import AdminOrgQuickSetup, { pairsToTeamRows } from "./AdminOrgQuickSetup";
 
-// Task #829 — one-page org quick setup: add/remove team + coach rows and a
-// single save that shows the claim-link hand-off view. Fetch is stubbed at
-// the global level (same approach as OrgSetupChecklist.test.tsx).
+// Task #829 — one-page org quick setup. The numbered two-column row editor
+// IS the team list (5 rows shown, "show 5 more" expands); a single save
+// shows the claim-link hand-off view. Fetch is stubbed at the global level
+// (same approach as OrgSetupChecklist.test.tsx).
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -73,31 +74,24 @@ beforeEach(() => {
 });
 
 describe("AdminOrgQuickSetup", () => {
-  it("adds/removes rows and saves everything once, then shows the claim link", async () => {
+  it("saves teams typed into the row editor and shows the claim link", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminOrgQuickSetup />);
 
     await user.type(await screen.findByTestId("input-qs-org-name"), "Quick Org");
 
-    // First team + coach email.
-    await user.type(screen.getByTestId("input-qs-team-name-0"), "12U Blue");
+    // Repeat a team name on another line to add a second coach to it.
+    await user.type(screen.getByTestId("input-qs-bulk-team-name-0"), "12U Blue");
     await user.type(
-      screen.getByTestId("input-qs-coach-email-0-0"),
+      screen.getByTestId("input-qs-bulk-coach-email-0"),
       "coach@example.com",
     );
-
-    // Second team goes into the next pre-rendered blank row (starter tier
-    // shows 15 rows up front).
-    await user.type(screen.getByTestId("input-qs-team-name-1"), "10U Gold");
-    expect(screen.getByTestId("qs-team-row-14")).toBeInTheDocument();
-    expect(screen.queryByTestId("qs-team-row-15")).not.toBeInTheDocument();
-
-    // Add team appends a 16th row; removing a blank row trims back to the
-    // tier's 15-row floor.
-    await user.click(screen.getByTestId("btn-qs-add-team"));
-    expect(screen.getByTestId("qs-team-row-15")).toBeInTheDocument();
-    await user.click(screen.getByTestId("btn-qs-remove-team-15"));
-    expect(screen.queryByTestId("qs-team-row-15")).not.toBeInTheDocument();
+    await user.type(screen.getByTestId("input-qs-bulk-team-name-1"), "12U Blue");
+    await user.type(
+      screen.getByTestId("input-qs-bulk-coach-email-1"),
+      "coach2@example.com",
+    );
+    await user.type(screen.getByTestId("input-qs-bulk-team-name-2"), "10U Gold");
 
     await user.click(screen.getByTestId("btn-qs-save"));
 
@@ -108,68 +102,59 @@ describe("AdminOrgQuickSetup", () => {
       "/claim/tok123",
     );
 
-    // Payload contained both teams and the coach email; blank rows dropped.
-    // Task #831 — gender/website are gone from the payload.
+    // Duplicate names merged; blank rows dropped.
     const body = lastQuickSetupBody as {
       name: string;
-      teams: Array<{ name: string; coachEmails: string[]; gender?: unknown }>;
+      teams: Array<{ name: string; coachEmails: string[] }>;
     };
     expect(body.name).toBe("Quick Org");
-    expect(body.teams.map((t) => t.name)).toEqual(["12U Blue", "10U Gold"]);
-    expect(body.teams[0].coachEmails).toEqual(["coach@example.com"]);
-    expect(body.teams[0]).not.toHaveProperty("gender");
-    expect(body.teams[0]).not.toHaveProperty("website");
+    expect(body.teams).toEqual([
+      { name: "12U Blue", coachEmails: ["coach@example.com", "coach2@example.com"] },
+      { name: "10U Gold", coachEmails: [] },
+    ]);
   });
 
-  it("fills team rows from the bulk row editor, keeping bad rows behind", async () => {
+  it("shows 5 rows up front and expands 5 at a time", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrgQuickSetup />);
+    await screen.findByTestId("input-qs-org-name");
+
+    expect(screen.getByTestId("row-qs-bulk-input-4")).toBeInTheDocument();
+    expect(screen.queryByTestId("row-qs-bulk-input-5")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-qs-bulk-show-more"));
+    expect(screen.getByTestId("row-qs-bulk-input-9")).toBeInTheDocument();
+    expect(screen.queryByTestId("row-qs-bulk-input-10")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-qs-bulk-show-more"));
+    expect(screen.getByTestId("row-qs-bulk-input-14")).toBeInTheDocument();
+  });
+
+  it("surfaces bad rows as errors and blocks save", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminOrgQuickSetup />);
     await user.type(await screen.findByTestId("input-qs-org-name"), "Bulk Org");
 
-    // Multi-line paste into the name column splits down that column
-    // (row 4 gets no name — its email will make it a flagged row).
-    await user.click(screen.getByTestId("input-qs-bulk-team-name-0"));
-    await user.paste("12U Blue\n12U Blue\n10U Gold\n\n8U Red");
-    // Coach emails on rows 1, 2, 4 (line 4 has email but no name), and a
-    // bad email on row 5.
+    // Orphan coach email (no team name) + a malformed email.
     await user.type(
       screen.getByTestId("input-qs-bulk-coach-email-0"),
-      "coach1@example.com",
-    );
-    await user.type(
-      screen.getByTestId("input-qs-bulk-coach-email-1"),
-      "coach2@example.com",
-    );
-    await user.type(
-      screen.getByTestId("input-qs-bulk-coach-email-3"),
       "orphan@example.com",
     );
+    await user.type(screen.getByTestId("input-qs-bulk-team-name-1"), "8U Red");
     await user.type(
-      screen.getByTestId("input-qs-bulk-coach-email-4"),
+      screen.getByTestId("input-qs-bulk-coach-email-1"),
       "not-an-email",
     );
-    await user.click(screen.getByTestId("btn-qs-bulk-apply"));
 
-    // Two coach emails merged onto one 12U Blue row; blank starter dropped.
-    expect(screen.getByTestId("input-qs-team-name-0")).toHaveValue("12U Blue");
-    expect(screen.getByTestId("input-qs-coach-email-0-0")).toHaveValue(
-      "coach1@example.com",
-    );
-    expect(screen.getByTestId("input-qs-coach-email-0-1")).toHaveValue(
-      "coach2@example.com",
-    );
-    expect(screen.getByTestId("input-qs-team-name-1")).toHaveValue("10U Gold");
-    // The bad rows stayed in the editor (renumbered) with errors listed.
     const errors = screen.getByTestId("qs-bulk-errors");
     expect(errors).toHaveTextContent("Line 1");
     expect(errors).toHaveTextContent("Line 2");
-    expect(screen.getByTestId("input-qs-bulk-coach-email-0")).toHaveValue(
-      "orphan@example.com",
+
+    await user.click(screen.getByTestId("btn-qs-save"));
+    expect(await screen.findByTestId("qs-save-error")).toHaveTextContent(
+      /fix the highlighted rows/i,
     );
-    expect(screen.getByTestId("input-qs-bulk-team-name-1")).toHaveValue("8U Red");
-    // The team on the bad-email row was NOT added (whole row flagged) —
-    // the next pre-rendered row is still blank.
-    expect(screen.getByTestId("input-qs-team-name-2")).toHaveValue("");
+    expect(lastQuickSetupBody).toBeNull();
   });
 
   it("shows a running team count against the starter cap", async () => {
@@ -177,11 +162,9 @@ describe("AdminOrgQuickSetup", () => {
     renderWithProviders(<AdminOrgQuickSetup />);
     await screen.findByTestId("input-qs-org-name");
     expect(screen.getByTestId("text-qs-team-count")).toHaveTextContent("0/15 teams");
-    await user.type(screen.getByTestId("input-qs-team-name-0"), "12U Blue");
-    // A NEW name in the bulk editor counts; a duplicate of an existing row
-    // does not.
+    // A multi-line paste splits down the column; duplicate names count once.
     await user.click(screen.getByTestId("input-qs-bulk-team-name-0"));
-    await user.paste("12U Blue\n10U Gold");
+    await user.paste("12U Blue\n12U Blue\n10U Gold");
     expect(screen.getByTestId("text-qs-team-count")).toHaveTextContent("2/15 teams");
   });
 
@@ -202,21 +185,6 @@ describe("AdminOrgQuickSetup", () => {
     };
     expect(body.brandPrimaryColor).toBe("#112233");
     expect(body.brandSecondaryColor).toBeUndefined();
-  });
-
-  it("blocks save when a coach email sits on a blank team row", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<AdminOrgQuickSetup />);
-    await user.type(await screen.findByTestId("input-qs-org-name"), "Quick Org");
-    await user.type(
-      screen.getByTestId("input-qs-coach-email-0-0"),
-      "coach@example.com",
-    );
-    await user.click(screen.getByTestId("btn-qs-save"));
-    expect(await screen.findByTestId("qs-save-error")).toHaveTextContent(
-      /no team name/i,
-    );
-    expect(lastQuickSetupBody).toBeNull();
   });
 });
 

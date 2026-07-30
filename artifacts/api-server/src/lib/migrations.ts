@@ -2094,6 +2094,16 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       END$migration$;
     `,
   },
+  {
+    // Admin quick setup — staged promo code for hand-off orgs. Surfaced on
+    // the claim page and auto-applied on the subscribe page.
+    name: "2026-07-30-org-pending-promo-code",
+    sql: `
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS pending_promo_code_id uuid
+          REFERENCES promo_codes(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

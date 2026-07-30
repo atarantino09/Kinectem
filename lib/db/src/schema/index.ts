@@ -390,6 +390,14 @@ export const organizations = pgTable("organizations", {
   // non-admin recaps enter the pending_approval queue for org admins to
   // approve/decline (the pre-#801 behavior).
   requireRecapApproval: boolean("require_recap_approval").notNull().default(false),
+  // Admin quick setup — promo code staged by the platform operator for a
+  // hand-off org. Surfaced on the claim page ("promo already applied") and
+  // auto-applied when the new owner reaches the subscribe page. Cleared
+  // implicitly once redeemed via the normal checkout path.
+  pendingPromoCodeId: uuid("pending_promo_code_id").references(
+    (): AnyPgColumn => promoCodes.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.

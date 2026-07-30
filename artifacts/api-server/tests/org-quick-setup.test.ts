@@ -130,6 +130,50 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
     expect(overCap.body.code).toBe("TEAM_LIMIT_REACHED");
   });
 
+  it("stores a valid promo code, surfaces it on the claim link, rejects bad codes", async () => {
+    const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
+    // Test DB is schema-only — create the promo code through the admin API.
+    const created = await agent.post("/api/v1/admin/promo-codes").send({
+      code: "qs25",
+      description: "Quick setup test promo",
+      discountType: "percent",
+      discountValue: 25,
+      active: true,
+    });
+    expect(created.status).toBeLessThan(300);
+
+    const res = await agent.post("/api/v1/admin/org-quick-setup").send({
+      name: "Promo Quick Org",
+      promoCode: " QS25 ", // trimmed + case-insensitive
+      teams: [],
+    });
+    expect(res.status).toBe(201);
+    const token = res.body.data.token;
+
+    // Public claim resolve carries the staged promo.
+    const claim = await request(app).get(`/api/v1/org-claim-links/${token}`);
+    expect(claim.status).toBe(200);
+    expect(claim.body.promo).toMatchObject({
+      code: "qs25",
+      discountType: "percent",
+      discountValue: 25,
+    });
+
+    // Invalid promo is a 400 and creates nothing.
+    const bad = await agent.post("/api/v1/admin/org-quick-setup").send({
+      name: "Promo Quick Org Bad",
+      promoCode: "definitely-not-a-code",
+      teams: [],
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.code).toBe("INVALID_PROMO_CODE");
+    const list = await agent.get("/api/v1/admin/org-claim-links");
+    const row = list.body.data.find(
+      (r: { name: string }) => r.name === "Promo Quick Org Bad",
+    );
+    expect(row).toBeUndefined();
+  });
+
   it("non-admin gets 403; unauthenticated 401", async () => {
     const { agent } = await loginAs((u) => u.role === "athlete" && !!u.email);
     const res = await agent
