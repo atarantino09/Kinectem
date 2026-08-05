@@ -122,16 +122,26 @@ router.post(
       });
     }
     const body = parsed.data;
-    const [row] = await db
-      .insert(competitionOrganizers)
-      .values({
-        slug: slugify(body.name),
-        name: body.name,
-        description: body.description ?? null,
-        websiteUrl: body.websiteUrl ?? null,
-        ownerUserId: me.id,
-      })
-      .returning();
+    // Atomic create + auto-follow: the creator runs this hub, so follow it
+    // for them so it shows in their feed/lists from day one. One tx so a
+    // failed follow insert can't strand a half-set-up hub.
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(competitionOrganizers)
+        .values({
+          slug: slugify(body.name),
+          name: body.name,
+          description: body.description ?? null,
+          websiteUrl: body.websiteUrl ?? null,
+          ownerUserId: me.id,
+        })
+        .returning();
+      await tx
+        .insert(organizerFollowers)
+        .values({ organizerId: created.id, userId: me.id })
+        .onConflictDoNothing();
+      return created;
+    });
     res.status(201).json(organizerToJson(row));
   }),
 );

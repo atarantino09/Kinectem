@@ -368,29 +368,39 @@ const createCompetitionHandler = asyncHandler(async (req, res) => {
     organizer = o;
   }
 
-  const [row] = await db
-    .insert(tournaments)
-    .values({
-      slug: slugify(body.name),
-      name: body.name,
-      type: body.type ?? "tournament",
-      startDate: body.startDate,
-      endDate: body.endDate,
-      location: body.location ?? null,
-      description: body.description ?? null,
-      createdById: me.id,
-      ownerUserId: me.id,
-      organizerId: organizer?.id ?? null,
-      // Brand inheritance — copied (not referenced) so later organizer
-      // rebrands never silently restyle past competitions.
-      logoUrl: organizer?.logoUrl ?? null,
-      brandColor: organizer?.brandColor ?? null,
-      secondaryColor: organizer?.secondaryColor ?? null,
-      tertiaryColor: organizer?.tertiaryColor ?? null,
-      bannerUrl: organizer?.bannerUrl ?? null,
-      websiteUrl: organizer?.websiteUrl ?? null,
-    })
-    .returning();
+  // Atomic create + auto-follow: the creator operates this competition, so
+  // follow it for them immediately. One tx so a failed follow insert can't
+  // strand a half-set-up competition.
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(tournaments)
+      .values({
+        slug: slugify(body.name),
+        name: body.name,
+        type: body.type ?? "tournament",
+        startDate: body.startDate,
+        endDate: body.endDate,
+        location: body.location ?? null,
+        description: body.description ?? null,
+        createdById: me.id,
+        ownerUserId: me.id,
+        organizerId: organizer?.id ?? null,
+        // Brand inheritance — copied (not referenced) so later organizer
+        // rebrands never silently restyle past competitions.
+        logoUrl: organizer?.logoUrl ?? null,
+        brandColor: organizer?.brandColor ?? null,
+        secondaryColor: organizer?.secondaryColor ?? null,
+        tertiaryColor: organizer?.tertiaryColor ?? null,
+        bannerUrl: organizer?.bannerUrl ?? null,
+        websiteUrl: organizer?.websiteUrl ?? null,
+      })
+      .returning();
+    await tx
+      .insert(competitionFollowers)
+      .values({ competitionId: created.id, userId: me.id })
+      .onConflictDoNothing();
+    return created;
+  });
 
   res.status(201).json({
     id: row.id,
