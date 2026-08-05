@@ -21,6 +21,10 @@ import {
   postShares,
   takedownRequests,
   scheduleEvents,
+  tournaments,
+  tournamentParticipants,
+  competitionFollowers,
+  guardianLinks,
 } from "@workspace/db";
 import {
   and,
@@ -1045,10 +1049,80 @@ router.get(
       }),
     );
 
+    // Competitions your teams are in (extra beyond the locked openapi spec —
+    // same pattern as other extra-spec response fields). Personal, not
+    // popularity-ranked: a competition is suggested when a team the viewer is
+    // rostered on — or a team one of their children is rostered on — holds a
+    // claimed slot in it, and the viewer doesn't already follow it.
+    const myTeamIdRows = await db
+      .selectDistinct({ teamId: rosterEntries.teamId })
+      .from(rosterEntries)
+      .leftJoin(
+        guardianLinks,
+        and(
+          eq(guardianLinks.childId, rosterEntries.userId),
+          eq(guardianLinks.guardianId, me.id),
+          eq(guardianLinks.status, "active"),
+        ),
+      )
+      .where(
+        and(
+          eq(rosterEntries.status, "accepted"),
+          or(
+            eq(rosterEntries.userId, me.id),
+            sql`${guardianLinks.id} IS NOT NULL`,
+          ),
+        ),
+      );
+    const myTeamIds = myTeamIdRows.map((r) => r.teamId);
+
+    let competitionSuggestions: {
+      id: string;
+      slug: string;
+      name: string;
+      type: string;
+      startDate: string;
+      endDate: string;
+      location: string | null;
+      logoUrl: string | null;
+      brandColor: string | null;
+    }[] = [];
+    if (myTeamIds.length > 0) {
+      const followedCompRows = await db
+        .select({ id: competitionFollowers.competitionId })
+        .from(competitionFollowers)
+        .where(eq(competitionFollowers.userId, me.id));
+      const followedCompIds = new Set(followedCompRows.map((r) => r.id));
+      const compRows = await db
+        .selectDistinct({ t: tournaments })
+        .from(tournamentParticipants)
+        .innerJoin(
+          tournaments,
+          eq(tournaments.id, tournamentParticipants.tournamentId),
+        )
+        .where(inArray(tournamentParticipants.teamId, myTeamIds));
+      competitionSuggestions = compRows
+        .filter((r) => !followedCompIds.has(r.t.id))
+        .sort((a, b) => (a.t.startDate < b.t.startDate ? 1 : -1))
+        .slice(0, SUGGESTION_LIMIT)
+        .map((r) => ({
+          id: r.t.id,
+          slug: r.t.slug,
+          name: r.t.name,
+          type: r.t.type,
+          startDate: r.t.startDate,
+          endDate: r.t.endDate,
+          location: r.t.location,
+          logoUrl: r.t.logoUrl,
+          brandColor: r.t.brandColor,
+        }));
+    }
+
     res.json({
       organizations: orgSuggestions,
       teams: teamSuggestions,
       users: userSuggestions,
+      competitions: competitionSuggestions,
     });
   }),
 );

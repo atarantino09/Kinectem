@@ -2600,7 +2600,7 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
             )
             .limit(1);
           if (alreadyIn) throw new TeamAlreadyInError();
-          return tx
+          const updated = await tx
             .update(tournamentParticipants)
             .set(
               autoApprove
@@ -2624,6 +2624,15 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
               ),
             )
             .returning();
+          // Auto-follow only once the claim actually landed — a lost race
+          // (0 rows updated) must not leave a stray follow behind.
+          if (updated.length > 0) {
+            await tx
+              .insert(competitionFollowers)
+              .values({ competitionId: tournament.id, userId: me.id })
+              .onConflictDoNothing();
+          }
+          return updated;
         });
       } catch (err) {
         if (err instanceof TeamAlreadyInError) {
@@ -2671,6 +2680,12 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
           position: "admin",
           invitedById: me.id,
         });
+        // Claiming a slot means you run this team here — auto-follow the
+        // competition so it lands in the claimer's feed/sidebar.
+        await tx
+          .insert(competitionFollowers)
+          .values({ competitionId: tournament.id, userId: me.id })
+          .onConflictDoNothing();
         const claimed = await tx
           .update(tournamentParticipants)
           .set(

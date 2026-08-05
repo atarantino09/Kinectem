@@ -9,18 +9,33 @@ import {
   useFollowUser,
   getListFollowSuggestionsQueryKey,
   getListFeedQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Building2, Users, UserCheck } from "lucide-react";
+import { Building2, Users, UserCheck, Trophy } from "lucide-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { cn } from "@/lib/utils";
 
 type Variant = "full" | "compact";
-type Section = "users" | "organizations" | "teams";
+type Section = "users" | "organizations" | "teams" | "competitions";
+
+// Extra-spec field on /posts/follow-suggestions (openapi.yaml is locked):
+// competitions your teams — or your children's teams — are entered in.
+interface SuggestedCompetition {
+  id: string;
+  slug: string;
+  name: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  location: string | null;
+  logoUrl: string | null;
+  brandColor: string | null;
+}
 
 export interface SuggestionsPanelProps {
   variant?: Variant;
@@ -50,6 +65,7 @@ export function SuggestionsPanel({
   const followOrg = useFollowOrg();
   const followTeam = useFollowTeam();
   const followUser = useFollowUser();
+  const [followingComp, setFollowingComp] = useState(false);
 
   const refresh = async () => {
     await Promise.all([
@@ -85,6 +101,20 @@ export function SuggestionsPanel({
       throw err;
     }
   };
+  const handleFollowCompetition = async (slug: string) => {
+    setFollowingComp(true);
+    try {
+      await customFetch(`/api/v1/competitions/${slug}/follow`, {
+        method: "POST",
+      });
+      await refresh();
+    } catch (err) {
+      toast({ title: "Couldn't follow", variant: "destructive" });
+      throw err;
+    } finally {
+      setFollowingComp(false);
+    }
+  };
 
   if (isLoading) {
     if (hideWhenEmpty && variant === "compact") {
@@ -117,6 +147,7 @@ export function SuggestionsPanel({
   const showOrgs = !activeSection || activeSection === "organizations";
   const showTeams = !activeSection || activeSection === "teams";
   const showUsers = !activeSection || activeSection === "users";
+  const showComps = !activeSection || activeSection === "competitions";
   const orgs = (
     showOrgs ? limit(data?.organizations ?? []) : []
   ) as NonNullable<typeof data>["organizations"];
@@ -126,7 +157,15 @@ export function SuggestionsPanel({
   const users = (showUsers ? limit(data?.users ?? []) : []) as NonNullable<
     typeof data
   >["users"];
-  const empty = orgs.length === 0 && teams.length === 0 && users.length === 0;
+  const allComps =
+    ((data as { competitions?: SuggestedCompetition[] } | undefined)
+      ?.competitions ?? []) as SuggestedCompetition[];
+  const comps = (showComps ? limit(allComps) : []) as SuggestedCompetition[];
+  const empty =
+    orgs.length === 0 &&
+    teams.length === 0 &&
+    users.length === 0 &&
+    comps.length === 0;
 
   if (empty) {
     if (hideWhenEmpty) return null;
@@ -216,6 +255,18 @@ export function SuggestionsPanel({
                 testId={`button-follow-suggested-team-${t.id}`}
               />
             ))}
+            {comps.map((c) => (
+              <CompactRow
+                key={`c-${c.id}`}
+                href={`/competitions/c/${c.slug}`}
+                avatar={<CompetitionThumb comp={c} size="sm" />}
+                title={c.name}
+                subtitle={competitionSubtitle(c)}
+                onFollow={() => handleFollowCompetition(c.slug)}
+                disabled={followingComp}
+                testId={`button-follow-suggested-competition-${c.id}`}
+              />
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -288,6 +339,26 @@ export function SuggestionsPanel({
                 onFollow={() => handleFollowTeam(team.id)}
                 disabled={followTeam.isPending}
                 testId={`button-follow-suggested-team-${team.id}`}
+              />
+            ))}
+          </SuggestionSection>
+        )}
+
+        {comps.length > 0 && (
+          <SuggestionSection
+            title="Competitions"
+            icon={<Trophy className="w-4 h-4" />}
+          >
+            {comps.map((c) => (
+              <SuggestionRow
+                key={c.id}
+                href={`/competitions/c/${c.slug}`}
+                avatar={<CompetitionThumb comp={c} size="md" />}
+                title={c.name}
+                subtitle={competitionSubtitle(c)}
+                onFollow={() => handleFollowCompetition(c.slug)}
+                disabled={followingComp}
+                testId={`button-follow-suggested-competition-${c.id}`}
               />
             ))}
           </SuggestionSection>
@@ -486,6 +557,45 @@ function CompactRow({
           {exiting ? "Following" : "Follow"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function competitionSubtitle(c: SuggestedCompetition): string {
+  const kind = c.type === "league" ? "League" : "Tournament";
+  return c.location ? `${kind} · ${c.location}` : kind;
+}
+
+/**
+ * Logo/brand-color thumbnail for competition suggestion rows — mirrors the
+ * competition page hero (logo on brand color, trophy fallback).
+ */
+function CompetitionThumb({
+  comp,
+  size,
+}: {
+  comp: SuggestedCompetition;
+  size: "sm" | "md";
+}) {
+  const sizeClass = size === "sm" ? "w-9 h-9" : "w-10 h-10";
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center rounded-lg border border-border overflow-hidden shrink-0",
+        sizeClass,
+      )}
+      style={{ backgroundColor: comp.brandColor ?? "#0f172a" }}
+    >
+      {comp.logoUrl ? (
+        <img
+          src={comp.logoUrl}
+          alt={`${comp.name} logo`}
+          className="w-full h-full object-contain"
+          data-testid={`img-suggested-competition-logo-${comp.id}`}
+        />
+      ) : (
+        <Trophy className="w-4 h-4 text-white/90" />
+      )}
     </div>
   );
 }

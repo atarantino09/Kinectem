@@ -527,6 +527,13 @@ export default function FeedPage() {
           perSectionLimit={3}
           hideWhenEmpty
         />
+        <SuggestionsPanel
+          variant="compact"
+          section="competitions"
+          heading="Competitions to follow"
+          perSectionLimit={3}
+          hideWhenEmpty
+        />
       </aside>
     </div>
   );
