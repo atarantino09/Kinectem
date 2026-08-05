@@ -4,13 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
-import { OrganizerSidebar } from "@/components/OrganizerSidebar";
+import { NewHubDialog, OrganizerSidebar } from "@/components/OrganizerSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Upload } from "lucide-react";
+import { Building2, Trophy, Upload } from "lucide-react";
 
 // Competitions §4 — self-serve competition creation. Any signed-in user can
 // create a tournament or league they operate; the per-competition console
@@ -85,6 +85,8 @@ function CreateCompetitionCard({
   // Step 3 — schedule
   const [csv, setCsv] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
+  // First-time organizers can create a hub inline without leaving the wizard.
+  const [newHubOpen, setNewHubOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const finish = (id: string) => {
@@ -280,34 +282,80 @@ function CreateCompetitionCard({
                 </button>
               ))}
             </div>
-            {organizers.length > 0 && (
-              <div className="space-y-1.5">
-                <Label htmlFor="c-organizer" className="text-xs font-bold">
-                  Competition hub{" "}
-                  <span className="text-muted-foreground">(optional)</span>
-                </Label>
-                <select
-                  id="c-organizer"
-                  value={organizerId}
-                  onChange={(e) => setOrganizerId(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  data-testid="select-competition-organizer"
+            <div className="space-y-1.5">
+              <Label htmlFor="c-organizer" className="text-xs font-bold">
+                Competition hub{" "}
+                <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              {organizers.length === 0 ? (
+                <div
+                  className="rounded-lg border border-dashed border-border bg-muted/40 p-3 space-y-2"
+                  data-testid="hub-intro-empty"
                 >
-                  <option value="">Standalone (no hub)</option>
-                  {organizers.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-                {organizerId ? (
                   <p className="text-xs text-muted-foreground">
-                    Starts with your hub's branding — you can still customize
-                    it in the next step.
+                    A <strong className="text-foreground">competition hub</strong>{" "}
+                    is a home base for your company or organization — it groups
+                    all your tournaments and leagues under one brand with a
+                    shareable public page, and new competitions start with your
+                    hub's branding automatically.
                   </p>
-                ) : null}
-              </div>
-            )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="font-bold"
+                    onClick={() => setNewHubOpen(true)}
+                    data-testid="btn-create-hub-inline"
+                  >
+                    <Building2 className="w-4 h-4 mr-1.5" /> Create a competition
+                    hub
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground">
+                    Running a one-off event? Skip this — your competition will be
+                    standalone.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <select
+                    id="c-organizer"
+                    value={organizerId}
+                    onChange={(e) => setOrganizerId(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    data-testid="select-competition-organizer"
+                  >
+                    <option value="">Standalone (no hub)</option>
+                    {organizers.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                  {organizerId ? (
+                    <p className="text-xs text-muted-foreground">
+                      Starts with your hub's branding — you can still customize
+                      it in the next step.
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setNewHubOpen(true)}
+                    className="text-xs font-bold text-primary hover:underline"
+                    data-testid="btn-create-hub-inline"
+                  >
+                    + New competition hub
+                  </button>
+                </>
+              )}
+            </div>
+            <NewHubDialog
+              open={newHubOpen}
+              onOpenChange={setNewHubOpen}
+              onCreated={(row) => {
+                qc.invalidateQueries({ queryKey: ["my", "organizers"] });
+                setOrganizerId(row.id);
+              }}
+            />
             <div className="space-y-1.5">
               <Label htmlFor="c-name" className="text-xs font-bold">
                 Name

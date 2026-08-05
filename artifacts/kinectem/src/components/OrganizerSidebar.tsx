@@ -65,12 +65,16 @@ function readStoredExpanded(): boolean {
 
 // Dialog form for creating a new hub — moved here from the old
 // "Competition hub" card on the Competitions page (Task #745 cleanup).
-function NewHubDialog({
+export function NewHubDialog({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // When provided, called with the new hub instead of navigating to its
+  // page — e.g. the create-competition wizard selects it in place.
+  onCreated?: (row: SidebarOrganizerRow) => void;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -94,7 +98,11 @@ function NewHubDialog({
       onOpenChange(false);
       setName("");
       setDescription("");
-      navigate(`/competitions/o/${row.slug}`);
+      if (onCreated) {
+        onCreated(row);
+      } else {
+        navigate(`/competitions/o/${row.slug}`);
+      }
     },
     onError: (err) =>
       toast({
