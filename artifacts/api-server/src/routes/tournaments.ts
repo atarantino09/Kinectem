@@ -2395,6 +2395,82 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// Task #846 — DELETE /competitions/:id — delete the whole competition.
+// Operator-gated (owner, competition/hub admin, or platform admin) with the
+// same type-to-confirm contract as the bulk clear actions. DB cascades remove
+// matches, participants, followers, admin rows, and admin invites; recap
+// posts SURVIVE — their competition/game links are cleared explicitly (and
+// `featured` reset) so the count is exact, even though the FKs are SET NULL.
+// Same per-competition advisory lock as imports/clears so a delete can't
+// interleave with an in-flight import.
+// ---------------------------------------------------------------------------
+router.delete(
+  "/competitions/:id",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const tournament = await loadOperableCompetition(req, res);
+    if (!tournament) return;
+
+    const parsed = ClearAllBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Confirmation text is required.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    if (
+      normalizeConfirmName(parsed.data.confirm) !==
+      normalizeConfirmName(tournament.name)
+    ) {
+      return apiError(
+        res,
+        400,
+        `Type the competition's exact name ("${tournament.name}") to confirm.`,
+        { code: "CONFIRMATION_REQUIRED" },
+      );
+    }
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`competition-clear:${tournament.id}`}))`,
+      );
+
+      // Unlink recaps first (explicit + counted): clear both link columns
+      // and the operator-curated featured flag. The posts themselves stay.
+      const unlinked = await tx
+        .update(articles)
+        .set({ competitionId: null, competitionGameId: null, featured: false })
+        .where(eq(articles.competitionId, tournament.id))
+        .returning({ id: articles.id });
+
+      // Pre-delete counts for the response (cascades don't report rows).
+      const [counts] = await tx
+        .select({
+          games: sql<number>`(select count(*)::int from tournament_matches where tournament_id = ${tournament.id})`,
+          teams: sql<number>`(select count(*)::int from tournament_participants where tournament_id = ${tournament.id})`,
+          followers: sql<number>`(select count(*)::int from competition_followers where competition_id = ${tournament.id})`,
+        })
+        .from(sql`(select 1) as _`);
+
+      await tx.delete(tournaments).where(eq(tournaments.id, tournament.id));
+
+      return {
+        gamesDeleted: counts?.games ?? 0,
+        teamsRemoved: counts?.teams ?? 0,
+        followersRemoved: counts?.followers ?? 0,
+        recapsUnlinked: unlinked.length,
+      };
+    });
+
+    req.log.info(
+      { competitionId: tournament.id, name: tournament.name, ...result },
+      "competition deleted",
+    );
+    res.json({ ok: true, ...result });
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // POST /tournaments/:slug/claim — a signed-in visiting coach creates a SOLO
 // team (no organization) and claims an unclaimed participant slot in one
 // step. Race-safe: the claim is a conditional UPDATE ... WHERE team_id IS

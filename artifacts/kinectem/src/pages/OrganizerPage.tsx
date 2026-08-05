@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
@@ -27,8 +27,19 @@ import {
   MapPin,
   Pencil,
   Star,
+  Trash2,
   Trophy,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Task #723 — PUBLIC organizer hub page: the parent company's home base.
 // Branded hero (mirrors CompetitionPage), its competitions grouped by
@@ -117,6 +128,131 @@ function fmtDate(d: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+// Task #846 — owner-only hub delete. Type-to-confirm; the server blocks the
+// delete (409) while any competition is still attached, so the dialog warns
+// up front when the hub isn't empty.
+function DeleteHubButton({
+  organizer,
+  competitionCount,
+}: {
+  organizer: OrganizerMeta;
+  competitionCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState("");
+  const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  useEffect(() => {
+    if (!open) setConfirm("");
+  }, [open]);
+
+  const del = useMutation({
+    mutationFn: () =>
+      customFetch<{ ok: true }>(`/api/v1/organizers/${organizer.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm }),
+      }),
+    onSuccess: () => {
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
+      qc.invalidateQueries({ queryKey: ["organizer"] });
+      toast({ title: "Hub deleted" });
+      navigate("/competitions");
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't delete the hub",
+        description:
+          err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const blocked = competitionCount > 0;
+  const matches =
+    confirm.trim().replace(/\s+/g, " ").toLowerCase() ===
+    organizer.name.trim().replace(/\s+/g, " ").toLowerCase();
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="font-bold rounded-full border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+        onClick={() => setOpen(true)}
+        data-testid="btn-delete-hub"
+      >
+        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+        Delete hub
+      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent data-testid="dialog-delete-hub">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {blocked
+                ? "This hub still has competitions"
+                : `Delete "${organizer.name}"?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {blocked ? (
+                  <p>
+                    <span className="font-bold text-foreground">
+                      {competitionCount} competition
+                      {competitionCount === 1 ? " is" : "s are"} still attached
+                      to this hub.
+                    </span>{" "}
+                    Delete those competitions (or detach them from the hub)
+                    first — then you can delete the hub itself.
+                  </p>
+                ) : (
+                  <p>
+                    This permanently removes the hub — its branding, admins,
+                    followers, and pending admin invites. This can't be undone.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {!blocked ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="delete-hub-confirm" className="text-xs font-bold">
+                Type the hub name to confirm
+              </Label>
+              <Input
+                id="delete-hub-confirm"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder={organizer.name}
+                data-testid="input-delete-hub-confirm"
+              />
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="btn-delete-hub-cancel">
+              {blocked ? "Got it" : "Never mind"}
+            </AlertDialogCancel>
+            {!blocked ? (
+              <AlertDialogAction
+                disabled={!matches || del.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => {
+                  e.preventDefault();
+                  del.mutate();
+                }}
+                data-testid="btn-delete-hub-confirm"
+              >
+                {del.isPending ? "Deleting…" : "Delete forever"}
+              </AlertDialogAction>
+            ) : null}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }
 
 // Owner-only inline edit panel (details + branding).
@@ -591,6 +727,12 @@ export default function OrganizerPage() {
                   Create a competition
                 </Button>
               </Link>
+              {o.viewerIsOwner ? (
+                <DeleteHubButton
+                  organizer={o}
+                  competitionCount={competitions.length}
+                />
+              ) : null}
             </div>
             <CollapsibleContent className="pt-3">
               <EditHubPanel organizer={o} />

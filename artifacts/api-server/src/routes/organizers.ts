@@ -300,6 +300,88 @@ const AttachBody = z.object({
   attach: z.boolean(),
 });
 
+// ---------------------------------------------------------------------------
+// Task #846 — DELETE /organizers/:id — delete a hub. OWNER-only (or platform
+// admin), per the owner-only-destructive convention: hub admins can manage,
+// but only the owner may delete. Type-to-confirm (exact hub name). Blocked
+// (409) while any competition still references the hub — detach or delete
+// those first so a hub delete can never silently orphan live competitions.
+// DB cascades remove admin rows, follower rows, and admin invites.
+// ---------------------------------------------------------------------------
+const DeleteOrganizerBody = z.object({ confirm: z.string() });
+
+const normalizeConfirmName = (s: string) =>
+  s.trim().replace(/\s+/g, " ").toLowerCase();
+
+router.delete(
+  "/organizers/:id",
+  requireAuth,
+  organizerWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [organizer] = await db
+      .select()
+      .from(competitionOrganizers)
+      .where(eq(competitionOrganizers.id, req.params.id))
+      .limit(1);
+    if (!organizer) return apiError(res, 404, "Organizer not found");
+    if (me.role !== "admin" && organizer.ownerUserId !== me.id) {
+      return apiError(res, 403, "Only the hub owner can delete this hub");
+    }
+    const parsed = DeleteOrganizerBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "Confirmation text is required.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    if (
+      normalizeConfirmName(parsed.data.confirm) !==
+      normalizeConfirmName(organizer.name)
+    ) {
+      return apiError(
+        res,
+        400,
+        `Type the hub's exact name ("${organizer.name}") to confirm.`,
+        { code: "CONFIRMATION_REQUIRED" },
+      );
+    }
+    // Race-safe emptiness check: count + conditional delete run in one tx,
+    // and the delete re-checks via NOT EXISTS so a competition attached
+    // between the two can't slip through.
+    const outcome = await db.transaction(async (tx) => {
+      const [c] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(tournaments)
+        .where(eq(tournaments.organizerId, organizer.id));
+      const competitionCount = c?.n ?? 0;
+      if (competitionCount > 0) return { deleted: false, competitionCount };
+      const deleted = await tx.execute(
+        sql`DELETE FROM competition_organizers
+            WHERE id = ${organizer.id}
+              AND NOT EXISTS (
+                SELECT 1 FROM tournaments WHERE organizer_id = ${organizer.id}
+              )
+            RETURNING id`,
+      );
+      return { deleted: deleted.rows.length > 0, competitionCount: 0 };
+    });
+    if (!outcome.deleted) {
+      return apiError(
+        res,
+        409,
+        `This hub still has ${outcome.competitionCount || "attached"} competition${outcome.competitionCount === 1 ? "" : "s"}. Detach or delete them first, then delete the hub.`,
+        { code: "HUB_NOT_EMPTY" },
+      );
+    }
+    req.log.info(
+      { organizerId: organizer.id, name: organizer.name },
+      "organizer hub deleted",
+    );
+    res.json({ ok: true });
+  }),
+);
+
 router.post(
   "/organizers/:id/competitions",
   requireAuth,

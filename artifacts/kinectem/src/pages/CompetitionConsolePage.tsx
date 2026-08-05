@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
@@ -317,6 +317,110 @@ function ClearAllDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+// Task #846 — danger zone: delete the whole competition. Reuses the
+// type-to-confirm ClearAllDialog contract; the server (operator-gated)
+// cascades matches/teams/followers/invites and unlinks recaps (kept).
+function DangerZonePanel({
+  competitionId,
+  competitionName,
+}: {
+  competitionId: string;
+  competitionName: string;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const del = useMutation({
+    mutationFn: (confirm: string) =>
+      customFetch<{
+        ok: true;
+        gamesDeleted: number;
+        teamsRemoved: number;
+        recapsUnlinked: number;
+      }>(`/api/v1/competitions/${competitionId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm }),
+      }),
+    onSuccess: (r) => {
+      setConfirmOpen(false);
+      qc.invalidateQueries({ queryKey: ["my", "competitions"] });
+      qc.invalidateQueries({ queryKey: ["my", "organizers"] });
+      qc.invalidateQueries({ queryKey: ["competition"] });
+      toast({
+        title: "Competition deleted",
+        description: `${r.gamesDeleted} game${r.gamesDeleted === 1 ? "" : "s"} and ${r.teamsRemoved} team slot${r.teamsRemoved === 1 ? "" : "s"} removed · ${r.recapsUnlinked} recap${r.recapsUnlinked === 1 ? "" : "s"} kept (unlinked).`,
+      });
+      navigate("/competitions");
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't delete the competition",
+        description:
+          err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      }),
+  });
+
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base text-destructive">
+          <Trash2 className="w-4 h-4" />
+          Danger zone
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <p className="text-sm text-muted-foreground flex-1">
+          Delete this competition permanently — its schedule, team slots,
+          followers, and invites are removed. Published recaps are kept; they
+          just lose their link to this competition.
+        </p>
+        <Button
+          variant="outline"
+          className="font-bold border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground shrink-0"
+          onClick={() => setConfirmOpen(true)}
+          data-testid="btn-delete-competition"
+        >
+          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+          Delete competition
+        </Button>
+      </CardContent>
+      <ClearAllDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Delete "${competitionName}"?`}
+        description={
+          <>
+            <p>
+              This permanently removes the competition and everything attached
+              to it:{" "}
+              <span className="font-bold text-foreground">
+                all games, team slots, followers, and pending invites
+              </span>
+              . This can't be undone.
+            </p>
+            <p>
+              <span className="font-bold text-foreground">
+                Game recaps are NOT deleted
+              </span>{" "}
+              — they stay on their team pages, but their link to this
+              competition is cleared.
+            </p>
+          </>
+        }
+        competitionName={competitionName}
+        confirmLabel="Delete forever"
+        pending={del.isPending}
+        onConfirm={(confirm) => del.mutate(confirm)}
+        testId="dialog-delete-competition"
+      />
+    </Card>
   );
 }
 
@@ -3177,6 +3281,10 @@ function ConsoleWithTour({
       />
       <GamesPanel competitionId={row.id} slug={row.slug} />
       <CurationPanel competitionId={row.id} />
+      <DangerZonePanel
+        competitionId={row.id}
+        competitionName={detail?.name ?? row.name}
+      />
       </div>
       {tourOpen && <SpotlightTour steps={tourSteps} onFinish={finishTour} />}
     </OrganizerSidebar>
