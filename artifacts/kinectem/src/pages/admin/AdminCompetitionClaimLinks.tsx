@@ -351,6 +351,41 @@ export default function AdminCompetitionClaimLinks() {
     setBrandingTarget(r);
     setBrandDraft(r.brandColor ?? "");
     setSecondaryDraft(r.secondaryColor ?? "");
+    setDeleteConfirm("");
+    setDeleting(false);
+  };
+
+  // Danger zone inside the branding dialog: delete the competition after
+  // typing its exact name (server enforces the same confirmation rule).
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const deleteConfirmMatches =
+    brandingTarget != null &&
+    deleteConfirm.trim().toLowerCase() === brandingTarget.name.trim().toLowerCase();
+
+  const deleteCompetition = async () => {
+    if (!brandingTarget || !deleteConfirmMatches || deleting) return;
+    setDeleting(true);
+    try {
+      // Extra-spec endpoint (openapi locked) — call it directly.
+      await customFetch(`/api/v1/competitions/${brandingTarget.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirm: deleteConfirm.trim() }),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "competition-claim-links"],
+      });
+      toast({ title: `Deleted "${brandingTarget.name}"` });
+      setBrandingTarget(null);
+    } catch (err) {
+      toast({
+        title: "Couldn't delete competition",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const brandingValid =
@@ -776,6 +811,33 @@ export default function AdminCompetitionClaimLinks() {
                 data-testid="preview-competition-branding"
               />
             )}
+
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+              <p className="text-sm font-medium text-destructive">
+                Delete this competition
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Permanently removes the competition, its schedule, team slots,
+                followers, and this claim link. Published recaps stay but are
+                unlinked. Type the competition's exact name to confirm.
+              </p>
+              <Input
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={brandingTarget?.name ?? ""}
+                disabled={deleting}
+                data-testid="input-delete-competition-confirm"
+              />
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={deleteCompetition}
+                disabled={!deleteConfirmMatches || deleting}
+                data-testid="btn-delete-competition"
+              >
+                {deleting ? "Deleting…" : "Delete competition"}
+              </Button>
+            </div>
           </div>
           <DialogFooter>
             <Button
