@@ -259,14 +259,11 @@ type CompetitionClaimResolve = {
   alreadyClaimed: boolean;
 };
 
-export function CompetitionClaimBanner({ slug }: { slug: string }) {
-  const { token, autoClaim } = useClaimTokenParams();
-  const { toast } = useToast();
-  const { data: me } = useGetLoggedInUser();
-  const [claiming, setClaiming] = useState(false);
-  const attempted = useRef(false);
-
-  const resolve = useQuery<CompetitionClaimResolve>({
+// Shared resolve query (deduped by queryKey) so CompetitionPage can also
+// react to a valid unclaimed token — e.g. auto-expanding the "How your
+// competition works" walkthrough for the prospective operator (Task #851).
+export function useCompetitionClaimResolve(token: string) {
+  return useQuery<CompetitionClaimResolve>({
     queryKey: ["competition-claim-link", token],
     queryFn: () =>
       customFetch<CompetitionClaimResolve>(
@@ -276,6 +273,16 @@ export function CompetitionClaimBanner({ slug }: { slug: string }) {
     enabled: !!token,
     retry: false,
   });
+}
+
+export function CompetitionClaimBanner({ slug }: { slug: string }) {
+  const { token, autoClaim } = useClaimTokenParams();
+  const { toast } = useToast();
+  const { data: me } = useGetLoggedInUser();
+  const [claiming, setClaiming] = useState(false);
+  const attempted = useRef(false);
+
+  const resolve = useCompetitionClaimResolve(token);
 
   const finalize = useCallback(async () => {
     setClaiming(true);

@@ -26,7 +26,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CompetitionClaimBanner } from "@/components/ClaimTokenBanner";
+import {
+  CompetitionClaimBanner,
+  useClaimTokenParams,
+  useCompetitionClaimResolve,
+} from "@/components/ClaimTokenBanner";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
 // from org/team pages on purpose: the hero is themed with the operator's
@@ -153,6 +157,12 @@ export default function CompetitionPage() {
   const { data: me } = useGetLoggedInUser();
   const [teamsOpen, setTeamsOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  // Task #851 — a valid, unclaimed claim token means the viewer is the
+  // prospective operator: show the "How your competition works" walkthrough
+  // even though they can't manage yet, and start it expanded.
+  const { token: claimToken } = useClaimTokenParams();
+  const claimResolve = useCompetitionClaimResolve(claimToken);
 
   const q = useQuery<CompetitionResponse>({
     queryKey: ["competition", slug],
@@ -449,12 +459,22 @@ export default function CompetitionPage() {
         {/* Organizer-only lifecycle explainer — starts collapsed (like the
             Teams and Schedule sections below); the organizer expands it via
             the chevron when they want the walkthrough. */}
-        {c.canManage ? (
-          <CompetitionHowItWorks
-            brandColor={c.brandColor}
-            secondaryColor={c.secondaryColor}
-          />
-        ) : null}
+        {(() => {
+          // Task #851 — a prospective operator arriving via a valid,
+          // unclaimed claim link sees the walkthrough too, already expanded.
+          const isClaimVisitor =
+            !c.canManage &&
+            !!claimResolve.data &&
+            claimResolve.data.competition.slug === slug &&
+            !claimResolve.data.alreadyClaimed;
+          return c.canManage || isClaimVisitor ? (
+            <CompetitionHowItWorks
+              brandColor={c.brandColor}
+              secondaryColor={c.secondaryColor}
+              defaultOpen={isClaimVisitor}
+            />
+          ) : null;
+        })()}
 
         {/* Featured game recaps rail (§7) — the visual centerpiece; hidden
             entirely until the operator features at least one recap. Each
