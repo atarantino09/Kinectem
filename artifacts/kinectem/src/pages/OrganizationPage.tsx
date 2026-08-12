@@ -96,6 +96,7 @@ import { readOrgBrandColors, orgHeroGradient } from "@/lib/orgBrand";
 import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import { useWhoami } from "@/hooks/useWhoami";
+import { OrgClaimBanner } from "@/components/ClaimTokenBanner";
 
 type TeamRailItem = {
   id: string;
@@ -636,6 +637,8 @@ export default function OrganizationPage() {
                 </Button>
               </div>
             )}
+          {/* Task #850 — red claim CTA when a valid ?claimToken= is present. */}
+          <OrgClaimBanner orgId={orgId} />
           {/* Hero */}
           <div className="relative rounded-xl border border-border shadow-sm overflow-hidden bg-card">
             <PersonaPill

@@ -56,7 +56,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const status = (currentUserError as { status?: number } | null)?.status;
-    if (status === 401 && location !== "/login") {
+    // Task #850 — claim-link visits (`?claimToken=`) must stay viewable
+    // logged-out so the recipient can preview the real page before signing
+    // up; the claim banner on the page owns the signup hand-off.
+    const hasClaimToken =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("claimToken");
+    if (status === 401 && location !== "/login" && !hasClaimToken) {
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         window.location.assign(`${base}/login`);

@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { CompetitionClaimBanner } from "@/components/ClaimTokenBanner";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
 // from org/team pages on purpose: the hero is themed with the operator's
@@ -284,6 +285,10 @@ export default function CompetitionPage() {
 
   return (
     <div className="min-h-screen">
+      {/* Task #850 — red claim CTA when a valid ?claimToken= is present. */}
+      <div className="max-w-4xl mx-auto px-6 pt-4 empty:hidden">
+        <CompetitionClaimBanner slug={slug} />
+      </div>
       {/* Branded hero (§9a/§10) — brand_color band, logo-forward */}
       <div
         style={{ background: heroBackground, color: heroText }}
