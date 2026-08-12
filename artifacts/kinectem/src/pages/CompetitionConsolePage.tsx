@@ -432,11 +432,13 @@ function DangerZonePanel({
 function DetailsPanel({
   detail,
   competitionId,
+  preview = false,
 }: {
   detail: CompetitionDetail["competition"];
   competitionId: string;
+  preview?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(preview);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [name, setName] = useState(detail.name);
@@ -607,11 +609,13 @@ function DetailsPanel({
 function BrandingPanel({
   detail,
   competitionId,
+  preview = false,
 }: {
   detail: CompetitionDetail["competition"];
   competitionId: string;
+  preview?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(preview);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [brandColor, setBrandColor] = useState(detail.brandColor ?? "");
@@ -757,6 +761,7 @@ function InviteTeamsPanel({
   autoApproveClaims,
   slug,
   promoCode,
+  preview = false,
 }: {
   name: string;
   type: "tournament" | "league";
@@ -766,8 +771,9 @@ function InviteTeamsPanel({
   autoApproveClaims: boolean;
   slug: string;
   promoCode: string | null;
+  preview?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(preview);
   const { toast } = useToast();
 
   // Absolute public link (with the /app prefix) so it works when pasted
@@ -893,13 +899,15 @@ function PromoReferralPanel({
   competitionName,
   promoCode,
   hubPromoCode,
+  preview = false,
 }: {
   competitionId: string;
   competitionName: string;
   promoCode: string | null;
   hubPromoCode: string | null;
+  preview?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(preview);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -1143,14 +1151,16 @@ function ClaimsPanel({
   competitionName,
   participantCount,
   claimedCount,
+  preview = false,
 }: {
   competitionId: string;
   autoApproveClaims: boolean;
   competitionName: string;
   participantCount: number;
   claimedCount: number;
+  preview?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(preview);
   const [clearOpen, setClearOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1195,6 +1205,8 @@ function ClaimsPanel({
         `/api/v1/competitions/${competitionId}/claims/pending`,
         { method: "GET" },
       ),
+    // Owner-only endpoint — skip it in claim preview (would 401).
+    enabled: !preview,
   });
 
   const toggle = useMutation({
@@ -1400,8 +1412,14 @@ interface CurationRecap {
   createdAt: string;
 }
 
-function CurationPanel({ competitionId }: { competitionId: string }) {
-  const [open, setOpen] = useState(false);
+function CurationPanel({
+  competitionId,
+  preview = false,
+}: {
+  competitionId: string;
+  preview?: boolean;
+}) {
+  const [open, setOpen] = useState(preview);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -1421,6 +1439,8 @@ function CurationPanel({ competitionId }: { competitionId: string }) {
         `/api/v1/competitions/${competitionId}/recaps`,
         { method: "GET" },
       ),
+    // Owner-only endpoint — skip it in claim preview (would 401).
+    enabled: !preview,
   });
 
   const feature = useMutation({
@@ -1549,13 +1569,16 @@ function SchedulePanel({
   matchCount,
   isLeague,
   competitionName,
+  // Renamed locally: this panel already has a `preview` state (CSV dry-run).
+  preview: claimPreviewMode = false,
 }: {
   competitionId: string;
   matchCount: number;
   isLeague: boolean;
   competitionName: string;
+  preview?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(claimPreviewMode);
   const [clearOpen, setClearOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2307,9 +2330,11 @@ function GameFormFields({
 function GamesPanel({
   competitionId,
   slug,
+  preview = false,
 }: {
   competitionId: string;
   slug: string;
+  preview?: boolean;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2345,7 +2370,7 @@ function GamesPanel({
   const [deleteTarget, setDeleteTarget] = useState<ConsoleMatch | null>(null);
   // Long schedules (hundreds of games) shouldn't dominate the console —
   // collapsed by default, expand on demand.
-  const [listOpen, setListOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(preview);
 
   const openAdd = () => {
     setForm({ ...EMPTY_GAME_FORM, matchNumber: suggestMatchNumber(matches) });
@@ -3099,56 +3124,82 @@ export default function CompetitionConsolePage() {
       customFetch<{ data: CompetitionRow[] }>(`/api/v1/my/competitions`, {
         method: "GET",
       }),
+    // With a claim token in the URL, hold this auth-gated request until the
+    // token resolves: preview visitors (often anonymous) never need it, so
+    // don't fire a 401-retry loop for them. Tokenless visits load it
+    // immediately as before.
+    enabled:
+      !claimToken || (!claimResolve.isLoading && !claimPreview),
   });
 
   const row = (listQ.data?.data ?? []).find((c) => c.id === competitionId);
 
+  // Claim-preview visitors have no /my/competitions row — fall back to the
+  // slug the claim token resolved to (same public endpoint either way).
+  const detailSlug = row?.slug ?? claimPreview?.competition.slug ?? "";
+
   const detailQ = useQuery<CompetitionDetail>({
-    queryKey: ["competition", row?.slug],
+    queryKey: ["competition", detailSlug],
     queryFn: () =>
       customFetch<CompetitionDetail>(
-        `/api/v1/competitions/${encodeURIComponent(row?.slug ?? "")}`,
+        `/api/v1/competitions/${encodeURIComponent(detailSlug)}`,
         { method: "GET" },
       ),
-    enabled: !!row?.slug,
+    enabled: !!detailSlug,
   });
 
-  // Claim-preview branches come first: an unclaimed competition can't be in
+  // Claim-preview branch comes first: an unclaimed competition can't be in
   // anyone's /my/competitions list, so don't hold the preview hostage to that
   // (auth-gated, retrying) request — anonymous visitors would stare at a
-  // skeleton for seconds otherwise.
+  // skeleton for seconds otherwise. The full console renders read-only with
+  // every section expanded; claiming remounts the page as the real operator.
   if (!row && claimPreview) {
-    // Claim-link preview: not an operator yet. Show the claim banner and the
-    // walkthrough (expanded); editing unlocks after claiming.
+    const previewDetail = detailQ.data?.competition;
+    if (!previewDetail) {
+      return (
+        <div className="max-w-3xl mx-auto space-y-4">
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
+      );
+    }
+    // Public detail response also carries the public counts + matches (same
+    // endpoint the public page and GamesPanel use) — enough for a synthetic
+    // console row.
+    const pub = previewDetail as CompetitionDetail["competition"] & {
+      participantCount?: number;
+      claimedCount?: number;
+    };
+    const matchCount =
+      (detailQ.data as { matches?: unknown[] } | undefined)?.matches?.length ??
+      0;
+    const previewRow: CompetitionRow = {
+      id: previewDetail.id,
+      slug: previewDetail.slug,
+      name: previewDetail.name,
+      type: previewDetail.type,
+      startDate: previewDetail.startDate,
+      endDate: previewDetail.endDate,
+      location: previewDetail.location,
+      organizerId: null,
+      autoApproveClaims: previewDetail.autoApproveClaims,
+      logoUrl: previewDetail.logoUrl,
+      brandColor: previewDetail.brandColor,
+      matchCount,
+      participantCount: pub.participantCount ?? 0,
+      claimedCount: pub.claimedCount ?? 0,
+      pendingClaimCount: 0,
+    };
     return (
-      <div className="max-w-3xl mx-auto space-y-4">
-        <CompetitionClaimBanner slug={claimPreview.competition.slug} />
-        <Card>
-          <CardContent className="p-6 space-y-1">
-            <h1
-              className="text-xl font-extrabold"
-              data-testid="text-claim-preview-title"
-            >
-              {claimPreview.competition.name}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              This is a preview of your competition console. Claim the
-              competition above to unlock editing — branding, schedule
-              import, team invites, and recap curation.
-            </p>
-            <p className="text-sm">
-              <Link
-                href={`/competitions/c/${encodeURIComponent(claimPreview.competition.slug)}?claimToken=${encodeURIComponent(claimToken)}`}
-                className="font-bold underline"
-                data-testid="link-claim-preview-public-page"
-              >
-                View the public page
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
-        <CompetitionHowItWorks defaultOpen />
-      </div>
+      <ConsoleWithTour
+        row={previewRow}
+        detail={previewDetail}
+        tourOpen={false}
+        setTourOpen={setTourOpen}
+        finishTour={finishTour}
+        tourSteps={tourSteps}
+        preview
+      />
     );
   }
 
@@ -3202,6 +3253,7 @@ function ConsoleWithTour({
   setTourOpen,
   finishTour,
   tourSteps,
+  preview = false,
 }: {
   row: CompetitionRow;
   detail: CompetitionDetail["competition"] | undefined;
@@ -3209,12 +3261,17 @@ function ConsoleWithTour({
   setTourOpen: (v: boolean) => void;
   finishTour: () => void;
   tourSteps: TourStep[];
+  // Claim-link preview: prospective operator, not an owner yet. Everything
+  // renders expanded and read-only (disabled fieldset); owner-only child
+  // queries are skipped. Server-side authorization is unaffected.
+  preview?: boolean;
 }) {
+  const { token: previewClaimToken } = useClaimTokenParams();
   // Open the walkthrough once per browser, the first time the organizer lands
   // on any competition console (only organizers can reach this page — the
   // /my/competitions lookup above already filtered to competitions they run).
   useEffect(() => {
-    if (typeof window === "undefined" || !detail) return;
+    if (typeof window === "undefined" || !detail || preview) return;
     let alreadySeen = false;
     try {
       alreadySeen = localStorage.getItem(COMP_TOUR_KEY) === "1";
@@ -3222,17 +3279,31 @@ function ConsoleWithTour({
       // storage blocked (private mode etc.) — treat as not seen
     }
     if (!alreadySeen) setTourOpen(true);
-  }, [detail, setTourOpen]);
+  }, [detail, setTourOpen, preview]);
 
   return (
     <OrganizerSidebar>
       <div className="max-w-3xl mx-auto space-y-6">
+      {preview ? (
+        <>
+          <CompetitionClaimBanner slug={row.slug} />
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-claim-preview-note"
+          >
+            This is your competition console — everything below is what you'll
+            manage. It's read-only until you claim the competition above.
+          </p>
+        </>
+      ) : null}
       <div className="space-y-2">
-        <Link href="/competitions">
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline cursor-pointer">
-            <ArrowLeft className="w-3 h-3" /> My competitions
-          </span>
-        </Link>
+        {!preview ? (
+          <Link href="/competitions">
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline cursor-pointer">
+              <ArrowLeft className="w-3 h-3" /> My competitions
+            </span>
+          </Link>
+        ) : null}
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -3254,18 +3325,24 @@ function ConsoleWithTour({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="font-bold rounded-full"
-              onClick={() => setTourOpen(true)}
-              data-testid="btn-competition-replay-tour"
-            >
-              <Compass className="w-3.5 h-3.5 mr-1.5" />
-              Show me around
-            </Button>
+            {!preview ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-bold rounded-full"
+                onClick={() => setTourOpen(true)}
+                data-testid="btn-competition-replay-tour"
+              >
+                <Compass className="w-3.5 h-3.5 mr-1.5" />
+                Show me around
+              </Button>
+            ) : null}
             <a
-              href={`/app/c/${row.slug}`}
+              href={`/app/c/${row.slug}${
+                preview && previewClaimToken
+                  ? `?claimToken=${encodeURIComponent(previewClaimToken)}`
+                  : ""
+              }`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -3283,24 +3360,43 @@ function ConsoleWithTour({
         </div>
       </div>
 
+      {/* In claim preview everything renders expanded but read-only: the
+          fieldset disables every form control (inputs, buttons, switches,
+          chevron toggles) in one place. Server-side authorization is the real
+          boundary — this is purely presentational. */}
+      <fieldset
+        disabled={preview}
+        className="space-y-6 min-w-0"
+        data-testid={preview ? "fieldset-claim-preview" : undefined}
+      >
       {/* Compact lifecycle guide right where the organizer does the work —
-          starts collapsed like every section so the page lands condensed. */}
+          starts collapsed like every section so the page lands condensed
+          (expanded for claim-preview visitors). */}
       <CompetitionHowItWorks
         brandColor={detail?.brandColor}
         secondaryColor={detail?.secondaryColor}
+        defaultOpen={preview}
       />
 
-      <HubPanel competitionId={row.id} organizerId={row.organizerId} />
-      {/* Task #745 — per-competition admin management (any admin can add;
-          only the owner can remove). */}
-      <CompetitionAdminsPanel kind="competition" targetId={row.id} collapsible />
+      {!preview ? (
+        <>
+          <HubPanel competitionId={row.id} organizerId={row.organizerId} />
+          {/* Task #745 — per-competition admin management (any admin can add;
+              only the owner can remove). */}
+          <CompetitionAdminsPanel
+            kind="competition"
+            targetId={row.id}
+            collapsible
+          />
+        </>
+      ) : null}
       {detail ? (
-        <DetailsPanel detail={detail} competitionId={row.id} />
+        <DetailsPanel detail={detail} competitionId={row.id} preview={preview} />
       ) : (
         <Skeleton className="h-48 rounded-xl" />
       )}
       {detail ? (
-        <BrandingPanel detail={detail} competitionId={row.id} />
+        <BrandingPanel detail={detail} competitionId={row.id} preview={preview} />
       ) : (
         <Skeleton className="h-48 rounded-xl" />
       )}
@@ -3309,12 +3405,14 @@ function ConsoleWithTour({
         competitionName={detail?.name ?? row.name}
         promoCode={detail?.promoCode ?? null}
         hubPromoCode={detail?.organizer?.promoCode ?? null}
+        preview={preview}
       />
       <SchedulePanel
         competitionId={row.id}
         matchCount={row.matchCount}
         isLeague={row.type === "league"}
         competitionName={detail?.name ?? row.name}
+        preview={preview}
       />
       <InviteTeamsPanel
         name={detail?.name ?? row.name}
@@ -3328,6 +3426,7 @@ function ConsoleWithTour({
           detail?.promoCode,
           detail?.organizer?.promoCode,
         )}
+        preview={preview}
       />
       <ClaimsPanel
         competitionId={row.id}
@@ -3335,13 +3434,15 @@ function ConsoleWithTour({
         competitionName={detail?.name ?? row.name}
         participantCount={row.participantCount}
         claimedCount={row.claimedCount}
+        preview={preview}
       />
-      <GamesPanel competitionId={row.id} slug={row.slug} />
-      <CurationPanel competitionId={row.id} />
+      <GamesPanel competitionId={row.id} slug={row.slug} preview={preview} />
+      <CurationPanel competitionId={row.id} preview={preview} />
       <DangerZonePanel
         competitionId={row.id}
         competitionName={detail?.name ?? row.name}
       />
+      </fieldset>
       </div>
       {tourOpen && <SpotlightTour steps={tourSteps} onFinish={finishTour} />}
     </OrganizerSidebar>
