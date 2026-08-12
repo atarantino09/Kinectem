@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download } from "lucide-react";
+import { ArrowDown, ArrowUp, Download } from "lucide-react";
 
 // Admin "Claims" tracker — one place to see every organization and
 // competition that has been claimed: what, by whom, when, and how.
@@ -103,8 +103,50 @@ function fmtDate(iso: string | null): string {
   });
 }
 
+type SortDir = "desc" | "asc";
+
+function dateValue(iso: string | null): number {
+  if (!iso) return 0; // unknown dates sink to the oldest end
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function SortableDateHead({
+  label,
+  dir,
+  onToggle,
+  testid,
+}: {
+  label: string;
+  dir: SortDir;
+  onToggle: () => void;
+  testid: string;
+}) {
+  return (
+    <TableHead>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-1 hover:text-foreground"
+        data-testid={testid}
+      >
+        {label}
+        {dir === "desc" ? (
+          <ArrowDown className="w-3.5 h-3.5" />
+        ) : (
+          <ArrowUp className="w-3.5 h-3.5" />
+        )}
+      </button>
+    </TableHead>
+  );
+}
+
 export default function AdminClaims() {
   const [q, setQ] = useState("");
+  const [orgSort, setOrgSort] = useState<SortDir>("desc");
+  const [compSort, setCompSort] = useState<SortDir>("desc");
+  const [slotSort, setSlotSort] = useState<SortDir>("desc");
+  const flip = (d: SortDir): SortDir => (d === "desc" ? "asc" : "desc");
 
   const { data, isLoading, isError } = useQuery<ClaimsResponse>({
     queryKey: ["admin", "claims"],
@@ -118,30 +160,45 @@ export default function AdminClaims() {
 
   const orgs = useMemo(
     () =>
-      (data?.organizations.claimed ?? []).filter((r) =>
-        match(r.name, r.ownerName, r.ownerEmail, r.city, r.state),
-      ),
-    [data, needle],
+      (data?.organizations.claimed ?? [])
+        .filter((r) => match(r.name, r.ownerName, r.ownerEmail, r.city, r.state))
+        .sort((a, b) =>
+          orgSort === "desc"
+            ? dateValue(b.claimedAt) - dateValue(a.claimedAt)
+            : dateValue(a.claimedAt) - dateValue(b.claimedAt),
+        ),
+    [data, needle, orgSort],
   );
   const comps = useMemo(
     () =>
-      (data?.competitions.claimed ?? []).filter((r) =>
-        match(r.name, r.ownerName, r.ownerEmail),
-      ),
-    [data, needle],
+      (data?.competitions.claimed ?? [])
+        .filter((r) => match(r.name, r.ownerName, r.ownerEmail))
+        .sort((a, b) =>
+          // Competitions have no recorded claim timestamp — sort by start date.
+          compSort === "desc"
+            ? b.startDate.localeCompare(a.startDate)
+            : a.startDate.localeCompare(b.startDate),
+        ),
+    [data, needle, compSort],
   );
   const slots = useMemo(
     () =>
-      (data?.slotClaims ?? []).filter((r) =>
-        match(
-          r.competitionName,
-          r.slotName,
-          r.teamName,
-          r.claimedByName,
-          r.claimedByEmail,
+      (data?.slotClaims ?? [])
+        .filter((r) =>
+          match(
+            r.competitionName,
+            r.slotName,
+            r.teamName,
+            r.claimedByName,
+            r.claimedByEmail,
+          ),
+        )
+        .sort((a, b) =>
+          slotSort === "desc"
+            ? dateValue(b.claimedAt) - dateValue(a.claimedAt)
+            : dateValue(a.claimedAt) - dateValue(b.claimedAt),
         ),
-      ),
-    [data, needle],
+    [data, needle, slotSort],
   );
 
   const exportAll = () => {
@@ -290,7 +347,12 @@ export default function AdminClaims() {
                 <TableRow>
                   <TableHead>Organization</TableHead>
                   <TableHead>Claimed by</TableHead>
-                  <TableHead>When</TableHead>
+                  <SortableDateHead
+                    label="When"
+                    dir={orgSort}
+                    onToggle={() => setOrgSort(flip(orgSort))}
+                    testid="btn-sort-orgs-date"
+                  />
                   <TableHead>How</TableHead>
                 </TableRow>
               </TableHeader>
@@ -348,7 +410,12 @@ export default function AdminClaims() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Competition</TableHead>
-                  <TableHead>Dates</TableHead>
+                  <SortableDateHead
+                    label="Dates"
+                    dir={compSort}
+                    onToggle={() => setCompSort(flip(compSort))}
+                    testid="btn-sort-comps-date"
+                  />
                   <TableHead>Claimed by</TableHead>
                   <TableHead>How</TableHead>
                 </TableRow>
@@ -406,7 +473,12 @@ export default function AdminClaims() {
                   <TableHead>Slot</TableHead>
                   <TableHead>Linked team</TableHead>
                   <TableHead>Claimed by</TableHead>
-                  <TableHead>When</TableHead>
+                  <SortableDateHead
+                    label="When"
+                    dir={slotSort}
+                    onToggle={() => setSlotSort(flip(slotSort))}
+                    testid="btn-sort-slots-date"
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
