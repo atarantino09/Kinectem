@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
@@ -65,6 +65,12 @@ export function CompetitionHowItWorks({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // The claim-link resolve can finish after mount (e.g. for signed-in
+  // managers the section renders immediately), so react when defaultOpen
+  // flips to true. Never force-close — the user can still collapse it.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
 
   const payoffBg = brandColor
     ? secondaryColor

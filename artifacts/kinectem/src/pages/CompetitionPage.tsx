@@ -463,7 +463,6 @@ export default function CompetitionPage() {
           // Task #851 — a prospective operator arriving via a valid,
           // unclaimed claim link sees the walkthrough too, already expanded.
           const isClaimVisitor =
-            !c.canManage &&
             !!claimResolve.data &&
             claimResolve.data.competition.slug === slug &&
             !claimResolve.data.alreadyClaimed;
