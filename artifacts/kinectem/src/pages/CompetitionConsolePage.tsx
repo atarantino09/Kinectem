@@ -6,6 +6,11 @@ import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
 import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
+import {
+  CompetitionClaimBanner,
+  useClaimTokenParams,
+  useCompetitionClaimResolve,
+} from "@/components/ClaimTokenBanner";
 import { OrganizerSidebar } from "@/components/OrganizerSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -2920,6 +2925,19 @@ export default function CompetitionConsolePage() {
   const competitionId = params?.id ?? "";
   const [tourOpen, setTourOpen] = useState(false);
 
+  // A prospective operator can arrive here from a claim link ("Edit
+  // competition" on the public page carries ?claimToken=). They get a
+  // read-only preview — claim banner + walkthrough — until they actually
+  // claim; every edit endpoint stays owner-only server-side.
+  const { token: claimToken } = useClaimTokenParams();
+  const claimResolve = useCompetitionClaimResolve(claimToken);
+  const claimPreview =
+    !!claimResolve.data &&
+    claimResolve.data.competition.id === competitionId &&
+    !claimResolve.data.alreadyClaimed
+      ? claimResolve.data
+      : null;
+
   const tourSteps = useMemo<TourStep[]>(
     () => [
       {
@@ -3095,7 +3113,46 @@ export default function CompetitionConsolePage() {
     enabled: !!row?.slug,
   });
 
-  if (listQ.isLoading) {
+  // Claim-preview branches come first: an unclaimed competition can't be in
+  // anyone's /my/competitions list, so don't hold the preview hostage to that
+  // (auth-gated, retrying) request — anonymous visitors would stare at a
+  // skeleton for seconds otherwise.
+  if (!row && claimPreview) {
+    // Claim-link preview: not an operator yet. Show the claim banner and the
+    // walkthrough (expanded); editing unlocks after claiming.
+    return (
+      <div className="max-w-3xl mx-auto space-y-4">
+        <CompetitionClaimBanner slug={claimPreview.competition.slug} />
+        <Card>
+          <CardContent className="p-6 space-y-1">
+            <h1
+              className="text-xl font-extrabold"
+              data-testid="text-claim-preview-title"
+            >
+              {claimPreview.competition.name}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              This is a preview of your competition console. Claim the
+              competition above to unlock editing — branding, schedule
+              import, team invites, and recap curation.
+            </p>
+            <p className="text-sm">
+              <Link
+                href={`/competitions/c/${encodeURIComponent(claimPreview.competition.slug)}?claimToken=${encodeURIComponent(claimToken)}`}
+                className="font-bold underline"
+                data-testid="link-claim-preview-public-page"
+              >
+                View the public page
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
+        <CompetitionHowItWorks defaultOpen />
+      </div>
+    );
+  }
+
+  if (listQ.isLoading || (!row && claimToken && claimResolve.isLoading)) {
     return (
       <div className="max-w-3xl mx-auto space-y-4">
         <Skeleton className="h-24 rounded-xl" />
