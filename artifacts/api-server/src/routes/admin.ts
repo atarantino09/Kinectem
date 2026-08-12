@@ -23,11 +23,13 @@ import {
   scheduleEvents,
   scheduleEventRsvps,
   tournaments,
+  tournamentParticipants,
   announcements,
   guardianLinks,
   stagedCoachInvites,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { hardDeleteUser } from "@workspace/user-hard-delete";
 import { asyncHandler } from "../lib/async-handler";
@@ -2915,6 +2917,160 @@ router.get(
       .orderBy(asc(teams.name))
       .limit(500);
     res.json({ data: rows });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// GET /admin/claims — one place to track everything that has been claimed.
+// Extra-spec (openapi locked), platform-admin only via router-wide gate.
+//
+// "Claimable" org = one that carries a claim token (bulk-seeded hand-off
+// pages) OR that ever received a claim request. An org counts as CLAIMED
+// when it has an owner row AND is claimable — orgs created the normal way
+// (owner from day one, no token, no request) are excluded so the list is
+// about the hand-off funnel, not every org on the platform.
+// Method: an approved claim request by the owner = "request"; otherwise the
+// owner arrived through the secret claim link = "link".
+//
+// Competition claims come in two shapes:
+//  - page takeovers: seeded competitions (claim token) whose owner_user_id
+//    is now set (the link claim stamps owner + createdBy together).
+//    tournaments has no claim timestamp, so claimedAt is null there.
+//  - team-slot claims: tournament_participants rows with claimed_by stamped
+//    (these DO carry claimed_at).
+// ---------------------------------------------------------------------------
+router.get(
+  "/claims",
+  asyncHandler(async (_req, res) => {
+    const owners = alias(users, "owners");
+
+    // --- Organizations ----------------------------------------------------
+    const [orgTotals] = await db
+      .select({
+        seeded: sql<number>`count(*) filter (where ${organizations.claimToken} is not null)::int`,
+      })
+      .from(organizations);
+
+    const claimedOrgs = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        city: organizations.city,
+        state: organizations.state,
+        claimToken: organizations.claimToken,
+        ownerId: organizationAdmins.userId,
+        ownerName: owners.name,
+        ownerEmail: owners.email,
+        ownerSince: organizationAdmins.createdAt,
+        // Literal table qualification on purpose: drizzle renders ${table.col}
+        // inside raw sql`` UNQUALIFIED, which breaks correlation with the
+        // outer query (see drizzle-sql-template-unqualified memory).
+        approvedRequestAt: sql<string | null>`(
+          select max(ocr.decided_at)
+          from organization_claim_requests ocr
+          where ocr.organization_id = organizations.id
+            and ocr.requested_by_user_id = organization_admins.user_id
+            and ocr.status = 'approved'
+        )`,
+        hasAnyRequest: sql<boolean>`exists (
+          select 1 from organization_claim_requests ocr
+          where ocr.organization_id = organizations.id
+        )`,
+      })
+      .from(organizations)
+      .innerJoin(
+        organizationAdmins,
+        and(
+          eq(organizationAdmins.organizationId, organizations.id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .innerJoin(owners, eq(owners.id, organizationAdmins.userId))
+      .orderBy(desc(organizationAdmins.createdAt));
+
+    const orgRows = claimedOrgs
+      .filter((r) => r.claimToken != null || r.hasAnyRequest)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        city: r.city,
+        state: r.state,
+        ownerId: r.ownerId,
+        ownerName: r.ownerName,
+        ownerEmail: r.ownerEmail,
+        claimedAt: (r.approvedRequestAt ?? r.ownerSince) as Date | string | null,
+        method: r.approvedRequestAt ? ("request" as const) : ("link" as const),
+      }));
+
+    // --- Competitions: page takeovers --------------------------------------
+    const [compTotals] = await db
+      .select({
+        seeded: sql<number>`count(*) filter (where ${tournaments.claimToken} is not null)::int`,
+        claimed: sql<number>`count(*) filter (where ${tournaments.claimToken} is not null and ${tournaments.ownerUserId} is not null)::int`,
+      })
+      .from(tournaments);
+
+    const claimedComps = await db
+      .select({
+        id: tournaments.id,
+        slug: tournaments.slug,
+        name: tournaments.name,
+        type: tournaments.type,
+        startDate: tournaments.startDate,
+        endDate: tournaments.endDate,
+        ownerId: tournaments.ownerUserId,
+        ownerName: owners.name,
+        ownerEmail: owners.email,
+        updatedAt: tournaments.updatedAt,
+      })
+      .from(tournaments)
+      .innerJoin(owners, eq(owners.id, tournaments.ownerUserId))
+      .where(isNotNull(tournaments.claimToken))
+      .orderBy(desc(tournaments.updatedAt));
+
+    // --- Competitions: team-slot claims ------------------------------------
+    const claimers = alias(users, "claimers");
+    const slotClaims = await db
+      .select({
+        participantId: tournamentParticipants.id,
+        competitionId: tournaments.id,
+        competitionSlug: tournaments.slug,
+        competitionName: tournaments.name,
+        slotName: tournamentParticipants.name,
+        division: tournamentParticipants.division,
+        teamId: tournamentParticipants.teamId,
+        teamName: teams.name,
+        claimedById: tournamentParticipants.claimedByUserId,
+        claimedByName: claimers.name,
+        claimedByEmail: claimers.email,
+        claimedAt: tournamentParticipants.claimedAt,
+      })
+      .from(tournamentParticipants)
+      .innerJoin(
+        tournaments,
+        eq(tournaments.id, tournamentParticipants.tournamentId),
+      )
+      .leftJoin(teams, eq(teams.id, tournamentParticipants.teamId))
+      .innerJoin(
+        claimers,
+        eq(claimers.id, tournamentParticipants.claimedByUserId),
+      )
+      .orderBy(desc(tournamentParticipants.claimedAt));
+
+    res.json({
+      organizations: {
+        totals: { seeded: orgTotals?.seeded ?? 0, claimed: orgRows.length },
+        claimed: orgRows,
+      },
+      competitions: {
+        totals: {
+          seeded: compTotals?.seeded ?? 0,
+          claimed: compTotals?.claimed ?? 0,
+        },
+        claimed: claimedComps,
+      },
+      slotClaims,
+    });
   }),
 );
 
