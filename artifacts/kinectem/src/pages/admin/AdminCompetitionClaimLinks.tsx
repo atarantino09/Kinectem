@@ -638,14 +638,13 @@ export default function AdminCompetitionClaimLinks() {
             <TableHead className="w-[130px]">Dates</TableHead>
             <TableHead className="min-w-[220px]">Promo code</TableHead>
             <TableHead>Claim link</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isLoading ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={6}
                 className="text-center py-6 text-muted-foreground"
               >
                 Loading…
@@ -654,7 +653,7 @@ export default function AdminCompetitionClaimLinks() {
           ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={6}
                 className="text-center py-6 text-muted-foreground"
               >
                 No ownerless competitions.
@@ -747,18 +746,21 @@ export default function AdminCompetitionClaimLinks() {
                     data-testid={`input-competition-promo-code-${r.id}`}
                   />
                 </TableCell>
-                <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
-                  {claimUrl(r.token)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyLink(r.token)}
-                    data-testid={`btn-copy-competition-claim-link-${r.id}`}
-                  >
-                    Copy link
-                  </Button>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => copyLink(r.token)}
+                      data-testid={`btn-copy-competition-claim-link-${r.id}`}
+                    >
+                      Copy link
+                    </Button>
+                    <span className="text-xs font-mono text-muted-foreground truncate max-w-[240px]">
+                      {claimUrl(r.token)}
+                    </span>
+                  </div>
                 </TableCell>
               </TableRow>
             ))
