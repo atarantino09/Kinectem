@@ -148,14 +148,52 @@ export function BulkAddTeamsDialog({
 
   const createTeam = useCreateTeam();
 
-  const { rows, errors: lineErrors } = useMemo(
-    () => parseBulkRows(text, coachText),
-    [text, coachText],
-  );
+  const { rows, errors: lineErrors } = useMemo(() => {
+    const parsed = parseBulkRows(text, coachText);
+    // Per-row extra coaches (the "+ Add coach" control). Rows keep their
+    // original 1-based line numbers, so pairs[line-1] is the matching row.
+    const errors = [...parsed.errors];
+    const rows = parsed.rows.map((r) => {
+      const extras = (pairs[r.line - 1]?.extraEmails ?? [])
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+      for (const e of extras) {
+        if (!STAGED_EMAIL_RE.test(e)) {
+          errors.push({
+            line: r.line,
+            message: `Line ${r.line}: "${e}" doesn't look like an email`,
+          });
+        }
+      }
+      // De-dup within the row (incl. against the primary email).
+      const emails: string[] = [];
+      for (const e of [r.email, ...extras]) {
+        if (e && !emails.includes(e)) emails.push(e);
+      }
+      return { ...r, emails };
+    });
+    // Extras on a line parseBulkRows skipped (blank name AND blank primary
+    // email) would otherwise be silently dropped — surface them as the same
+    // orphan error the primary column gets.
+    const rowLines = new Set(parsed.rows.map((r) => r.line));
+    const errorLines = new Set(parsed.errors.map((e) => e.line));
+    pairs.forEach((p, i) => {
+      const line = i + 1;
+      if (rowLines.has(line) || errorLines.has(line)) return;
+      if ((p.extraEmails ?? []).some((e) => e.trim())) {
+        errors.push({
+          line,
+          message: `Line ${line}: coach email has no team name on the same line`,
+        });
+      }
+    });
+    return { rows, errors };
+  }, [text, coachText, pairs]);
   const names = rows; // valid team rows (may still carry email errors above)
-  const coachCount = rows.filter(
-    (r) => r.email && STAGED_EMAIL_RE.test(r.email),
-  ).length;
+  const coachCount = rows.reduce(
+    (n, r) => n + r.emails.filter((e) => STAGED_EMAIL_RE.test(e)).length,
+    0,
+  );
 
   // Plan-limit awareness. `usage` is undefined until the parent loads it; in
   // that case no limit UI renders and nothing is blocked client-side — the
@@ -227,7 +265,7 @@ export function BulkAddTeamsDialog({
     setResults([]);
     setProgress({ done: 0, total: rows.length });
     const collected: LineResult[] = [];
-    const failedRows: BulkRow[] = [];
+    const failedRows: Array<BulkRow & { emails: string[] }> = [];
     // teamId → email pairs to stage after the loop (platform-admin path).
     const toStage: Array<{ teamId: string; email: string; index: number }> = [];
     // Sequential on purpose: keeps slug-collision and rate-limit behavior
@@ -246,35 +284,47 @@ export function BulkAddTeamsDialog({
         });
         const result: LineResult = {
           name: row.name,
-          email: row.email,
+          email: row.emails.join(", "),
           status: "success",
         };
-        if (row.email) {
+        if (row.emails.length > 0) {
           if (staging) {
             // Defer: staged drafts are saved in one merged PUT after the
             // loop (the endpoint has replace-all semantics).
-            toStage.push({
-              teamId: (team as { id: string }).id,
-              email: row.email,
-              index: collected.length,
-            });
+            for (const email of row.emails) {
+              toStage.push({
+                teamId: (team as { id: string }).id,
+                email,
+                index: collected.length,
+              });
+            }
           } else {
             // Same behavior as inviting a coach from the team page: email
             // invite for new accounts, in-app pending membership for
             // existing accounts. A failed invite never undoes the team.
-            try {
-              await customFetch(
-                `/api/v1/teams/${(team as { id: string }).id}/invites`,
-                {
-                  method: "POST",
-                  body: JSON.stringify({ email: row.email, position: "coach" }),
-                },
-              );
+            const failedEmails: string[] = [];
+            let lastReason: string | null = null;
+            for (const email of row.emails) {
+              try {
+                await customFetch(
+                  `/api/v1/teams/${(team as { id: string }).id}/invites`,
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ email, position: "coach" }),
+                  },
+                );
+              } catch (err) {
+                failedEmails.push(email);
+                lastReason = apiErrorMessage(err) ?? null;
+              }
+            }
+            if (failedEmails.length === 0) {
               result.coach = "invited";
-            } catch (err) {
+            } else {
               result.coach = "failed";
+              result.email = failedEmails.join(", ");
               result.coachReason =
-                apiErrorMessage(err) ?? "Couldn't send the coach invite";
+                lastReason ?? "Couldn't send the coach invite";
             }
           }
         }
@@ -282,7 +332,7 @@ export function BulkAddTeamsDialog({
       } catch (err) {
         collected.push({
           name: row.name,
-          email: row.email,
+          email: row.emails.join(", "),
           status: "error",
           reason: apiErrorMessage(err) ?? "Failed to create team",
         });
@@ -347,7 +397,13 @@ export function BulkAddTeamsDialog({
     // Keep only the failed lines (name + paired coach email) in the
     // textareas so the user can retry just those; clear entirely when
     // everything succeeded.
-    setPairs(failedRows.map((r) => ({ name: r.name, email: r.email })));
+    setPairs(
+      failedRows.map((r) => ({
+        name: r.name,
+        email: r.emails[0] ?? "",
+        extraEmails: r.emails.length > 1 ? r.emails.slice(1) : undefined,
+      })),
+    );
     if (failed === 0 && coachFailed === 0) {
       const coachDone = collected.filter(
         (r) => r.coach === "invited" || r.coach === "staged",
@@ -481,9 +537,9 @@ export function BulkAddTeamsDialog({
                     </span>
                     <span className="font-bold truncate">{r.name}</span>
                     <span className="text-muted-foreground shrink-0">→</span>
-                    {r.email ? (
+                    {r.emails.length > 0 ? (
                       <span className="truncate">
-                        {r.email}
+                        {r.emails.join(", ")}
                         <span className="text-muted-foreground">
                           {staging
                             ? " (staged for owner confirmation)"

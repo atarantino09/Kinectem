@@ -214,7 +214,15 @@ export default function AdminOrgQuickSetup() {
   const parsedBulk = useMemo(
     () =>
       pairsToTeamRows(
-        trimTrailingEmpty(bulkPairs).map((p, i) => ({ line: i + 1, ...p })),
+        // Per-row extra coaches expand into additional entries with the same
+        // team name and line number — pairsToTeamRows merges same-name rows'
+        // coach emails onto one team.
+        trimTrailingEmpty(bulkPairs).flatMap((p, i) => [
+          { line: i + 1, name: p.name, email: p.email },
+          ...(p.extraEmails ?? [])
+            .filter((e) => e.trim())
+            .map((e) => ({ line: i + 1, name: p.name, email: e })),
+        ]),
       ),
     [bulkPairs],
   );

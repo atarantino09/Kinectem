@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, ChevronDown } from "lucide-react";
+import { Upload, ChevronDown, Plus, X } from "lucide-react";
 import { STAGED_EMAIL_RE } from "@/components/StageCoachesDialog";
 
 // Task #832 — the numbered two-column (team name + optional coach email)
@@ -12,11 +12,18 @@ import { STAGED_EMAIL_RE } from "@/components/StageCoachesDialog";
 // Enter jumps to the same column of the next row; a multi-line paste into
 // either column splits down that column; Upload CSV replaces the list.
 
-export type BulkPair = { name: string; email: string };
+// A row is one team; `email` is the first coach and `extraEmails` holds any
+// additional coaches added via the per-row "+ Add coach" control.
+export type BulkPair = { name: string; email: string; extraEmails?: string[] };
 
 export function trimTrailingEmpty(pairs: BulkPair[]): BulkPair[] {
   let end = pairs.length;
-  while (end > 0 && !pairs[end - 1].name.trim() && !pairs[end - 1].email.trim())
+  while (
+    end > 0 &&
+    !pairs[end - 1].name.trim() &&
+    !pairs[end - 1].email.trim() &&
+    !(pairs[end - 1].extraEmails ?? []).some((e) => e.trim())
+  )
     end--;
   return pairs.slice(0, end);
 }
@@ -182,6 +189,41 @@ export function BulkPairEditor({
     onPairsChange(trimTrailingEmpty(next));
   };
 
+  // Per-row extra coach emails ("+ Add coach" expands the row downward).
+  const withRow = (i: number, fn: (p: BulkPair) => void) => {
+    const next: BulkPair[] = pairs.map((p) => ({
+      ...p,
+      extraEmails: p.extraEmails ? [...p.extraEmails] : undefined,
+    }));
+    while (next.length <= i) next.push({ name: "", email: "" });
+    fn(next[i]);
+    onPairsChange(trimTrailingEmpty(next));
+  };
+  const addExtraEmail = (i: number) => {
+    withRow(i, (p) => {
+      p.extraEmails = [...(p.extraEmails ?? []), ""];
+    });
+    requestAnimationFrame(() => {
+      cellRefs.current
+        .get(`extra-${i}-${(pairs[i]?.extraEmails ?? []).length}`)
+        ?.focus();
+    });
+  };
+  const updateExtraEmail = (i: number, j: number, value: string) => {
+    withRow(i, (p) => {
+      const list = [...(p.extraEmails ?? [])];
+      list[j] = value.replace(/\n/g, " ");
+      p.extraEmails = list;
+    });
+  };
+  const removeExtraEmail = (i: number, j: number) => {
+    withRow(i, (p) => {
+      const list = [...(p.extraEmails ?? [])];
+      list.splice(j, 1);
+      p.extraEmails = list.length > 0 ? list : undefined;
+    });
+  };
+
   const focusCell = (i: number, col: "name" | "email") => {
     // Rendered rows always include one empty trailing row, so the target
     // exists on the next paint.
@@ -332,6 +374,46 @@ export function BulkPairEditor({
                   refKey={`email-${i}`}
                   cellRefs={cellRefs}
                 />
+                {(pair.extraEmails ?? []).map((extra, j) => (
+                  <div
+                    key={j}
+                    className="flex items-center gap-1"
+                    data-testid={`row-${idPrefix}-extra-coach-${i}-${j}`}
+                  >
+                    <GrowCell
+                      value={extra}
+                      onChange={(v) => updateExtraEmail(i, j, v)}
+                      onEnter={() => addExtraEmail(i)}
+                      placeholder="another-coach@example.com"
+                      disabled={disabled}
+                      testId={`input-${idPrefix}-extra-coach-${i}-${j}`}
+                      refKey={`extra-${i}-${j}`}
+                      cellRefs={cellRefs}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeExtraEmail(i, j)}
+                      disabled={disabled}
+                      aria-label="Remove coach"
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      data-testid={`btn-${idPrefix}-remove-extra-coach-${i}-${j}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {(pair.name.trim() || pair.email.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => addExtraEmail(i)}
+                    disabled={disabled}
+                    className="mt-0.5 flex items-center gap-1 px-2 pb-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    data-testid={`btn-${idPrefix}-add-coach-${i}`}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add coach
+                  </button>
+                )}
               </div>
             </div>
           );
