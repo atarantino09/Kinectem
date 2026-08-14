@@ -406,6 +406,12 @@ export const organizations = pgTable("organizations", {
   // owner's subscribe page; the owner can still pick a different tier. NULL
   // = no staged tier (Starter default behavior everywhere).
   pendingPlan: planTierEnum("pending_plan"),
+  // Task #860 — stamped when a platform operator creates the org through
+  // the one-page Quick setup flow. These are "orgs I know" — the Claim
+  // links admin tab surfaces them in their own section above the ~1,000
+  // bulk-imported orgs the operator doesn't know. Nullable timestamp:
+  // NULL = not created via quick setup (incl. all pre-existing rows).
+  createdViaQuickSetupAt: timestamp("created_via_quick_setup_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.

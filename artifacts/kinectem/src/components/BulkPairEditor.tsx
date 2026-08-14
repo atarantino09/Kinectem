@@ -402,18 +402,21 @@ export function BulkPairEditor({
                     </button>
                   </div>
                 ))}
-                {(pair.name.trim() || pair.email.trim()) && (
-                  <button
-                    type="button"
-                    onClick={() => addExtraEmail(i)}
-                    disabled={disabled}
-                    className="mt-0.5 flex items-center gap-1 px-2 pb-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
-                    data-testid={`btn-${idPrefix}-add-coach-${i}`}
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add another coach to this team
-                  </button>
-                )}
+                {/* Always visible so the affordance is discoverable on a
+                    fresh, empty list; disabled until the row has content so
+                    an extra email can't be orphaned on a blank line. */}
+                <button
+                  type="button"
+                  onClick={() => addExtraEmail(i)}
+                  disabled={
+                    disabled || !(pair.name.trim() || pair.email.trim())
+                  }
+                  className="mt-0.5 flex items-center gap-1 px-2 pb-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  data-testid={`btn-${idPrefix}-add-coach-${i}`}
+                >
+                  <Plus className="w-3 h-3" />
+                  Add another coach to this team
+                </button>
               </div>
             </div>
           );

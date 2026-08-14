@@ -39,6 +39,9 @@ type ClaimLinkRow = {
   token: string;
   messagedAt: string | null;
   facebookAddedAt: string | null;
+  // Task #860 — non-null when the org was created through Quick setup
+  // ("orgs I set up"); those rows render in their own section on top.
+  quickSetupAt: string | null;
 };
 
 type ClaimLinksResponse = { data: ClaimLinkRow[] };
@@ -264,6 +267,22 @@ export default function AdminOrgClaimLinks() {
         (r.state ?? "").toLowerCase().includes(needle),
     );
   }, [rows, q]);
+
+  // Task #860 — split into "Orgs I set up" (quick-setup created, most recent
+  // first) and everything else. Search filters both sections.
+  const quickSetupRows = useMemo(
+    () =>
+      filtered
+        .filter((r) => r.quickSetupAt)
+        .sort((a, b) =>
+          (b.quickSetupAt as string).localeCompare(a.quickSetupAt as string),
+        ),
+    [filtered],
+  );
+  const otherRows = useMemo(
+    () => filtered.filter((r) => !r.quickSetupAt),
+    [filtered],
+  );
 
   const toggleMessaged = async (id: string, messaged: boolean) => {
     try {
@@ -625,85 +644,121 @@ export default function AdminOrgClaimLinks() {
           {rows.length} ownerless page{rows.length === 1 ? "" : "s"}
         </div>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[110px]">Facebook</TableHead>
-            <TableHead className="w-[110px]">Messaged</TableHead>
-            <TableHead>Organization</TableHead>
-            <TableHead>Location</TableHead>
-            <TableHead>Claim link</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
-            <TableRow>
-              <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                Loading…
+      {(() => {
+        const renderRow = (r: ClaimLinkRow) => {
+          const location = [r.city, r.state].filter(Boolean).join(", ");
+          return (
+            <TableRow key={r.id} data-testid={`row-claim-link-${r.id}`}>
+              <TableCell>
+                <Checkbox
+                  checked={!!r.facebookAddedAt}
+                  onCheckedChange={(v) => toggleFacebookAdded(r.id, v === true)}
+                  aria-label={`Added ${r.name} on Facebook`}
+                  data-testid={`checkbox-facebook-added-${r.id}`}
+                />
+              </TableCell>
+              <TableCell>
+                <Checkbox
+                  checked={!!r.messagedAt}
+                  onCheckedChange={(v) => toggleMessaged(r.id, v === true)}
+                  aria-label={`Messaged ${r.name} on Facebook`}
+                  data-testid={`checkbox-messaged-${r.id}`}
+                />
+              </TableCell>
+              <TableCell className="font-medium">
+                {/* Task #808 — link straight to the unclaimed org page so
+                    the operator can set it up (logo, teams, staged
+                    coaches) before sending the claim link. */}
+                <Link
+                  href={`/organizations/${r.id}`}
+                  className="hover:underline"
+                  data-testid={`link-claim-org-${r.id}`}
+                >
+                  {formatOrgName(r.name)}
+                </Link>
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {location || "—"}
+              </TableCell>
+              <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
+                {claimUrl(r.token)}
+              </TableCell>
+              <TableCell className="text-right">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyLink(r.token)}
+                  data-testid={`btn-copy-claim-link-${r.id}`}
+                >
+                  Copy link
+                </Button>
               </TableCell>
             </TableRow>
-          ) : filtered.length === 0 ? (
+          );
+        };
+        const header = (
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                No ownerless pages.
-              </TableCell>
+              <TableHead className="w-[110px]">Facebook</TableHead>
+              <TableHead className="w-[110px]">Messaged</TableHead>
+              <TableHead>Organization</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Claim link</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ) : (
-            filtered.map((r) => {
-              const location = [r.city, r.state].filter(Boolean).join(", ");
-              return (
-                <TableRow key={r.id} data-testid={`row-claim-link-${r.id}`}>
-                  <TableCell>
-                    <Checkbox
-                      checked={!!r.facebookAddedAt}
-                      onCheckedChange={(v) => toggleFacebookAdded(r.id, v === true)}
-                      aria-label={`Added ${r.name} on Facebook`}
-                      data-testid={`checkbox-facebook-added-${r.id}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Checkbox
-                      checked={!!r.messagedAt}
-                      onCheckedChange={(v) => toggleMessaged(r.id, v === true)}
-                      aria-label={`Messaged ${r.name} on Facebook`}
-                      data-testid={`checkbox-messaged-${r.id}`}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {/* Task #808 — link straight to the unclaimed org page so
-                        the operator can set it up (logo, teams, staged
-                        coaches) before sending the claim link. */}
-                    <Link
-                      href={`/organizations/${r.id}`}
-                      className="hover:underline"
-                      data-testid={`link-claim-org-${r.id}`}
-                    >
-                      {formatOrgName(r.name)}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {location || "—"}
-                  </TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
-                    {claimUrl(r.token)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyLink(r.token)}
-                      data-testid={`btn-copy-claim-link-${r.id}`}
-                    >
-                      Copy link
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+        );
+        return (
+          <>
+            {/* Task #860 — orgs the operator created through Quick setup
+                ("orgs I set up") get their own section on top, most recent
+                first, above the ~1,000 bulk-imported orgs below. */}
+            {quickSetupRows.length > 0 && (
+              <div className="mb-6" data-testid="section-quick-setup-orgs">
+                <h2 className="text-sm font-bold mb-1">Orgs I set up</h2>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Created through Quick setup — most recent first.
+                </p>
+                <Table>
+                  {header}
+                  <TableBody>{quickSetupRows.map(renderRow)}</TableBody>
+                </Table>
+              </div>
+            )}
+            <div data-testid="section-all-orgs">
+              {quickSetupRows.length > 0 && (
+                <h2 className="text-sm font-bold mb-2">All other unclaimed orgs</h2>
+              )}
+              <Table>
+                {header}
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                        Loading…
+                      </TableCell>
+                    </TableRow>
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                        No ownerless pages.
+                      </TableCell>
+                    </TableRow>
+                  ) : otherRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                        No other unclaimed orgs match.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    otherRows.map(renderRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        );
+      })()}
     </AdminLayout>
   );
 }

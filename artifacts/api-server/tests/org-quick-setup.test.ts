@@ -174,6 +174,35 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
     expect(row).toBeUndefined();
   });
 
+  // Task #860 — quick-setup orgs are "orgs I know": the claim-links list
+  // carries a non-null quickSetupAt for them, while orgs added through the
+  // plain POST /org-claim-links form stay null (lower list).
+  it("stamps quick-setup orgs and exposes quickSetupAt on the claim-links list", async () => {
+    const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
+    const qs = await agent
+      .post("/api/v1/admin/org-quick-setup")
+      .send({ name: "Known Quick Org", teams: [] });
+    expect(qs.status).toBe(201);
+    const plain = await agent
+      .post("/api/v1/admin/org-claim-links")
+      .send({ name: "Unknown Bulk Org" });
+    expect(plain.status).toBe(201);
+
+    const list = await agent.get("/api/v1/admin/org-claim-links");
+    expect(list.status).toBe(200);
+    const known = list.body.data.find(
+      (r: { id: string }) => r.id === qs.body.data.id,
+    );
+    const unknown = list.body.data.find(
+      (r: { id: string }) => r.id === plain.body.data.id,
+    );
+    expect(known).toBeTruthy();
+    expect(typeof known.quickSetupAt).toBe("string");
+    expect(new Date(known.quickSetupAt).getTime()).not.toBeNaN();
+    expect(unknown).toBeTruthy();
+    expect(unknown.quickSetupAt).toBeNull();
+  });
+
   it("non-admin gets 403; unauthenticated 401", async () => {
     const { agent } = await loginAs((u) => u.role === "athlete" && !!u.email);
     const res = await agent

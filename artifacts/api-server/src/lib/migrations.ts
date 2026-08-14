@@ -2210,6 +2210,17 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS pending_plan plan_tier;
     `,
   },
+  {
+    // Task #860 — mark orgs created through the admin Quick setup flow
+    // ("orgs I know"), so the Claim links tab can list them separately
+    // above the bulk-imported orgs. Nullable, no backfill: pre-existing
+    // orgs simply stay in the lower list.
+    name: "2026-08-14-task-860-org-quick-setup-flag",
+    sql: `
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS created_via_quick_setup_at timestamp;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

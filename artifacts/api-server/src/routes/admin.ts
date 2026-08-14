@@ -1815,6 +1815,7 @@ router.get(
         claimToken: organizations.claimToken,
         outreachMessagedAt: organizations.outreachMessagedAt,
         outreachFacebookAddedAt: organizations.outreachFacebookAddedAt,
+        createdViaQuickSetupAt: organizations.createdViaQuickSetupAt,
       })
       .from(organizations)
       .where(sql`NOT ${ownerExists}`)
@@ -1830,6 +1831,7 @@ router.get(
       token: string;
       messagedAt: string | null;
       facebookAddedAt: string | null;
+      quickSetupAt: string | null;
     }> = [];
     for (const r of rows) {
       let token = r.claimToken;
@@ -1852,6 +1854,11 @@ router.get(
           : null,
         facebookAddedAt: r.outreachFacebookAddedAt
           ? r.outreachFacebookAddedAt.toISOString()
+          : null,
+        // Task #860 — non-null for orgs created via Quick setup ("orgs I
+        // know"); the Claim links tab lists those in a section on top.
+        quickSetupAt: r.createdViaQuickSetupAt
+          ? r.createdViaQuickSetupAt.toISOString()
           : null,
       });
     }
@@ -2198,6 +2205,9 @@ router.post(
           pendingPromoCodeId: pendingPromoCodeId ?? undefined,
           pendingPlan: pendingPlan ?? undefined,
           claimToken: token,
+          // Task #860 — mark quick-setup orgs as "orgs I know" so the
+          // Claim links tab can surface them in their own section.
+          createdViaQuickSetupAt: new Date(),
         })
         .returning();
       const createdTeams: Array<{ id: string; name: string }> = [];

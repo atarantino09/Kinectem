@@ -13,6 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { US_STATES } from "@/lib/usStates";
 import {
@@ -125,6 +133,10 @@ export default function AdminOrgQuickSetup() {
   } | null>(null);
   const [promoChecking, setPromoChecking] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
+  // Task #860 — bulk "teams & coaches" popup. It binds the SAME pairs state
+  // as the inline editor below, so entries made in the popup show up inline
+  // immediately (and vice versa) — confirming just closes the dialog.
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [result, setResult] = useState<QuickSetupResult | null>(null);
@@ -601,7 +613,75 @@ export default function AdminOrgQuickSetup() {
               </p>
             )}
           </div>
+
+          {/* Task #860 — focused bulk entry: opens the paired team-name /
+              coach-email editor in a popup. Same pairs state as the inline
+              editor below, so both always stay in sync. */}
+          <div className="mt-4 border-t pt-3">
+            <Button
+              variant="secondary"
+              onClick={() => setBulkDialogOpen(true)}
+              data-testid="btn-qs-open-bulk-dialog"
+            >
+              Add teams &amp; coaches
+            </Button>
+            <span className="ml-3 text-xs text-muted-foreground">
+              Fill the team list in a focused popup — it updates the inline
+              list below.
+            </span>
+          </div>
         </section>
+
+        <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="font-black tracking-tight">
+                Add teams &amp; coaches
+              </DialogTitle>
+              <DialogDescription>
+                One team per line, with an optional coach email on the same
+                line. Coach emails are staged as drafts — nothing is sent.
+                Whatever you enter here fills the team list on the page.
+              </DialogDescription>
+            </DialogHeader>
+            <BulkPairEditor
+              pairs={bulkPairs}
+              onPairsChange={setBulkPairs}
+              idPrefix="qs-popup"
+              autoFocusFirst
+            />
+            <div className="flex justify-end">
+              <span
+                className="text-xs font-medium text-muted-foreground"
+                data-testid="text-qs-popup-team-count"
+              >
+                {selectedPlan
+                  ? selectedPlan.maxTeams != null
+                    ? `${validTeams.length}/${selectedPlan.maxTeams} teams`
+                    : `${validTeams.length} team${validTeams.length === 1 ? "" : "s"}`
+                  : `${validTeams.length}/15 teams (Starter cap until the org picks a plan)`}
+              </span>
+            </div>
+            {bulkErrors.length > 0 && (
+              <ul
+                className="space-y-0.5 text-xs text-destructive"
+                data-testid="qs-popup-bulk-errors"
+              >
+                {bulkErrors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+            <DialogFooter>
+              <Button
+                onClick={() => setBulkDialogOpen(false)}
+                data-testid="btn-qs-popup-done"
+              >
+                Done
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ---- Teams + coaches — the row editor IS the team list ---- */}
         <section className="rounded-lg border bg-card p-4 mb-5">
