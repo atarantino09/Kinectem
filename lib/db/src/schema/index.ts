@@ -1766,12 +1766,14 @@ export const tournamentParticipants = pgTable("tournament_participants", {
 }, (t) => ({
   byTournament: index("tournament_participants_tournament_id_idx").on(t.tournamentId),
   byTeam: index("tournament_participants_team_id_idx").on(t.teamId),
-  // A team name is unique per competition — the same name appearing in
-  // multiple divisions/brackets maps to ONE participant slot (division/
-  // bracket hold the first-seen values and are informational only).
-  uniqueName: uniqueIndex("tournament_participants_unique_name").on(
+  // Participant identity is (competition, name, gender) — the same name in
+  // multiple divisions/brackets maps to ONE participant slot per gender
+  // (division/bracket hold the first-seen values and are informational
+  // only), while same-named boys/girls teams stay separate participants.
+  uniqueNameGender: uniqueIndex("tournament_participants_unique_name_gender").on(
     t.tournamentId,
     t.nameKey,
+    sql`LOWER(BTRIM(COALESCE(${t.gender}, '')))`,
   ),
 }));
 

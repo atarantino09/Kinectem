@@ -2134,20 +2134,21 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
-    // A team name is now unique per competition — the same exact name in
-    // multiple divisions/brackets used to create one participant slot per
-    // context, showing duplicate team names after a schedule upload. Merge
-    // duplicates (keeping a claimed row over an unclaimed one, then the
-    // oldest), repoint matches at the keeper, then swap the unique index
-    // from (tournament, division, bracket, name_key) to (tournament,
-    // name_key). Idempotent: after the first run there are no duplicates
-    // and the index statements are IF-guarded.
-    name: "2026-08-14-participant-unique-per-name",
+    // Participant identity is (competition, name, gender). The same exact
+    // name in multiple divisions/brackets is ONE participant slot per gender
+    // — this fixes the duplicate-team-names-after-upload bug WITHOUT merging
+    // real same-named boys/girls teams (seen in production: a club fielding
+    // "Red 2012" in both a girls and a boys division). Merge duplicates
+    // (keeping a claimed row over an unclaimed one, then the oldest),
+    // repoint matches at the keeper, then swap the unique index. Idempotent:
+    // after the first run there are no duplicates and the index statements
+    // are IF-guarded. (Supersedes the short-lived name-only unique index.)
+    name: "2026-08-14-participant-unique-per-name-gender",
     sql: `
       WITH ranked AS (
         SELECT id,
                first_value(id) OVER (
-                 PARTITION BY tournament_id, name_key
+                 PARTITION BY tournament_id, name_key, LOWER(BTRIM(COALESCE(gender, '')))
                  ORDER BY (team_id IS NOT NULL) DESC,
                           (pending_team_id IS NOT NULL) DESC,
                           created_at ASC, id ASC
@@ -2162,7 +2163,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       WITH ranked AS (
         SELECT id,
                first_value(id) OVER (
-                 PARTITION BY tournament_id, name_key
+                 PARTITION BY tournament_id, name_key, LOWER(BTRIM(COALESCE(gender, '')))
                  ORDER BY (team_id IS NOT NULL) DESC,
                           (pending_team_id IS NOT NULL) DESC,
                           created_at ASC, id ASC
@@ -2177,7 +2178,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       WITH ranked AS (
         SELECT id,
                first_value(id) OVER (
-                 PARTITION BY tournament_id, name_key
+                 PARTITION BY tournament_id, name_key, LOWER(BTRIM(COALESCE(gender, '')))
                  ORDER BY (team_id IS NOT NULL) DESC,
                           (pending_team_id IS NOT NULL) DESC,
                           created_at ASC, id ASC
@@ -2189,8 +2190,9 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         WHERE p.id = r.id AND r.id <> r.keeper_id;
 
       DROP INDEX IF EXISTS tournament_participants_unique_slot;
-      CREATE UNIQUE INDEX IF NOT EXISTS tournament_participants_unique_name
-        ON tournament_participants (tournament_id, name_key);
+      DROP INDEX IF EXISTS tournament_participants_unique_name;
+      CREATE UNIQUE INDEX IF NOT EXISTS tournament_participants_unique_name_gender
+        ON tournament_participants (tournament_id, name_key, LOWER(BTRIM(COALESCE(gender, ''))));
     `,
   },
 ];

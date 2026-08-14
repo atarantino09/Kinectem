@@ -269,13 +269,19 @@ function parseDateCell(v: string): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-// Slot key for a participant: a team name is unique per competition, so the
-// key is just the lowercased trimmed name. Division/bracket are informational
-// (first-seen values) and intentionally NOT part of the key — the same exact
-// team name across brackets/divisions is one participant, never duplicates.
-// The unused params are kept so call sites stay explicit about the context.
-function slotKey(_division: string, _bracket: string, nameKey: string): string {
-  return nameKey;
+// Slot key for a participant: identity is (name, gender) per competition.
+// Division/bracket are informational (first-seen values) and intentionally
+// NOT part of the key — the same exact team name across brackets/divisions
+// is one participant per gender, never duplicates. Gender IS part of the key
+// because real clubs field same-named boys and girls teams. The unused
+// params are kept so call sites stay explicit about the context.
+function slotKey(
+  _division: string,
+  _bracket: string,
+  nameKey: string,
+  gender: string | null | undefined,
+): string {
+  return `${nameKey}\u0000${(gender ?? "").trim().toLowerCase()}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1410,7 +1416,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         [awayName, awayKey],
       ] as const) {
         if (!name) continue;
-        const sk = slotKey(division, bracket, key);
+        const sk = slotKey(division, bracket, key, gender);
         if (!slots.has(sk)) {
           slots.set(sk, { name, nameKey: key, division, bracket, age, gender });
         }
@@ -1637,17 +1643,17 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         .where(eq(tournamentParticipants.tournamentId, tournament.id));
       const partBySlot = new Map<string, string>();
       for (const p of partRows) {
-        partBySlot.set(slotKey(p.division, p.bracket, p.nameKey), p.id);
+        partBySlot.set(slotKey(p.division, p.bracket, p.nameKey, p.gender), p.id);
       }
 
       // Upsert matches (idempotent on the unique (tournament, matchNumber)).
       let matchesUpserted = 0;
       for (const m of matchRecs) {
         const homeParticipantId = m.homeName
-          ? partBySlot.get(slotKey(m.division, m.bracket, m.homeKey)) ?? null
+          ? partBySlot.get(slotKey(m.division, m.bracket, m.homeKey, m.gender)) ?? null
           : null;
         const awayParticipantId = m.awayName
-          ? partBySlot.get(slotKey(m.division, m.bracket, m.awayKey)) ?? null
+          ? partBySlot.get(slotKey(m.division, m.bracket, m.awayKey, m.gender)) ?? null
           : null;
         await tx
           .insert(tournamentMatches)
@@ -1720,7 +1726,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
     {
       const partById = new Map(summary.partRows.map((p) => [p.id, p]));
       const partBySlot = new Map(
-        summary.partRows.map((p) => [slotKey(p.division, p.bracket, p.nameKey), p]),
+        summary.partRows.map((p) => [slotKey(p.division, p.bracket, p.nameKey, p.gender), p]),
       );
       // Later rows win on upsert, so diff only each match number's LAST row.
       const finalByNumber = new Map<string, MatchRec>();
@@ -1743,7 +1749,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
           [m.awayName, m.awayKey],
         ] as const) {
           if (!name) continue;
-          const t = partBySlot.get(slotKey(m.division, m.bracket, key))?.teamId;
+          const t = partBySlot.get(slotKey(m.division, m.bracket, key, m.gender))?.teamId;
           if (t) teamIds.add(t);
         }
         changedGames.push({ teamIds: Array.from(teamIds), statusChanged });
@@ -1824,22 +1830,24 @@ function parseMatchDateInput(
 }
 
 // Resolve (or create) the participant slot for a team name, mirroring the
-// CSV import's slot-upsert semantics. Team names are unique per competition,
-// so lookup matches on name only; division/bracket are just first-seen
-// informational values on a newly created slot.
-// Returns null for a blank name (TBD side).
+// CSV import's slot-upsert semantics. Participant identity is (name, gender)
+// per competition — same-named boys/girls teams stay separate slots.
+// Division/bracket are just first-seen informational values on a newly
+// created slot. Returns null for a blank name (TBD side).
 async function resolveParticipantId(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   tournamentId: string,
   division: string,
   bracket: string,
+  gender: string | null,
   name: string | null,
 ): Promise<string | null> {
   if (!name) return null;
   const nameKey = name.toLowerCase();
+  const genderKey = (gender ?? "").trim().toLowerCase();
   await tx
     .insert(tournamentParticipants)
-    .values({ tournamentId, name, nameKey, division, bracket })
+    .values({ tournamentId, name, nameKey, division, bracket, gender: gender || null })
     .onConflictDoNothing();
   const [row] = await tx
     .select({ id: tournamentParticipants.id })
@@ -1848,6 +1856,7 @@ async function resolveParticipantId(
       and(
         eq(tournamentParticipants.tournamentId, tournamentId),
         eq(tournamentParticipants.nameKey, nameKey),
+        sql`LOWER(BTRIM(COALESCE(${tournamentParticipants.gender}, ''))) = ${genderKey}`,
       ),
     )
     .limit(1);
@@ -1966,10 +1975,10 @@ router.post(
 
     const created = await db.transaction(async (tx) => {
       const homeParticipantId = await resolveParticipantId(
-        tx, tournament.id, division, bracket, b.homeName ?? null,
+        tx, tournament.id, division, bracket, b.gender || null, b.homeName ?? null,
       );
       const awayParticipantId = await resolveParticipantId(
-        tx, tournament.id, division, bracket, b.awayName ?? null,
+        tx, tournament.id, division, bracket, b.gender || null, b.awayName ?? null,
       );
       const [row] = await tx
         .insert(tournamentMatches)
@@ -2068,10 +2077,10 @@ router.patch(
 
     const updated = await db.transaction(async (tx) => {
       const homeParticipantId = await resolveParticipantId(
-        tx, tournament.id, division, bracket, b.homeName ?? null,
+        tx, tournament.id, division, bracket, b.gender || null, b.homeName ?? null,
       );
       const awayParticipantId = await resolveParticipantId(
-        tx, tournament.id, division, bracket, b.awayName ?? null,
+        tx, tournament.id, division, bracket, b.gender || null, b.awayName ?? null,
       );
       await tx
         .update(tournamentMatches)
