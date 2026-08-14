@@ -411,7 +411,7 @@ export function BulkPairEditor({
                     data-testid={`btn-${idPrefix}-add-coach-${i}`}
                   >
                     <Plus className="w-3 h-3" />
-                    Add coach
+                    Add another coach to this team
                   </button>
                 )}
               </div>
