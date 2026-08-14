@@ -28,6 +28,7 @@ import {
   Clock,
   Copy,
   UserCheck,
+  Plus,
 } from "lucide-react";
 
 // Task #835 — bulk-invite one coach per existing team from the org page.
@@ -72,6 +73,8 @@ export function BulkAddCoachesDialog({
   const qc = useQueryClient();
   const { toast } = useToast();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Additional coach emails per team ("+ Add another coach to this team").
+  const [extraDrafts, setExtraDrafts] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(
     null,
@@ -99,23 +102,33 @@ export function BulkAddCoachesDialog({
   useEffect(() => {
     if (!open) {
       setDrafts({});
+      setExtraDrafts({});
       setResults(null);
       setProgress(null);
     }
   }, [open]);
 
+  // Every email typed for a team (primary + extras), de-duped per team.
+  const emailsForTeam = (teamId: string): string[] => {
+    const all = [drafts[teamId] ?? "", ...(extraDrafts[teamId] ?? [])]
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    return Array.from(new Set(all));
+  };
   const invalidTeams = useMemo(
     () =>
-      teams.filter((t) => {
-        const e = (drafts[t.id] ?? "").trim();
-        return e.length > 0 && !EMAIL_RE.test(e);
-      }),
-    [teams, drafts],
+      teams.filter((t) =>
+        [drafts[t.id] ?? "", ...(extraDrafts[t.id] ?? [])].some((raw) => {
+          const e = raw.trim();
+          return e.length > 0 && !EMAIL_RE.test(e);
+        }),
+      ),
+    [teams, drafts, extraDrafts],
   );
   const filledCount = useMemo(
-    () =>
-      teams.filter((t) => (drafts[t.id] ?? "").trim().length > 0).length,
-    [teams, drafts],
+    () => teams.reduce((n, t) => n + emailsForTeam(t.id).length, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [teams, drafts, extraDrafts],
   );
 
   const handleOpenChange = (v: boolean) => {
@@ -132,9 +145,9 @@ export function BulkAddCoachesDialog({
       });
       return;
     }
-    const rows = teams
-      .map((t) => ({ team: t, email: (drafts[t.id] ?? "").trim().toLowerCase() }))
-      .filter((r) => r.email.length > 0);
+    const rows = teams.flatMap((t) =>
+      emailsForTeam(t.id).map((email) => ({ team: t, email })),
+    );
     if (rows.length === 0) {
       toast({
         title: "Enter at least one coach email",
@@ -190,10 +203,11 @@ export function BulkAddCoachesDialog({
     }
     setBusy(false);
     // Refresh each touched team's staff/invite lists and the indicators.
+    const touchedTeams = Array.from(new Set(rows.map((r) => r.team)));
     await Promise.all([
-      ...rows.flatMap((r) => [
-        qc.invalidateQueries({ queryKey: getListTeamMembersQueryKey(r.team.id) }),
-        qc.invalidateQueries({ queryKey: getListRosterInvitesQueryKey(r.team.id) }),
+      ...touchedTeams.flatMap((t) => [
+        qc.invalidateQueries({ queryKey: getListTeamMembersQueryKey(t.id) }),
+        qc.invalidateQueries({ queryKey: getListRosterInvitesQueryKey(t.id) }),
       ]),
       qc.invalidateQueries({ queryKey: ["org-coach-status", orgId] }),
     ]);
@@ -316,6 +330,73 @@ export function BulkAddCoachesDialog({
                       "{value.trim()}" doesn't look like an email
                     </p>
                   )}
+                  {(extraDrafts[t.id] ?? []).map((extra, j) => {
+                    const extraInvalid =
+                      extra.trim().length > 0 && !EMAIL_RE.test(extra.trim());
+                    return (
+                      <div key={j} className="space-y-1">
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="email"
+                            placeholder="another-coach@example.com"
+                            value={extra}
+                            onChange={(e) =>
+                              setExtraDrafts((d) => {
+                                const list = [...(d[t.id] ?? [])];
+                                list[j] = e.target.value;
+                                return { ...d, [t.id]: list };
+                              })
+                            }
+                            disabled={busy}
+                            aria-invalid={extraInvalid || undefined}
+                            className={
+                              extraInvalid ? "border-destructive" : undefined
+                            }
+                            data-testid={`input-bulk-coach-extra-${t.id}-${j}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExtraDrafts((d) => {
+                                const list = [...(d[t.id] ?? [])];
+                                list.splice(j, 1);
+                                return { ...d, [t.id]: list };
+                              })
+                            }
+                            disabled={busy}
+                            aria-label="Remove coach"
+                            className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                            data-testid={`btn-bulk-coach-remove-extra-${t.id}-${j}`}
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {extraInvalid && (
+                          <p
+                            className="text-xs font-medium text-destructive"
+                            data-testid={`error-bulk-coach-extra-${t.id}-${j}`}
+                          >
+                            "{extra.trim()}" doesn't look like an email
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExtraDrafts((d) => ({
+                        ...d,
+                        [t.id]: [...(d[t.id] ?? []), ""],
+                      }))
+                    }
+                    disabled={busy}
+                    className="flex items-center gap-1 px-1 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    data-testid={`btn-bulk-coach-add-extra-${t.id}`}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add another coach to this team
+                  </button>
                 </div>
               );
             })}
@@ -340,7 +421,7 @@ export function BulkAddCoachesDialog({
               <div
                 key={`${r.teamId}-${i}`}
                 className="flex items-start gap-2 px-3 py-2 text-xs"
-                data-testid={`result-bulk-coach-${r.teamId}`}
+                data-testid={`result-bulk-coach-${r.teamId}-${i}`}
               >
                 {r.status === "error" ? (
                   <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -381,7 +462,7 @@ export function BulkAddCoachesDialog({
                           size="sm"
                           className="h-6 px-2 text-[11px] font-bold"
                           onClick={() => copyLink(r.acceptUrl!)}
-                          data-testid={`btn-copy-invite-link-${r.teamId}`}
+                          data-testid={`btn-copy-invite-link-${r.teamId}-${i}`}
                         >
                           <Copy className="w-3 h-3 mr-1" /> Copy invite link
                         </Button>
