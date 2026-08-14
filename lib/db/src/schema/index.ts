@@ -699,6 +699,10 @@ export const articles = pgTable("articles", {
   // the competition operator; the public page rail renders featured recaps.
   competitionId: uuid("competition_id").references((): AnyPgColumn => tournaments.id, { onDelete: "set null" }),
   competitionGameId: uuid("competition_game_id").references((): AnyPgColumn => tournamentMatches.id, { onDelete: "set null" }),
+  // Task #852 — organizer-facing sorting label. Optional; set by the coach
+  // in the composer or re-assigned by the organizer in the console. Never
+  // rendered on the published post itself.
+  bracketId: uuid("bracket_id").references((): AnyPgColumn => competitionBrackets.id, { onDelete: "set null" }),
   featured: boolean("featured").notNull().default(false),
   status: articleStatusEnum("status").notNull().default("published"),
   publishedAt: timestamp("published_at"),
@@ -1810,6 +1814,31 @@ export const tournamentMatches = pgTable("tournament_matches", {
   uniqueNumber: uniqueIndex("tournament_matches_unique_number").on(
     t.tournamentId,
     t.matchNumber,
+  ),
+}));
+
+// Task #852 — organizer-defined brackets used to SORT recaps (labels only —
+// no standings/seeding/match trees). Auto-seeded from the schedule CSV's
+// division/bracket column (dedupe via label_key) and freely editable,
+// deletable, and reorderable by the organizer. sort_order is the canonical
+// display order everywhere (console, composer dropdown, public filter).
+export const competitionBrackets = pgTable("competition_brackets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  label: text("label").notNull(),
+  // Lowercased/trimmed dedupe key so CSV re-imports never duplicate a
+  // bracket the organizer merely re-cased or re-spaced.
+  labelKey: text("label_key").notNull(),
+  gender: text("gender"),
+  ageGroup: text("age_group"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  byTournament: index("competition_brackets_tournament_id_idx").on(t.tournamentId),
+  uniqueLabel: uniqueIndex("competition_brackets_unique_label").on(
+    t.tournamentId,
+    t.labelKey,
   ),
 }));
 

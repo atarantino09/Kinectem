@@ -296,6 +296,10 @@ export default function NewPostPage() {
               onCompetitionGameIdChange={form.setCompetitionGameId}
               competitionGames={form.competitionGames}
               competitionGamesLoading={form.competitionGamesLoading}
+              bracketId={form.bracketId}
+              onBracketIdChange={form.setBracketId}
+              brackets={form.brackets}
+              bracketsLoading={form.bracketsLoading}
               saving={form.saving}
               publishing={form.publishing}
               publishDisabled={publishDisabled}

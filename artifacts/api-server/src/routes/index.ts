@@ -35,6 +35,7 @@ import announcementsRouter from "./announcements";
 import tournamentsRouter from "./tournaments";
 import organizersRouter from "./organizers";
 import competitionAdminsRouter from "./competition-admins";
+import competitionBracketsRouter from "./competition-brackets";
 import broadcastsRouter from "./broadcasts";
 import dailyAdminDigestRouter from "./daily-admin-digest";
 
@@ -85,6 +86,7 @@ router.use(announcementsRouter);
 router.use(tournamentsRouter);
 router.use(organizersRouter);
 router.use(competitionAdminsRouter);
+router.use(competitionBracketsRouter);
 router.use(broadcastsRouter);
 router.use(dailyAdminDigestRouter);
 

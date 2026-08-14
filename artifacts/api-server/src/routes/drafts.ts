@@ -10,6 +10,7 @@ import {
   highlights,
   orgPosts,
   notifications,
+  competitionBrackets,
 } from "@workspace/db";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -385,6 +386,8 @@ router.patch(
       if (body.competitionId === null || body.competitionId === "") {
         updates["competitionId"] = null;
         updates["competitionGameId"] = null;
+        // Task #852 — a bracket only makes sense inside its competition.
+        updates["bracketId"] = null;
       } else if (typeof body.competitionId === "string") {
         if (!UUID_RE.test(body.competitionId))
           return apiError(res, 400, "Invalid competitionId");
@@ -404,6 +407,13 @@ router.patch(
           );
         }
         updates["competitionId"] = explicit.competitionId;
+        // Task #852 — switching to a DIFFERENT competition invalidates any
+        // stored bracket (brackets are per-competition). Re-sending the
+        // same competition (autosave does this) leaves it alone; an
+        // explicit body.bracketId below overrides this clear.
+        if (explicit.competitionId !== a.competitionId) {
+          updates["bracketId"] = null;
+        }
         // Combined recaps span many games — competition-level link only.
         updates["competitionGameId"] =
           a.recapKind === "combined" ? null : explicit.competitionGameId;
@@ -433,6 +443,48 @@ router.patch(
             );
           updates["competitionGameId"] = body.competitionGameId;
         }
+      }
+    }
+    // Task #852 — bracket pick from the composer (extra-spec field, same
+    // precedent as competitionId above). Touch-gated client-side, so absent
+    // means unchanged; null/"" clears; a UUID must belong to the recap's
+    // (possibly just-updated) competition.
+    if ("bracketId" in body) {
+      if (body.bracketId === null || body.bracketId === "") {
+        updates["bracketId"] = null;
+      } else if (typeof body.bracketId === "string") {
+        if (!UUID_RE.test(body.bracketId))
+          return apiError(res, 400, "Invalid bracketId");
+        const effectiveCompetitionId =
+          "competitionId" in updates
+            ? (updates["competitionId"] as string | null)
+            : a.competitionId;
+        if (!effectiveCompetitionId) {
+          return apiError(
+            res,
+            400,
+            "Pick a competition before choosing a bracket.",
+            { code: "bracket_without_competition" },
+          );
+        }
+        const [bracketRow] = await db
+          .select({ id: competitionBrackets.id })
+          .from(competitionBrackets)
+          .where(
+            and(
+              eq(competitionBrackets.id, body.bracketId),
+              eq(competitionBrackets.tournamentId, effectiveCompetitionId),
+            ),
+          )
+          .limit(1);
+        if (!bracketRow)
+          return apiError(
+            res,
+            400,
+            "That bracket doesn't belong to the selected competition.",
+            { code: "invalid_bracket" },
+          );
+        updates["bracketId"] = body.bracketId;
       }
     }
     if (Object.keys(updates).length === 0)

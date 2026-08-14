@@ -24,6 +24,7 @@ import {
   tournaments,
   tournamentParticipants,
   competitionFollowers,
+  competitionBrackets,
   guardianLinks,
 } from "@workspace/db";
 import {
@@ -2218,6 +2219,39 @@ router.post(
         recapKind === "combined"
           ? { competitionId: rawLink.competitionId, competitionGameId: null }
           : rawLink;
+      // Task #852 — optional bracket pick from the composer (extra-spec
+      // field, same precedent). Only honored when the recap ends up linked
+      // to a competition and the bracket belongs to that competition.
+      let bracketId: string | null = null;
+      if (
+        typeof body.bracketId === "string" &&
+        body.bracketId.length > 0 &&
+        competitionLink.competitionId
+      ) {
+        if (!UUID_RE.test(body.bracketId))
+          return apiError(res, 400, "Invalid bracketId");
+        const [bracketRow] = await db
+          .select({ id: competitionBrackets.id })
+          .from(competitionBrackets)
+          .where(
+            and(
+              eq(competitionBrackets.id, body.bracketId),
+              eq(
+                competitionBrackets.tournamentId,
+                competitionLink.competitionId,
+              ),
+            ),
+          )
+          .limit(1);
+        if (!bracketRow)
+          return apiError(
+            res,
+            400,
+            "That bracket doesn't belong to the selected competition.",
+            { code: "invalid_bracket" },
+          );
+        bracketId = body.bracketId;
+      }
       const [a] = await db
         .insert(articles)
         .values({
@@ -2236,6 +2270,7 @@ router.post(
           recapKind,
           competitionId: competitionLink.competitionId,
           competitionGameId: competitionLink.competitionGameId,
+          bracketId,
           status,
           publishedAt: status === "published" ? new Date() : null,
         })

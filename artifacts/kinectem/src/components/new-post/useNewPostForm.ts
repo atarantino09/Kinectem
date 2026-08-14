@@ -95,6 +95,16 @@ export type CompetitionGameOption = {
   opponentName: string | null;
 };
 
+// Task #852 — one bracket option in the composer's optional bracket
+// dropdown, listed in the organizer's saved order. Sourced from
+// GET /competitions/:id/brackets.
+export type CompetitionBracketOption = {
+  id: string;
+  label: string;
+  gender: string | null;
+  ageGroup: string | null;
+};
+
 // Today's local calendar date in YYYY-MM-DD form, the shape an
 // <input type="date"> control accepts.
 function todayLocalIso(): string {
@@ -290,6 +300,14 @@ export function useNewPostForm({
   const [gameTouched, setGameTouched] = useState(
     !!(initialCompetitionId && initialMatchId),
   );
+  // Task #852 — optional bracket pick for the recap (empty = none).
+  // Same touch-gating pattern as the competition pick above: an
+  // untouched picker stays absent from draft PATCHes so autosaves
+  // never wipe a bracket set elsewhere (e.g. by the organizer).
+  const [bracketId, setBracketId] = useState<string>("");
+  const [bracketTouched, setBracketTouched] = useState(false);
+  const [brackets, setBrackets] = useState<CompetitionBracketOption[]>([]);
+  const [bracketsLoading, setBracketsLoading] = useState(false);
   // Opponent name auto-filled when the coach picks a game in the
   // composer (deep-links pass the opponent via `initialOpponent`
   // instead). Feeds buildPayload's `opponentName`.
@@ -409,6 +427,32 @@ export function useNewPostForm({
       cancelled = true;
     };
   }, [postType, composerTeamId, competitionId]);
+  // Task #852 — fetch the picked competition's brackets (organizer
+  // order) for the optional bracket dropdown. Cleared with no pick.
+  useEffect(() => {
+    if (postType === "short" || !competitionId) {
+      setBrackets([]);
+      return;
+    }
+    let cancelled = false;
+    setBracketsLoading(true);
+    customFetch<{ data?: CompetitionBracketOption[] }>(
+      `/api/v1/competitions/${competitionId}/brackets`,
+      { method: "GET" },
+    )
+      .then((r) => {
+        if (!cancelled) setBrackets(r.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setBrackets([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBracketsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [postType, competitionId]);
 
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
@@ -447,6 +491,7 @@ export function useNewPostForm({
     taggedUserIds: string[];
     competitionId: string;
     competitionGameId: string;
+    bracketId: string;
   }) => JSON.stringify(v);
   const initialSnapshot = buildSnapshot({
     title: "",
@@ -459,6 +504,7 @@ export function useNewPostForm({
     competitionId: initialCompetitionId ?? "",
     competitionGameId:
       initialCompetitionId && initialMatchId ? initialMatchId : "",
+    bracketId: "",
   });
   const [baseline, setBaseline] = useState<string>(initialSnapshot);
   const currentSnapshot = buildSnapshot({
@@ -471,6 +517,7 @@ export function useNewPostForm({
     taggedUserIds,
     competitionId,
     competitionGameId,
+    bracketId,
   });
   const isDirty = currentSnapshot !== baseline;
   const dirtyRef = useRef(isDirty);
@@ -599,6 +646,14 @@ export function useNewPostForm({
       // game for the (re-sent) competition.
       ...(gameTouched && competitionId && competitionGameId
         ? ({ competitionGameId } as object)
+        : {}),
+      // Task #852 — the optional bracket pick, touch-gated exactly like
+      // the competition pick: untouched saves omit it entirely so an
+      // autosave never clears a bracket set elsewhere (e.g. by the
+      // organizer in the console). An explicit "No bracket" pick sends
+      // null to clear.
+      ...(bracketTouched && competitionId
+        ? ({ bracketId: bracketId || null } as object)
         : {}),
     });
   };
@@ -806,6 +861,9 @@ export function useNewPostForm({
           // pick — autosaves omit it and the server keeps the stored
           // link.
           competitionGameId: "",
+          // Same locked-spec gap for the bracket — re-opened sessions
+          // start untouched/empty; autosaves omit it.
+          bracketId: "",
         });
         setBaseline(loadedSnapshot);
       })
@@ -858,6 +916,7 @@ export function useNewPostForm({
     gameDate,
     tagRoster,
     competitionId,
+    bracketId,
     draftId,
     isEditingPublished,
   ]);
@@ -906,6 +965,11 @@ export function useNewPostForm({
       // meaningful alongside an explicit competition pick.
       ...(!isShort && competitionId && competitionGameId
         ? ({ competitionGameId } as object)
+        : {}),
+      // Task #852 — optional bracket pick; only meaningful alongside an
+      // explicit competition pick.
+      ...(!isShort && competitionId && bracketId
+        ? ({ bracketId } as object)
         : {}),
       ...(status ? ({ status } as object) : {}),
     };
@@ -1309,6 +1373,11 @@ export function useNewPostForm({
     competitionGameId,
     competitionGames,
     competitionGamesLoading,
+    // Task #852 — bracket picker surface: the picked competition's
+    // brackets in organizer order plus the current (optional) pick.
+    bracketId,
+    brackets,
+    bracketsLoading,
     composerTeamId,
     draftId,
     editId,
@@ -1372,6 +1441,9 @@ export function useNewPostForm({
       setCompetitionTouched(false);
       setCompetitionGameId("");
       setGameTouched(false);
+      // Bracket reset stays "untouched" — not an explicit clear.
+      setBracketId("");
+      setBracketTouched(false);
       setPickedOpponent(null);
     },
     // Changing the competition invalidates the game pick — the game
@@ -1383,6 +1455,12 @@ export function useNewPostForm({
       setCompetitionTouched(true);
       setCompetitionGameId("");
       setGameTouched(false);
+      // Task #852 — brackets are per-competition; a stale pick is
+      // meaningless for the new competition. Untouched so the PATCH
+      // omits it — the server clears the stored bracket itself when
+      // the competition actually changes.
+      setBracketId("");
+      setBracketTouched(false);
       setPickedOpponent(null);
     },
     // Task #746 — explicit game pick. Marks BOTH pickers touched so
@@ -1400,6 +1478,15 @@ export function useNewPostForm({
       } else {
         setPickedOpponent(null);
       }
+    },
+    // Task #852 — explicit bracket pick (or explicit "No bracket" when
+    // v is ""). Marks the competition touched too so the PATCH carries
+    // competitionId alongside (the server validates the bracket against
+    // the recap's competition).
+    setBracketId: (v: string) => {
+      setBracketId(v);
+      setBracketTouched(true);
+      setCompetitionTouched(true);
     },
     setPhotos,
     setVideoUrl,

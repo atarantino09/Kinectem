@@ -48,7 +48,16 @@ import {
   ChevronDown,
   Plus,
   Trash2,
+  GripVertical,
+  ListOrdered,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -1397,6 +1406,322 @@ function ClaimsPanel({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Task #852 — Brackets panel: organizer-defined labels for sorting recaps.
+// Auto-seeded from the schedule import's division/bracket column (the GET
+// below also lazily backfills from an already-imported schedule); fully
+// editable, deletable, and drag-reorderable. The saved order is canonical
+// everywhere (composer dropdown, curation dropdown, public filter).
+// ---------------------------------------------------------------------------
+
+export interface CompetitionBracket {
+  id: string;
+  label: string;
+  gender: string | null;
+  ageGroup: string | null;
+  sortOrder: number;
+}
+
+const BRACKET_GENDERS = ["Boys", "Girls", "Coed"] as const;
+
+function BracketsPanel({
+  competitionId,
+  preview = false,
+}: {
+  competitionId: string;
+  preview?: boolean;
+}) {
+  const [open, setOpen] = useState(preview);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const bracketsQ = useQuery<{ data: CompetitionBracket[] }>({
+    queryKey: ["competition", competitionId, "brackets"],
+    queryFn: () =>
+      customFetch<{ data: CompetitionBracket[] }>(
+        `/api/v1/competitions/${competitionId}/brackets`,
+        { method: "GET" },
+      ),
+    enabled: !preview,
+  });
+  const brackets = bracketsQ.data?.data ?? [];
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["competition", competitionId, "brackets"] });
+    qc.invalidateQueries({ queryKey: ["competition"] });
+  };
+  const onError = (title: string) => (err: unknown) =>
+    toast({
+      title,
+      description: err instanceof Error ? err.message : undefined,
+      variant: "destructive",
+    });
+
+  // Add form
+  const [newLabel, setNewLabel] = useState("");
+  const [newGender, setNewGender] = useState("");
+  const [newAge, setNewAge] = useState("");
+  const create = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/v1/competitions/${competitionId}/brackets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: newLabel.trim(),
+          gender: newGender || null,
+          ageGroup: newAge.trim() || null,
+        }),
+      }),
+    onSuccess: () => {
+      setNewLabel("");
+      setNewGender("");
+      setNewAge("");
+      invalidate();
+    },
+    onError: onError("Couldn't add that bracket"),
+  });
+
+  // Inline edit
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editGender, setEditGender] = useState("");
+  const [editAge, setEditAge] = useState("");
+  const startEdit = (b: CompetitionBracket) => {
+    setEditingId(b.id);
+    setEditLabel(b.label);
+    setEditGender(b.gender ?? "");
+    setEditAge(b.ageGroup ?? "");
+  };
+  const update = useMutation({
+    mutationFn: (id: string) =>
+      customFetch(`/api/v1/competitions/${competitionId}/brackets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: editLabel.trim(),
+          gender: editGender || null,
+          ageGroup: editAge.trim() || null,
+        }),
+      }),
+    onSuccess: () => {
+      setEditingId(null);
+      invalidate();
+    },
+    onError: onError("Couldn't save that bracket"),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) =>
+      customFetch(`/api/v1/competitions/${competitionId}/brackets/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Bracket deleted",
+        description: "Recaps that used it keep everything else — they just show under All.",
+      });
+    },
+    onError: onError("Couldn't delete that bracket"),
+  });
+
+  // Drag-and-drop reorder (native HTML5, same pattern as the photo grid).
+  // Optimistic: reorder the cached list immediately, then persist the full
+  // id order in one call; refetch on settle keeps us honest.
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const reorder = useMutation({
+    mutationFn: (ids: string[]) =>
+      customFetch(`/api/v1/competitions/${competitionId}/brackets/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      }),
+    onError: (err) => {
+      onError("Couldn't save the new order")(err);
+      invalidate();
+    },
+    onSuccess: invalidate,
+  });
+  const moveTo = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...brackets];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    qc.setQueryData(["competition", competitionId, "brackets"], { data: next });
+    reorder.mutate(next.map((b) => b.id));
+  };
+
+  return (
+    <Card>
+      <CollapsibleCardHeader
+        icon={<ListOrdered className="w-4 h-4" />}
+        label={`Brackets${brackets.length > 0 ? ` (${brackets.length})` : ""}`}
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        testId="btn-toggle-brackets"
+      />
+      {open && (
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Brackets are labels for sorting incoming recaps (they never change
+            how a published recap looks). They're picked up automatically from
+            your schedule's division/bracket column — add, edit, or drag to
+            reorder them any way you like.
+          </p>
+          {bracketsQ.isLoading && !preview ? (
+            <Skeleton className="h-16 rounded-lg" />
+          ) : brackets.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-brackets">
+              No brackets yet — import a schedule with a division column, or
+              add one below.
+            </p>
+          ) : (
+            <div className="space-y-1.5" data-testid="list-brackets">
+              {brackets.map((b, i) => (
+                <div
+                  key={b.id}
+                  className={`rounded-lg border border-border px-2 py-1.5 ${
+                    dragIndex === i ? "opacity-40" : ""
+                  }`}
+                  draggable={editingId !== b.id}
+                  onDragStart={(e) => {
+                    setDragIndex(i);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", String(i));
+                  }}
+                  onDragOver={(e) => {
+                    if (dragIndex === null || dragIndex === i) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIndex === null) return;
+                    moveTo(dragIndex, i);
+                    setDragIndex(null);
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                  data-testid={`row-bracket-${b.id}`}
+                >
+                  {editingId === b.id ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Input
+                        value={editLabel}
+                        onChange={(e) => setEditLabel(e.target.value)}
+                        className="h-8 w-44"
+                        placeholder="Bracket name"
+                        data-testid="input-edit-bracket-label"
+                      />
+                      <Select value={editGender || "none"} onValueChange={(v) => setEditGender(v === "none" ? "" : v)}>
+                        <SelectTrigger className="h-8 w-28" data-testid="select-edit-bracket-gender">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No gender</SelectItem>
+                          {BRACKET_GENDERS.map((g) => (
+                            <SelectItem key={g} value={g}>{g}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={editAge}
+                        onChange={(e) => setEditAge(e.target.value)}
+                        className="h-8 w-24"
+                        placeholder="Age (U14)"
+                        data-testid="input-edit-bracket-age"
+                      />
+                      <Button
+                        size="sm"
+                        variant="brand"
+                        disabled={update.isPending || editLabel.trim() === ""}
+                        onClick={() => update.mutate(b.id)}
+                        data-testid="btn-save-bracket"
+                      >
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 text-muted-foreground/60 cursor-grab shrink-0" />
+                      <span className="text-sm font-bold truncate">{b.label}</span>
+                      {b.gender && (
+                        <Badge variant="secondary" className="shrink-0">{b.gender}</Badge>
+                      )}
+                      {b.ageGroup && (
+                        <Badge variant="outline" className="shrink-0">{b.ageGroup}</Badge>
+                      )}
+                      <span className="flex-1" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="font-bold text-muted-foreground"
+                        onClick={() => startEdit(b)}
+                        data-testid={`btn-edit-bracket-${b.id}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="font-bold text-muted-foreground hover:text-destructive"
+                        disabled={remove.isPending}
+                        onClick={() => remove.mutate(b.id)}
+                        data-testid={`btn-delete-bracket-${b.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <Input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              className="h-8 w-44"
+              placeholder="New bracket name"
+              data-testid="input-new-bracket-label"
+            />
+            <Select value={newGender || "none"} onValueChange={(v) => setNewGender(v === "none" ? "" : v)}>
+              <SelectTrigger className="h-8 w-28" data-testid="select-new-bracket-gender">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No gender</SelectItem>
+                {BRACKET_GENDERS.map((g) => (
+                  <SelectItem key={g} value={g}>{g}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={newAge}
+              onChange={(e) => setNewAge(e.target.value)}
+              className="h-8 w-24"
+              placeholder="Age (U14)"
+              data-testid="input-new-bracket-age"
+            />
+            <Button
+              size="sm"
+              variant="brand"
+              disabled={create.isPending || newLabel.trim() === ""}
+              onClick={() => create.mutate()}
+              data-testid="btn-add-bracket"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Add bracket
+            </Button>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 interface CurationRecap {
   id: string;
   title: string;
@@ -1409,6 +1734,7 @@ interface CurationRecap {
   teamId: string;
   teamName: string;
   featured: boolean;
+  bracketId: string | null;
   createdAt: string;
 }
 
@@ -1441,6 +1767,41 @@ function CurationPanel({
       ),
     // Owner-only endpoint — skip it in claim preview (would 401).
     enabled: !preview,
+  });
+
+  // Task #852 — brackets for the per-recap sorting dropdown (organizer can
+  // re-assign a recap's bracket any time, including after publish).
+  const bracketsQ = useQuery<{ data: CompetitionBracket[] }>({
+    queryKey: ["competition", competitionId, "brackets"],
+    queryFn: () =>
+      customFetch<{ data: CompetitionBracket[] }>(
+        `/api/v1/competitions/${competitionId}/brackets`,
+        { method: "GET" },
+      ),
+    enabled: !preview,
+  });
+  const brackets = bracketsQ.data?.data ?? [];
+
+  const setBracket = useMutation({
+    mutationFn: ({ articleId, bracketId }: { articleId: string; bracketId: string | null }) =>
+      customFetch(
+        `/api/v1/competitions/${competitionId}/recaps/${articleId}/bracket`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bracketId }),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["competition", competitionId, "recaps"] });
+      qc.invalidateQueries({ queryKey: ["competition"] });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't change that recap's bracket",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      }),
   });
 
   const feature = useMutation({
@@ -1525,6 +1886,32 @@ function CurationPanel({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {brackets.length > 0 && (
+                    <Select
+                      value={r.bracketId ?? "none"}
+                      onValueChange={(v) =>
+                        setBracket.mutate({
+                          articleId: r.id,
+                          bracketId: v === "none" ? null : v,
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        className="h-8 w-36"
+                        data-testid={`select-recap-bracket-${r.id}`}
+                      >
+                        <SelectValue placeholder="No bracket" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No bracket</SelectItem>
+                        {brackets.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <a href={`/app/posts/${r.id}`} target="_blank" rel="noopener noreferrer">
                     <Button size="sm" variant="ghost" className="font-bold text-muted-foreground">
                       View
@@ -3414,6 +3801,8 @@ function ConsoleWithTour({
         competitionName={detail?.name ?? row.name}
         preview={preview}
       />
+      {/* Task #852 — brackets for sorting recaps, directly below Schedule. */}
+      <BracketsPanel competitionId={row.id} preview={preview} />
       <InviteTeamsPanel
         name={detail?.name ?? row.name}
         type={detail?.type ?? row.type}

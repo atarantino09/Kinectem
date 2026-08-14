@@ -2104,6 +2104,35 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
           REFERENCES promo_codes(id) ON DELETE SET NULL;
     `,
   },
+  {
+    // Task #852 — organizer-defined competition brackets used to sort
+    // recaps (labels only; no standings/seeding). Auto-seeded from the
+    // schedule import's division/bracket column; articles get a nullable
+    // bracket reference set by the coach in the composer or re-assigned
+    // by the organizer. Idempotent.
+    name: "2026-08-14-task-852-competition-brackets",
+    sql: `
+      CREATE TABLE IF NOT EXISTS competition_brackets (
+        id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        tournament_id uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        label         text NOT NULL,
+        label_key     text NOT NULL,
+        gender        text,
+        age_group     text,
+        sort_order    integer NOT NULL DEFAULT 0,
+        created_at    timestamp NOT NULL DEFAULT now(),
+        updated_at    timestamp NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS competition_brackets_tournament_id_idx
+        ON competition_brackets(tournament_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS competition_brackets_unique_label
+        ON competition_brackets(tournament_id, label_key);
+
+      ALTER TABLE articles
+        ADD COLUMN IF NOT EXISTS bracket_id uuid
+          REFERENCES competition_brackets(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

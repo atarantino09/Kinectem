@@ -25,6 +25,7 @@ import {
 import type {
   ClaimedCompetition,
   CompetitionGameOption,
+  CompetitionBracketOption,
 } from "./useNewPostForm";
 
 interface PostFormFieldsProps {
@@ -97,6 +98,13 @@ interface PostFormFieldsProps {
   ) => void;
   competitionGames?: CompetitionGameOption[];
   competitionGamesLoading?: boolean;
+  // Task #852 — bracket picker (shown once a competition is picked and
+  // the competition has brackets). Optional sorting label the organizer
+  // uses to group incoming recaps; never rendered on the post itself.
+  bracketId?: string;
+  onBracketIdChange?: (v: string) => void;
+  brackets?: CompetitionBracketOption[];
+  bracketsLoading?: boolean;
   saving: boolean;
   publishing: boolean;
   // True when the form should refuse submission because the user has
@@ -153,6 +161,10 @@ export function PostFormFields({
   onCompetitionGameIdChange,
   competitionGames = [],
   competitionGamesLoading = false,
+  bracketId = "",
+  onBracketIdChange,
+  brackets = [],
+  bracketsLoading = false,
   saving,
   publishing,
   publishDisabled = false,
@@ -584,6 +596,54 @@ export function PostFormFields({
                       game.
                     </p>
                   )}
+                </div>
+              )}
+              {/* Task #852 — bracket picker. Appears once a competition
+                  is picked and it has brackets defined. Optional — the
+                  organizer uses it to sort incoming recaps; it never
+                  shows on the published post. */}
+              {competitionId && !bracketsLoading && brackets.length > 0 && (
+                <div className="mt-3" data-testid="section-bracket-picker">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Bracket{" "}
+                    <span className="normal-case font-semibold tracking-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Select
+                    value={bracketId || "__none__"}
+                    onValueChange={(v) =>
+                      onBracketIdChange?.(v === "__none__" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger
+                      className="mt-2"
+                      data-testid="select-bracket"
+                    >
+                      <SelectValue placeholder="No bracket" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value="__none__"
+                        data-testid="option-bracket-none"
+                      >
+                        No bracket
+                      </SelectItem>
+                      {brackets.map((b) => (
+                        <SelectItem
+                          key={b.id}
+                          value={b.id}
+                          data-testid={`option-bracket-${b.id}`}
+                        >
+                          {b.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-2 text-[12px] text-muted-foreground font-semibold">
+                    Helps the organizer sort recaps on the competition page.
+                    It won't appear on your published recap.
+                  </p>
                 </div>
               )}
               <p className="mt-2 text-[12px] text-muted-foreground font-semibold">

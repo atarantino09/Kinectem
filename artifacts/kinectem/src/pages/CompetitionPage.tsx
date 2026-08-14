@@ -119,6 +119,17 @@ type FeaturedRecap = {
   teamId: string;
   teamName: string;
   publishedAt: string | null;
+  // Task #852 — organizer-assigned sorting bracket (null = unbracketed).
+  bracketId?: string | null;
+};
+
+// Task #852 — bracket labels in the organizer's saved order, driving the
+// recap rail's filter chips.
+type CompetitionBracketInfo = {
+  id: string;
+  label: string;
+  gender: string | null;
+  ageGroup: string | null;
 };
 
 type CompetitionResponse = {
@@ -126,6 +137,7 @@ type CompetitionResponse = {
   participants: Participant[];
   matches: Match[];
   featuredRecaps?: FeaturedRecap[];
+  brackets?: CompetitionBracketInfo[];
 };
 
 function groupLabel(division: string, bracket: string): string {
@@ -157,6 +169,9 @@ export default function CompetitionPage() {
   const { data: me } = useGetLoggedInUser();
   const [teamsOpen, setTeamsOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  // Task #852 — active bracket filter for the featured-recaps rail
+  // ("" = All; unbracketed recaps only ever show under All).
+  const [bracketFilter, setBracketFilter] = useState("");
 
   // Task #851 — a valid, unclaimed claim token means the viewer is the
   // prospective operator: show the "How your competition works" walkthrough
@@ -481,7 +496,18 @@ export default function CompetitionPage() {
             entirely until the operator features at least one recap. Each
             card carries the authoring team's identity inside the
             competition-branded page. */}
-        {(q.data.featuredRecaps?.length ?? 0) > 0 && (
+        {(q.data.featuredRecaps?.length ?? 0) > 0 && (() => {
+          const allRecaps = q.data.featuredRecaps!;
+          const brackets = q.data.brackets ?? [];
+          // Only offer chips for brackets that actually have a featured
+          // recap; "All" always includes unbracketed recaps.
+          const usedBrackets = brackets.filter((b) =>
+            allRecaps.some((r) => r.bracketId === b.id),
+          );
+          const shownRecaps = bracketFilter
+            ? allRecaps.filter((r) => r.bracketId === bracketFilter)
+            : allRecaps;
+          return (
           <section className="space-y-3" data-testid="rail-featured-recaps">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-lg font-black tracking-tight">
@@ -509,8 +535,38 @@ export default function CompetitionPage() {
                 ) : null}
               </div>
             </div>
+            {/* Task #852 — bracket filter chips (organizer order + All).
+                Unbracketed recaps only show under All. */}
+            {usedBrackets.length > 0 && (
+              <div
+                className="flex items-center gap-2 flex-wrap"
+                data-testid="filter-bracket-chips"
+              >
+                <Button
+                  size="sm"
+                  variant={bracketFilter === "" ? "default" : "outline"}
+                  className="h-7 rounded-full font-bold text-xs"
+                  onClick={() => setBracketFilter("")}
+                  data-testid="chip-bracket-all"
+                >
+                  All
+                </Button>
+                {usedBrackets.map((b) => (
+                  <Button
+                    key={b.id}
+                    size="sm"
+                    variant={bracketFilter === b.id ? "default" : "outline"}
+                    className="h-7 rounded-full font-bold text-xs"
+                    onClick={() => setBracketFilter(b.id)}
+                    data-testid={`chip-bracket-${b.id}`}
+                  >
+                    {b.label}
+                  </Button>
+                ))}
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {q.data.featuredRecaps!.map((r) => (
+              {shownRecaps.map((r) => (
                 <Link key={r.id} href={`/posts/${r.id}`}>
                   <Card
                     className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
@@ -553,7 +609,8 @@ export default function CompetitionPage() {
               ))}
             </div>
           </section>
-        )}
+          );
+        })()}
 
         {/* Organizer-only empty state — a clear path to the curation panel
             even before anything has been featured. Hidden from the public. */}

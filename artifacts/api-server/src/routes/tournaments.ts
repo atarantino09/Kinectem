@@ -16,6 +16,7 @@ import {
   tournaments,
   tournamentParticipants,
   tournamentMatches,
+  competitionBrackets,
   teams,
   rosterEntries,
   articles,
@@ -46,6 +47,7 @@ import {
   canManageTeam,
   recapFreeUntil,
 } from "../lib/permissions";
+import { seedBracketsFromSchedule } from "../lib/competition-brackets";
 import {
   materialChanges,
   notifyGameEdited,
@@ -969,6 +971,14 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .orderBy(desc(articles.createdAt))
       .limit(12);
 
+    // Task #852 — brackets in the organizer's saved order, for the public
+    // page's recap filter chips. Labels only; safe to expose publicly.
+    const bracketRows = await db
+      .select()
+      .from(competitionBrackets)
+      .where(eq(competitionBrackets.tournamentId, tournament.id))
+      .orderBy(asc(competitionBrackets.sortOrder), asc(competitionBrackets.createdAt));
+
     const competitionMeta = {
       id: tournament.id,
       slug: tournament.slug,
@@ -1015,6 +1025,13 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       // read the same payload during the rename transition.
       tournament: competitionMeta,
       competition: competitionMeta,
+      // Task #852 — organizer-ordered brackets driving the recap filter.
+      brackets: bracketRows.map((b) => ({
+        id: b.id,
+        label: b.label,
+        gender: b.gender,
+        ageGroup: b.ageGroup,
+      })),
       featuredRecaps: featuredRows.map(({ article: a, teamName }) => ({
         // Post ids are prefixed ("article-<uuid>") — the client links to
         // /posts/:id which 404s on a raw uuid.
@@ -1029,6 +1046,9 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         teamId: a.teamId,
         teamName,
         publishedAt: a.publishedAt,
+        // Task #852 — used only for the public page's bracket filter;
+        // never rendered on the post itself.
+        bracketId: a.bracketId,
       })),
       participants: partRows.map((p) => ({
         id: p.id,
@@ -1680,6 +1700,16 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         partRows,
       };
     });
+
+    // Task #852 — auto-seed brackets from the freshly imported schedule's
+    // division/bracket column. Idempotent: never duplicates or clobbers
+    // organizer-edited brackets/order; new values are appended.
+    try {
+      await seedBracketsFromSchedule(tournament.id);
+    } catch (err) {
+      // Bracket seeding is a convenience — never fail the import over it.
+      req.log?.error?.({ err }, "bracket auto-seed failed");
+    }
 
     // Task #767 — digest fan-out. Compare each imported game's material
     // fields against the pre-import snapshot; new games and cosmetic-only
@@ -2944,6 +2974,8 @@ router.get(
         teamName,
         featured: a.featured,
         competitionGameId: a.competitionGameId,
+        // Task #852 — current bracket assignment for the curation dropdown.
+        bracketId: a.bracketId,
         createdAt: a.createdAt.toISOString(),
       })),
     });
