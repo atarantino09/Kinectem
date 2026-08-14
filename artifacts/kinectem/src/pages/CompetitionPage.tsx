@@ -172,6 +172,10 @@ export default function CompetitionPage() {
   // Task #852 — active bracket filter for the featured-recaps rail
   // ("" = All; unbracketed recaps only ever show under All).
   const [bracketFilter, setBracketFilter] = useState("");
+  // Task #854 — optional grouped layout: recaps under bracket headings in
+  // the organizer's saved order, unbracketed last under "Other". Grouping
+  // supersedes the chip filter, so chips hide while grouped.
+  const [groupedView, setGroupedView] = useState(false);
 
   // Task #851 — a valid, unclaimed claim token means the viewer is the
   // prospective operator: show the "How your competition works" walkthrough
@@ -507,6 +511,66 @@ export default function CompetitionPage() {
           const shownRecaps = bracketFilter
             ? allRecaps.filter((r) => r.bracketId === bracketFilter)
             : allRecaps;
+          // Task #854 — grouped sections: brackets in the organizer's saved
+          // order (only those with recaps), then unbracketed under "Other".
+          const bracketIds = new Set(brackets.map((b) => b.id));
+          const groupedSections: { key: string; label: string; recaps: FeaturedRecap[] }[] =
+            usedBrackets.map((b) => ({
+              key: b.id,
+              label: b.label,
+              recaps: allRecaps.filter((r) => r.bracketId === b.id),
+            }));
+          const otherRecaps = allRecaps.filter(
+            (r) => !r.bracketId || !bracketIds.has(r.bracketId),
+          );
+          if (otherRecaps.length > 0) {
+            groupedSections.push({
+              key: "__other__",
+              label: "Other",
+              recaps: otherRecaps,
+            });
+          }
+          const renderRecapCard = (r: FeaturedRecap) => (
+            <Link key={r.id} href={`/posts/${r.id}`}>
+              <Card
+                className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
+                data-testid={`card-featured-recap-${r.id}`}
+              >
+                <CompetitionBrandStrip
+                  name={c.name}
+                  logoUrl={c.logoUrl}
+                  brandColor={c.brandColor}
+                  secondaryColor={c.secondaryColor}
+                />
+                {r.coverImageUrl ? (
+                  <div className="h-32 w-full overflow-hidden">
+                    <img
+                      src={r.coverImageUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : null}
+                <CardContent className="p-4 space-y-1.5">
+                  <p className="text-xs font-bold text-muted-foreground truncate">
+                    {r.teamName}
+                    {r.opponentName ? ` vs ${r.opponentName}` : ""}
+                    {r.teamScore != null && r.opponentScore != null
+                      ? ` · ${r.teamScore}-${r.opponentScore}`
+                      : ""}
+                  </p>
+                  <p className="text-sm font-black tracking-tight line-clamp-2">
+                    {r.title}
+                  </p>
+                  {r.summary ? (
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {r.summary}
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </Link>
+          );
           return (
           <section className="space-y-3" data-testid="rail-featured-recaps">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -536,78 +600,75 @@ export default function CompetitionPage() {
               </div>
             </div>
             {/* Task #852 — bracket filter chips (organizer order + All).
-                Unbracketed recaps only show under All. */}
+                Unbracketed recaps only show under All.
+                Task #854 — a "Group by bracket" toggle swaps chips for
+                grouped sections with one heading per bracket. */}
             {usedBrackets.length > 0 && (
               <div
                 className="flex items-center gap-2 flex-wrap"
                 data-testid="filter-bracket-chips"
               >
+                {!groupedView && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant={bracketFilter === "" ? "default" : "outline"}
+                      className="h-7 rounded-full font-bold text-xs"
+                      onClick={() => setBracketFilter("")}
+                      data-testid="chip-bracket-all"
+                    >
+                      All
+                    </Button>
+                    {usedBrackets.map((b) => (
+                      <Button
+                        key={b.id}
+                        size="sm"
+                        variant={bracketFilter === b.id ? "default" : "outline"}
+                        className="h-7 rounded-full font-bold text-xs"
+                        onClick={() => setBracketFilter(b.id)}
+                        data-testid={`chip-bracket-${b.id}`}
+                      >
+                        {b.label}
+                      </Button>
+                    ))}
+                  </>
+                )}
                 <Button
                   size="sm"
-                  variant={bracketFilter === "" ? "default" : "outline"}
-                  className="h-7 rounded-full font-bold text-xs"
-                  onClick={() => setBracketFilter("")}
-                  data-testid="chip-bracket-all"
+                  variant={groupedView ? "default" : "outline"}
+                  className="h-7 rounded-full font-bold text-xs ml-auto"
+                  onClick={() => setGroupedView((v) => !v)}
+                  data-testid="btn-toggle-grouped-view"
                 >
-                  All
+                  Group by bracket
                 </Button>
-                {usedBrackets.map((b) => (
-                  <Button
-                    key={b.id}
-                    size="sm"
-                    variant={bracketFilter === b.id ? "default" : "outline"}
-                    className="h-7 rounded-full font-bold text-xs"
-                    onClick={() => setBracketFilter(b.id)}
-                    data-testid={`chip-bracket-${b.id}`}
-                  >
-                    {b.label}
-                  </Button>
-                ))}
               </div>
             )}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {shownRecaps.map((r) => (
-                <Link key={r.id} href={`/posts/${r.id}`}>
-                  <Card
-                    className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
-                    data-testid={`card-featured-recap-${r.id}`}
+            {groupedView && usedBrackets.length > 0 ? (
+              <div className="space-y-5" data-testid="rail-grouped-sections">
+                {groupedSections.map((s) => (
+                  <div
+                    key={s.key}
+                    className="space-y-2"
+                    data-testid={`section-bracket-${s.key}`}
                   >
-                    <CompetitionBrandStrip
-                      name={c.name}
-                      logoUrl={c.logoUrl}
-                      brandColor={c.brandColor}
-                      secondaryColor={c.secondaryColor}
-                    />
-                    {r.coverImageUrl ? (
-                      <div className="h-32 w-full overflow-hidden">
-                        <img
-                          src={r.coverImageUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : null}
-                    <CardContent className="p-4 space-y-1.5">
-                      <p className="text-xs font-bold text-muted-foreground truncate">
-                        {r.teamName}
-                        {r.opponentName ? ` vs ${r.opponentName}` : ""}
-                        {r.teamScore != null && r.opponentScore != null
-                          ? ` · ${r.teamScore}-${r.opponentScore}`
-                          : ""}
-                      </p>
-                      <p className="text-sm font-black tracking-tight line-clamp-2">
-                        {r.title}
-                      </p>
-                      {r.summary ? (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {r.summary}
-                        </p>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                      {s.label}{" "}
+                      <span className="font-bold normal-case tracking-normal">
+                        ({s.recaps.length})
+                      </span>
+                    </h3>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {s.recaps.map(renderRecapCard)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {shownRecaps.map(renderRecapCard)}
+              </div>
+            )}
           </section>
           );
         })()}
