@@ -536,6 +536,9 @@ router.get(
       },
       alreadyClaimed: !!owner,
       promo,
+      // Task #856 — plan tier staged by the platform admin at creation.
+      // Pre-selected on the subscribe page after claiming; label-only here.
+      pendingPlan: org.pendingPlan ?? null,
     });
   }),
 );

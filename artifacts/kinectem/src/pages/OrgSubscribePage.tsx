@@ -30,9 +30,10 @@ type SubscriptionResponse = {
     promo: AppliedPromo | null;
     hasCardOnFile?: boolean;
   } | null;
-  // Staged promo from admin quick setup — auto-applied when the org hasn't
-  // picked its own promo yet.
+  // Staged promo / plan tier from admin creation — auto-applied /
+  // pre-selected when the org hasn't picked its own yet.
   pendingPromo?: AppliedPromo | null;
+  pendingPlan?: PlanTier | null;
   plans: Plan[];
   billingStartsAt: string | null;
   freePeriodDays?: number;
@@ -92,6 +93,10 @@ export default function OrgSubscribePage() {
         setPromo(data.subscription.promo);
         setPromoInput(data.subscription.promo.code);
       }
+    } else if (data.pendingPlan) {
+      // Task #856 — plan tier staged by the platform admin at org creation.
+      // Pre-select it; the owner can still pick any other tier.
+      setSelected(data.pendingPlan);
     }
     // Staged promo from admin quick setup — auto-apply it when the org
     // hasn't chosen a promo of its own yet.

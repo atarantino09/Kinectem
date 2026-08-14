@@ -110,7 +110,10 @@ export default function AdminOrgQuickSetup() {
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
   const [bulkPairs, setBulkPairs] = useState<BulkPair[]>([]);
-  const [tier, setTier] = useState<PlanTier>("starter");
+  // Task #856 — optional staged plan tier. null = not picked (skipped):
+  // nothing is sent and the org behaves exactly as before (Starter default).
+  // Clicking the selected card again deselects it.
+  const [tier, setTier] = useState<PlanTier | null>(null);
   // Staged promo code — validated against the promo catalog, stored on the
   // org, and auto-applied when the new owner sets up billing.
   const [promoInput, setPromoInput] = useState("");
@@ -254,6 +257,7 @@ export default function AdminOrgQuickSetup() {
             logoUrl: logoDataUrl || undefined,
             brandPrimaryColor: primaryColor || undefined,
             brandSecondaryColor: secondaryColor || undefined,
+            tier: tier ?? undefined,
             promoCode: appliedPromo?.code || undefined,
             teams: validTeams,
           }),
@@ -286,7 +290,7 @@ export default function AdminOrgQuickSetup() {
     setPrimaryColor(null);
     setSecondaryColor(null);
     setBulkPairs([]);
-    setTier("starter");
+    setTier(null);
     setPromoInput("");
     setAppliedPromo(null);
     setPromoError(null);
@@ -336,7 +340,7 @@ export default function AdminOrgQuickSetup() {
               <Link href={`/organizations/${result.id}`}>Open org page</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/admin/org-claim-links">Back to claim links</Link>
+              <Link href="/admin/org-claim-links">Back to Org Links</Link>
             </Button>
             <Button onClick={reset} data-testid="btn-quick-setup-another">
               Set up another org
@@ -487,9 +491,12 @@ export default function AdminOrgQuickSetup() {
 
         {/* ---- Plan tier (sets the team-count cap shown below) ---- */}
         <section className="rounded-lg border bg-card p-4 mb-5">
-          <h2 className="text-sm font-bold mb-1">How many teams?</h2>
+          <h2 className="text-sm font-bold mb-1">Plan tier (optional)</h2>
           <p className="text-xs text-muted-foreground mb-3">
-            Tiers differ only in the number of teams.
+            Tiers differ only in the number of teams. Picking one pre-selects
+            it on the new owner's subscribe page (they can still change it)
+            and sets the team cap below. Skip it to leave the choice entirely
+            to them (Starter cap applies during setup).
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {PLANS.map((p) => {
@@ -498,7 +505,7 @@ export default function AdminOrgQuickSetup() {
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => setTier(p.id)}
+                  onClick={() => setTier((cur) => (cur === p.id ? null : p.id))}
                   aria-pressed={selected}
                   className={`rounded-md border p-3 text-left transition-colors ${
                     selected
@@ -618,9 +625,11 @@ export default function AdminOrgQuickSetup() {
               className="text-xs font-medium text-muted-foreground"
               data-testid="text-qs-team-count"
             >
-              {selectedPlan?.maxTeams != null
-                ? `${validTeams.length}/${selectedPlan.maxTeams} teams`
-                : `${validTeams.length} team${validTeams.length === 1 ? "" : "s"}`}
+              {selectedPlan
+                ? selectedPlan.maxTeams != null
+                  ? `${validTeams.length}/${selectedPlan.maxTeams} teams`
+                  : `${validTeams.length} team${validTeams.length === 1 ? "" : "s"}`
+                : `${validTeams.length}/15 teams (Starter cap until the org picks a plan)`}
             </span>
           </div>
           {bulkErrors.length > 0 && (

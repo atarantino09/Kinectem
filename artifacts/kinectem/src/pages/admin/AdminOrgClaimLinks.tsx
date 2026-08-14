@@ -22,6 +22,7 @@ import {
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
+import { PLANS, type PlanTier } from "@/lib/plans";
 import { X } from "lucide-react";
 
 // Task #610 — Admin screen listing every ownerless org page with its secret
@@ -93,6 +94,41 @@ export default function AdminOrgClaimLinks() {
   const logoUploadSeq = useRef(0);
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
+  // Task #856 — optional staged plan tier + promo code (mirrors Quick setup).
+  // Both skippable; when set they're stored on the org and pre-selected /
+  // auto-applied on the new owner's subscribe page.
+  const [tier, setTier] = useState<PlanTier | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    description: string | null;
+    discountType: string;
+    discountValue: number;
+  } | null>(null);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
+  const applyPromoCode = async () => {
+    const code = promoInput.trim();
+    if (!code) return;
+    setPromoChecking(true);
+    setPromoError(null);
+    try {
+      const res = await customFetch<{
+        valid: boolean;
+        promo: NonNullable<typeof appliedPromo>;
+      }>(`/api/v1/promo-codes/validate`, {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      setAppliedPromo(res.promo);
+    } catch {
+      setAppliedPromo(null);
+      setPromoError("That promo code isn't valid.");
+    } finally {
+      setPromoChecking(false);
+    }
+  };
 
   const onLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,6 +209,8 @@ export default function AdminOrgClaimLinks() {
             logoUrl: logoDataUrl || undefined,
             brandPrimaryColor: primaryColor || undefined,
             brandSecondaryColor: secondaryColor || undefined,
+            tier: tier ?? undefined,
+            promoCode: appliedPromo?.code || undefined,
           }),
         },
       );
@@ -181,6 +219,10 @@ export default function AdminOrgClaimLinks() {
       setLogoDataUrl(null);
       setPrimaryColor(null);
       setSecondaryColor(null);
+      setTier(null);
+      setPromoInput("");
+      setAppliedPromo(null);
+      setPromoError(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
       try {
         await navigator.clipboard.writeText(claimUrl(resp.data.token));
@@ -286,7 +328,7 @@ export default function AdminOrgClaimLinks() {
     <AdminLayout>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black">Claim links</h1>
+          <h1 className="text-2xl font-black">Org Links</h1>
           <p className="text-sm text-muted-foreground">
             Secret invite links for ownerless organization pages. Send each link
             to the right org — whoever signs up through it becomes the owner.
@@ -408,6 +450,118 @@ export default function AdminOrgClaimLinks() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Task #856 — optional staged plan tier + promo code. Both skippable;
+            they're pre-selected / auto-applied on the owner's subscribe page. */}
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Plan tier (optional)</Label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Pre-selects the tier on the new owner's subscribe page — they can
+              still change it. Click again to deselect.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {PLANS.map((p) => {
+                const selected = tier === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setTier((cur) => (cur === p.id ? null : p.id))}
+                    aria-pressed={selected}
+                    className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                      selected
+                        ? "border-primary ring-2 ring-primary/40 bg-primary/5"
+                        : "hover:border-muted-foreground/40"
+                    }`}
+                    data-testid={`btn-add-org-tier-${p.id}`}
+                  >
+                    <div className="text-xs font-bold">{p.name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {p.maxTeams != null
+                        ? `Up to ${p.maxTeams} teams`
+                        : "41+ teams (unlimited)"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="add-org-promo-code">Promo code (optional)</Label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Applied automatically when the org admin claims the page and sets
+              up billing.
+            </p>
+            {appliedPromo ? (
+              <div
+                className="flex items-center gap-2 text-sm"
+                data-testid="add-org-promo-applied"
+              >
+                <span className="rounded-md border border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 px-2 py-1 font-bold uppercase">
+                  {appliedPromo.code}
+                </span>
+                <span className="text-muted-foreground">
+                  {appliedPromo.discountType === "percent"
+                    ? `${appliedPromo.discountValue}% off first year`
+                    : `$${appliedPromo.discountValue} off first year`}
+                  {appliedPromo.description ? ` — ${appliedPromo.description}` : ""}
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    setAppliedPromo(null);
+                    setPromoInput("");
+                    setPromoError(null);
+                  }}
+                  aria-label="Remove promo code"
+                  data-testid="btn-add-org-promo-clear"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 max-w-sm">
+                <Input
+                  id="add-org-promo-code"
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value);
+                    setPromoError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void applyPromoCode();
+                    }
+                  }}
+                  placeholder="e.g. FOUNDING50"
+                  className="h-9"
+                  data-testid="input-add-org-promo-code"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void applyPromoCode()}
+                  disabled={promoChecking || !promoInput.trim()}
+                  data-testid="btn-add-org-promo-apply"
+                >
+                  {promoChecking ? "Checking…" : "Apply"}
+                </Button>
+              </div>
+            )}
+            {promoError && (
+              <p
+                className="mt-1 text-xs text-destructive"
+                data-testid="add-org-promo-error"
+              >
+                {promoError}
+              </p>
+            )}
           </div>
         </div>
 

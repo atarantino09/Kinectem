@@ -29,7 +29,7 @@ const NAV = [
   { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
   { href: "/admin/activity", label: "Activity log", icon: History },
   { href: "/admin/founding-100", label: "Founding 100", icon: Sparkles },
-  { href: "/admin/org-claim-links", label: "Claim links", icon: Link2 },
+  { href: "/admin/org-claim-links", label: "Org Links", icon: Link2 },
   { href: "/admin/competition-claim-links", label: "Competition links", icon: Link2 },
   { href: "/admin/claims", label: "Claims", icon: ClipboardCheck },
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },

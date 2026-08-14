@@ -234,17 +234,25 @@ router.get(
       }
     }
 
-    // Staged promo from admin quick setup — auto-applied client-side when
-    // the org hasn't already chosen a promo of its own. Only surfaced while
-    // still redeemable.
+    // Staged promo + plan tier from admin creation — auto-applied /
+    // pre-selected client-side when the org hasn't already chosen its own.
+    // Promo only surfaced while still redeemable.
     let pendingPromo: ReturnType<typeof publicPromo> | null = null;
-    if (!sub?.promoCodeId) {
+    let pendingPlan: PlanTier | null = null;
+    if (!sub || !sub.promoCodeId) {
       const [org] = await db
-        .select({ pendingPromoCodeId: organizations.pendingPromoCodeId })
+        .select({
+          pendingPromoCodeId: organizations.pendingPromoCodeId,
+          pendingPlan: organizations.pendingPlan,
+        })
         .from(organizations)
         .where(eq(organizations.id, orgId))
         .limit(1);
-      if (org?.pendingPromoCodeId) {
+      // Task #856 — staged tier only matters until the org picks its own plan.
+      if (!sub && org?.pendingPlan) {
+        pendingPlan = org.pendingPlan as PlanTier;
+      }
+      if (!sub?.promoCodeId && org?.pendingPromoCodeId) {
         const [row] = await db
           .select()
           .from(promoCodes)
@@ -275,8 +283,9 @@ router.get(
 
     res.json({
       subscription: serializeSubscription(sub, promo),
-      // Extra-spec: staged promo from admin quick setup (see above).
+      // Extra-spec: staged promo + plan tier from admin creation (see above).
       pendingPromo,
+      pendingPlan,
       plans: PLAN_CATALOG,
       // The org's real charge date: creation + 90 days (Stripe-safe floor).
       billingStartsAt: billingStartsAt?.toISOString() ?? null,

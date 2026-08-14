@@ -1264,6 +1264,7 @@ export const COMBINED_RECAP_TAG_BACKFILL_SQL = `
           ON CONFLICT DO NOTHING;
 `;
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-04-27-task-190-post-shares-polymorphic",
@@ -2193,6 +2194,20 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       DROP INDEX IF EXISTS tournament_participants_unique_name;
       CREATE UNIQUE INDEX IF NOT EXISTS tournament_participants_unique_name_gender
         ON tournament_participants (tournament_id, name_key, LOWER(BTRIM(COALESCE(gender, ''))));
+    `,
+  },
+  {
+    // Task #856 — plan tier staged by the platform operator when creating an
+    // ownerless org (Quick setup / Org Links inline form). Pre-selected on
+    // the new owner's subscribe page. Enum creation is guarded because
+    // plan_tier may already exist from the org-subscriptions rollout.
+    name: "2026-08-14-task-856-org-pending-plan",
+    sql: `
+      DO $$ BEGIN
+        CREATE TYPE plan_tier AS ENUM ('starter', 'pro', 'elite');
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS pending_plan plan_tier;
     `,
   },
 ];

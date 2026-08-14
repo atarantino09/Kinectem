@@ -345,6 +345,9 @@ export const apiKeys = pgTable("api_keys", {
   lastUsedAt: timestamp("last_used_at"),
   revokedAt: timestamp("revoked_at"),
 });
+// Subscription plan tiers (declared before `organizations` so its staged
+// `pendingPlan` column can reference it — pgEnum consts are TDZ-bound).
+export const planTierEnum = pgEnum("plan_tier", ["starter", "pro", "elite"]);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -398,6 +401,11 @@ export const organizations = pgTable("organizations", {
     (): AnyPgColumn => promoCodes.id,
     { onDelete: "set null" },
   ),
+  // Task #856 — plan tier staged by the platform operator at org creation
+  // (Quick setup or the Org Links inline form). Pre-selected on the new
+  // owner's subscribe page; the owner can still pick a different tier. NULL
+  // = no staged tier (Starter default behavior everywhere).
+  pendingPlan: planTierEnum("pending_plan"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.
@@ -1489,16 +1497,6 @@ export const guardianLinks = pgTable(
       .where(sql`${t.status} <> 'revoked'`),
   }),
 );
-
-// ---------------------------------------------------------------------------
-// Org subscriptions + promo codes
-//
-// Multi-tier annual plans (mirrors the marketing pricing page). Stripe is not
-// wired up yet — these tables capture the org's plan selection and any applied
-// promo code so the checkout flow can run end-to-end now and be connected to
-// Stripe later (the nullable stripe* columns are the future hook).
-// ---------------------------------------------------------------------------
-export const planTierEnum = pgEnum("plan_tier", ["starter", "pro", "elite"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "trialing",
   "active",

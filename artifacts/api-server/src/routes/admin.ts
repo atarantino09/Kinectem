@@ -36,7 +36,12 @@ import { asyncHandler } from "../lib/async-handler";
 import { ensureActiveGuardianLink, syncParentIdMirror } from "../lib/guardian-links";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
-import { DEFAULT_PLAN, teamLimitForPlan } from "../lib/plan-limits";
+import {
+  DEFAULT_PLAN,
+  PLAN_TEAM_LIMITS,
+  teamLimitForPlan,
+  type PlanTier,
+} from "../lib/plan-limits";
 import { findRedeemablePromo } from "./subscriptions";
 import {
   splitName,
@@ -1956,6 +1961,31 @@ router.post(
       }
       assign(v.toLowerCase());
     }
+    // Task #856 — optional staged plan tier + promo code (same rules as the
+    // quick-setup route): validated now, stored on the org, and pre-selected /
+    // auto-applied when the new owner reaches the subscribe page.
+    let pendingPlan: PlanTier | null = null;
+    if (req.body?.tier != null && req.body.tier !== "") {
+      const t = String(req.body.tier).trim().toLowerCase();
+      if (!(t in PLAN_TEAM_LIMITS)) {
+        return res.status(400).json({
+          error: `tier must be one of: ${Object.keys(PLAN_TEAM_LIMITS).join(", ")}`,
+          code: "INVALID_TIER",
+        });
+      }
+      pendingPlan = t as PlanTier;
+    }
+    let pendingPromoCodeId: string | null = null;
+    if (typeof req.body?.promoCode === "string" && req.body.promoCode.trim()) {
+      const promo = await findRedeemablePromo(req.body.promoCode);
+      if (!promo) {
+        return res.status(400).json({
+          error: "That promo code isn't valid (inactive, expired, or fully redeemed).",
+          code: "INVALID_PROMO_CODE",
+        });
+      }
+      pendingPromoCodeId = promo.id;
+    }
     const token = generateToken();
     const [org] = await db
       .insert(organizations)
@@ -1965,6 +1995,8 @@ router.post(
         logoUrl: logoUrl ?? undefined,
         brandPrimaryColor: brandPrimaryColor ?? undefined,
         brandSecondaryColor: brandSecondaryColor ?? undefined,
+        pendingPlan: pendingPlan ?? undefined,
+        pendingPromoCodeId: pendingPromoCodeId ?? undefined,
       })
       .returning();
     return res.status(201).json({
@@ -2059,18 +2091,34 @@ router.post(
       pendingPromoCodeId = promo.id;
     }
 
+    // Task #856 — optional staged plan tier. Stored on the org, pre-selected
+    // on the new owner's subscribe page (they can still change it). Omitted
+    // = no staged tier; the org behaves exactly as before (Starter default).
+    let pendingPlan: PlanTier | null = null;
+    if (body.tier != null && body.tier !== "") {
+      const t = String(body.tier).trim().toLowerCase();
+      if (!(t in PLAN_TEAM_LIMITS)) {
+        return res.status(400).json({
+          error: `tier must be one of: ${Object.keys(PLAN_TEAM_LIMITS).join(", ")}`,
+          code: "INVALID_TIER",
+        });
+      }
+      pendingPlan = t as PlanTier;
+    }
+
     const teamsRaw = Array.isArray(body.teams) ? body.teams : [];
     if (teamsRaw.length > QUICK_SETUP_MAX_TEAMS) {
       return res.status(400).json({ error: `too many teams (max ${QUICK_SETUP_MAX_TEAMS})`, code: "TOO_MANY_TEAMS" });
     }
-    // A brand-new org has no subscription, so it sits on the default entry
-    // tier — enforce that cap up front (same source of truth as the normal
-    // team-create route). No advisory lock needed: the org doesn't exist
+    // Enforce the team cap of the staged tier (or the default entry tier when
+    // none was picked) up front — same source of truth as the normal
+    // team-create route. No advisory lock needed: the org doesn't exist
     // until this transaction commits, so nothing can race its team count.
-    const teamCap = teamLimitForPlan(DEFAULT_PLAN);
+    const capPlan = pendingPlan ?? DEFAULT_PLAN;
+    const teamCap = teamLimitForPlan(capPlan);
     if (teamCap != null && teamsRaw.length > teamCap) {
       return res.status(400).json({
-        error: `The ${DEFAULT_PLAN} plan allows up to ${teamCap} teams. Remove some teams or have the org upgrade after claiming.`,
+        error: `The ${capPlan} plan allows up to ${teamCap} teams. Remove some teams${pendingPlan ? " or pick a higher tier" : " or have the org upgrade after claiming"}.`,
         code: "TEAM_LIMIT_REACHED",
       });
     }
@@ -2148,6 +2196,7 @@ router.post(
           brandPrimaryColor: brandPrimaryColor ?? undefined,
           brandSecondaryColor: brandSecondaryColor ?? undefined,
           pendingPromoCodeId: pendingPromoCodeId ?? undefined,
+          pendingPlan: pendingPlan ?? undefined,
           claimToken: token,
         })
         .returning();
