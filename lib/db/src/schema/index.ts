@@ -1766,10 +1766,11 @@ export const tournamentParticipants = pgTable("tournament_participants", {
 }, (t) => ({
   byTournament: index("tournament_participants_tournament_id_idx").on(t.tournamentId),
   byTeam: index("tournament_participants_team_id_idx").on(t.teamId),
-  uniqueSlot: uniqueIndex("tournament_participants_unique_slot").on(
+  // A team name is unique per competition — the same name appearing in
+  // multiple divisions/brackets maps to ONE participant slot (division/
+  // bracket hold the first-seen values and are informational only).
+  uniqueName: uniqueIndex("tournament_participants_unique_name").on(
     t.tournamentId,
-    t.division,
-    t.bracket,
     t.nameKey,
   ),
 }));

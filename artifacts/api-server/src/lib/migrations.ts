@@ -2133,6 +2133,66 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
           REFERENCES competition_brackets(id) ON DELETE SET NULL;
     `,
   },
+  {
+    // A team name is now unique per competition — the same exact name in
+    // multiple divisions/brackets used to create one participant slot per
+    // context, showing duplicate team names after a schedule upload. Merge
+    // duplicates (keeping a claimed row over an unclaimed one, then the
+    // oldest), repoint matches at the keeper, then swap the unique index
+    // from (tournament, division, bracket, name_key) to (tournament,
+    // name_key). Idempotent: after the first run there are no duplicates
+    // and the index statements are IF-guarded.
+    name: "2026-08-14-participant-unique-per-name",
+    sql: `
+      WITH ranked AS (
+        SELECT id,
+               first_value(id) OVER (
+                 PARTITION BY tournament_id, name_key
+                 ORDER BY (team_id IS NOT NULL) DESC,
+                          (pending_team_id IS NOT NULL) DESC,
+                          created_at ASC, id ASC
+               ) AS keeper_id
+        FROM tournament_participants
+      ),
+      dupes AS (SELECT id, keeper_id FROM ranked WHERE id <> keeper_id)
+      UPDATE tournament_matches m
+        SET home_participant_id = d.keeper_id
+        FROM dupes d WHERE m.home_participant_id = d.id;
+
+      WITH ranked AS (
+        SELECT id,
+               first_value(id) OVER (
+                 PARTITION BY tournament_id, name_key
+                 ORDER BY (team_id IS NOT NULL) DESC,
+                          (pending_team_id IS NOT NULL) DESC,
+                          created_at ASC, id ASC
+               ) AS keeper_id
+        FROM tournament_participants
+      ),
+      dupes AS (SELECT id, keeper_id FROM ranked WHERE id <> keeper_id)
+      UPDATE tournament_matches m
+        SET away_participant_id = d.keeper_id
+        FROM dupes d WHERE m.away_participant_id = d.id;
+
+      WITH ranked AS (
+        SELECT id,
+               first_value(id) OVER (
+                 PARTITION BY tournament_id, name_key
+                 ORDER BY (team_id IS NOT NULL) DESC,
+                          (pending_team_id IS NOT NULL) DESC,
+                          created_at ASC, id ASC
+               ) AS keeper_id
+        FROM tournament_participants
+      )
+      DELETE FROM tournament_participants p
+        USING ranked r
+        WHERE p.id = r.id AND r.id <> r.keeper_id;
+
+      DROP INDEX IF EXISTS tournament_participants_unique_slot;
+      CREATE UNIQUE INDEX IF NOT EXISTS tournament_participants_unique_name
+        ON tournament_participants (tournament_id, name_key);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

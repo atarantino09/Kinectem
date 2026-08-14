@@ -54,4 +54,5 @@
 - [Recap approval opt-in toggle](recap-approval-toggle.md) — coach recaps publish directly by default; org `require_recap_approval` restores the queue; pending-flow tests must flip it ON first.
 - [Staged coach persistence](staged-coach-persistence.md) — staged coach drafts survive dialog skip/close; removed only by successful invite or per-row delete; clear-all is explicit-cleanup only.
 - [Competition brackets](competition-brackets.md) — recap-sorting labels; lazy seed in organizer GET; composer pick touch-gated; server nulls bracket only when competition actually changes.
+- [Competition participant identity](competition-participant-identity.md) — team names unique per competition; division/bracket informational only, read per-game values from matches.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.

@@ -269,11 +269,13 @@ function parseDateCell(v: string): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-// Slot key for a participant: division|bracket|nameKey, all lowercased and
-// trimmed; division/bracket normalize to "" (never null) to mirror the
-// schema's unique-slot index.
-function slotKey(division: string, bracket: string, nameKey: string): string {
-  return `${division}\u0000${bracket}\u0000${nameKey}`;
+// Slot key for a participant: a team name is unique per competition, so the
+// key is just the lowercased trimmed name. Division/bracket are informational
+// (first-seen values) and intentionally NOT part of the key — the same exact
+// team name across brackets/divisions is one participant, never duplicates.
+// The unused params are kept so call sites stay explicit about the context.
+function slotKey(_division: string, _bracket: string, nameKey: string): string {
+  return nameKey;
 }
 
 // ---------------------------------------------------------------------------
@@ -1821,8 +1823,10 @@ function parseMatchDateInput(
   return parsed === null ? undefined : parsed;
 }
 
-// Resolve (or create) the participant slot for a team name within a
-// division/bracket, mirroring the CSV import's slot-upsert semantics.
+// Resolve (or create) the participant slot for a team name, mirroring the
+// CSV import's slot-upsert semantics. Team names are unique per competition,
+// so lookup matches on name only; division/bracket are just first-seen
+// informational values on a newly created slot.
 // Returns null for a blank name (TBD side).
 async function resolveParticipantId(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
@@ -1843,8 +1847,6 @@ async function resolveParticipantId(
     .where(
       and(
         eq(tournamentParticipants.tournamentId, tournamentId),
-        eq(tournamentParticipants.division, division),
-        eq(tournamentParticipants.bracket, bracket),
         eq(tournamentParticipants.nameKey, nameKey),
       ),
     )
