@@ -1926,10 +1926,46 @@ router.post(
         existing: existing[0],
       });
     }
+    // Optional logo + brand colors so the operator can brand the page at
+    // creation time (same rules as org-quick-setup; app.ts gives this route
+    // the 21 MB image JSON parser for the inline data: URL).
+    let logoUrl: string | null = null;
+    if (typeof req.body?.logoUrl === "string" && req.body.logoUrl) {
+      if (!req.body.logoUrl.startsWith("data:image/")) {
+        return res.status(400).json({ error: "logoUrl must be an image data URL", code: "INVALID_LOGO" });
+      }
+      if (req.body.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+        return res.status(413).json({ error: "logo too large", code: "LOGO_TOO_LARGE" });
+      }
+      logoUrl = req.body.logoUrl;
+    }
+    let brandPrimaryColor: string | null = null;
+    let brandSecondaryColor: string | null = null;
+    for (const [key, assign] of [
+      ["brandPrimaryColor", (v: string) => (brandPrimaryColor = v)],
+      ["brandSecondaryColor", (v: string) => (brandSecondaryColor = v)],
+    ] as const) {
+      const raw = (req.body as Record<string, unknown>)[key];
+      if (raw == null || raw === "") continue;
+      const v = String(raw).trim();
+      if (!QUICK_SETUP_HEX_RE.test(v)) {
+        return res.status(400).json({
+          error: `${key} must be a #rrggbb hex color`,
+          code: "INVALID_COLOR",
+        });
+      }
+      assign(v.toLowerCase());
+    }
     const token = generateToken();
     const [org] = await db
       .insert(organizations)
-      .values({ name, claimToken: token })
+      .values({
+        name,
+        claimToken: token,
+        logoUrl: logoUrl ?? undefined,
+        brandPrimaryColor: brandPrimaryColor ?? undefined,
+        brandSecondaryColor: brandSecondaryColor ?? undefined,
+      })
       .returning();
     return res.status(201).json({
       data: {

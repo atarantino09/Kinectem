@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { formatOrgName } from "@/lib/format";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +16,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { Label } from "@/components/ui/label";
+import {
+  shrinkImageToDataUrl,
+  IMAGE_UPLOAD_MAX_BYTES,
+} from "@/lib/shrinkImage";
+import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
+import { X } from "lucide-react";
 
 // Task #610 — Admin screen listing every ownerless org page with its secret
 // claim link. The operator copies each link to the corresponding org so a
@@ -79,6 +86,58 @@ export default function AdminOrgClaimLinks() {
   const [newName, setNewName] = useState("");
   const [debounced, setDebounced] = useState("");
   const [creating, setCreating] = useState(false);
+  // Optional branding at creation time (mirrors Quick setup): logo upload
+  // auto-suggests brand colors, both stay editable/clearable before Add.
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const logoUploadSeq = useRef(0);
+  const [primaryColor, setPrimaryColor] = useState<string | null>(null);
+  const [secondaryColor, setSecondaryColor] = useState<string | null>(null);
+
+  const onLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please pick an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
+      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+      return;
+    }
+    setLogoBusy(true);
+    const uploadSeq = ++logoUploadSeq.current;
+    try {
+      const dataUrl = await shrinkImageToDataUrl(file);
+      if (uploadSeq !== logoUploadSeq.current) return; // superseded upload
+      setLogoDataUrl(dataUrl);
+      try {
+        const colors = await extractBrandColorsFromDataUrl(dataUrl);
+        if (uploadSeq !== logoUploadSeq.current) return; // superseded upload
+        if (colors) {
+          // Set BOTH so a one-color logo clears a stale secondary from a
+          // previous upload.
+          setPrimaryColor(colors.primary);
+          setSecondaryColor(colors.secondary);
+          toast({
+            title: "Brand colors picked from the logo",
+            description: "You can adjust or clear them below.",
+          });
+        }
+      } catch {
+        // Color extraction is best-effort; the logo itself still uploaded.
+      }
+    } catch {
+      if (uploadSeq === logoUploadSeq.current) {
+        toast({ title: "Couldn't read that image", variant: "destructive" });
+      }
+    } finally {
+      // Only the latest upload may clear the busy flag — a superseded job
+      // finishing must not reopen the submit window early.
+      if (uploadSeq === logoUploadSeq.current) setLogoBusy(false);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(newName.trim()), 250);
@@ -100,15 +159,28 @@ export default function AdminOrgClaimLinks() {
 
   const addOrg = async () => {
     const name = newName.trim();
-    if (!name || creating) return;
+    // Mirror the button's disabled conditions — Enter in the name field also
+    // lands here, and submitting mid logo-processing would drop the branding.
+    if (!name || creating || logoBusy || exactMatch) return;
     setCreating(true);
     try {
       const resp = await customFetch<{ data: ClaimLinkRow }>(
         `/api/v1/admin/org-claim-links`,
-        { method: "POST", body: JSON.stringify({ name }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name,
+            logoUrl: logoDataUrl || undefined,
+            brandPrimaryColor: primaryColor || undefined,
+            brandSecondaryColor: secondaryColor || undefined,
+          }),
+        },
       );
       setNewName("");
       setDebounced("");
+      setLogoDataUrl(null);
+      setPrimaryColor(null);
+      setSecondaryColor(null);
       await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
       try {
         await navigator.clipboard.writeText(claimUrl(resp.data.token));
@@ -256,11 +328,87 @@ export default function AdminOrgClaimLinks() {
           </div>
           <Button
             onClick={addOrg}
-            disabled={!newName.trim() || creating || !!exactMatch}
+            disabled={!newName.trim() || creating || logoBusy || !!exactMatch}
             data-testid="btn-add-org"
           >
             {creating ? "Adding…" : "Add org"}
           </Button>
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="add-org-logo">Logo (optional)</Label>
+            <div className="flex items-center gap-3 mt-1">
+              {logoDataUrl && (
+                <img
+                  src={logoDataUrl}
+                  alt="Logo preview"
+                  className="h-12 w-12 rounded object-contain border bg-white"
+                  data-testid="img-add-org-logo-preview"
+                />
+              )}
+              <Input
+                id="add-org-logo"
+                type="file"
+                accept="image/*"
+                onChange={onLogoChange}
+                disabled={logoBusy}
+                className="max-w-xs"
+                data-testid="input-add-org-logo"
+              />
+              {logoDataUrl && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setLogoDataUrl(null)}
+                  aria-label="Remove logo"
+                  data-testid="btn-add-org-clear-logo"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+          <div>
+            <Label>Brand colors (optional)</Label>
+            <div className="flex flex-wrap items-center gap-5 mt-1">
+              {(
+                [
+                  ["Primary", primaryColor, setPrimaryColor, "primary"],
+                  ["Secondary", secondaryColor, setSecondaryColor, "secondary"],
+                ] as const
+              ).map(([label, value, set, id]) => (
+                <div key={id} className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={value ?? "#888888"}
+                    onChange={(e) => set(e.target.value)}
+                    className="h-9 w-12 cursor-pointer rounded border bg-transparent p-0.5"
+                    aria-label={`${label} brand color`}
+                    data-testid={`input-add-org-color-${id}`}
+                  />
+                  <div className="text-xs">
+                    <div className="font-medium">{label}</div>
+                    <div className="text-muted-foreground font-mono">
+                      {value ?? "not set"}
+                    </div>
+                  </div>
+                  {value && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => set(null)}
+                      aria-label={`Clear ${label.toLowerCase()} color`}
+                      data-testid={`btn-add-org-clear-color-${id}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {debounced.length >= 2 && (

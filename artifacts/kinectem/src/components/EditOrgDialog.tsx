@@ -240,11 +240,15 @@ export function EditOrgDialog({
     // enforces the same rules, so any drift between the two is a bug.
     const nextErrors: typeof errors = {};
     if (!trimmedName) nextErrors.name = "Name is required";
-    if (!trimmedCity) nextErrors.city = "City is required";
-    if (!state) nextErrors.state = "State is required";
-    if (!trimmedZip) {
-      nextErrors.zipCode = "Zip code is required";
-    } else if (!US_ZIP_PATTERN.test(trimmedZip)) {
+    // Platform admins set up hand-off pages before knowing the org's real
+    // location — city/state/zip are optional for them (zip format is still
+    // checked when provided). Owners/admins keep the required rules.
+    if (!isPlatformAdmin) {
+      if (!trimmedCity) nextErrors.city = "City is required";
+      if (!state) nextErrors.state = "State is required";
+      if (!trimmedZip) nextErrors.zipCode = "Zip code is required";
+    }
+    if (trimmedZip && !US_ZIP_PATTERN.test(trimmedZip)) {
       nextErrors.zipCode = "Enter a US zip (12345 or 12345-6789)";
     }
     if (!websiteResult.ok) nextErrors.website = websiteResult.error;
@@ -265,10 +269,13 @@ export function EditOrgDialog({
       const payload: Record<string, string | boolean | null> = {
         name: trimmedName,
         description,
-        city: trimmedCity,
-        state: state as UpdateOrganizationRequestState,
-        zipCode: trimmedZip,
       };
+      // The server rejects empty-string location values (absent = unchanged),
+      // so only include the ones that are filled in. Non-admins always have
+      // all three (validated above).
+      if (trimmedCity) payload.city = trimmedCity;
+      if (state) payload.state = state as UpdateOrganizationRequestState;
+      if (trimmedZip) payload.zipCode = trimmedZip;
       // Always include website so the user can clear a previously-set
       // value by emptying the field (server treats "" as "set to null").
       payload.website = normalizedWebsite;
@@ -505,9 +512,11 @@ export function EditOrgDialog({
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-city" className="font-bold">
                   City
-                  <span className="text-destructive ml-0.5" aria-hidden>
-                    *
-                  </span>
+                  {!isPlatformAdmin && (
+                    <span className="text-destructive ml-0.5" aria-hidden>
+                      *
+                    </span>
+                  )}
                 </Label>
                 <Input
                   id="edit-org-city"
@@ -527,9 +536,11 @@ export function EditOrgDialog({
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-state" className="font-bold">
                   State
-                  <span className="text-destructive ml-0.5" aria-hidden>
-                    *
-                  </span>
+                  {!isPlatformAdmin && (
+                    <span className="text-destructive ml-0.5" aria-hidden>
+                      *
+                    </span>
+                  )}
                 </Label>
                 <Select value={state} onValueChange={setState}>
                   <SelectTrigger
@@ -563,9 +574,11 @@ export function EditOrgDialog({
               <div className="space-y-1.5">
                 <Label htmlFor="edit-org-zip" className="font-bold">
                   Zip
-                  <span className="text-destructive ml-0.5" aria-hidden>
-                    *
-                  </span>
+                  {!isPlatformAdmin && (
+                    <span className="text-destructive ml-0.5" aria-hidden>
+                      *
+                    </span>
+                  )}
                 </Label>
                 <Input
                   id="edit-org-zip"
