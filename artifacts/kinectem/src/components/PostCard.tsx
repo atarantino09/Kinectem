@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight, Medal } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight, Medal, ImageDown } from "lucide-react";
+import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
   customFetch,
@@ -136,9 +137,21 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     }
   };
   const [confirmShareOpen, setConfirmShareOpen] = useState(false);
+  // Task #863 follow-up — "Share as image" straight from feed cards, so
+  // users don't have to open the recap first. Same gate as the recap
+  // page: PUBLISHED game recaps only (articleStatus is the extra-spec
+  // publication-state field; drafts/pending/hidden/guardian-preview
+  // never expose the exporter).
+  const [shareImageOpen, setShareImageOpen] = useState(false);
   const [untagOpen, setUntagOpen] = useState(false);
   const [untagging, setUntagging] = useState(false);
   const isShort = post.postType === "short";
+  const canShareAsImage =
+    !isShort &&
+    !asChildId &&
+    (post as { articleStatus?: string | null }).articleStatus ===
+      "published" &&
+    !(post as { hidden?: boolean }).hidden;
   // Extra server field beyond the locked spec (same precedent as
   // `recapKind`): number of photos in the post's team photo album.
   const albumPhotoCount =
@@ -851,6 +864,22 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               </Button>
             </Link>
           )}
+          {canShareAsImage && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShareImageOpen(true);
+              }}
+              className="font-bold gap-1.5 h-8"
+              data-testid={`btn-share-image-${post.id}`}
+              aria-label="Share as image"
+            >
+              <ImageDown className="w-3.5 h-3.5" />
+              Share as image
+            </Button>
+          )}
           {post.recentReactorName && post.reactionCount > 0 && (
             <span className="text-xs text-muted-foreground ml-1 truncate">
               {post.recentReactorName}
@@ -859,6 +888,16 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           )}
         </div>
       </CardContent>
+      {canShareAsImage && shareImageOpen && (
+        <ShareRecapImageDialog
+          // FeedPost is the feed-shaped subset of PostResponse; the share
+          // canvas only reads fields both shapes carry (title, body,
+          // context, author, gameDate + extra-spec branding blocks).
+          post={post as PostResponse}
+          open={shareImageOpen}
+          onOpenChange={setShareImageOpen}
+        />
+      )}
     </Card>
   );
 }
