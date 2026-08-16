@@ -16,6 +16,7 @@ import {
   highlightTags,
   postShares,
   takedownRequests,
+  teamNewsLinks,
   userSports,
   guardianLinks,
 } from "@workspace/db";
@@ -35,6 +36,7 @@ import { asyncHandler } from "../lib/async-handler";
 import {
   getActiveChildIds,
   getActiveGuardianIds,
+  getActiveGuardianIdsForChildren,
   isActiveGuardian,
   patchParentIdForViewer,
 } from "../lib/guardian-links";
@@ -60,6 +62,7 @@ import {
   toOrganization,
   articleToPost,
   highlightToPost,
+  newsLinkToPost,
   paginate,
   emptyPagination,
   splitName,
@@ -916,6 +919,59 @@ router.get(
         ),
       );
 
+    // 3c) "In the News" links from teams where the user is an accepted
+    //     rostered player — mirrors the recap roster auto-tag fanout,
+    //     but computed at query time (no tag rows): news cards carry no
+    //     player names, and roster changes / link removals apply
+    //     retroactively for free. Consent gating mirrors recap tags:
+    //     when the player (or an active guardian) requires tag consent,
+    //     the news card is only visible to self / real parent / real
+    //     admin — strangers never see it (there is no approve flow to
+    //     graduate it, so it behaves like a permanently-pending tag).
+    let rosterNews: {
+      n: typeof teamNewsLinks.$inferSelect;
+      team: typeof teams.$inferSelect;
+      org: typeof organizations.$inferSelect | null;
+      author: typeof users.$inferSelect | null;
+    }[] = [];
+    {
+      let consentGated = !!u.requireTagConsent;
+      if (!consentGated) {
+        const guardianIds = await getActiveGuardianIdsForChildren([u.id]);
+        const gIds = guardianIds.get(u.id) ?? [];
+        if (gIds.length) {
+          const gRows = await db
+            .select({ flag: users.requireTagConsent })
+            .from(users)
+            .where(inArray(users.id, gIds));
+          consentGated = gRows.some((g) => !!g.flag);
+        }
+      }
+      if (!consentGated || canSeePending) {
+        const newsAuthor = aliasedTable(users, "news_author");
+        rosterNews = await db
+          .select({
+            n: teamNewsLinks,
+            team: teams,
+            org: organizations,
+            author: newsAuthor,
+          })
+          .from(teamNewsLinks)
+          .innerJoin(
+            rosterEntries,
+            and(
+              eq(rosterEntries.teamId, teamNewsLinks.teamId),
+              eq(rosterEntries.userId, u.id),
+              eq(rosterEntries.role, "player"),
+              eq(rosterEntries.status, "accepted"),
+            ),
+          )
+          .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+          .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(newsAuthor, eq(teamNewsLinks.addedByUserId, newsAuthor.id));
+      }
+    }
+
     // 4) Re-shares the user has posted. Each share row is joined
     //    against its underlying post; rows whose target has gone
     //    away (deleted, hidden to non-admins, or no longer a valid
@@ -988,7 +1044,16 @@ router.get(
       tagStatus?: "approved" | "pending";
       sharedAt?: Date;
     };
-    type MergedRow = ArticleRow | HighlightRow;
+    type NewsRow = {
+      kind: "news";
+      n: typeof teamNewsLinks.$inferSelect;
+      team: typeof teams.$inferSelect;
+      org: typeof organizations.$inferSelect | null;
+      author: typeof users.$inferSelect | null;
+      tagStatus?: "approved" | "pending";
+      sharedAt?: Date;
+    };
+    type MergedRow = ArticleRow | HighlightRow | NewsRow;
 
     // We key by post id so authored / tagged / share rows for the
     // same item collapse into one card. Original (non-share) rows
@@ -1028,6 +1093,9 @@ router.get(
         tagStatus: row.tagStatus as "approved" | "pending",
       });
     }
+    for (const row of rosterNews) {
+      seen.set(`news-${row.n.id}`, { kind: "news", ...row });
+    }
     const shareByKey = new Map<string, Date>();
     for (const s of shares) {
       shareByKey.set(`${s.share.postKind}-${s.share.postRefId}`, s.share.createdAt);
@@ -1061,6 +1129,7 @@ router.get(
       if (row.kind === "article") {
         return (row.a.publishedAt ?? row.a.createdAt).getTime();
       }
+      if (row.kind === "news") return row.n.createdAt.getTime();
       return row.h.createdAt.getTime();
     };
     // Task #367 — drop pending-takedown items from the profile feed.
@@ -1102,6 +1171,7 @@ router.get(
     }
     const filteredSeen = Array.from(seen.values()).filter((r) => {
       if (r.kind === "article") return !pendingTakedownArticleIds.has(r.a.id);
+      if (r.kind === "news") return true;
       return !pendingTakedownHighlightIds.has(r.h.id);
     });
     // Task #785 — honor the spec's cursor/limit params so profile
@@ -1116,7 +1186,11 @@ router.get(
     const pageLimit = parsePostLimit(req.query["limit"]);
     const pageCursor = decodePostCursor(req.query["cursor"]);
     const rowId = (row: MergedRow): string =>
-      row.kind === "article" ? `article-${row.a.id}` : `highlight-${row.h.id}`;
+      row.kind === "article"
+        ? `article-${row.a.id}`
+        : row.kind === "news"
+          ? `news-${row.n.id}`
+          : `highlight-${row.h.id}`;
     const ordered = filteredSeen.sort((x, y) => {
       const diff = effectiveDate(y) - effectiveDate(x);
       if (diff !== 0) return diff;
@@ -1133,11 +1207,14 @@ router.get(
     const limited = cursorFiltered.slice(0, pageLimit);
 
     // Bulk-load reaction / comment / share stats for the page.
-    const statKeys: { kind: StatsKind; refId: string }[] = limited.map((row) =>
-      row.kind === "article"
-        ? { kind: "article", refId: row.a.id }
-        : { kind: "highlight", refId: row.h.id },
-    );
+    // News rows have no stats (read-only cards, no reactions/comments).
+    const statKeys: { kind: StatsKind; refId: string }[] = limited
+      .filter((row) => row.kind !== "news")
+      .map((row) =>
+        row.kind === "article"
+          ? { kind: "article" as const, refId: row.a.id }
+          : { kind: "highlight" as const, refId: row.h.id },
+      );
     const shareStatKeys = statKeys.filter(
       (k): k is { kind: "article" | "highlight"; refId: string } =>
         k.kind === "article" || k.kind === "highlight",
@@ -1228,14 +1305,28 @@ router.get(
       // moderation. Annotate them (extra field beyond the locked spec) so
       // the client can render a clear "Deleted" badge instead of the post
       // silently looking alive.
+      // News rows have no hidden/moderation state — keep the hiddenAt
+      // dereference to article/highlight rows only.
       const hiddenExtra =
-        isAdmin && (row.kind === "article" ? row.a.hiddenAt : row.h.hiddenAt)
+        isAdmin &&
+        row.kind !== "news" &&
+        (row.kind === "article" ? row.a.hiddenAt : row.h.hiddenAt)
           ? { hidden: true as const }
           : {};
       const sharedBy = row.sharedAt
         ? toPostAuthor(u, { minorNameCtx: profileMinorCtxWithOwner })
         : undefined;
       const sharedAt = row.sharedAt ? row.sharedAt.toISOString() : undefined;
+      if (row.kind === "news") {
+        // Read-only card; managing (removal) happens on the team/org
+        // pages, so no edit/delete affordance on profiles.
+        return newsLinkToPost(row.n, {
+          team: row.team,
+          org: row.org,
+          author: row.author,
+          minorNameCtx: profileMinorCtxWithOwner,
+        });
+      }
       if (row.kind === "article") {
         const post = articleToPost(row.a, {
           team: row.team,
