@@ -102,12 +102,18 @@ export function ShareRecapImageDialog({
     };
   }, [open]);
 
+  // Use the native share sheet only on touch devices (phones/tablets).
+  // Desktop macOS browsers also pass canShare(), but there the system
+  // share sheet (AirDrop/Mail/Notes…) is confusing — desktop users
+  // expect a straight download they can then upload to their socials.
   const canNativeShare =
     typeof navigator !== "undefined" &&
     typeof navigator.canShare === "function" &&
     navigator.canShare({
       files: [new File([""], "x.png", { type: "image/png" })],
-    });
+    }) &&
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
 
   const renderPng = useCallback(async (): Promise<Blob> => {
     const node = captureRef.current;
