@@ -1891,7 +1891,7 @@ router.get(
     // fetchCap truncate in a different order than the final sort and
     // pages go missing.
     const articleEffTs = sql`coalesce(${articles.publishedAt}, ${articles.createdAt})`;
-    const [articleRows, orgPostRows] = await Promise.all([
+    const [articleRows, orgPostRows, orgNewsRows] = await Promise.all([
       db
         .select({ a: articles, team: teams, org: organizations, author: users })
         .from(articles)
@@ -1920,6 +1920,22 @@ router.get(
           ),
         )
         .orderBy(desc(orgPosts.createdAt))
+        .limit(fetchCap),
+      // "In the News" links from any of the org's teams surface on the
+      // org page too, same as team recaps.
+      db
+        .select({ n: teamNewsLinks, team: teams, org: organizations, author: users })
+        .from(teamNewsLinks)
+        .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(teamNewsLinks.addedByUserId, users.id))
+        .where(
+          and(
+            eq(organizations.id, orgId),
+            ...(pageCursor ? [lte(teamNewsLinks.createdAt, pageCursor.ts)] : []),
+          ),
+        )
+        .orderBy(desc(teamNewsLinks.createdAt))
         .limit(fetchCap),
     ]);
 
@@ -2003,6 +2019,18 @@ router.get(
           minorNameCtx: orgPostsMinorCtx,
         });
       }),
+      // News cards are read-only; the remove flag mirrors the DELETE
+      // route's canManageTeam, which org admins always pass. (Team
+      // coaches can still remove from the team page itself.)
+      ...orgNewsRows.map((r) =>
+        newsLinkToPost(r.n, {
+          team: r.team,
+          org: r.org,
+          author: r.author,
+          canEdit: isViewerOrgAdmin,
+          canDelete: isViewerOrgAdmin,
+        }),
+      ),
     ].sort((a, b) =>
       a.createdAt === b.createdAt
         ? a.id < b.id
@@ -2017,7 +2045,9 @@ router.get(
         cursor: pageCursor,
         limit: pageLimit,
         sourcesMayHaveMore:
-          articleRows.length >= fetchCap || orgPostRows.length >= fetchCap,
+          articleRows.length >= fetchCap ||
+          orgPostRows.length >= fetchCap ||
+          orgNewsRows.length >= fetchCap,
       }),
     );
   }),
