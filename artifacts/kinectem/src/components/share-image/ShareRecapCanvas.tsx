@@ -49,9 +49,32 @@ export const ShareRecapCanvas = forwardRef<
     recapUrl: string;
   }
 >(function ShareRecapCanvas({ post, ctaMode, recapUrl }, ref) {
-  const brand = readOrgBrandColors(
-    post.context as unknown as Record<string, unknown>,
-  );
+  // Org brand colors ride on the post context as extra-spec fields with
+  // the `orgBrand*` prefix (same block PostPage/PostCard read) — passing
+  // the context straight to readOrgBrandColors silently yields null.
+  const brand =
+    post.context.type === "team"
+      ? readOrgBrandColors({
+          brandPrimaryColor: (
+            post.context as { orgBrandPrimaryColor?: string | null }
+          ).orgBrandPrimaryColor,
+          brandSecondaryColor: (
+            post.context as { orgBrandSecondaryColor?: string | null }
+          ).orgBrandSecondaryColor,
+        })
+      : null;
+  // Competition branding block (extra-spec, recapKind precedent) — the
+  // same banner the recap page shows above the title.
+  const competition = (
+    post as {
+      competition?: {
+        name: string;
+        logoUrl: string | null;
+        brandColor: string | null;
+        secondaryColor: string | null;
+      } | null;
+    }
+  ).competition;
   const paragraphs = useMemo(
     () =>
       plainBody(post.body ?? "")
@@ -184,10 +207,62 @@ export const ShareRecapCanvas = forwardRef<
                   : "linear-gradient(90deg,#4F46E5,#9333EA)",
               }}
             />
-            {/* Badges row */}
+            {/* Competition banner — same branded strip the recap page shows */}
+            {competition && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  borderRadius: 16,
+                  padding: "14px 24px",
+                  marginBottom: 26,
+                  background: competition.brandColor
+                    ? competition.secondaryColor
+                      ? `linear-gradient(135deg, ${competition.brandColor} 0%, ${competition.brandColor} 60%, ${competition.secondaryColor} 100%)`
+                      : competition.brandColor
+                    : "linear-gradient(90deg,#4F46E5,#9333EA)",
+                }}
+              >
+                {competition.logoUrl && (
+                  <img
+                    src={competition.logoUrl}
+                    alt=""
+                    crossOrigin="anonymous"
+                    style={{
+                      height: 40,
+                      width: 40,
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.92)",
+                      objectFit: "contain",
+                      padding: 3,
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <span
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 24,
+                    fontWeight: 900,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                  }}
+                >
+                  {competition.name}
+                </span>
+              </div>
+            )}
+            {/* Badges row, with the watermark in-flow at the right so it
+                can never be clipped by the card edge or the fade crop */}
             <div
               style={{
                 display: "flex",
+                alignItems: "center",
                 gap: 12,
                 flexWrap: "wrap",
                 marginBottom: 26,
@@ -209,12 +284,24 @@ export const ShareRecapCanvas = forwardRef<
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-                      maxWidth: 560,
+                      maxWidth: 500,
                     }}
                   >
                     {label}
                   </span>
                 ))}
+              <img
+                src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+                alt=""
+                crossOrigin="anonymous"
+                style={{
+                  marginLeft: "auto",
+                  height: 32,
+                  width: "auto",
+                  opacity: 0.4,
+                  flexShrink: 0,
+                }}
+              />
             </div>
             {/* Title */}
             {post.title && (
@@ -284,21 +371,6 @@ export const ShareRecapCanvas = forwardRef<
               </p>
             ))}
           </div>
-
-          {/* Watermark INSIDE the card so cropping the frame keeps branding */}
-          <img
-            src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
-            alt=""
-            crossOrigin="anonymous"
-            style={{
-              position: "absolute",
-              right: 34,
-              top: 40,
-              height: 34,
-              width: "auto",
-              opacity: 0.38,
-            }}
-          />
 
           {/* Fade-to-white crop treatment (covers nothing when card is short:
               it sits at the bottom of the card, and short cards end above
