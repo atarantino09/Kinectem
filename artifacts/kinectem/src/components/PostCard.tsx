@@ -392,7 +392,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     reportTarget.contentType === "article" &&
     post.postType === "long" &&
     (!!post.gameDate || isCombinedRecap);
-  const recapOrgBrand = isRecapArticle
+  // News cards get the same strip — their team context carries the same
+  // org brand color fields.
+  const recapOrgBrand = isRecapArticle || isNews
     ? readOrgBrandColors({
         brandPrimaryColor: (
           post.context as { orgBrandPrimaryColor?: string | null }
