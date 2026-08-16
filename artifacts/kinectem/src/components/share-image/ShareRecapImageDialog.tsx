@@ -38,49 +38,21 @@ export function ShareRecapImageDialog({
 }) {
   const { toast } = useToast();
   const captureRef = useRef<HTMLDivElement | null>(null);
-  const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const [ctaMode, setCtaMode] = useState<ShareCtaMode>("bio");
   const [busy, setBusy] = useState(false);
   const [captureReady, setCaptureReady] = useState(false);
-  const [previewScale, setPreviewScale] = useState(0.3);
+  // The preview is a RENDERED IMAGE of the capture node, not a live
+  // scaled-down DOM copy. Three rounds of iOS-only off-center/cropped
+  // previews proved JS scale math can't be trusted across engines; an
+  // <img> at width:100% is layout-proof everywhere and doubles as a
+  // truthful "this is exactly what you'll download" preview.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const recapUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     return `${window.location.origin}${base}/posts/${post.id}`;
   }, [post.id]);
-
-  // Scale the preview to whatever width the preview BOX actually renders
-  // at. The box itself is plain CSS (width 100%, aspect-ratio) so it can
-  // never overflow or sit off-center; we only observe its real width and
-  // scale the artwork to match. Computing a pixel width from wrapper
-  // measurements was off by a hair on iOS Safari, which pushed the box
-  // past the right edge (Safari overflows centered flex items to the
-  // right instead of splitting the excess).
-  useEffect(() => {
-    if (!open) return;
-    const el = previewBoxRef.current;
-    if (!el) return;
-    // Measure LAYOUT width only (clientWidth / contentRect) — never
-    // getBoundingClientRect. The dialog opens with a zoom-in transform
-    // animation, and rect widths are transform-affected: measuring
-    // mid-animation bakes a ~5%-off scale in and nothing refires (layout
-    // size never changes), which cropped/mis-fit the preview on iOS.
-    const apply = (w: number) => {
-      if (w > 0) setPreviewScale(w / SHARE_CANVAS_W);
-    };
-    apply(el.clientWidth);
-    const raf = requestAnimationFrame(() => apply(el.clientWidth));
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect?.width;
-      if (typeof w === "number") apply(w);
-    });
-    ro.observe(el);
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-    };
-  }, [open]);
 
   // Capture-readiness barrier: don't allow export until webfonts have
   // settled AND every image inside the off-screen capture node has
@@ -134,7 +106,9 @@ export function ShareRecapImageDialog({
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
 
-  const renderPng = useCallback(async (): Promise<Blob> => {
+  // Shared capture pipeline: inline images, then multi-pass rasterize
+  // the off-screen node at the requested pixel ratio.
+  const renderCanvas = useCallback(async (pixelRatio: number) => {
     const node = captureRef.current;
     if (!node) throw new Error("Share canvas not ready");
     // Inline every <img> as a data: URL BEFORE capture. html-to-image
@@ -179,12 +153,18 @@ export function ShareRecapImageDialog({
     let big: HTMLCanvasElement | null = null;
     for (let i = 0; i < passes; i++) {
       big = await toCanvas(node, {
-        pixelRatio: 2,
+        pixelRatio,
         width: SHARE_CANVAS_W,
         height: SHARE_CANVAS_H,
       });
     }
     if (!big) throw new Error("Could not render the image");
+    return big;
+  }, []);
+
+  const renderPng = useCallback(async (): Promise<Blob> => {
+    // 2× capture then downscale — a 1× capture is visibly soft.
+    const big = await renderCanvas(2);
     const out = document.createElement("canvas");
     out.width = SHARE_CANVAS_W;
     out.height = SHARE_CANVAS_H;
@@ -199,6 +179,42 @@ export function ShareRecapImageDialog({
     if (!blob) throw new Error("Could not create the image");
     return blob;
   }, []);
+
+  // Generate the preview image once fonts/images are ready, and again
+  // whenever the CTA line toggles. 0.5× is plenty for a dialog-width
+  // preview and keeps regeneration snappy.
+  useEffect(() => {
+    if (!open || !captureReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const canvas = await renderCanvas(0.5);
+        if (cancelled) return;
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/png"),
+        );
+        if (cancelled || !blob) return;
+        setPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+      } catch {
+        // Preview failure is non-fatal — the download path still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, captureReady, ctaMode, renderCanvas]);
+
+  // Drop the object URL when the dialog closes.
+  useEffect(() => {
+    if (open) return;
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, [open]);
 
   const fileName = useMemo(() => {
     const slug = (post.title ?? "game-recap")
@@ -281,11 +297,10 @@ export function ShareRecapImageDialog({
             className="w-full rounded-xl bg-muted/60 border border-border p-3"
             data-testid="share-image-preview"
           >
-            {/* Pure-CSS sizing: 100% width + aspect-ratio + auto margins.
-                This box CANNOT overflow or sit off-center; the artwork is
-                scaled to the box's measured width, never the reverse. */}
+            {/* The preview is a plain <img> of the rendered export — a
+                width-100% image can't be off-center or cropped in any
+                browser, and it shows EXACTLY what will download. */}
             <div
-              ref={previewBoxRef}
               style={{
                 width: "100%",
                 maxWidth: SHARE_CANVAS_W / 2,
@@ -296,18 +311,20 @@ export function ShareRecapImageDialog({
                 borderRadius: 10,
               }}
             >
-              <div
-                style={{
-                  transform: `scale(${previewScale})`,
-                  transformOrigin: "top left",
-                }}
-              >
-                <ShareRecapCanvas
-                  post={post}
-                  ctaMode={ctaMode}
-                  recapUrl={recapUrl}
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Preview of your branded recap image"
+                  className="w-full h-full"
+                  data-testid="img-share-preview"
                 />
-              </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-muted animate-pulse">
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    Rendering preview…
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
