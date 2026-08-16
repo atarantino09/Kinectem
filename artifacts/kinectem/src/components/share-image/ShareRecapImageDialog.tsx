@@ -61,13 +61,20 @@ export function ShareRecapImageDialog({
     if (!open) return;
     const el = previewBoxRef.current;
     if (!el) return;
-    const apply = () => {
-      const w = el.getBoundingClientRect().width;
+    // Measure LAYOUT width only (clientWidth / contentRect) — never
+    // getBoundingClientRect. The dialog opens with a zoom-in transform
+    // animation, and rect widths are transform-affected: measuring
+    // mid-animation bakes a ~5%-off scale in and nothing refires (layout
+    // size never changes), which cropped/mis-fit the preview on iOS.
+    const apply = (w: number) => {
       if (w > 0) setPreviewScale(w / SHARE_CANVAS_W);
     };
-    apply();
-    const raf = requestAnimationFrame(apply);
-    const ro = new ResizeObserver(apply);
+    apply(el.clientWidth);
+    const raf = requestAnimationFrame(() => apply(el.clientWidth));
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (typeof w === "number") apply(w);
+    });
     ro.observe(el);
     return () => {
       cancelAnimationFrame(raf);
