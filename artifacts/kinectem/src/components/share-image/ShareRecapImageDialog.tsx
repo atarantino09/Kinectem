@@ -55,21 +55,35 @@ export function ShareRecapImageDialog({
     if (!open) return;
     const el = previewWrapRef.current;
     if (!el) return;
-    const update = () => {
-      // clientWidth includes the wrapper's padding (p-3 = 12px per side);
-      // scaling to the full clientWidth overflows the content box and
-      // clips the preview's right edge.
-      const style = getComputedStyle(el);
-      const inner =
-        el.clientWidth -
-        parseFloat(style.paddingLeft) -
-        parseFloat(style.paddingRight);
-      setPreviewScale(Math.min(inner / SHARE_CANVAS_W, 0.5));
+    // Scale to the wrapper's CONTENT box (padding/border excluded) or the
+    // preview clips at the right edge. ResizeObserver's contentRect is
+    // that box exactly; the manual fallback covers the initial paint.
+    const apply = (contentWidth: number) => {
+      // Tiny safety inset so sub-pixel rounding never overflows the box
+      // (seen as an off-center preview on mobile).
+      setPreviewScale(Math.min((contentWidth - 1) / SHARE_CANVAS_W, 0.5));
     };
-    update();
-    const ro = new ResizeObserver(update);
+    const measure = () => {
+      const style = getComputedStyle(el);
+      apply(
+        el.clientWidth -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight),
+      );
+    };
+    measure();
+    // Re-measure on the next frame too — when the dialog opens mid-
+    // animation the first layout pass can report a not-yet-final width.
+    const raf = requestAnimationFrame(measure);
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 0) apply(rect.width);
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, [open]);
 
   // Capture-readiness barrier: don't allow export until webfonts have

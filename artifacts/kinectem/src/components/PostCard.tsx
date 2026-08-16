@@ -877,7 +877,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               aria-label="Share as image"
             >
               <ImageDown className="w-3.5 h-3.5" />
-              Share as image
+              {/* Icon-only on phones — the action row runs out of width
+                  and the button gets clipped off the card edge. */}
+              <span className="hidden sm:inline">Share as image</span>
             </Button>
           )}
           {post.recentReactorName && post.reactionCount > 0 && (
