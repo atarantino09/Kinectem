@@ -1,0 +1,186 @@
+# Kinectem — "Share this game recap" card generator
+### Replit build handoff · August 2026
+
+---
+
+## What this feature does
+
+A **Share** button on any published game recap generates a branded image the user can
+download and post to Facebook or Instagram. The image wraps a rendered snapshot of the
+recap in the Kinectem stadium/purple frame.
+
+**Flow:** user taps Share → picks a size → server renders → image downloads → user posts manually.
+
+---
+
+## 1. Canvas presets
+
+| Preset | Size | Use |
+|---|---|---|
+| **Portrait** (default) | 1080 × 1350 | IG + FB feed. Ship this first. |
+| Square | 1080 × 1080 | IG feed |
+| Story | 1080 × 1920 | IG/FB stories |
+
+Ship **portrait only** for v1. The other two are the same code path with different constants.
+
+---
+
+## 2. Layout constants (portrait)
+
+All values in px on a 1080 × 1350 canvas.
+
+```
+SIDE_MARGIN        56          → card width = 968
+TOP_PAD            44
+LOGO_HEIGHT        56          left-aligned at (56, 44)
+PILL               "GAME RECAP", right-aligned, top 46
+CARD_TOP           y = 44 + 56 + 34 = 134
+CARD_RADIUS        22
+CTA_HEIGHT         96
+CTA_BOTTOM_PAD     34          → CTA top = 1350 - 34 - 96 = 1220
+AVAILABLE_HEIGHT   1220 - 30 - 134 = 1056   ← max recap card height
+```
+
+**The recap card is vertically centred** inside AVAILABLE_HEIGHT. Do not top-align —
+short recaps leave a dead zone at the bottom if you do.
+
+---
+
+## 3. Background (three stacked layers)
+
+1. **Stadium photo**, duotone-mapped to purple, as a band across the top, fading out at
+   62% of its own height into flat `#0B0417`.
+   - Duotone ramp: shadow `#0C051C` → mid `#4A208E` → highlight `#BE96FF`
+   - Pre-contrast: `clip((L - 0.46) * 1.30 + 0.46)`
+2. **Vertical wash**: `rgba(9,4,20,α)` where `α = min(0.10 + 1.55·(y/H)^1.35, 0.93)`
+3. **Concentric arcs** (Coaches persona pattern): centre at `(0.35W, 0.47H)`,
+   radii `180…1350`, stroke `rgba(201,180,255,0.12)`, width 2.
+
+⚠️ **Pre-render the background once per preset and cache it as a JPG.** Do not regenerate
+the duotone per request — it is the slowest part of the pipeline by a wide margin.
+
+---
+
+## 4. Recap snapshot
+
+Render the recap DOM to an image server-side. Recommended: **Puppeteer** on a headless
+Chromium.
+
+```js
+await page.setViewport({ width: 1204, height: 1400, deviceScaleFactor: 2 });
+await page.goto(recapUrl + '?share=1');       // ?share=1 hides nav/sidebar/footer
+const el = await page.$('#recap-card');
+const buf = await el.screenshot({ type: 'png' });
+```
+
+Capture **width 1204** to match the design ratio, then downscale to 968.
+Use `deviceScaleFactor: 2` and downscale — a 1× capture is visibly soft after resize.
+
+**Build a dedicated `?share=1` view.** Do not screenshot the live page and crop.
+The share view should render only: the colour rule, badges row, title, author block,
+and body text. No nav, no sidebar, no comment box, no reaction bar.
+
+---
+
+## 5. Handling variable recap length ← the hard part
+
+Recaps vary from ~100 to 800+ words. After scaling to 968 wide:
+
+```
+if card_height <= 1056:
+    centre it vertically, done
+else:
+    crop to 1056
+    apply a 190px white fade at the cut edge (ease: alpha = (i/190)^1.25)
+    draw "• • •" centred at 46px above the bottom, colour #A08CC8
+```
+
+The fade must go **to white**, matching the recap card background, so the cut reads as
+intentional rather than as a clipped screenshot.
+
+Do **not** repeat "Read the full game recap" in the fade — the CTA bar already says it.
+Two copies of the same sentence 60px apart looks like a bug.
+
+---
+
+## 6. CTA bar
+
+- Rounded rect, radius 20, full card width, height 96, at y = 1220
+- Gradient left→right: `#4F46E5 → #7C3AED → #9333EA`
+- Line 1: Inter Bold 29 — `Read the full game recap on Kinectem.`
+- Line 2: Inter Medium 25 at 85% white — `Link in bio.`
+- White circle ⌀58 on the right with a purple arrow, 26px inset
+
+**Make line 2 configurable.** "Link in bio" is right for Instagram; for Facebook the org
+will want the actual URL.
+
+---
+
+## 7. Fonts
+
+Inter — Black / Bold / SemiBold / Medium / Regular.
+Bundle the TTFs in the repo. Do **not** rely on a CDN or on system fonts: a missing font
+silently falls back and the output ships wrong without erroring.
+
+> This exact bug happened while building the source template — a bad font download
+> returned HTML instead of TTFs, and several rounds rendered in a fallback face before
+> anyone noticed.
+
+---
+
+## 8. Assets to copy into the repo
+
+```
+/assets/kinectem_logo_white.png    transparent, 1094×224, K-to-wordmark gap already tightened
+/assets/bg_portrait.jpg            pre-rendered background, 1080×1350
+/assets/fonts/Inter-{Black,Bold,SemiBold,Medium,Regular}.ttf
+```
+
+⚠️ **The stadium photo in the current build is an unlicensed iStock comp preview**
+(612×323). Buy the licence and re-render the cached backgrounds from the full-res file
+before this ships. At 612px the source is also being upscaled ~1.8×, which is why the
+floodlights are soft.
+
+---
+
+## 9. Reference implementation
+
+`frame_recap.py` (attached) is a working Python/Pillow implementation of everything
+above. It runs end-to-end and produces all three presets. Use it as the spec — if the
+JS port disagrees with it, the Python is correct.
+
+Port target: **sharp** (Node) or keep a small Python service. Pillow's
+`rounded_rectangle` masks and Gaussian shadow have direct sharp equivalents.
+
+---
+
+## 10. Two things to decide before building
+
+### Player names go public
+The sample recap names a player in the body text. This feature takes content from a
+permissioned team space and makes it a public social image — which is a different
+privacy posture than a recap sitting behind team access.
+
+Worth deciding deliberately, not by default:
+- Who is allowed to press Share — coach and org admin only, or any team member?
+- Should the generated image auto-redact player surnames?
+- Does the org's existing media-consent status gate the button?
+
+This matters more for Kinectem than for a generic app, because the youth-sports context
+is exactly the one parents are most sensitive about, and "our platform generated it"
+carries implied endorsement.
+
+### Rate limiting
+Headless Chromium is heavy. Queue the renders and cap per-user requests, or a few orgs
+sharing recaps at the same time on a Sunday evening will stall the dyno.
+
+---
+
+## 11. Suggested build order
+
+1. `?share=1` recap view (clean DOM, no chrome)
+2. Puppeteer capture → PNG buffer
+3. Python/sharp framing service using cached background
+4. Share button → size picker → download
+5. Square + story presets
+6. Rate limiting + render queue
