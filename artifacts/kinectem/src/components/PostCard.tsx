@@ -409,6 +409,11 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
         "rounded-xl border border-border shadow-sm overflow-hidden",
         isCombinedRecap &&
           "bg-gradient-to-br from-purple-50 to-violet-100/60 dark:from-purple-950/30 dark:to-violet-900/20",
+        // News cards get a light brand-blue tint (matches --brand-blue /
+        // --primary, hsl 217 91% 60% ≈ Tailwind blue-500 family) so they
+        // stand out from regular and combined recaps.
+        isNews &&
+          "bg-gradient-to-br from-blue-50 to-blue-100/60 dark:from-blue-950/30 dark:to-blue-900/20",
       )}
     >
       <CardContent className="p-0">
