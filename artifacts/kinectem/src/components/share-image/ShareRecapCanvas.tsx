@@ -199,7 +199,7 @@ export const ShareRecapCanvas = forwardRef<
             {/* Org colour rule */}
             <div
               style={{
-                height: 8,
+                height: 16,
                 borderRadius: 999,
                 marginBottom: 30,
                 background: brand
