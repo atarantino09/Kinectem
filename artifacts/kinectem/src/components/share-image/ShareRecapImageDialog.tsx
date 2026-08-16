@@ -55,8 +55,17 @@ export function ShareRecapImageDialog({
     if (!open) return;
     const el = previewWrapRef.current;
     if (!el) return;
-    const update = () =>
-      setPreviewScale(Math.min(el.clientWidth / SHARE_CANVAS_W, 0.5));
+    const update = () => {
+      // clientWidth includes the wrapper's padding (p-3 = 12px per side);
+      // scaling to the full clientWidth overflows the content box and
+      // clips the preview's right edge.
+      const style = getComputedStyle(el);
+      const inner =
+        el.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
+      setPreviewScale(Math.min(inner / SHARE_CANVAS_W, 0.5));
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
