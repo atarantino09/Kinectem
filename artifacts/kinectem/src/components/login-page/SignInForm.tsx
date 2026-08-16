@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { safeInternalPath } from "@/lib/safePath";
 import { rateLimitMessage } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +50,7 @@ export function SignInForm({
         }),
       });
       await qc.invalidateQueries();
-      const dest = returnTo || "/";
+      const dest = safeInternalPath(returnTo) ?? "/";
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         window.location.assign(base + (dest.startsWith("/") ? dest : "/" + dest));

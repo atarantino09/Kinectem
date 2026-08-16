@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { safeInternalPath } from "@/lib/safePath";
 import { rateLimitMessage } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -170,7 +171,7 @@ export function SignUpForm({
       // Competition organizers land on the Competitions page with the
       // "New competition hub" dialog auto-opened (mirrors the org flow).
       const dest =
-        returnTo ||
+        safeInternalPath(returnTo) ??
         (isOrgAdmin
           ? "/organizations/mine?new=1"
           : isCompetitionOrganizer

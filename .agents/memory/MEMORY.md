@@ -55,4 +55,5 @@
 - [Staged coach persistence](staged-coach-persistence.md) — staged coach drafts survive dialog skip/close; removed only by successful invite or per-row delete; clear-all is explicit-cleanup only.
 - [Competition brackets](competition-brackets.md) — recap-sorting labels; lazy seed in organizer GET; composer pick touch-gated; server nulls bracket only when competition actually changes.
 - [Competition participant identity](competition-participant-identity.md) — identity is name+gender per competition (same-named boys/girls teams are real); division/bracket informational, read per-game values from matches.
+- [Public recap visitor gate](public-recap-visitor-gate.md) — logged-out viewing is recaps-only (client-side); detect visitors via whoami not users/me 401; returnTo sanitized via safeInternalPath.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.

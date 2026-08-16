@@ -57,6 +57,9 @@ const HEADINGS: Record<Mode, { title: string; subtitle: string }> = {
 export default function LoginPage() {
   const initialSignup = readQueryParam("signup");
   const returnTo = readQueryParam("returnTo");
+  // Task #864 — visitors arriving from a public game recap get a warm
+  // invitation banner explaining why they're here.
+  const gate = readQueryParam("gate");
   const [mode, setMode] = useState<Mode>(initialSignup ? "signup" : "signin");
   const [error, setError] = useState<string | null>(null);
   const [forgotSentEmail, setForgotSentEmail] = useState("");
@@ -95,6 +98,19 @@ export default function LoginPage() {
             </h2>
             <p className="text-sm text-slate-500">{heading.subtitle}</p>
           </div>
+
+          {gate === "recap" && (mode === "signup" || mode === "signin") && (
+            <div
+              className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm"
+              data-testid="text-recap-gate-message"
+            >
+              <p className="font-bold">You've caught the highlights 🎉</p>
+              <p className="text-slate-600 mt-0.5">
+                Create your free account to cheer, comment, and follow this
+                team all season — you'll land right back on the recap.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div

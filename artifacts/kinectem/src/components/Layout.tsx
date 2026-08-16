@@ -54,6 +54,39 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const canAuthorRecap = whoami?.canAuthorRecap === true;
   const [location, setLocation] = useLocation();
 
+  // Task #864 — published game recap pages are publicly viewable. A
+  // logged-out visitor on /posts/:id gets a slim read-only shell instead
+  // of a redirect to /login; every interaction on the page routes them to
+  // the signup screen (see the click gate below). `/posts/new` is a
+  // different route entirely (registered outside Layout).
+  const isPublicPostRoute = /^\/posts\/[^/]+$/.test(location);
+  // whoami answers 200 `{authenticated:false}` immediately for logged-out
+  // visitors, while the users/me query can spend seconds retrying its 401
+  // (other mounts of the same query use default retries) — so key visitor
+  // detection on whoami and use the 401 only as a fallback.
+  const authStatus = (currentUserError as { status?: number } | null)?.status;
+  const isVisitor =
+    (whoami as { authenticated?: boolean } | undefined)?.authenticated ===
+      false || authStatus === 401;
+
+  // Only game recaps (long-form articles) are publicly viewable; highlights
+  // and org posts keep the login wall even though the API serves them. We
+  // peek at the post (shared queryKey with PostPage, so this is one fetch)
+  // to decide before letting the visitor shell render.
+  const publicPostId = isPublicPostRoute ? location.split("/")[2] : null;
+  const publicPostQuery = useQuery<{ postType?: string }>({
+    queryKey: ["post", publicPostId],
+    queryFn: () => customFetch(`/api/v1/posts/${publicPostId}`),
+    enabled: isVisitor && !!publicPostId,
+    retry: false,
+  });
+  const publicPostPending =
+    isVisitor && isPublicPostRoute && publicPostQuery.isLoading;
+  const publicPostAllowed =
+    isVisitor &&
+    isPublicPostRoute &&
+    publicPostQuery.data?.postType === "long";
+
   useEffect(() => {
     const status = (currentUserError as { status?: number } | null)?.status;
     // Task #850 — claim-link visits (`?claimToken=`) must stay viewable
@@ -62,6 +95,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const hasClaimToken =
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).has("claimToken");
+    // Public recap pages don't bounce to login while we're checking (or
+    // once we've confirmed) that the post is a publicly viewable game
+    // recap (Task #864). Anything else falls through to the redirect.
+    if (
+      /^\/posts\/[^/]+$/.test(location) &&
+      status === 401 &&
+      (publicPostQuery.isLoading || publicPostQuery.data?.postType === "long")
+    )
+      return;
     if (status === 401 && location !== "/login" && !hasClaimToken) {
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -70,7 +112,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         setLocation("/login");
       }
     }
-  }, [currentUserError, location, setLocation]);
+  }, [
+    currentUserError,
+    location,
+    setLocation,
+    publicPostQuery.isLoading,
+    publicPostQuery.data,
+  ]);
   const [query, setQuery] = useState("");
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -155,6 +203,111 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName = currentUser
     ? `${currentUser.firstName} ${currentUser.lastName}`
     : "";
+
+  // Task #864 — slim public shell for logged-out recap visitors. Reading is
+  // free; any click inside the page content (links, reactions, share — all
+  // of it) hands the visitor to the signup screen with a return-to so they
+  // land right back on this recap after creating an account.
+  // Avoid flashing the full logged-in chrome while we check whether this
+  // post is publicly viewable.
+  if (publicPostPending) {
+    return <div className="min-h-screen" />;
+  }
+
+  if (publicPostAllowed) {
+    const signupUrl = () => {
+      const returnTo =
+        typeof window !== "undefined"
+          ? window.location.pathname.replace(
+              new RegExp(`^${import.meta.env.BASE_URL.replace(/\/$/, "")}`),
+              "",
+            ) + window.location.search
+          : location;
+      return `/login?signup=1&gate=recap&returnTo=${encodeURIComponent(returnTo)}`;
+    };
+    const gateClicks = (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const interactive = target.closest(
+        "a, button, input, textarea, select, [role='button']",
+      );
+      if (!interactive) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLocation(signupUrl());
+    };
+    return (
+      <div className="min-h-screen text-foreground">
+        <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+          <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-3">
+            <a
+              href={signupUrl()}
+              onClick={(e) => {
+                e.preventDefault();
+                setLocation(signupUrl());
+              }}
+              className="flex items-center shrink-0 cursor-pointer"
+              aria-label="Kinectem"
+            >
+              <img
+                src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+                alt="Kinectem"
+                className="block h-8 md:h-9 w-auto"
+              />
+            </a>
+            <div className="flex-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="font-semibold"
+              onClick={() =>
+                setLocation(
+                  `/login?returnTo=${encodeURIComponent(location)}`,
+                )
+              }
+              data-testid="btn-visitor-login"
+            >
+              Log in
+            </Button>
+            <Button
+              variant="brand"
+              size="sm"
+              className="font-bold"
+              onClick={() => setLocation(signupUrl())}
+              data-testid="btn-visitor-join"
+            >
+              Join Kinectem — it's free
+            </Button>
+          </div>
+        </header>
+        <main
+          className="mx-auto max-w-6xl px-4 py-6 pb-16 md:pb-8"
+          onClickCapture={gateClicks}
+          data-testid="visitor-post-shell"
+        >
+          {children}
+        </main>
+        <div className="mx-auto max-w-3xl px-4 pb-12">
+          <div className="rounded-2xl border border-border bg-card p-6 text-center space-y-3">
+            <p className="font-black text-lg tracking-tight">
+              You've caught the highlights — don't miss the season.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Create your free Kinectem account to cheer, comment, and follow
+              this team all season long.
+            </p>
+            <Button
+              variant="brand"
+              className="font-bold"
+              onClick={() => setLocation(signupUrl())}
+              data-testid="btn-visitor-join-footer"
+            >
+              Create your free account
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen text-foreground">
