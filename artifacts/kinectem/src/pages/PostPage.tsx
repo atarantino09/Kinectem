@@ -36,6 +36,7 @@ import {
   ChevronRight,
   Trash2,
   Trophy,
+  ImageDown,
 } from "lucide-react";
 import {
   timeAgo,
@@ -68,6 +69,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TakedownDialog } from "@/components/TakedownDialog";
+import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { apiErrorMessage } from "@/lib/api-errors";
 
 export default function PostPage() {
@@ -78,6 +80,7 @@ export default function PostPage() {
   const qc = useQueryClient();
   const deletePost = useDeletePost();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [shareImageOpen, setShareImageOpen] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [takedownOpen, setTakedownOpen] = useState(false);
   // When the parent jumps in here from the family stream the link carries
@@ -1016,6 +1019,40 @@ export default function PostPage() {
           ))}
         </div>
       )}
+
+      {/* Task #863 — "Share as image": PUBLISHED game recaps only. The
+          server ships the article's publication state as `articleStatus`
+          (extra beyond the locked spec, recapKind precedent) precisely so
+          this gate can't be fooled: the detail endpoint serves drafts and
+          pending-approval recaps to their author/org admins, and those
+          must never be exportable. Also excluded: highlights/org posts
+          (no articleStatus), guardian preview, deleted/hidden posts. */}
+      {!isShort &&
+        !asChildId &&
+        !isAdminOnPending &&
+        (post as { articleStatus?: string | null }).articleStatus ===
+          "published" &&
+        !(post as { hidden?: boolean }).hidden && (
+          <>
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold rounded-full"
+                onClick={() => setShareImageOpen(true)}
+                data-testid="btn-share-recap-image"
+              >
+                <ImageDown className="w-3.5 h-3.5 mr-1.5" />
+                Share as image
+              </Button>
+            </div>
+            <ShareRecapImageDialog
+              post={post}
+              open={shareImageOpen}
+              onOpenChange={setShareImageOpen}
+            />
+          </>
+        )}
 
       {asChildId ? (
         <div

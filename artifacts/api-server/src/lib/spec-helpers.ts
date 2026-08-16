@@ -993,6 +993,7 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     updatedAt: a.updatedAt.toISOString(),
     gameDate: a.gameDate ? a.gameDate.toISOString() : null,
     recapKind: a.recapKind ?? null,
+    articleStatus: a.status ?? null,
     // Medal marker: operator-featured competition recap.
     competitionFeatured: a.featured === true && a.competitionId != null,
     extras,
@@ -1087,6 +1088,14 @@ function basePost(p: {
   // competition's public rail. Drives the medal marker on the post card.
   // Extra field beyond the locked spec — recapKind precedent.
   competitionFeatured?: boolean;
+  // Task #863 — the article's publication state ("draft" |
+  // "pending_approval" | "published"). Only article-backed posts set
+  // this; highlights and org posts omit it and serialize null. Extra
+  // field beyond the locked spec — recapKind precedent. The client
+  // uses it to show "Share as image" ONLY on published recaps: the
+  // detail endpoint intentionally serves drafts/pending recaps to
+  // their author and org admins, and those must never be exportable.
+  articleStatus?: string | null;
   extras: PostExtras;
 }) {
   const author = p.extras.author
@@ -1159,6 +1168,7 @@ function basePost(p: {
     updatedAt: p.updatedAt,
     gameDate: p.gameDate ?? null,
     recapKind: p.recapKind ?? null,
+    articleStatus: p.articleStatus ?? null,
     competition: p.extras.competition ?? null,
     competitionFeatured: p.competitionFeatured ?? false,
     author,

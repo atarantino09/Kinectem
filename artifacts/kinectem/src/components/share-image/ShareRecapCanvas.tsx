@@ -1,0 +1,412 @@
+import {
+  forwardRef,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { PostResponse } from "@workspace/api-client-react";
+import { formatDateUTC, formatOrgName } from "@/lib/format";
+import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
+import shareBg from "@/assets/share-bg-portrait.jpg";
+
+/**
+ * Task #863 — the fixed 1080×1350 composition that becomes the shareable
+ * PNG. Rendered as plain DOM (not <canvas>) so it inherits the app's
+ * bundled fonts and Tailwind styling, then captured with html-to-image.
+ *
+ * Layout constants follow the handoff spec (all px on a 1080×1350 canvas):
+ * side margin 56 → card width 968; logo band at top; CTA bar 96 tall at
+ * y=1220; the recap card is vertically centred in the space between and
+ * fade-cropped with a "• • •" marker when too tall.
+ */
+
+export const SHARE_CANVAS_W = 1080;
+export const SHARE_CANVAS_H = 1350;
+const SIDE = 56;
+const CARD_W = SHARE_CANVAS_W - SIDE * 2; // 968
+const TOP_PAD = 44;
+const LOGO_H = 56;
+const CARD_TOP = TOP_PAD + LOGO_H + 34; // 134
+const CTA_H = 96;
+const CTA_BOTTOM_PAD = 34;
+const CTA_TOP = SHARE_CANVAS_H - CTA_BOTTOM_PAD - CTA_H; // 1220
+const AVAILABLE_H = CTA_TOP - 30 - CARD_TOP; // 1056
+const FADE_H = 190;
+
+/** Strip `@[Name](user:uuid)` mention tokens down to the plain name. */
+export function plainBody(body: string): string {
+  return body.replace(/@\[([^\]]+)\]\(user:[^)]+\)/g, "$1");
+}
+
+export type ShareCtaMode = "bio" | "url";
+
+export const ShareRecapCanvas = forwardRef<
+  HTMLDivElement,
+  {
+    post: PostResponse;
+    ctaMode: ShareCtaMode;
+    recapUrl: string;
+  }
+>(function ShareRecapCanvas({ post, ctaMode, recapUrl }, ref) {
+  const brand = readOrgBrandColors(
+    post.context as unknown as Record<string, unknown>,
+  );
+  const paragraphs = useMemo(
+    () =>
+      plainBody(post.body ?? "")
+        .split(/\n{2,}|\n/)
+        .map((p) => p.trim())
+        .filter(Boolean),
+    [post.body],
+  );
+
+  // Only show the fade-out + "• • •" when the card content genuinely
+  // overflows the available band; short recaps get a clean card bottom.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [cropped, setCropped] = useState(false);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = cardRef.current;
+      if (el) setCropped(el.scrollHeight > AVAILABLE_H + 1);
+    };
+    measure();
+    // Re-measure once webfonts settle — text metrics (and therefore the
+    // crop decision) can change when Inter finishes loading.
+    let cancelled = false;
+    document.fonts?.ready?.then(() => {
+      if (!cancelled) measure();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [post.body, post.title]);
+
+  const teamName = post.context.name ?? null;
+  const orgName =
+    post.context.type === "team" && post.context.orgName
+      ? formatOrgName(post.context.orgName)
+      : null;
+
+  return (
+    <div
+      ref={ref}
+      data-testid="share-image-canvas"
+      style={{
+        width: SHARE_CANVAS_W,
+        height: SHARE_CANVAS_H,
+        position: "relative",
+        overflow: "hidden",
+        backgroundColor: "#0B0417",
+        fontFamily: "inherit",
+      }}
+    >
+      {/* Layer 1: pre-rendered purple stadium background */}
+      <img
+        src={shareBg}
+        alt=""
+        crossOrigin="anonymous"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+        }}
+      />
+
+      {/* Header: white wordmark left, GAME RECAP pill right */}
+      <img
+        src={`${import.meta.env.BASE_URL}logo-horizontal-dark.png`}
+        alt="Kinectem"
+        crossOrigin="anonymous"
+        style={{
+          position: "absolute",
+          left: SIDE,
+          top: TOP_PAD,
+          height: LOGO_H,
+          width: "auto",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: SIDE,
+          top: TOP_PAD + 2,
+          padding: "12px 26px",
+          borderRadius: 999,
+          border: "2px solid rgba(201,180,255,0.55)",
+          background: "rgba(20,8,44,0.55)",
+          color: "#E4D9FF",
+          fontSize: 24,
+          fontWeight: 900,
+          letterSpacing: "0.22em",
+          textTransform: "uppercase",
+          lineHeight: 1.2,
+        }}
+      >
+        Game Recap
+      </div>
+
+      {/* Recap card, vertically centred in the available band */}
+      <div
+        style={{
+          position: "absolute",
+          left: SIDE,
+          top: CARD_TOP,
+          width: CARD_W,
+          height: AVAILABLE_H,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <div
+          ref={cardRef}
+          style={{
+            position: "relative",
+            width: "100%",
+            maxHeight: AVAILABLE_H,
+            overflow: "hidden",
+            background: "#FFFFFF",
+            borderRadius: 22,
+            boxShadow: "0 32px 70px rgba(4,0,16,0.55)",
+          }}
+        >
+          <div style={{ padding: "44px 52px 48px" }}>
+            {/* Org colour rule */}
+            <div
+              style={{
+                height: 8,
+                borderRadius: 999,
+                marginBottom: 30,
+                background: brand
+                  ? orgStripGradient(brand)
+                  : "linear-gradient(90deg,#4F46E5,#9333EA)",
+              }}
+            />
+            {/* Badges row */}
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                flexWrap: "wrap",
+                marginBottom: 26,
+              }}
+            >
+              {[orgName, teamName]
+                .filter((v): v is string => !!v)
+                .map((label) => (
+                  <span
+                    key={label}
+                    style={{
+                      display: "inline-block",
+                      padding: "8px 18px",
+                      borderRadius: 999,
+                      border: "2px solid #E2E0EC",
+                      color: "#3F3A55",
+                      fontSize: 22,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 560,
+                    }}
+                  >
+                    {label}
+                  </span>
+                ))}
+            </div>
+            {/* Title */}
+            {post.title && (
+              <h1
+                style={{
+                  margin: 0,
+                  color: "#151022",
+                  fontSize: 52,
+                  lineHeight: 1.12,
+                  fontWeight: 900,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {post.title}
+              </h1>
+            )}
+            {post.gameDate && (
+              <p
+                style={{
+                  margin: "14px 0 0",
+                  color: "#7A7490",
+                  fontSize: 24,
+                  fontWeight: 600,
+                }}
+              >
+                Game date: {formatDateUTC(post.gameDate)}
+              </p>
+            )}
+            {/* Author block */}
+            <p
+              style={{
+                margin: "26px 0 0",
+                color: "#151022",
+                fontSize: 25,
+                fontWeight: 800,
+              }}
+            >
+              {post.author.displayName}
+              {post.author.authorRole && (
+                <span style={{ color: "#8B84A6", fontWeight: 600 }}>
+                  {" "}
+                  · {post.author.authorRole}
+                </span>
+              )}
+            </p>
+            <div
+              style={{
+                height: 2,
+                background: "#EEECF4",
+                margin: "30px 0",
+              }}
+            />
+            {/* Body */}
+            {paragraphs.map((p, i) => (
+              <p
+                key={i}
+                style={{
+                  margin: i === 0 ? 0 : "22px 0 0",
+                  color: "#2A2440",
+                  fontSize: 27,
+                  lineHeight: 1.5,
+                  fontWeight: 450,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {p}
+              </p>
+            ))}
+          </div>
+
+          {/* Watermark INSIDE the card so cropping the frame keeps branding */}
+          <img
+            src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+            alt=""
+            crossOrigin="anonymous"
+            style={{
+              position: "absolute",
+              right: 34,
+              top: 40,
+              height: 34,
+              width: "auto",
+              opacity: 0.38,
+            }}
+          />
+
+          {/* Fade-to-white crop treatment (covers nothing when card is short:
+              it sits at the bottom of the card, and short cards end above
+              natural content anyway — the gradient starts transparent). */}
+          {cropped && (
+          <div
+            data-share-fade
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: FADE_H,
+              pointerEvents: "none",
+              background:
+                "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 45%, #FFFFFF 92%)",
+            }}
+          />
+          )}
+          {cropped && (
+          <div
+            data-share-ellipsis
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 34,
+              textAlign: "center",
+              color: "#A08CC8",
+              fontSize: 30,
+              fontWeight: 900,
+              letterSpacing: "0.5em",
+              pointerEvents: "none",
+            }}
+          >
+            •&nbsp;•&nbsp;•
+          </div>
+          )}
+        </div>
+      </div>
+
+      {/* CTA bar */}
+      <div
+        style={{
+          position: "absolute",
+          left: SIDE,
+          top: CTA_TOP,
+          width: CARD_W,
+          height: CTA_H,
+          borderRadius: 20,
+          background: "linear-gradient(90deg,#4F46E5 0%,#7C3AED 55%,#9333EA 100%)",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 26px 0 40px",
+          boxSizing: "border-box",
+          gap: 24,
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p
+            style={{
+              margin: 0,
+              color: "#FFFFFF",
+              fontSize: 29,
+              fontWeight: 800,
+              lineHeight: 1.25,
+            }}
+          >
+            Read the full game recap on Kinectem.
+          </p>
+          <p
+            style={{
+              margin: "2px 0 0",
+              color: "rgba(255,255,255,0.85)",
+              fontSize: ctaMode === "url" ? 21 : 25,
+              fontWeight: 600,
+              lineHeight: 1.25,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {ctaMode === "bio" ? "Link in bio." : recapUrl}
+          </p>
+        </div>
+        <div
+          style={{
+            width: 58,
+            height: 58,
+            borderRadius: "50%",
+            background: "#FFFFFF",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M5 12h14M13 6l6 6-6 6"
+              stroke="#7C3AED"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+});

@@ -56,4 +56,5 @@
 - [Competition brackets](competition-brackets.md) — recap-sorting labels; lazy seed in organizer GET; composer pick touch-gated; server nulls bracket only when competition actually changes.
 - [Competition participant identity](competition-participant-identity.md) — identity is name+gender per competition (same-named boys/girls teams are real); division/bracket informational, read per-game values from matches.
 - [Public recap visitor gate](public-recap-visitor-gate.md) — logged-out viewing is recaps-only (client-side); detect visitors via whoami not users/me 401; returnTo sanitized via safeInternalPath.
+- [Shareable recap image](share-recap-image.md) — client-side 1080×1350 PNG export; published-only gate via extra-spec articleStatus; fonts must be self-hosted for html-to-image; capture waits on fonts+image decode.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.
