@@ -38,6 +38,17 @@ import {
 import { apiErrorMessage } from "@/lib/api-errors";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
+import { extractLogoColors } from "@/components/BrandColorField";
+import {
+  readOrgBrandColors,
+  orgHeroGradient,
+  orgStripGradient,
+} from "@/lib/orgBrand";
+
+// Starting swatches shown when no brand colors are set yet (matches
+// EditOrgDialog defaults).
+const DEFAULT_BRAND_PRIMARY = "#1d4ed8";
+const DEFAULT_BRAND_SECONDARY = "#9333ea";
 
 function slugify(s: string) {
   return s
@@ -72,6 +83,10 @@ export function CreateOrgDialog({
   const [zipCode, setZipCode] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>("");
+  // Optional brand colors — null means "not set" (org page uses the
+  // default gradient and team pages show no brand strip).
+  const [brandPrimary, setBrandPrimary] = useState<string | null>(null);
+  const [brandSecondary, setBrandSecondary] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
     name?: string;
     city?: string;
@@ -94,6 +109,8 @@ export function CreateOrgDialog({
     setZipCode("");
     setSlugDirty(false);
     setLogoUrl("");
+    setBrandPrimary(null);
+    setBrandSecondary(null);
     setErrors({});
   };
 
@@ -139,6 +156,22 @@ export function CreateOrgDialog({
         return;
       }
       setLogoUrl(dataUrl);
+      // Auto-suggest brand colors from the logo (best-effort — needs at
+      // least two distinct usable colors). The pickers below stay fully
+      // editable, so this is only a starting point.
+      try {
+        const extracted = await extractLogoColors(dataUrl);
+        if (extracted.length >= 2) {
+          setBrandPrimary(extracted[0]);
+          setBrandSecondary(extracted[1]);
+          toast({
+            title: "Brand colors picked from the logo",
+            description: "You can adjust them below.",
+          });
+        }
+      } catch {
+        // tainted canvas / decode failure — skip color suggestion
+      }
     } catch (err) {
       if (err instanceof UnsupportedImageFormatError) {
         toast({
@@ -198,7 +231,15 @@ export function CreateOrgDialog({
           state: state as CreateOrganizationRequestState,
           zipCode: trimmedZip,
           logoUrl: logoUrl || undefined,
-        },
+          // Extra-spec fields (same as EditOrgDialog PATCH) — cast keeps
+          // the generated client's locked request type happy.
+          ...(brandPrimary
+            ? { brandPrimaryColor: brandPrimary }
+            : {}),
+          ...(brandSecondary
+            ? { brandSecondaryColor: brandSecondary }
+            : {}),
+        } as Parameters<typeof createOrg.mutateAsync>[0]["data"],
       });
       toast({
         title: "Organization created!",
@@ -302,6 +343,88 @@ export function CreateOrgDialog({
                   </Button>
                 )}
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-bold">Brand colors</Label>
+              <p className="text-xs text-muted-foreground">
+                Two colors that blend into a gradient on your organization
+                page and appear as a strip on each team page.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={brandPrimary ?? DEFAULT_BRAND_PRIMARY}
+                    onChange={(e) => {
+                      setBrandPrimary(e.target.value);
+                      // Picking one color implicitly activates the pair so
+                      // the preview + save reflect what the page will show.
+                      setBrandSecondary(
+                        (prev) => prev ?? DEFAULT_BRAND_SECONDARY,
+                      );
+                    }}
+                    className="h-9 w-9 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+                    aria-label="Primary brand color"
+                    data-testid="input-create-org-brand-primary"
+                  />
+                  <span className="text-xs font-bold text-muted-foreground">
+                    Primary
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={brandSecondary ?? DEFAULT_BRAND_SECONDARY}
+                    onChange={(e) => {
+                      setBrandSecondary(e.target.value);
+                      setBrandPrimary((prev) => prev ?? DEFAULT_BRAND_PRIMARY);
+                    }}
+                    className="h-9 w-9 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+                    aria-label="Secondary brand color"
+                    data-testid="input-create-org-brand-secondary"
+                  />
+                  <span className="text-xs font-bold text-muted-foreground">
+                    Secondary
+                  </span>
+                </div>
+                {(brandPrimary || brandSecondary) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="font-bold rounded-full"
+                    onClick={() => {
+                      setBrandPrimary(null);
+                      setBrandSecondary(null);
+                    }}
+                    data-testid="btn-clear-create-org-brand-colors"
+                  >
+                    Reset to default
+                  </Button>
+                )}
+              </div>
+              {(() => {
+                const colors = readOrgBrandColors({
+                  brandPrimaryColor: brandPrimary,
+                  brandSecondaryColor: brandSecondary,
+                });
+                if (!colors) return null;
+                return (
+                  <div
+                    className="overflow-hidden rounded-lg border border-border"
+                    data-testid="preview-create-org-brand-gradient"
+                  >
+                    <div
+                      className="h-1.5"
+                      style={{ background: orgStripGradient(colors) }}
+                    />
+                    <div
+                      className="h-10"
+                      style={{ background: orgHeroGradient(colors) }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="org-name" className="font-bold">

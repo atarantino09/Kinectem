@@ -278,6 +278,27 @@ router.post(
       if (!websiteResult.ok) return reject(400, "website", websiteResult.error);
       websiteValue = websiteResult.value || undefined;
     }
+    // Brand colors at create time (same rules as the PATCH route: hex
+    // string sets, null/empty clears). Extra fields beyond the locked
+    // spec (recapKind precedent), so validation lives here.
+    const CREATE_HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    const brandColors: {
+      brandPrimaryColor?: string;
+      brandSecondaryColor?: string;
+    } = {};
+    for (const key of ["brandPrimaryColor", "brandSecondaryColor"] as const) {
+      const value = req.body?.[key];
+      if (value === undefined || value === null || value === "") continue;
+      if (typeof value !== "string") {
+        return reject(400, key, `${key} must be a string or null`);
+      }
+      const trimmed = value.trim();
+      if (trimmed === "") continue;
+      if (!CREATE_HEX_COLOR_PATTERN.test(trimmed)) {
+        return reject(400, key, `${key} must be a hex color like #1a2b3c`);
+      }
+      brandColors[key] = trimmed.toLowerCase();
+    }
     // Wrap the create flow so unexpected DB errors get logged with the
     // same structured shape as the validation rejections above. Without
     // this the request would 500 via the global error handler with no
@@ -293,6 +314,7 @@ router.post(
           zipCode,
           website: websiteValue,
           logoUrl: req.body?.logoUrl ?? undefined,
+          ...brandColors,
           createdById: me.id,
         })
         .returning();
