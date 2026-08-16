@@ -415,7 +415,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
         // --primary, hsl 217 91% 60% ≈ Tailwind blue-500 family) so they
         // stand out from regular and combined recaps.
         isNews &&
-          "bg-gradient-to-br from-blue-50 to-blue-100/60 dark:from-blue-950/30 dark:to-blue-900/20",
+          "bg-gradient-to-br from-blue-100 to-blue-200/60 dark:from-blue-950/40 dark:to-blue-900/30",
       )}
     >
       <CardContent className="p-0">
