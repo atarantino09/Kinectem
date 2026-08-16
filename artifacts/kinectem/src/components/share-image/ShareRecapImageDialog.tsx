@@ -38,7 +38,7 @@ export function ShareRecapImageDialog({
 }) {
   const { toast } = useToast();
   const captureRef = useRef<HTMLDivElement | null>(null);
-  const previewWrapRef = useRef<HTMLDivElement | null>(null);
+  const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const [ctaMode, setCtaMode] = useState<ShareCtaMode>("bio");
   const [busy, setBusy] = useState(false);
   const [captureReady, setCaptureReady] = useState(false);
@@ -50,35 +50,24 @@ export function ShareRecapImageDialog({
     return `${window.location.origin}${base}/posts/${post.id}`;
   }, [post.id]);
 
-  // Scale the preview to the dialog width.
+  // Scale the preview to whatever width the preview BOX actually renders
+  // at. The box itself is plain CSS (width 100%, aspect-ratio) so it can
+  // never overflow or sit off-center; we only observe its real width and
+  // scale the artwork to match. Computing a pixel width from wrapper
+  // measurements was off by a hair on iOS Safari, which pushed the box
+  // past the right edge (Safari overflows centered flex items to the
+  // right instead of splitting the excess).
   useEffect(() => {
     if (!open) return;
-    const el = previewWrapRef.current;
+    const el = previewBoxRef.current;
     if (!el) return;
-    // Scale to the wrapper's CONTENT box (padding/border excluded) or the
-    // preview clips at the right edge. ResizeObserver's contentRect is
-    // that box exactly; the manual fallback covers the initial paint.
-    const apply = (contentWidth: number) => {
-      // Tiny safety inset so sub-pixel rounding never overflows the box
-      // (seen as an off-center preview on mobile).
-      setPreviewScale(Math.min((contentWidth - 1) / SHARE_CANVAS_W, 0.5));
+    const apply = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setPreviewScale(w / SHARE_CANVAS_W);
     };
-    const measure = () => {
-      const style = getComputedStyle(el);
-      apply(
-        el.clientWidth -
-          parseFloat(style.paddingLeft) -
-          parseFloat(style.paddingRight),
-      );
-    };
-    measure();
-    // Re-measure on the next frame too — when the dialog opens mid-
-    // animation the first layout pass can report a not-yet-final width.
-    const raf = requestAnimationFrame(measure);
-    const ro = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect && rect.width > 0) apply(rect.width);
-    });
+    apply();
+    const raf = requestAnimationFrame(apply);
+    const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => {
       cancelAnimationFrame(raf);
@@ -282,14 +271,20 @@ export function ShareRecapImageDialog({
         <div className="px-5 overflow-y-auto flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden">
           {/* Preview (scaled-down live render) */}
           <div
-            ref={previewWrapRef}
-            className="w-full flex justify-center rounded-xl bg-muted/60 border border-border p-3"
+            className="w-full rounded-xl bg-muted/60 border border-border p-3"
             data-testid="share-image-preview"
           >
+            {/* Pure-CSS sizing: 100% width + aspect-ratio + auto margins.
+                This box CANNOT overflow or sit off-center; the artwork is
+                scaled to the box's measured width, never the reverse. */}
             <div
+              ref={previewBoxRef}
               style={{
-                width: SHARE_CANVAS_W * previewScale,
-                height: SHARE_CANVAS_H * previewScale,
+                width: "100%",
+                maxWidth: SHARE_CANVAS_W / 2,
+                aspectRatio: `${SHARE_CANVAS_W} / ${SHARE_CANVAS_H}`,
+                marginLeft: "auto",
+                marginRight: "auto",
                 overflow: "hidden",
                 borderRadius: 10,
               }}
