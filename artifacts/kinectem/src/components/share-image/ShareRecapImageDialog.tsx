@@ -118,12 +118,38 @@ export function ShareRecapImageDialog({
   const renderPng = useCallback(async (): Promise<Blob> => {
     const node = captureRef.current;
     if (!node) throw new Error("Share canvas not ready");
+    // Inline every <img> as a data: URL BEFORE capture. html-to-image
+    // re-fetches image URLs while serializing, which can silently render
+    // blanks: cache-busted query params invalidate signed asset URLs, and
+    // slow re-fetches lose the race with the SVG snapshot (seen in the
+    // wild as an export missing the stadium background). Pre-inlining
+    // makes the capture deterministic; failures keep the original src.
+    await Promise.all(
+      Array.from(node.querySelectorAll("img")).map(async (img) => {
+        const src = img.getAttribute("src") ?? "";
+        if (!src || src.startsWith("data:")) return;
+        try {
+          const resp = await fetch(src);
+          if (!resp.ok) return;
+          const blob = await resp.blob();
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result as string);
+            fr.onerror = () => reject(fr.error);
+            fr.readAsDataURL(blob);
+          });
+          img.src = dataUrl;
+          await img.decode().catch(() => undefined);
+        } catch {
+          // Keep the original src — better a possibly-cached image than none.
+        }
+      }),
+    );
     // 2× capture then downscale — a 1× capture is visibly soft.
     const big = await toCanvas(node, {
       pixelRatio: 2,
       width: SHARE_CANVAS_W,
       height: SHARE_CANVAS_H,
-      cacheBust: true,
     });
     const out = document.createElement("canvas");
     out.width = SHARE_CANVAS_W;
