@@ -146,11 +146,26 @@ export function ShareRecapImageDialog({
       }),
     );
     // 2× capture then downscale — a 1× capture is visibly soft.
-    const big = await toCanvas(node, {
-      pixelRatio: 2,
-      width: SHARE_CANVAS_W,
-      height: SHARE_CANVAS_H,
-    });
+    // Safari/WebKit quirk: the first SVG-foreignObject rasterization
+    // frequently drops <img> layers (they decode too late), so the first
+    // export ships without the stadium background. The standard fix is
+    // to render more than once and keep the LAST pass — by then WebKit
+    // has the images decoded. Chrome renders correctly on pass one; the
+    // extra passes just cost a moment, so we always do them.
+    const isWebKit =
+      typeof navigator !== "undefined" &&
+      /safari/i.test(navigator.userAgent) &&
+      !/chrome|chromium|android/i.test(navigator.userAgent);
+    const passes = isWebKit ? 3 : 2;
+    let big: HTMLCanvasElement | null = null;
+    for (let i = 0; i < passes; i++) {
+      big = await toCanvas(node, {
+        pixelRatio: 2,
+        width: SHARE_CANVAS_W,
+        height: SHARE_CANVAS_H,
+      });
+    }
+    if (!big) throw new Error("Could not render the image");
     const out = document.createElement("canvas");
     out.width = SHARE_CANVAS_W;
     out.height = SHARE_CANVAS_H;
