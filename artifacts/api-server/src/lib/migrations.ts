@@ -2211,6 +2211,30 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
+    // "In the News" — newspaper-article links a coach attaches to a team
+    // page; extracted headline/source/image stored at add time so cards
+    // never re-fetch the paper.
+    name: "2026-08-16-team-news-links",
+    sql: `
+      CREATE TABLE IF NOT EXISTS team_news_links (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        added_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        url text NOT NULL,
+        title text NOT NULL,
+        source_name text,
+        description text,
+        image_url text,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS team_news_links_team_id_idx
+        ON team_news_links (team_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS team_news_links_team_url_unique
+        ON team_news_links (team_id, url);
+    `,
+  },
+  {
     // Task #860 — mark orgs created through the admin Quick setup flow
     // ("orgs I know"), so the Claim links tab can list them separately
     // above the bulk-imported orgs. Nullable, no backfill: pre-existing

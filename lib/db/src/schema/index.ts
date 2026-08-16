@@ -2097,3 +2097,26 @@ export const broadcastAssets = pgTable("broadcast_assets", {
 }, (t) => ({
   pk: primaryKey({ columns: [t.broadcastId, t.assetId] }),
 }));
+
+// "In the News" links on team pages — a coach/manager pastes the URL of a
+// published newspaper article about the team; the server fetches the page
+// once and stores the extracted headline/source/preview so the card renders
+// without ever re-fetching the paper. Serialized into feeds as posts with
+// synthetic id `news-<uuid>` (read-only cards that link out to the paper).
+export const teamNewsLinks = pgTable("team_news_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  addedByUserId: uuid("added_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  url: text("url").notNull(),
+  title: text("title").notNull(),
+  sourceName: text("source_name"),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  teamIdx: index("team_news_links_team_id_idx").on(t.teamId),
+  // Same link can only be added once per team — enforced at the DB
+  // layer so concurrent adds can't slip past the pre-insert check.
+  teamUrlUnique: uniqueIndex("team_news_links_team_url_unique").on(t.teamId, t.url),
+}));

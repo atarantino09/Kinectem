@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
-import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight, Medal, ImageDown } from "lucide-react";
+import { Play, FileText, Heart, MessageSquare, MoreVertical, Flag, Pencil, Share2, Repeat2, UserMinus, Camera, Trophy, ChevronRight, Medal, ImageDown, Newspaper, ExternalLink, Trash2 } from "lucide-react";
 import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
@@ -146,6 +146,42 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   const [untagOpen, setUntagOpen] = useState(false);
   const [untagging, setUntagging] = useState(false);
   const isShort = post.postType === "short";
+  // "In the News" — a newspaper-article link a coach attached to the team
+  // page. Read-only card: no reactions/comments/shares/detail page; the
+  // card links OUT to the paper. `newsLink` is the extra-spec block the
+  // server serializes only for `news-` posts.
+  const newsLink = (
+    post as { newsLink?: { url: string; sourceName: string | null } | null }
+  ).newsLink;
+  const isNews = post.id.startsWith("news-") && !!newsLink;
+  const [confirmNewsDelete, setConfirmNewsDelete] = useState(false);
+  const [deletingNews, setDeletingNews] = useState(false);
+  const deleteNewsLink = async () => {
+    setDeletingNews(true);
+    try {
+      await customFetch(
+        `/api/v1/teams/${post.context.id}/news/${post.id.slice("news-".length)}`,
+        { method: "DELETE" },
+      );
+      toast({ title: "News article removed" });
+      qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].includes(`/teams/${post.context.id}/posts`),
+      });
+      setConfirmNewsDelete(false);
+    } catch (err) {
+      toast({
+        title: "Couldn't remove the article",
+        description: apiErrorMessage(err) ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingNews(false);
+    }
+  };
   const canShareAsImage =
     !isShort &&
     !asChildId &&
@@ -156,7 +192,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   // `recapKind`): number of photos in the post's team photo album.
   const albumPhotoCount =
     (post as PostResponse & { albumPhotoCount?: number }).albumPhotoCount ?? 0;
-  const Icon = isShort ? Play : FileText;
+  const Icon = isNews ? Newspaper : isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
   // Task #524 — only surface the takedown affordance on posts where the
   // selected child has a plausible client-visible link: child is the
@@ -202,8 +238,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   // competition's public rail (extra field beyond the locked spec).
   const competitionFeatured =
     (post as { competitionFeatured?: boolean }).competitionFeatured === true;
-  const label =
-    reportTarget.contentType === "highlight"
+  const label = isNews
+    ? "In the News"
+    : reportTarget.contentType === "highlight"
       ? "Highlight"
       : reportTarget.contentType === "org_post"
         ? "Update"
@@ -536,7 +573,18 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {canEditPost && (
+                {isNews && (post.canDelete ?? false) && (
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setConfirmNewsDelete(true);
+                    }}
+                    data-testid={`menuitem-remove-news-${post.id}`}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" /> Remove from team page
+                  </DropdownMenuItem>
+                )}
+                {!isNews && canEditPost && (
                   <DropdownMenuItem
                     onSelect={() =>
                       setLocation(
@@ -561,12 +609,14 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                     {reportingPhoto ? "Submitting…" : "Report photo of my child"}
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem
-                  onSelect={() => setReportOpen(true)}
-                  data-testid={`menuitem-report-${post.id}`}
-                >
-                  <Flag className="w-4 h-4 mr-2" /> Report post
-                </DropdownMenuItem>
+                {!isNews && (
+                  <DropdownMenuItem
+                    onSelect={() => setReportOpen(true)}
+                    data-testid={`menuitem-report-${post.id}`}
+                  >
+                    <Flag className="w-4 h-4 mr-2" /> Report post
+                  </DropdownMenuItem>
+                )}
                 {/* Task #344 — A tagged player can untag themselves from a
                     post directly from its three-dot menu. The server only
                     populates `currentUserTag` when the viewer has an
@@ -715,7 +765,44 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 </span>
               </div>
             )}
-            {post.title && (
+            {isNews && newsLink ? (
+              <a
+                href={newsLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block group"
+                data-testid={`link-news-${post.id}`}
+              >
+                <h3 className="font-black text-lg tracking-tight leading-tight group-hover:underline mb-1">
+                  {post.title}
+                </h3>
+                {newsLink.sourceName && (
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
+                    {newsLink.sourceName}
+                  </p>
+                )}
+                {post.body && (
+                  <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-2">
+                    {post.body}
+                  </p>
+                )}
+                {firstImage?.url && (
+                  <img
+                    src={firstImage.url}
+                    alt={post.title ?? ""}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full max-h-72 object-cover rounded-lg border border-border mb-2"
+                  />
+                )}
+                <span className="inline-flex items-center gap-1.5 text-sm font-bold text-primary">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Read the full story
+                  {newsLink.sourceName ? ` at ${newsLink.sourceName}` : ""}
+                </span>
+              </a>
+            ) : null}
+            {!isNews && post.title && (
               <div className="flex items-start gap-2 mb-2">
                 <Link href={`/posts/${post.id}`} className="flex-1 min-w-0">
                   <h3 className="font-black text-lg tracking-tight leading-tight hover:underline cursor-pointer">
@@ -732,7 +819,8 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 )}
               </div>
             )}
-            {post.title &&
+            {!isNews &&
+              post.title &&
               !isShort &&
               reportTarget.contentType === "article" && (
                 <hr
@@ -740,15 +828,15 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                   data-testid={`divider-post-title-card-${post.id}`}
                 />
               )}
-            {post.description && (
+            {!isNews && post.description && (
               <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-2">
                 {linkify(post.description)}
               </p>
             )}
-            {!isShort && post.body && (
+            {!isNews && !isShort && post.body && (
               <RecapExcerpt body={post.body} postId={post.id} />
             )}
-            {!isShort && allImages.length > 0 && (
+            {!isNews && !isShort && allImages.length > 0 && (
               <PhotoAlbum
                 images={allImages
                   .map((a) => a.url)
@@ -797,6 +885,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           />
         )}
 
+        {!isNews && (
         <div className="px-5 py-3 border-t border-border/60 flex items-center gap-2">
           <Button
             variant={post.hasReacted ? "default" : "outline"}
@@ -889,6 +978,39 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </span>
           )}
         </div>
+        )}
+        {isNews && (
+          <AlertDialog
+            open={confirmNewsDelete}
+            onOpenChange={setConfirmNewsDelete}
+          >
+            <AlertDialogContent data-testid={`dialog-remove-news-${post.id}`}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove this news article?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The card will disappear from the team page and followers'
+                  feeds. The newspaper's article itself isn't affected, and
+                  you can add the link again later.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletingNews}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deletingNews}
+                  data-testid={`btn-confirm-remove-news-${post.id}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void deleteNewsLink();
+                  }}
+                >
+                  {deletingNews ? "Removing…" : "Remove"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </CardContent>
       {canShareAsImage && shareImageOpen && (
         <ShareRecapImageDialog

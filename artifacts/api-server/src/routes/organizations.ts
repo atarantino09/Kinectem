@@ -22,6 +22,7 @@ import {
   guardianLinks,
   stagedCoachInvites,
   promoCodes,
+  teamNewsLinks,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -40,6 +41,7 @@ import {
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
   canManageOrganization,
+  canManageTeam,
   canAuthorRecapAnywhere,
   canCreateRecap,
   canApproveTeamHighlight,
@@ -69,6 +71,8 @@ import {
   clearSessionCookie,
   SESSION_COOKIE,
 } from "../lib/auth";
+import { requireAuth } from "../middlewares/auth";
+import { fetchNewsMetadata, NewsFetchError } from "../lib/news-metadata";
 import {
   displayName,
   toOrganization,
@@ -77,6 +81,7 @@ import {
   articleToPost,
   articlePostId,
   highlightToPost,
+  newsLinkToPost,
   orgPostToPost,
   paginate,
   parsePostLimit,
@@ -1601,6 +1606,29 @@ router.get(
       )
       .orderBy(desc(highlights.createdAt))
       .limit(fetchCap);
+    // "In the News" — newspaper-article links attached to this team.
+    // Read-only cards (no reactions/comments/shares), so they skip all
+    // the stat/tag batching below.
+    const nRows = await db
+      .select({ n: teamNewsLinks, team: teams, org: organizations, author: users })
+      .from(teamNewsLinks)
+      .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(users, eq(teamNewsLinks.addedByUserId, users.id))
+      .where(
+        and(
+          eq(teamNewsLinks.teamId, req.params.teamId),
+          ...(pageCursor ? [lte(teamNewsLinks.createdAt, pageCursor.ts)] : []),
+        ),
+      )
+      .orderBy(desc(teamNewsLinks.createdAt))
+      .limit(fetchCap);
+    // Managers see a Remove item on news cards; one check covers the
+    // whole page since every news row belongs to this team.
+    const canManageNews =
+      nRows.length > 0 && !!me
+        ? await canManageTeam(me.id, nRows[0].team)
+        : false;
 
     const [shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
@@ -1695,7 +1723,16 @@ router.get(
         minorNameCtx: teamPostsMinorCtx,
       });
     });
-    const merged = [...articleData, ...highlightData].sort((a, b) =>
+    const newsData = nRows.map((r) =>
+      newsLinkToPost(r.n, {
+        team: r.team,
+        org: r.org,
+        author: r.author,
+        canEdit: canManageNews,
+        canDelete: canManageNews,
+      }),
+    );
+    const merged = [...articleData, ...highlightData, ...newsData].sort((a, b) =>
       a.createdAt === b.createdAt
         ? a.id < b.id
           ? 1
@@ -1709,9 +1746,125 @@ router.get(
         cursor: pageCursor,
         limit: pageLimit,
         sourcesMayHaveMore:
-          rows.length >= fetchCap || hRows.length >= fetchCap,
+          rows.length >= fetchCap ||
+          hRows.length >= fetchCap ||
+          nRows.length >= fetchCap,
       }),
     );
+  }),
+);
+
+// "In the News" — a coach/manager pastes a newspaper article's URL; we
+// fetch the page once, extract headline/source/image, and store it as a
+// read-only news card on the team page + followers' feeds.
+router.post(
+  "/teams/:teamId/news",
+  requireAuth,
+  rateLimit({
+    name: "team-news-add",
+    windowMs: 60_000,
+    max: 10,
+    keyFn: ipKey,
+  }),
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only team managers can add news articles.");
+    }
+    const rawUrl = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+    if (!rawUrl) return apiError(res, 400, "Paste the article's link.");
+    let meta;
+    try {
+      meta = await fetchNewsMetadata(rawUrl);
+    } catch (err) {
+      if (err instanceof NewsFetchError) {
+        return apiError(res, 422, err.message);
+      }
+      throw err;
+    }
+    // Same link twice on one team = the earlier card, not a duplicate.
+    const [existing] = await db
+      .select({ id: teamNewsLinks.id })
+      .from(teamNewsLinks)
+      .where(
+        and(eq(teamNewsLinks.teamId, team.id), eq(teamNewsLinks.url, meta.url)),
+      )
+      .limit(1);
+    if (existing) {
+      return apiError(res, 409, "That article is already on this team's page.");
+    }
+    let row;
+    try {
+      [row] = await db
+        .insert(teamNewsLinks)
+        .values({
+          teamId: team.id,
+          addedByUserId: me.id,
+          url: meta.url,
+          title: meta.title,
+          sourceName: meta.sourceName,
+          description: meta.description,
+          imageUrl: meta.imageUrl,
+        })
+        .returning();
+    } catch (err) {
+      // Unique (team_id, url) index — a concurrent add of the same link
+      // lost the race; surface the same 409 as the pre-insert check.
+      if ((err as { code?: string })?.code === "23505" || /23505/.test(String(err))) {
+        return apiError(res, 409, "That article is already on this team's page.");
+      }
+      throw err;
+    }
+    const [org] = team.organizationId
+      ? await db
+          .select()
+          .from(organizations)
+          .where(eq(organizations.id, team.organizationId))
+          .limit(1)
+      : [null];
+    res.status(201).json(
+      newsLinkToPost(row!, {
+        team,
+        org: org ?? null,
+        author: me,
+        canEdit: true,
+        canDelete: true,
+      }),
+    );
+  }),
+);
+
+router.delete(
+  "/teams/:teamId/news/:newsId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only team managers can remove news articles.");
+    }
+    const deleted = await db
+      .delete(teamNewsLinks)
+      .where(
+        and(
+          eq(teamNewsLinks.id, req.params.newsId),
+          eq(teamNewsLinks.teamId, team.id),
+        ),
+      )
+      .returning({ id: teamNewsLinks.id });
+    if (deleted.length === 0) return notFound(res);
+    res.status(204).end();
   }),
 );
 

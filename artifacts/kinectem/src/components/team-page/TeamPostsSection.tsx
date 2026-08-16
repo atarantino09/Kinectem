@@ -2,6 +2,16 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { apiErrorMessage } from "@/lib/api-errors";
 import { PostCard } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 import { SeasonRecapDialog } from "@/components/team-page/SeasonRecapDialog";
@@ -13,6 +23,7 @@ import {
   useDeclineTeamHighlight,
   getListTeamPendingHighlightsQueryKey,
   getListTeamPostsQueryKey,
+  customFetch,
   queryOpts,
   type PostResponse,
 } from "@workspace/api-client-react";
@@ -32,6 +43,10 @@ import {
 interface TeamPostsSectionProps {
   teamId: string;
   isAdmin: boolean;
+  // Mirrors the server's `canManageTeam` (org admins/owners, platform
+  // admins, AND coach-level roster staff). Gates the "Add News Article"
+  // control — coaches can add news even though they aren't org admins.
+  canManage: boolean;
   // True when the viewer has any accepted roster entry on this team
   // (player, coach, staff, author, etc.). Drives the broader "Post
   // Highlight" CTA — `isAdmin` keeps the existing recap-only gate.
@@ -80,6 +95,7 @@ function formatSubmitted(iso: string): string {
 export function TeamPostsSection({
   teamId,
   isAdmin,
+  canManage,
   isTeamMember,
   canPostRecap,
   teamName,
@@ -100,6 +116,39 @@ export function TeamPostsSection({
   });
   const canPostHighlight = isAdmin || isTeamMember;
   const [seasonRecapOpen, setSeasonRecapOpen] = useState(false);
+  // "In the News" — paste a newspaper article's link; the server fetches
+  // the headline/source/photo and posts a read-only news card.
+  const [addNewsOpen, setAddNewsOpen] = useState(false);
+  const [newsUrl, setNewsUrl] = useState("");
+  const [addingNews, setAddingNews] = useState(false);
+  const submitNewsUrl = async () => {
+    const url = newsUrl.trim();
+    if (!url) return;
+    setAddingNews(true);
+    try {
+      await customFetch(`/api/v1/teams/${teamId}/news`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      toast({ title: "Article added to the team page" });
+      setAddNewsOpen(false);
+      setNewsUrl("");
+      await qc.invalidateQueries({
+        queryKey: getListTeamPostsQueryKey(teamId),
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't add that article",
+        description:
+          apiErrorMessage(err) ??
+          "Check the link and try again — it should be the article's web address.",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingNews(false);
+    }
+  };
   // Task #452 — only fetch the pending-recaps list when the viewer
   // has author capability on the team. Non-authors never trigger the
   // request and never see the section.
@@ -205,8 +254,69 @@ export function TeamPostsSection({
               Combined Recap
             </Button>
           )}
+          {canManage && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddNewsOpen(true)}
+              data-testid="btn-add-news"
+            >
+              <Newspaper className="w-3.5 h-3.5 mr-1.5" />
+              Add News Article
+            </Button>
+          )}
         </div>
       </div>
+      {canManage && (
+        <Dialog open={addNewsOpen} onOpenChange={(o) => !addingNews && setAddNewsOpen(o)}>
+          <DialogContent data-testid="dialog-add-news">
+            <DialogHeader>
+              <DialogTitle>Add a news article</DialogTitle>
+              <DialogDescription>
+                Paste the web address of a newspaper article about this team.
+                We'll pull in the headline and photo automatically, and the
+                card will appear on the team page and followers' feeds.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitNewsUrl();
+              }}
+              className="space-y-3"
+            >
+              <Input
+                type="url"
+                inputMode="url"
+                placeholder="https://www.yourlocalpaper.com/sports/…"
+                value={newsUrl}
+                onChange={(e) => setNewsUrl(e.target.value)}
+                disabled={addingNews}
+                autoFocus
+                data-testid="input-news-url"
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAddNewsOpen(false)}
+                  disabled={addingNews}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="brand"
+                  disabled={addingNews || !newsUrl.trim()}
+                  data-testid="btn-submit-news"
+                >
+                  {addingNews ? "Fetching article…" : "Add article"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
       {canPostRecap && (
         <SeasonRecapDialog
           teamId={teamId}

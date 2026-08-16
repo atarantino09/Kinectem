@@ -15,6 +15,7 @@ import {
   highlights,
   highlightTags,
   orgPosts,
+  teamNewsLinks,
   notifications,
   postReactions,
   postComments,
@@ -84,6 +85,7 @@ import {
   toTeam,
   articleToPost,
   highlightToPost,
+  newsLinkToPost,
   orgPostToPost,
   toPostAuthor,
   paginate,
@@ -537,6 +539,25 @@ router.get(
           .limit(fetchCap)
       : [];
 
+    // "In the News" — newspaper links attached to followed teams (or
+    // teams under followed orgs). Read-only cards; no stats batching.
+    const newsConds = [];
+    if (followedTeamIds.length)
+      newsConds.push(inArray(teamNewsLinks.teamId, followedTeamIds));
+    if (followedOrgIds.length)
+      newsConds.push(inArray(teams.organizationId, followedOrgIds));
+    const newsRows = newsConds.length
+      ? await db
+          .select({ n: teamNewsLinks, team: teams, org: organizations, author: users })
+          .from(teamNewsLinks)
+          .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+          .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(teamNewsLinks.addedByUserId, users.id))
+          .where(and(or(...newsConds), cursorCond(teamNewsLinks.createdAt)))
+          .orderBy(desc(teamNewsLinks.createdAt))
+          .limit(fetchCap)
+      : [];
+
     // Re-shares posted by the viewer or any followed user. Each
     // share row joins back to its underlying article/highlight; we
     // drop targets that have been hidden / deleted / unpublished so
@@ -809,6 +830,13 @@ router.get(
           minorNameCtx: minorCtx,
         });
       }),
+      ...newsRows.map((r) =>
+        newsLinkToPost(r.n, {
+          team: r.team,
+          org: r.org,
+          author: r.author,
+        }),
+      ),
     ];
 
     for (const sr of shareRows) {
@@ -883,6 +911,7 @@ router.get(
           arts.length >= fetchCap ||
           hls.length >= fetchCap ||
           orgPostRows.length >= fetchCap ||
+          newsRows.length >= fetchCap ||
           shareRows.length >= shareFetchCap,
       }),
     );

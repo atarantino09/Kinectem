@@ -9,6 +9,7 @@ import {
   articles,
   highlights,
   orgPosts,
+  teamNewsLinks,
   notifications,
   conversations,
   messages,
@@ -181,6 +182,7 @@ type InviteRow = typeof rosterInvites.$inferSelect;
 type ArticleRow = typeof articles.$inferSelect;
 type HighlightRow = typeof highlights.$inferSelect;
 type OrgPostRow = typeof orgPosts.$inferSelect;
+type TeamNewsLinkRow = typeof teamNewsLinks.$inferSelect;
 type NotificationRow = typeof notifications.$inferSelect;
 
 // ---------------------------------------------------------------------------
@@ -1000,6 +1002,37 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
   });
 }
 
+// "In the News" — a team_news_links row rendered as a read-only feed
+// post. `news-` synthetic id; the card links OUT to the paper (no in-app
+// detail page, reactions, comments, or shares).
+export function newsLinkToPost(
+  n: TeamNewsLinkRow,
+  extras: PostExtras,
+) {
+  return basePost({
+    id: `news-${n.id}`,
+    postType: "long" as const,
+    title: n.title,
+    description: n.sourceName ?? null,
+    body: n.description ?? null,
+    assets: n.imageUrl
+      ? [
+          {
+            id: `newsimg-${n.id}`,
+            fileType: "image/jpeg",
+            url: n.imageUrl,
+            displayOrder: 0,
+          },
+        ]
+      : [],
+    isEdited: false,
+    createdAt: n.createdAt.toISOString(),
+    updatedAt: n.updatedAt.toISOString(),
+    newsLink: { url: n.url, sourceName: n.sourceName ?? null },
+    extras,
+  });
+}
+
 export function orgPostToPost(p: OrgPostRow, extras: PostExtras) {
   const photos = Array.isArray(p.photoUrls) && p.photoUrls.length > 0
     ? p.photoUrls
@@ -1096,6 +1129,12 @@ function basePost(p: {
   // detail endpoint intentionally serves drafts/pending recaps to
   // their author and org admins, and those must never be exportable.
   articleStatus?: string | null;
+  // "In the News" posts (team_news_links rows) carry the outbound link
+  // block — url + newspaper name — so the card can render a distinct
+  // read-only news layout that links OUT to the paper instead of to an
+  // in-app detail page. Extra field beyond the locked spec (recapKind
+  // precedent). Omitted (undefined → null) for every other post kind.
+  newsLink?: { url: string; sourceName: string | null } | null;
   extras: PostExtras;
 }) {
   const author = p.extras.author
@@ -1170,6 +1209,7 @@ function basePost(p: {
     recapKind: p.recapKind ?? null,
     articleStatus: p.articleStatus ?? null,
     competition: p.extras.competition ?? null,
+    newsLink: p.newsLink ?? null,
     competitionFeatured: p.competitionFeatured ?? false,
     author,
     context,

@@ -558,6 +558,7 @@ export default function TeamPage() {
             <TeamPostsSection
               teamId={teamId}
               isAdmin={isAdmin}
+              canManage={canManage}
               isTeamMember={isTeamMember}
               canPostRecap={canPostRecap}
               teamName={team.name}
