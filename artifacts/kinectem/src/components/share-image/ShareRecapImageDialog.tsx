@@ -259,7 +259,13 @@ export function ShareRecapImageDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg p-0 gap-0 overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
+        // min-w-0 is load-bearing: DialogContent is a flex item of the
+        // centering wrapper, and flex items refuse to shrink below their
+        // content's min-content width. Something in this dialog (preview
+        // + CTA row) is naturally wider than a phone screen, which pushed
+        // the whole dialog past the right edge on mobile — the preview
+        // then LOOKED off-center even though it was centered in its box.
+        className="max-w-lg min-w-0 p-0 gap-0 overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
         data-testid="dialog-share-recap-image"
       >
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0 text-left">
@@ -273,7 +279,7 @@ export function ShareRecapImageDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 overflow-y-auto flex-1 min-h-0">
+        <div className="px-5 overflow-y-auto flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden">
           {/* Preview (scaled-down live render) */}
           <div
             ref={previewWrapRef}

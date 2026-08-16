@@ -18,7 +18,7 @@ import shareBg from "@/assets/share-bg-portrait.jpg";
  * Layout constants follow the handoff spec (all px on a 1080×1350 canvas):
  * side margin 56 → card width 968; logo band at top; CTA bar 96 tall at
  * y=1220; the recap card is vertically centred in the space between and
- * fade-cropped with a "• • •" marker when too tall.
+ * fade-cropped when too tall (the CTA bar signals continuation).
  */
 
 export const SHARE_CANVAS_W = 1080;
@@ -390,25 +390,9 @@ export const ShareRecapCanvas = forwardRef<
             }}
           />
           )}
-          {cropped && (
-          <div
-            data-share-ellipsis
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 34,
-              textAlign: "center",
-              color: "#A08CC8",
-              fontSize: 30,
-              fontWeight: 900,
-              letterSpacing: "0.5em",
-              pointerEvents: "none",
-            }}
-          >
-            •&nbsp;•&nbsp;•
-          </div>
-          )}
+          {/* No "• • •" marker — the fade plus the "Read the full game
+              recap" CTA bar below already communicate continuation, and
+              floating dots over fading text read as stray marks. */}
         </div>
       </div>
 
