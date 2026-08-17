@@ -19,7 +19,7 @@ export const inviteDeliveryStatusEnum = pgEnum("invite_delivery_status", [
   "dropped",
   "spam",
 ]);
-export const postKindEnum = pgEnum("post_kind", ["article", "highlight", "org_post"]);
+export const postKindEnum = pgEnum("post_kind", ["article", "highlight", "org_post", "news"]);
 export const orgPostStatusEnum = pgEnum("org_post_status", ["draft", "published"]);
 export const highlightApprovalStatusEnum = pgEnum("highlight_approval_status", ["pending", "approved", "declined"]);
 export const reactionTypeEnum = pgEnum("reaction_type", ["like"]);

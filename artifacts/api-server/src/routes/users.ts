@@ -1207,17 +1207,17 @@ router.get(
     const limited = cursorFiltered.slice(0, pageLimit);
 
     // Bulk-load reaction / comment / share stats for the page.
-    // News rows have no stats (read-only cards, no reactions/comments).
-    const statKeys: { kind: StatsKind; refId: string }[] = limited
-      .filter((row) => row.kind !== "news")
-      .map((row) =>
-        row.kind === "article"
-          ? { kind: "article" as const, refId: row.a.id }
-          : { kind: "highlight" as const, refId: row.h.id },
-      );
+    // Task #867 — news rows carry stats now too.
+    const statKeys: { kind: StatsKind; refId: string }[] = limited.map((row) =>
+      row.kind === "article"
+        ? { kind: "article" as const, refId: row.a.id }
+        : row.kind === "highlight"
+          ? { kind: "highlight" as const, refId: row.h.id }
+          : { kind: "news" as const, refId: row.n.id },
+    );
     const shareStatKeys = statKeys.filter(
-      (k): k is { kind: "article" | "highlight"; refId: string } =>
-        k.kind === "article" || k.kind === "highlight",
+      (k): k is { kind: "article" | "highlight" | "news"; refId: string } =>
+        k.kind === "article" || k.kind === "highlight" || k.kind === "news",
     );
     const articleRows = limited.filter(
       (row): row is Extract<MergedRow, { kind: "article" }> => row.kind === "article",
@@ -1318,12 +1318,16 @@ router.get(
         : undefined;
       const sharedAt = row.sharedAt ? row.sharedAt.toISOString() : undefined;
       if (row.kind === "news") {
-        // Read-only card; managing (removal) happens on the team/org
-        // pages, so no edit/delete affordance on profiles.
+        // Managing (removal) happens on the team/org pages, so no
+        // edit/delete affordance on profiles.
         return newsLinkToPost(row.n, {
           team: row.team,
           org: row.org,
           author: row.author,
+          ...statsFor(stats, "news", row.n.id),
+          ...shareStatsFor(shareStats, "news", row.n.id),
+          sharedBy,
+          sharedAt,
           minorNameCtx: profileMinorCtxWithOwner,
         });
       }

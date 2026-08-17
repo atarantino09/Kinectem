@@ -1,4 +1,4 @@
-import { db, albumPhotos, articles, highlights, orgPosts, postReactions, postComments, postShares, users } from "@workspace/db";
+import { db, albumPhotos, articles, highlights, orgPosts, postReactions, postComments, postShares, teamNewsLinks, users } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 
@@ -17,7 +17,7 @@ export interface PostShareStats {
   hasShared: boolean;
 }
 
-export type StatsKind = "article" | "highlight" | "org_post";
+export type StatsKind = "article" | "highlight" | "org_post" | "news";
 
 function statsKey(kind: StatsKind, refId: string): string {
   return `${kind}:${refId}`;
@@ -54,13 +54,21 @@ export async function loadPostStats(
       albumPhotoCount: 0,
     });
   }
-  const articleIds = capBatch(items.filter((i) => i.kind === "article").map((i) => i.refId));
-  const highlightIds = capBatch(items.filter((i) => i.kind === "highlight").map((i) => i.refId));
-  const orgPostIds = capBatch(items.filter((i) => i.kind === "org_post").map((i) => i.refId));
+  // Task #867 — one generic per-kind block (was three copy-pasted ones);
+  // adding a kind now only means extending STAT_KINDS/StatsKind.
+  const STAT_KINDS: StatsKind[] = ["article", "highlight", "org_post", "news"];
+  const idsByKind = new Map<StatsKind, string[]>(
+    STAT_KINDS.map((kind) => [
+      kind,
+      capBatch(items.filter((i) => i.kind === kind).map((i) => i.refId)),
+    ]),
+  );
 
   const tasks: Promise<unknown>[] = [];
 
-  if (articleIds.length > 0) {
+  for (const kind of STAT_KINDS) {
+    const refIds = idsByKind.get(kind)!;
+    if (refIds.length === 0) continue;
     tasks.push(
       (async () => {
         const rows = await db
@@ -69,11 +77,10 @@ export async function loadPostStats(
             count: sql<number>`count(*)::int`,
           })
           .from(postReactions)
-          .where(and(eq(postReactions.postKind, "article"), inArray(postReactions.postRefId, articleIds)))
+          .where(and(eq(postReactions.postKind, kind), inArray(postReactions.postRefId, refIds)))
           .groupBy(postReactions.postRefId);
         for (const r of rows) {
-          const k = statsKey("article", r.postRefId);
-          const s = map.get(k);
+          const s = map.get(statsKey(kind, r.postRefId));
           if (s) s.reactionCount = Number(r.count);
         }
         if (meId) {
@@ -82,13 +89,13 @@ export async function loadPostStats(
             .from(postReactions)
             .where(
               and(
-                eq(postReactions.postKind, "article"),
+                eq(postReactions.postKind, kind),
                 eq(postReactions.userId, meId),
-                inArray(postReactions.postRefId, articleIds),
+                inArray(postReactions.postRefId, refIds),
               ),
             );
           for (const r of my) {
-            const s = map.get(statsKey("article", r.postRefId));
+            const s = map.get(statsKey(kind, r.postRefId));
             if (s) s.hasReacted = true;
           }
         }
@@ -100,10 +107,10 @@ export async function loadPostStats(
           })
           .from(postReactions)
           .innerJoin(users, eq(postReactions.userId, users.id))
-          .where(and(eq(postReactions.postKind, "article"), inArray(postReactions.postRefId, articleIds)))
+          .where(and(eq(postReactions.postKind, kind), inArray(postReactions.postRefId, refIds)))
           .orderBy(desc(postReactions.createdAt));
         for (const r of recent) {
-          const s = map.get(statsKey("article", r.postRefId));
+          const s = map.get(statsKey(kind, r.postRefId));
           if (s && !s.recentReactorName) s.recentReactorName = r.name;
         }
         const cmts = await db
@@ -114,149 +121,15 @@ export async function loadPostStats(
           .from(postComments)
           .where(
             and(
-              eq(postComments.postKind, "article"),
+              eq(postComments.postKind, kind),
               isNull(postComments.deletedAt),
               eq(postComments.moderationStatus, "approved"),
-              inArray(postComments.postRefId, articleIds),
+              inArray(postComments.postRefId, refIds),
             ),
           )
           .groupBy(postComments.postRefId);
         for (const c of cmts) {
-          const s = map.get(statsKey("article", c.postRefId));
-          if (s) s.commentCount = Number(c.count);
-        }
-      })(),
-    );
-  }
-  if (highlightIds.length > 0) {
-    tasks.push(
-      (async () => {
-        const rows = await db
-          .select({
-            postRefId: postReactions.postRefId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(postReactions)
-          .where(and(eq(postReactions.postKind, "highlight"), inArray(postReactions.postRefId, highlightIds)))
-          .groupBy(postReactions.postRefId);
-        for (const r of rows) {
-          const s = map.get(statsKey("highlight", r.postRefId));
-          if (s) s.reactionCount = Number(r.count);
-        }
-        if (meId) {
-          const my = await db
-            .select({ postRefId: postReactions.postRefId })
-            .from(postReactions)
-            .where(
-              and(
-                eq(postReactions.postKind, "highlight"),
-                eq(postReactions.userId, meId),
-                inArray(postReactions.postRefId, highlightIds),
-              ),
-            );
-          for (const r of my) {
-            const s = map.get(statsKey("highlight", r.postRefId));
-            if (s) s.hasReacted = true;
-          }
-        }
-        const recent = await db
-          .select({
-            postRefId: postReactions.postRefId,
-            createdAt: postReactions.createdAt,
-            name: users.name,
-          })
-          .from(postReactions)
-          .innerJoin(users, eq(postReactions.userId, users.id))
-          .where(and(eq(postReactions.postKind, "highlight"), inArray(postReactions.postRefId, highlightIds)))
-          .orderBy(desc(postReactions.createdAt));
-        for (const r of recent) {
-          const s = map.get(statsKey("highlight", r.postRefId));
-          if (s && !s.recentReactorName) s.recentReactorName = r.name;
-        }
-        const cmts = await db
-          .select({
-            postRefId: postComments.postRefId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(postComments)
-          .where(
-            and(
-              eq(postComments.postKind, "highlight"),
-              isNull(postComments.deletedAt),
-              eq(postComments.moderationStatus, "approved"),
-              inArray(postComments.postRefId, highlightIds),
-            ),
-          )
-          .groupBy(postComments.postRefId);
-        for (const c of cmts) {
-          const s = map.get(statsKey("highlight", c.postRefId));
-          if (s) s.commentCount = Number(c.count);
-        }
-      })(),
-    );
-  }
-  if (orgPostIds.length > 0) {
-    tasks.push(
-      (async () => {
-        const rows = await db
-          .select({
-            postRefId: postReactions.postRefId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(postReactions)
-          .where(and(eq(postReactions.postKind, "org_post"), inArray(postReactions.postRefId, orgPostIds)))
-          .groupBy(postReactions.postRefId);
-        for (const r of rows) {
-          const s = map.get(statsKey("org_post", r.postRefId));
-          if (s) s.reactionCount = Number(r.count);
-        }
-        if (meId) {
-          const my = await db
-            .select({ postRefId: postReactions.postRefId })
-            .from(postReactions)
-            .where(
-              and(
-                eq(postReactions.postKind, "org_post"),
-                eq(postReactions.userId, meId),
-                inArray(postReactions.postRefId, orgPostIds),
-              ),
-            );
-          for (const r of my) {
-            const s = map.get(statsKey("org_post", r.postRefId));
-            if (s) s.hasReacted = true;
-          }
-        }
-        const recent = await db
-          .select({
-            postRefId: postReactions.postRefId,
-            createdAt: postReactions.createdAt,
-            name: users.name,
-          })
-          .from(postReactions)
-          .innerJoin(users, eq(postReactions.userId, users.id))
-          .where(and(eq(postReactions.postKind, "org_post"), inArray(postReactions.postRefId, orgPostIds)))
-          .orderBy(desc(postReactions.createdAt));
-        for (const r of recent) {
-          const s = map.get(statsKey("org_post", r.postRefId));
-          if (s && !s.recentReactorName) s.recentReactorName = r.name;
-        }
-        const cmts = await db
-          .select({
-            postRefId: postComments.postRefId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(postComments)
-          .where(
-            and(
-              eq(postComments.postKind, "org_post"),
-              isNull(postComments.deletedAt),
-              eq(postComments.moderationStatus, "approved"),
-              inArray(postComments.postRefId, orgPostIds),
-            ),
-          )
-          .groupBy(postComments.postRefId);
-        for (const c of cmts) {
-          const s = map.get(statsKey("org_post", c.postRefId));
+          const s = map.get(statsKey(kind, c.postRefId));
           if (s) s.commentCount = Number(c.count);
         }
       })(),
@@ -264,7 +137,8 @@ export async function loadPostStats(
   }
   // Album photo counts — `album_photos` is polymorphic over
   // (postKind, postRefId), so one grouped query covers all kinds.
-  const allIds = [...articleIds, ...highlightIds, ...orgPostIds];
+  // (News posts never have albums; they simply match zero rows.)
+  const allIds = Array.from(idsByKind.values()).flat();
   if (allIds.length > 0) {
     tasks.push(
       (async () => {
@@ -304,9 +178,9 @@ export function statsFor(
   );
 }
 
-// Share stats — only `article` and `highlight` are valid share targets;
-// org_post is rejected at the share API layer (#190).
-export type ShareStatsKind = "article" | "highlight";
+// Share stats — `article`, `highlight`, and `news` (#867) are valid share
+// targets; org_post is rejected at the share API layer (#190).
+export type ShareStatsKind = "article" | "highlight" | "news";
 
 export async function loadPostShareStats(
   meId: string | null,
@@ -319,11 +193,13 @@ export async function loadPostShareStats(
   }
   const articleIds = capBatch(items.filter((i) => i.kind === "article").map((i) => i.refId));
   const highlightIds = capBatch(items.filter((i) => i.kind === "highlight").map((i) => i.refId));
+  const newsIds = capBatch(items.filter((i) => i.kind === "news").map((i) => i.refId));
 
   const tasks: Promise<unknown>[] = [];
   for (const [kind, refIds] of [
     ["article", articleIds] as const,
     ["highlight", highlightIds] as const,
+    ["news", newsIds] as const,
   ]) {
     if (refIds.length === 0) continue;
     tasks.push(
@@ -375,8 +251,18 @@ export function shareStatsFor(
 // (kind, id). Used by the like-notification path to address the bell
 // row to the correct user. Returns null when the post can't be located.
 export async function loadPostOwnerId(
-  parsed: { kind: "article" | "highlight" | "org_post"; id: string },
+  parsed: { kind: "article" | "highlight" | "org_post" | "news"; id: string },
 ): Promise<string | null> {
+  // Task #867 — news posts are owned by whoever attached the link; the
+  // column is nullable (SET NULL on user delete), so owner may be null.
+  if (parsed.kind === "news") {
+    const [n] = await db
+      .select({ id: teamNewsLinks.addedByUserId })
+      .from(teamNewsLinks)
+      .where(eq(teamNewsLinks.id, parsed.id))
+      .limit(1);
+    return n?.id ?? null;
+  }
   if (parsed.kind === "article") {
     const [a] = await db
       .select({ id: articles.authorId })

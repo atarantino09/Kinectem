@@ -129,8 +129,14 @@ export function PostInteractions({ post }: { post: PostResponse }) {
     (post.id.startsWith("article-") &&
       post.postType === "long" &&
       !!post.gameDate) ||
-    post.id.startsWith("highlight-");
-  const shareKindLabel = post.id.startsWith("highlight-") ? "highlight" : "recap";
+    post.id.startsWith("highlight-") ||
+    // Task #867 — news posts are shareable too.
+    post.id.startsWith("news-");
+  const shareKindLabel = post.id.startsWith("highlight-")
+    ? ("highlight" as const)
+    : post.id.startsWith("news-")
+      ? ("news article" as const)
+      : ("recap" as const);
   const onToggleShare = () => {
     if (post.hasShared) {
       unsharePost.mutate({ postId: post.id });

@@ -37,6 +37,7 @@ import {
   Trash2,
   Trophy,
   ImageDown,
+  ExternalLink,
 } from "lucide-react";
 import {
   timeAgo,
@@ -311,8 +312,14 @@ export default function PostPage() {
   }
 
   const isShort = post.postType === "short";
+  // Task #867 — news posts have a detail page now (for comments). The
+  // `newsLink` extra-spec block carries the outbound URL/source.
+  const newsLink = (
+    post as { newsLink?: { url: string; sourceName: string | null } | null }
+  ).newsLink;
+  const isNews = post.id.startsWith("news-") && !!newsLink;
   const Icon = isShort ? Play : FileText;
-  const label = isShort ? "Highlight" : "Game Recap";
+  const label = isNews ? "In the News" : isShort ? "Highlight" : "Game Recap";
   // Task #739 — the detail response carries the viewer-visible tag
   // list for recaps; @-mention tokens only render as live profile
   // links for users in it. Tokens for anyone else (deleted account,
@@ -963,6 +970,25 @@ export default function PostPage() {
               </CardContent>
             </Card>
           )}
+          {/* Task #867 — the news detail page keeps the outbound card:
+              the story itself lives at the paper. */}
+          {isNews && newsLink && (
+            <Card className="rounded-xl border border-border">
+              <CardContent className="p-5">
+                <a
+                  href={newsLink.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline"
+                  data-testid={`link-news-${post.id}`}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Read the full story
+                  {newsLink.sourceName ? ` at ${newsLink.sourceName}` : ""}
+                </a>
+              </CardContent>
+            </Card>
+          )}
           {post.body && isShort && (
             <div className="prose prose-slate max-w-none">
               {post.body.split("\n").map((para, i) => (
@@ -1065,7 +1091,8 @@ export default function PostPage() {
         <PostInteractions post={post} />
       )}
 
-      {!isShort && <GamePhotoAlbum postId={postId} />}
+      {/* Task #867 — news posts have no photo albums. */}
+      {!isShort && !isNews && <GamePhotoAlbum postId={postId} />}
     </article>
   );
 }

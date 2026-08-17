@@ -2273,6 +2273,15 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
           AND EXISTS (SELECT 1 FROM competition_brackets b WHERE b.tournament_id = t.id);
     `,
   },
+  {
+    // Task #867 — "In the News" posts become a real interaction target:
+    // reactions/comments/shares rows may now reference team_news_links via
+    // postKind 'news'. Enum add is idempotent; existing rows unaffected.
+    name: "2026-08-17-task-867-post-kind-news",
+    sql: `
+      ALTER TYPE post_kind ADD VALUE IF NOT EXISTS 'news';
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

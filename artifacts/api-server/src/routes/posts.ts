@@ -588,6 +588,11 @@ router.get(
     const sharedHighlightIds = shareRows
       .filter((r) => r.s.postKind === "highlight")
       .map((r) => r.s.postRefId);
+    // Task #867 — news posts are shareable too; re-shared news cards
+    // surface in follower feeds like articles/highlights.
+    const sharedNewsIds = shareRows
+      .filter((r) => r.s.postKind === "news")
+      .map((r) => r.s.postRefId);
 
     const sharedArticleRows = sharedArticleIds.length
       ? await db
@@ -624,19 +629,32 @@ router.get(
       )
       : [];
 
+    const sharedNewsRows = sharedNewsIds.length
+      ? await db
+          .select({ n: teamNewsLinks, team: teams, org: organizations, author: users })
+          .from(teamNewsLinks)
+          .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+          .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+          .leftJoin(users, eq(teamNewsLinks.addedByUserId, users.id))
+          .where(inArray(teamNewsLinks.id, sharedNewsIds))
+      : [];
+
     const sharedArticleById = new Map(sharedArticleRows.map((r) => [r.a.id, r]));
     const sharedHighlightById = new Map(sharedHighlightRows.map((r) => [r.h.id, r]));
+    const sharedNewsById = new Map(sharedNewsRows.map((r) => [r.n.id, r]));
 
     const statKeys = [
       ...arts.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...hls.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
       ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+      ...newsRows.map((r) => ({ kind: "news" as const, refId: r.n.id })),
       ...sharedArticleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
       ...sharedHighlightRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ...sharedNewsRows.map((r) => ({ kind: "news" as const, refId: r.n.id })),
     ];
     const shareStatKeys = statKeys.filter(
-      (k): k is { kind: "article" | "highlight"; refId: string } =>
-        k.kind === "article" || k.kind === "highlight",
+      (k): k is { kind: "article" | "highlight" | "news"; refId: string } =>
+        k.kind === "article" || k.kind === "highlight" || k.kind === "news",
     );
     const articleEditRows = [
       ...arts.map((r) => ({
@@ -782,6 +800,9 @@ router.get(
       ...hls
         .filter((r) => !feedPendingHlIds.has(r.h.id))
         .map((r) => `highlight-${r.h.id}`),
+      // Task #867 — news items already in the feed win over their
+      // share-card duplicates, same as articles/highlights.
+      ...newsRows.map((r) => `news-${r.n.id}`),
     ]);
 
     const feedBrandMap = await loadCompetitionBrandMap([
@@ -835,6 +856,8 @@ router.get(
           team: r.team,
           org: r.org,
           author: r.author,
+          ...statsFor(stats, "news", r.n.id),
+          ...shareStatsFor(shareStats, "news", r.n.id),
         }),
       ),
     ];
@@ -889,6 +912,21 @@ router.get(
             currentUserTag:
               currentUserTags.highlightTagByHighlightId.get(row.h.id) ?? null,
             minorNameCtx: minorCtx,
+          }),
+        );
+      } else if (sr.s.postKind === "news") {
+        // Task #867 — re-shared news posts surface as share cards too.
+        const row = sharedNewsById.get(sr.s.postRefId);
+        if (!row) continue;
+        items.push(
+          newsLinkToPost(row.n, {
+            team: row.team,
+            org: row.org,
+            author: row.author,
+            ...statsFor(stats, "news", row.n.id),
+            ...shareStatsFor(shareStats, "news", row.n.id),
+            sharedBy,
+            sharedAt,
           }),
         );
       }
@@ -1348,6 +1386,45 @@ router.get(
       });
       return;
     }
+    if (parsed.kind === "news") {
+      // Task #867 — news detail page (for comments). News links have no
+      // draft/hidden state and their list surfaces are ungated, so the
+      // detail read is ungated too.
+      const [row] = await db
+        .select({ n: teamNewsLinks, team: teams, org: organizations, author: users })
+        .from(teamNewsLinks)
+        .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(teamNewsLinks.addedByUserId, users.id))
+        .where(eq(teamNewsLinks.id, parsed.id))
+        .limit(1);
+      if (!row) return notFound(res);
+      // Team managers (and platform admins via canManageTeam's bypass)
+      // can remove the link — mirrors the team-page affordance.
+      const canManage = !!me && (await canManageTeam(me.id, row.team));
+      const [stats, shareStats] = await Promise.all([
+        loadPostStats(me?.id ?? null, [{ kind: "news", refId: row.n.id }]),
+        loadPostShareStats(me?.id ?? null, [{ kind: "news", refId: row.n.id }]),
+      ]);
+      // Author chip masking parity with other kinds.
+      const newsMinorCtx = await buildMinorNameContext(
+        { id: me?.id ?? null, role: req.realUser?.role ?? null },
+        row.author?.id ? [row.author.id] : [],
+      );
+      res.json(
+        newsLinkToPost(row.n, {
+          team: row.team,
+          org: row.org,
+          author: row.author,
+          canEdit: false,
+          canDelete: canManage,
+          ...statsFor(stats, "news", row.n.id),
+          ...shareStatsFor(shareStats, "news", row.n.id),
+          minorNameCtx: newsMinorCtx,
+        }),
+      );
+      return;
+    }
     const [row] = await db
       .select({ h: highlights, team: teams, org: organizations, uploader: users })
       .from(highlights)
@@ -1701,18 +1778,31 @@ router.delete(
 // ---------------------------------------------------------------------------
 //
 // Re-shares are stored polymorphically in `post_shares (postKind,
-// postRefId, sharerUserId)` and are scoped to the two viewer-facing
-// post kinds: game-recap articles and highlights. Org posts are
+// postRefId, sharerUserId)` and are scoped to the viewer-facing
+// post kinds: game-recap articles, highlights, and (task #867)
+// "In the News" posts. Org posts are
 // rejected with 400. Visibility mirrors GET /posts/:postId — drafts,
 // hidden, and non-recap articles return 404 to non-authors. Any
 // viewer of the post (including team-follower fans who are not on
 // the roster) may share it.
 
 async function loadShareableTarget(
-  parsed: { kind: "article" | "highlight"; id: string },
+  parsed: { kind: "article" | "highlight" | "news"; id: string },
   meId: string | null,
   isAdmin: boolean,
-): Promise<{ ok: true; ownerId: string | null; title: string; kindLabel: "recap" | "highlight" } | { ok: false }> {
+): Promise<{ ok: true; ownerId: string | null; title: string; kindLabel: "recap" | "highlight" | "news article" } | { ok: false }> {
+  // Task #867 — news posts are shareable. They have no draft/hidden
+  // state, so existence is sufficient; owner is whoever added the link
+  // (nullable → bell simply skipped for orphaned links).
+  if (parsed.kind === "news") {
+    const [row] = await db
+      .select({ n: teamNewsLinks })
+      .from(teamNewsLinks)
+      .where(eq(teamNewsLinks.id, parsed.id))
+      .limit(1);
+    if (!row) return { ok: false };
+    return { ok: true, ownerId: row.n.addedByUserId, title: row.n.title, kindLabel: "news article" };
+  }
   if (parsed.kind === "article") {
     const [row] = await db
       .select({
@@ -1759,7 +1849,7 @@ router.post(
     if (parsed.kind === "org_post") {
       return apiError(res, 400, "Org posts cannot be re-shared");
     }
-    const shareableParsed = parsed as { kind: "article" | "highlight"; id: string };
+    const shareableParsed = parsed as { kind: "article" | "highlight" | "news"; id: string };
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
     const target = await loadShareableTarget(shareableParsed, me.id, isAdmin);
     if (!target.ok) return notFound(res);
@@ -1943,6 +2033,12 @@ router.get(
           updatedAt: t.updatedAt.toISOString(),
         })),
       });
+      return;
+    }
+    // Task #867 — news (and org) posts have no tag rows; return an empty
+    // list instead of falling into the highlight query.
+    if (parsed.kind === "news" || parsed.kind === "org_post") {
+      res.json({ tags: [] });
       return;
     }
     const rows = await db

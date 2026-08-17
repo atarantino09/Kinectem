@@ -361,12 +361,15 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     (post.id.startsWith("article-") &&
       post.postType === "long" &&
       !!post.gameDate) ||
-    post.id.startsWith("highlight-");
-  const shareKindLabel: "highlight" | "recap" = post.id.startsWith(
-    "highlight-",
-  )
-    ? "highlight"
-    : "recap";
+    post.id.startsWith("highlight-") ||
+    // Task #867 — news posts are shareable too.
+    post.id.startsWith("news-");
+  const shareKindLabel: "highlight" | "recap" | "news article" =
+    post.id.startsWith("highlight-")
+      ? "highlight"
+      : post.id.startsWith("news-")
+        ? "news article"
+        : "recap";
   const onToggleShare = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -892,7 +895,6 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           />
         )}
 
-        {!isNews && (
         <div className="px-5 py-3 border-t border-border/60 flex items-center gap-2">
           <Button
             variant={post.hasReacted ? "default" : "outline"}
@@ -938,7 +940,8 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               {post.shareCount ?? 0}
             </Button>
           )}
-          {!isShort && (
+          {/* Task #867 — news posts have no photo albums; Photos stays hidden. */}
+          {!isShort && !isNews && (
             <Link href={`/posts/${post.id}?album=1`}>
               <Button
                 variant="outline"
@@ -985,7 +988,6 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </span>
           )}
         </div>
-        )}
         {isNews && (
           <AlertDialog
             open={confirmNewsDelete}

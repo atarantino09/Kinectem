@@ -24,9 +24,9 @@ export function ShareConfirmDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   recapTitle?: string | null;
-  kind?: "recap" | "highlight";
+  kind?: "recap" | "highlight" | "news article";
 }) {
-  const noun = kind === "highlight" ? "highlight" : "recap";
+  const noun = kind === "highlight" ? "highlight" : kind === "news article" ? "news article" : "recap";
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>

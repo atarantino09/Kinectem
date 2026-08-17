@@ -11,3 +11,12 @@ description: Newspaper-article links on team pages serialized as read-only feed 
 - News surfaces on team page, followers' feed, the parent ORG page, and rostered players' PROFILE feeds. Profile inclusion is **query-time** (accepted `role='player'` roster join), NOT article_tags rows — no approve/decline flow; if the player or an active guardian has `requireTagConsent`, news is visible only to self/real parent/real admin (behaves like a permanently-pending tag). Roster changes and link removals apply retroactively for free.
 - In the profile-feed serializer, `hiddenExtra` must stay narrowed to article/highlight rows — news rows have no `h`/`hiddenAt` and dereferencing crashes admin views.
 - `parseSyntheticPostId` falls back to "article" for `news-` ids; PostCard news branches must be gated on `isNews` before any reportTarget-based logic.
+
+## News posts are full interaction targets (task era: news post_kind)
+`post_kind` enum now includes `news`; reactions/comments/shares work on `news-<uuid>`
+ids and GET /posts/news-<id> serves a detail page (ungated read, canEdit:false,
+canDelete via canManageTeam, tags always []). Owner for bells = addedByUserId
+(nullable → notification skipped). Photos stays hidden for news client-side.
+**Gotcha:** after editing lib/db schema enums, api-server typecheck may still see the
+OLD enum union — stale `lib/db/dist` + tsbuildinfo; run `pnpm exec tsc -b lib/db` to
+refresh before judging errors.

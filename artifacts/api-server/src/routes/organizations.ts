@@ -1629,8 +1629,8 @@ router.get(
       .orderBy(desc(highlights.createdAt))
       .limit(fetchCap);
     // "In the News" — newspaper-article links attached to this team.
-    // Read-only cards (no reactions/comments/shares), so they skip all
-    // the stat/tag batching below.
+    // Task #867 — news cards are full interaction targets now, so they
+    // join the stat batching below.
     const nRows = await db
       .select({ n: teamNewsLinks, team: teams, org: organizations, author: users })
       .from(teamNewsLinks)
@@ -1652,12 +1652,15 @@ router.get(
         ? await canManageTeam(me.id, nRows[0].team)
         : false;
 
-    const [shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
+    const teamPostsStatKeys = [
+      ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+      ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
+      ...nRows.map((r) => ({ kind: "news" as const, refId: r.n.id })),
+    ];
+    const [stats, shareStats, canEditMap, authorRoleMap, highlightTagViews, currentUserTags] =
       await Promise.all([
-        loadPostShareStats(me?.id ?? null, [
-          ...rows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
-          ...hRows.map((r) => ({ kind: "highlight" as const, refId: r.h.id })),
-        ]),
+        loadPostStats(me?.id ?? null, teamPostsStatKeys),
+        loadPostShareStats(me?.id ?? null, teamPostsStatKeys),
         computeArticleCanEditMap(
           me?.id ?? null,
           rows.map((r) => ({
@@ -1724,6 +1727,7 @@ router.get(
           teamPostsBrandMap.get(r.a.competitionId ?? "") ?? null,
         canEdit: canEditMap.get(r.a.id) ?? false,
         authorRole: authorRoleMap.get(r.a.id) ?? null,
+        ...statsFor(stats, "article", r.a.id),
         ...shareStatsFor(shareStats, "article", r.a.id),
         currentUserTag:
           currentUserTags.articleTagByArticleId.get(r.a.id) ?? null,
@@ -1738,6 +1742,7 @@ router.get(
         author: r.author,
         canEdit: isUploader,
         canDelete: isUploader,
+        ...statsFor(stats, "highlight", r.h.id),
         ...shareStatsFor(shareStats, "highlight", r.h.id),
         taggedUsers: maskedHighlightTagViews.get(r.h.id) ?? [],
         currentUserTag:
@@ -1752,6 +1757,8 @@ router.get(
         author: r.author,
         canEdit: canManageNews,
         canDelete: canManageNews,
+        ...statsFor(stats, "news", r.n.id),
+        ...shareStatsFor(shareStats, "news", r.n.id),
       }),
     );
     const merged = [...articleData, ...highlightData, ...newsData].sort((a, b) =>
@@ -1965,13 +1972,15 @@ router.get(
       loadPostStats(me?.id ?? null, [
         ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
         ...orgPostRows.map((r) => ({ kind: "org_post" as const, refId: r.p.id })),
+        ...orgNewsRows.map((r) => ({ kind: "news" as const, refId: r.n.id })),
       ]),
       // Task #190 — Articles surface share state on org-page cards too
       // (org_post is non-shareable, so it stays at the default 0/false).
-      loadPostShareStats(
-        me?.id ?? null,
-        articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
-      ),
+      // Task #867 — news posts are shareable and surface share state.
+      loadPostShareStats(me?.id ?? null, [
+        ...articleRows.map((r) => ({ kind: "article" as const, refId: r.a.id })),
+        ...orgNewsRows.map((r) => ({ kind: "news" as const, refId: r.n.id })),
+      ]),
       computeArticleCanEditMap(
         me?.id ?? null,
         articleRows.map((r) => ({
@@ -2041,9 +2050,9 @@ router.get(
           minorNameCtx: orgPostsMinorCtx,
         });
       }),
-      // News cards are read-only; the remove flag mirrors the DELETE
-      // route's canManageTeam, which org admins always pass. (Team
-      // coaches can still remove from the team page itself.)
+      // News cards — the remove flag mirrors the DELETE route's
+      // canManageTeam, which org admins always pass. (Team coaches can
+      // still remove from the team page itself.)
       ...orgNewsRows.map((r) =>
         newsLinkToPost(r.n, {
           team: r.team,
@@ -2051,6 +2060,8 @@ router.get(
           author: r.author,
           canEdit: isViewerOrgAdmin,
           canDelete: isViewerOrgAdmin,
+          ...statsFor(stats, "news", r.n.id),
+          ...shareStatsFor(shareStats, "news", r.n.id),
         }),
       ),
     ].sort((a, b) =>

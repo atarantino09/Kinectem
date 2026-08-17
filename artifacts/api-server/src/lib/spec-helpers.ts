@@ -404,11 +404,17 @@ export function highlightPostId(id: string): string {
 export function orgPostPostId(id: string): string {
   return `orgpost-${id}`;
 }
-export type PostKind = "article" | "highlight" | "org_post";
+export function newsPostId(id: string): string {
+  return `news-${id}`;
+}
+export type PostKind = "article" | "highlight" | "org_post" | "news";
 export function parsePostId(postId: string): { kind: PostKind; id: string } | null {
   if (postId.startsWith("article-")) return { kind: "article", id: postId.slice(8) };
   if (postId.startsWith("highlight-")) return { kind: "highlight", id: postId.slice(10) };
   if (postId.startsWith("orgpost-")) return { kind: "org_post", id: postId.slice(8) };
+  // Task #867 — "In the News" posts are a real interaction target
+  // (reactions / comments / shares) backed by team_news_links.
+  if (postId.startsWith("news-")) return { kind: "news", id: postId.slice(5) };
   return null;
 }
 
@@ -1002,9 +1008,10 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
   });
 }
 
-// "In the News" — a team_news_links row rendered as a read-only feed
-// post. `news-` synthetic id; the card links OUT to the paper (no in-app
-// detail page, reactions, comments, or shares).
+// "In the News" — a team_news_links row rendered as a feed post. `news-`
+// synthetic id; the card links OUT to the paper. Task #867 — news posts
+// are full interaction targets (reactions/comments/shares + detail page);
+// only the body stays read-only (no in-app editing/albums).
 export function newsLinkToPost(
   n: TeamNewsLinkRow,
   extras: PostExtras,
