@@ -47,7 +47,10 @@ import {
   canManageTeam,
   recapFreeUntil,
 } from "../lib/permissions";
-import { seedBracketsFromSchedule } from "../lib/competition-brackets";
+import {
+  seedBracketsFromSchedule,
+  linkParticipantsToBrackets,
+} from "../lib/competition-brackets";
 import {
   materialChanges,
   notifyGameEdited,
@@ -176,6 +179,11 @@ const REQUIRED_CSV_COLUMNS: CsvColumn[] = [
   "date",
   "home team",
   "away team",
+  // Task #865 — the group/division column is required so every schedule
+  // upload produces an organized (bracket-grouped) Teams page from day 1.
+  // The `bracket` column still satisfies it (resolveCsvHeader treats either
+  // as the group column when only one is present — see below).
+  "division",
 ];
 
 // Normalize a header cell for matching: lowercase, strip everything that
@@ -222,7 +230,14 @@ function resolveCsvHeader(headerRow: string[]): {
       }
     }
   }
-  const missing = REQUIRED_CSV_COLUMNS.filter((c) => index[c] === undefined);
+  let missing = REQUIRED_CSV_COLUMNS.filter((c) => index[c] === undefined);
+  // Task #865 — "division" is the required group column, but a file whose
+  // only group column is named "bracket"/"round"/"pod" still satisfies it:
+  // the participant grouping falls back to the bracket value when division
+  // is blank, so either column organizes the page.
+  if (index["bracket"] !== undefined) {
+    missing = missing.filter((c) => c !== "division");
+  }
   return { index, missing };
 }
 
@@ -1063,6 +1078,9 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         name: p.name,
         division: p.division,
         bracket: p.bracket,
+        // Task #865 — sorting bracket this slot belongs to (null = "Other").
+        // Id-based like recaps, so bracket renames/reorders mirror here.
+        bracketId: p.bracketId,
         age: p.age,
         gender: p.gender,
         claimed: p.teamId != null,
@@ -1318,7 +1336,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         res,
         400,
         `Couldn't find these required columns in your file: ${missing.join(", ")}. ` +
-          "Make sure the first row has headers like: match #, date, home team, away team." +
+          "Make sure the first row has headers like: match #, date, home team, away team, division (or group/bracket)." +
           foundNote +
           ignoredNote,
       );
@@ -1367,6 +1385,8 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
     // only: skipped/partial rows behave exactly as before. Row numbers are
     // 1-based file line numbers (header = row 1).
     const rowWarnings: { row: number; reason: string }[] = [];
+    // Task #865 — rows (with a match #) whose group/division cell is blank.
+    const missingGroupRows: { row: number; matchNumber: string }[] = [];
 
     for (const [rowIdx, r] of dataRows.entries()) {
       const fileRow = rowIdx + 2;
@@ -1380,6 +1400,12 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       }
       const division = col(r, "division");
       const bracket = col(r, "bracket");
+      // Task #865 — group is mandatory per game row: every game must carry a
+      // division (or bracket) value so the Teams page is organized from the
+      // first upload. Collected here, rejected as a batch below.
+      if (!division && !bracket) {
+        missingGroupRows.push({ row: fileRow, matchNumber });
+      }
       const age = col(r, "age") || null;
       const gender = col(r, "gender") || null;
       const homeName = col(r, "home team");
@@ -1439,6 +1465,27 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         awayKey,
         status,
       });
+    }
+
+    // Task #865 — reject the whole upload when any game row is missing its
+    // group/division value (applies to preview AND apply, so the organizer
+    // hears about it at preview time). Naming the exact rows makes the fix
+    // a quick spreadsheet edit rather than a guessing game.
+    if (missingGroupRows.length > 0) {
+      const shown = missingGroupRows.slice(0, 15);
+      const rowList = shown
+        .map((r) => `row ${r.row} (game ${r.matchNumber})`)
+        .join(", ");
+      const more =
+        missingGroupRows.length > shown.length
+          ? ` and ${missingGroupRows.length - shown.length} more`
+          : "";
+      return apiError(
+        res,
+        400,
+        `Every game needs a value in the division (group) column so your Teams page stays organized. ` +
+          `Missing on: ${rowList}${more}. Fill those cells in and upload again.`,
+      );
     }
 
     // Task #766 — dry-run preview: diff the parsed rows against existing
@@ -1714,6 +1761,9 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
     // organizer-edited brackets/order; new values are appended.
     try {
       await seedBracketsFromSchedule(tournament.id);
+      // Task #865 — attach newly created team slots to their bracket so the
+      // Teams list is grouped immediately after the upload.
+      await linkParticipantsToBrackets(tournament.id);
     } catch (err) {
       // Bracket seeding is a convenience — never fail the import over it.
       req.log?.error?.({ err }, "bracket auto-seed failed");

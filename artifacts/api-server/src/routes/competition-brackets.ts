@@ -25,7 +25,7 @@ import {
   competitionBrackets,
   articles,
 } from "@workspace/db";
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { canOperateCompetition } from "../lib/competition-permissions";
@@ -35,6 +35,7 @@ import { apiError } from "../lib/spec-helpers";
 import {
   bracketLabelKey,
   seedBracketsFromSchedule,
+  linkParticipantsToBrackets,
 } from "../lib/competition-brackets";
 
 const router: IRouter = Router();
@@ -87,8 +88,26 @@ router.get(
     if (!competition) return apiError(res, 404, "Competition not found");
     const canManage = await canOperateCompetition(me, competition);
     if (canManage) {
-      // Lazy backfill for pre-feature schedules; no-op when already seeded.
-      await seedBracketsFromSchedule(competition.id);
+      // Lazy backfill for PRE-FEATURE schedules only: seed solely when this
+      // competition has no brackets at all. Task #865 — seeding per-label on
+      // every load would silently recreate brackets the organizer just
+      // deleted (and re-adopt their teams), so an existing bracket list —
+      // even a partial one — is treated as the organizer's intent, and the
+      // durable bracketsSeededAt stamp keeps a deliberately EMPTIED list
+      // (delete-all) from being mistaken for a never-seeded competition.
+      if (!competition.bracketsSeededAt) {
+        const [{ n }] = await db
+          .select({ n: sql<number>`COUNT(*)` })
+          .from(competitionBrackets)
+          .where(eq(competitionBrackets.tournamentId, competition.id));
+        if (Number(n) === 0) {
+          await seedBracketsFromSchedule(competition.id);
+        }
+      }
+      // Task #865 — link any unlinked team slots (pre-feature imports or
+      // newly seeded brackets) so the Teams grouping appears without a
+      // re-upload. Linking never creates brackets, so it's always safe.
+      await linkParticipantsToBrackets(competition.id);
     }
     const rows = await db
       .select()
@@ -144,6 +163,9 @@ router.post(
         code: "BRACKET_EXISTS",
       });
     }
+    // Task #865 — a manually added bracket may match team slots that were
+    // previously unmatched ("Other"); adopt them right away.
+    await linkParticipantsToBrackets(competition.id);
     res.status(201).json(bracketView(created));
   }),
 );
@@ -238,6 +260,13 @@ router.delete(
       )
       .returning({ id: competitionBrackets.id });
     if (deleted.length === 0) return apiError(res, 404, "Bracket not found");
+    // A deliberate delete is bracket management — stamp it so the lazy
+    // backfill never treats a later-emptied list as "never seeded" and
+    // resurrects brackets from the schedule.
+    await db
+      .update(tournaments)
+      .set({ bracketsSeededAt: new Date() })
+      .where(and(eq(tournaments.id, competition.id), isNull(tournaments.bracketsSeededAt)));
     res.json({ ok: true, id: deleted[0].id });
   }),
 );

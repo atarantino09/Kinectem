@@ -2245,6 +2245,34 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS created_via_quick_setup_at timestamp;
     `,
   },
+  {
+    // Task #865 — team slots carry the sorting bracket they belong to
+    // (id-based, like recaps), so bracket renames/reorders mirror onto the
+    // Teams list without a re-upload. Backfill happens lazily in code
+    // (linkParticipantsToBrackets) by matching division/bracket labels.
+    name: "2026-08-17-task-865-participant-bracket-id",
+    sql: `
+      ALTER TABLE tournament_participants
+        ADD COLUMN IF NOT EXISTS bracket_id uuid
+          REFERENCES competition_brackets(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS tournament_participants_bracket_id_idx
+        ON tournament_participants (bracket_id);
+    `,
+  },
+  {
+    // Task #865 — durable "brackets were seeded/managed" stamp so the lazy
+    // console backfill never resurrects brackets after an organizer deletes
+    // ALL of them (empty-by-intent vs never-seeded). Backfill: competitions
+    // that already have brackets are clearly past their first seed.
+    name: "2026-08-17-task-865-brackets-seeded-stamp",
+    sql: `
+      ALTER TABLE tournaments
+        ADD COLUMN IF NOT EXISTS brackets_seeded_at timestamp;
+      UPDATE tournaments t SET brackets_seeded_at = now()
+        WHERE brackets_seeded_at IS NULL
+          AND EXISTS (SELECT 1 FROM competition_brackets b WHERE b.tournament_id = t.id);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

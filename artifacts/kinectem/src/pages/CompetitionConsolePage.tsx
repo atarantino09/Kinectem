@@ -144,12 +144,20 @@ const SAMPLE = `${CSV_HEADER}
 // the alias examples mirror the server's REQUIRED_CSV_COLUMNS +
 // CSV_HEADER_ALIASES (display copy only; the post-upload summary below is
 // sourced from the server so it can never drift).
-const REQUIRED_COLUMNS = ["match #", "date", "home team", "away team"];
+// Task #865 — division (group) is now required: every game row must carry a
+// group value so the Teams page is organized from the first upload. A file
+// whose only group column is named "bracket"/"round"/"pod" also counts.
+const REQUIRED_COLUMNS = [
+  "match #",
+  "date",
+  "home team",
+  "away team",
+  "division",
+];
 const OPTIONAL_COLUMNS = [
   "start time",
   "age",
   "gender",
-  "division",
   "bracket",
   "venue",
   "venue state",
@@ -2138,8 +2146,10 @@ function SchedulePanel({
           data-testid="text-import-rules"
         >
           <p className="text-xs">
-            <span className="font-bold">Only 4 columns are required:</span>{" "}
-            {REQUIRED_COLUMNS.join(", ")}.
+            <span className="font-bold">Only 5 columns are required:</span>{" "}
+            {REQUIRED_COLUMNS.join(", ")}. Every game needs a division (group)
+            value — it's what keeps the Teams list organized by group, gender,
+            and age. A column named Group, Pool, Flight, or Bracket counts.
           </p>
           <p className="text-xs text-muted-foreground">
             <span className="font-bold text-foreground">

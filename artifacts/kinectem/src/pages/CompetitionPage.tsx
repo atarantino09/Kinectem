@@ -47,6 +47,8 @@ type Participant = {
   gender: string | null;
   claimed: boolean;
   teamId: string | null;
+  // Task #865 — sorting bracket this team belongs to (null = "Other").
+  bracketId?: string | null;
   // Operators only — public viewers never receive hidden slots.
   hidden?: boolean;
 };
@@ -290,6 +292,47 @@ export default function CompetitionPage() {
   }
 
   const { competition: c, participants } = q.data;
+  // Task #865 — Teams grouped under the organizer's brackets, mirroring the
+  // recap grouped view: saved bracket order, alphabetical inside a group
+  // (the API already sorts by name), unmatched teams last under "Other".
+  const bracketList = q.data.brackets ?? [];
+  const teamsByBracket = new Map<string, Participant[]>();
+  const ungroupedTeams: Participant[] = [];
+  for (const p of participants) {
+    if (p.bracketId && bracketList.some((b) => b.id === p.bracketId)) {
+      teamsByBracket.set(p.bracketId, [
+        ...(teamsByBracket.get(p.bracketId) ?? []),
+        p,
+      ]);
+    } else {
+      ungroupedTeams.push(p);
+    }
+  }
+  const teamSections: { key: string; title: string; teams: Participant[] }[] =
+    bracketList
+      .filter((b) => (teamsByBracket.get(b.id) ?? []).length > 0)
+      .map((b) => ({
+        key: b.id,
+        title: [
+          b.label,
+          // Append gender/age only when they aren't already in the label
+          // ("Boys U12 Gold" shouldn't become "Boys U12 Gold · Boys · U12").
+          ...[b.gender, b.ageGroup].filter(
+            (v): v is string =>
+              !!v && !b.label.toLowerCase().includes(v.toLowerCase()),
+          ),
+        ].join(" · "),
+        teams: teamsByBracket.get(b.id)!,
+      }));
+  if (ungroupedTeams.length > 0) {
+    teamSections.push({
+      key: "__other__",
+      // With no brackets at all there's nothing to group by — skip the
+      // "Other" heading and show the plain list.
+      title: teamSections.length > 0 ? "Other" : "",
+      teams: ungroupedTeams,
+    });
+  }
   const brand = c.brandColor ?? DEFAULT_BRAND;
   const heroText = contrastText(brand);
   // Secondary tints the hero as a subtle gradient; tertiary accents the
@@ -773,8 +816,21 @@ export default function CompetitionPage() {
                     )}
                   </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {participants.map((p) => (
+                <div className="flex flex-col gap-3">
+                  {teamSections.map((section) => (
+                    <div key={section.key} className="space-y-2">
+                      {section.title ? (
+                        <p
+                          className="text-xs font-black uppercase tracking-widest text-muted-foreground pt-1"
+                          data-testid={`heading-team-group-${section.key}`}
+                        >
+                          {section.title}{" "}
+                          <span className="font-bold normal-case tracking-normal">
+                            ({section.teams.length})
+                          </span>
+                        </p>
+                      ) : null}
+                  {section.teams.map((p) => (
                     <div
                       key={p.id}
                       className={`flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 ${
@@ -853,6 +909,8 @@ export default function CompetitionPage() {
                           </Link>
                         )}
                       </div>
+                    </div>
+                  ))}
                     </div>
                   ))}
                   {participants.length === 0 ? (

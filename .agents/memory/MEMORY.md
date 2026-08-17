@@ -58,4 +58,5 @@
 - [Public recap visitor gate](public-recap-visitor-gate.md) — logged-out viewing is recaps-only (client-side); detect visitors via whoami not users/me 401; returnTo sanitized via safeInternalPath.
 - [Shareable recap image](share-recap-image.md) — client-side 1080×1350 PNG export; published-only gate via extra-spec articleStatus; fonts must be self-hosted for html-to-image; capture waits on fonts+image decode.
 - [In the News team links](team-news-links.md) — read-only `news-` posts link OUT to the paper; SSRF-safe per-hop OG fetch helper; add-button gates on canManage not isAdmin.
+- [Participant bracket links](participant-bracket-links.md) — team slots attach to brackets by id (renames mirror, delete→Other); lazy seed only when zero brackets or it resurrects deletions; import now requires a group per row.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.

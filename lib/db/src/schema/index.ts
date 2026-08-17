@@ -1667,6 +1667,10 @@ export const tournaments = pgTable("tournaments", {
   // Unguessable-ish public slug used in the funnel URL (`/t/<slug>`).
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
+  // Stamped the first time sorting brackets are seeded (or explicitly
+  // managed) for this competition, so the lazy console backfill can tell an
+  // intentionally empty bracket list apart from a never-seeded one.
+  bracketsSeededAt: timestamp("brackets_seeded_at"),
   // Active window for recap authoring. Stored as plain calendar dates
   // (YYYY-MM-DD); the recap gate compares against today's date inclusive.
   startDate: date("start_date").notNull(),
@@ -1752,6 +1756,10 @@ export const tournamentParticipants = pgTable("tournament_participants", {
   bracket: text("bracket").notNull().default(""),
   age: text("age"),
   gender: text("gender"),
+  // Task #865 — sorting bracket this team slot belongs to (same label-keyed
+  // association recaps use). Linked at import / bracket-create time; survives
+  // bracket renames (id-based) and falls back to "Other" on bracket delete.
+  bracketId: uuid("bracket_id").references(() => competitionBrackets.id, { onDelete: "set null" }),
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "set null" }),
   claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
   claimedAt: timestamp("claimed_at"),

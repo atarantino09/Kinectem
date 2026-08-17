@@ -5,8 +5,14 @@
 // gender, age) are NEVER touched, and new brackets are appended after the
 // current max sort_order in a sensible initial order (gender, then age,
 // then label).
-import { db, tournamentMatches, competitionBrackets } from "@workspace/db";
-import { asc, eq } from "drizzle-orm";
+import {
+  db,
+  tournaments,
+  tournamentMatches,
+  tournamentParticipants,
+  competitionBrackets,
+} from "@workspace/db";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 export function bracketLabelKey(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, " ");
@@ -39,6 +45,15 @@ function ageNumber(age: string | null): number | null {
 export async function seedBracketsFromSchedule(
   tournamentId: string,
 ): Promise<number> {
+  // Durable "seeding happened" stamp — set even when nothing is inserted,
+  // so an organizer who later deletes ALL brackets isn't mistaken for a
+  // never-seeded competition and re-seeded behind their back.
+  await db
+    .update(tournaments)
+    .set({ bracketsSeededAt: new Date() })
+    .where(
+      and(eq(tournaments.id, tournamentId), isNull(tournaments.bracketsSeededAt)),
+    );
   const matches = await db
     .select({
       division: tournamentMatches.division,
@@ -128,4 +143,66 @@ export async function seedBracketsFromSchedule(
     .onConflictDoNothing()
     .returning({ id: competitionBrackets.id });
   return inserted.length;
+}
+
+/**
+ * Task #865 — link UNLINKED team slots (bracket_id IS NULL) to the bracket
+ * whose label key matches the slot's division (fallback bracket) value —
+ * the same label derivation the seeder uses. Id-based from then on, so
+ * bracket renames keep the association and deletes fall back to "Other"
+ * (FK ON DELETE SET NULL). Never re-links already-linked slots, so an
+ * organizer's mental model stays stable across re-imports.
+ */
+export async function linkParticipantsToBrackets(
+  tournamentId: string,
+): Promise<number> {
+  const unlinked = await db
+    .select({
+      id: tournamentParticipants.id,
+      division: tournamentParticipants.division,
+      bracket: tournamentParticipants.bracket,
+    })
+    .from(tournamentParticipants)
+    .where(
+      and(
+        eq(tournamentParticipants.tournamentId, tournamentId),
+        isNull(tournamentParticipants.bracketId),
+      ),
+    );
+  if (unlinked.length === 0) return 0;
+
+  const brackets = await db
+    .select({
+      id: competitionBrackets.id,
+      labelKey: competitionBrackets.labelKey,
+    })
+    .from(competitionBrackets)
+    .where(eq(competitionBrackets.tournamentId, tournamentId));
+  if (brackets.length === 0) return 0;
+  const byKey = new Map(brackets.map((b) => [b.labelKey, b.id]));
+
+  // Group updates per bracket id so N slots cost at most (distinct brackets)
+  // UPDATE statements.
+  const idsByBracket = new Map<string, string[]>();
+  for (const p of unlinked) {
+    const label = (p.division || p.bracket || "").trim();
+    if (!label) continue;
+    const bracketId = byKey.get(bracketLabelKey(label));
+    if (!bracketId) continue;
+    idsByBracket.set(bracketId, [...(idsByBracket.get(bracketId) ?? []), p.id]);
+  }
+  let linked = 0;
+  for (const [bracketId, ids] of idsByBracket) {
+    await db
+      .update(tournamentParticipants)
+      .set({ bracketId })
+      .where(
+        and(
+          inArray(tournamentParticipants.id, ids),
+          isNull(tournamentParticipants.bracketId),
+        ),
+      );
+    linked += ids.length;
+  }
+  return linked;
 }
