@@ -2161,21 +2161,14 @@ router.post(
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
     const teamId = req.params.teamId;
-    // Only org admins of the owning organization can mint join links.
+    // Task #870 — same gate as the rest of roster management: team-level
+    // coaches/admins, org owners/admins, and platform admins all qualify
+    // (the old org-admin-only check also broke independent teams, whose
+    // organizationId is null).
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!team) return notFound(res);
-    const [adminRow] = await db
-      .select()
-      .from(organizationAdmins)
-      .where(
-        and(
-          eq(organizationAdmins.organizationId, team.organizationId),
-          eq(organizationAdmins.userId, me.id),
-          inArray(organizationAdmins.role, ["owner", "admin"]),
-        ),
-      )
-      .limit(1);
-    if (!adminRow) return apiError(res, 403, "Not a team admin");
+    if (!(await canManageTeam(me.id, team)))
+      return apiError(res, 403, "Not a team admin");
     // Task #472 — archived teams cannot mint or refresh join links.
     // Existing tokens stay valid in the DB but admins can't share new
     // ones until the team is unarchived.
