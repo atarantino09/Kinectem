@@ -27,7 +27,17 @@ import {
   organizerAdmins,
   teamHiddenCompetitionGames,
 } from "@workspace/db";
-import { and, asc, eq, isNull, desc, sql, inArray, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  isNull,
+  desc,
+  sql,
+  inArray,
+  or,
+  TransactionRollbackError,
+} from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
@@ -2712,6 +2722,8 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
                 eq(tournamentParticipants.tournamentId, tournament.id),
                 isNull(tournamentParticipants.teamId),
                 isNull(tournamentParticipants.pendingTeamId),
+                // A slot hidden after the precheck read is not claimable.
+                isNull(tournamentParticipants.hiddenAt),
               ),
             )
             .returning();
@@ -2798,6 +2810,8 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
               eq(tournamentParticipants.tournamentId, tournament.id),
               isNull(tournamentParticipants.teamId),
               isNull(tournamentParticipants.pendingTeamId),
+              // A slot hidden after the precheck read is not claimable.
+              isNull(tournamentParticipants.hiddenAt),
             ),
           )
           .returning();
@@ -2934,6 +2948,16 @@ router.post(
         code: "NO_PENDING_CLAIM",
       });
     }
+    // Task #866 — a hidden slot can't be claimed, so its pending claim can't
+    // be approved either. Unhide the team first (rejecting is still allowed).
+    if (parsed.data.approve && participant.hiddenAt != null) {
+      return apiError(
+        res,
+        409,
+        "That team is hidden from the Teams list. Unhide it before approving the claim.",
+        { code: "PARTICIPANT_HIDDEN" },
+      );
+    }
 
     if (parsed.data.approve) {
       // Race-safe promote: only while the slot is still unclaimed and the
@@ -2953,10 +2977,27 @@ router.post(
             eq(tournamentParticipants.id, participant.id),
             eq(tournamentParticipants.pendingTeamId, participant.pendingTeamId),
             isNull(tournamentParticipants.teamId),
+            // Race guard vs hide committed after the read above.
+            isNull(tournamentParticipants.hiddenAt),
           ),
         )
         .returning();
       if (updated.length === 0) {
+        // Distinguish "slot was hidden meanwhile" from "claim resolved
+        // elsewhere" for a clear operator message.
+        const [now] = await db
+          .select({ hiddenAt: tournamentParticipants.hiddenAt })
+          .from(tournamentParticipants)
+          .where(eq(tournamentParticipants.id, participant.id))
+          .limit(1);
+        if (now?.hiddenAt != null) {
+          return apiError(
+            res,
+            409,
+            "That team is hidden from the Teams list. Unhide it before approving the claim.",
+            { code: "PARTICIPANT_HIDDEN" },
+          );
+        }
         return apiError(res, 409, "That claim was just resolved elsewhere.", {
           code: "ALREADY_CLAIMED",
         });
@@ -3492,6 +3533,73 @@ router.delete(
     if (!updated)
       return apiError(res, 404, "Team not found in this competition");
     res.json({ ok: true, hidden: false });
+  }),
+);
+
+// Task #866 — bulk hide: same semantics/permission as the single hide, but
+// for a list of participant ids in one request. Every id must belong to
+// this competition (whole request 400s otherwise, so a stale client can't
+// silently half-apply). Idempotent — already-hidden slots just get their
+// stamp refreshed like the single route does.
+const BulkHideBody = z.object({
+  participantIds: z.array(z.string().uuid()).min(1).max(500),
+});
+
+router.post(
+  "/competitions/:competitionId/participants/bulk-hide",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const competitionId = String(req.params.competitionId);
+    const [tournament] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, competitionId))
+      .limit(1);
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    if (!(await canOperateCompetition(me, tournament)))
+      return apiError(res, 403, "Only competition admins can hide teams");
+    const parsed = BulkHideBody.safeParse(req.body);
+    if (!parsed.success) {
+      const first = parsed.error.errors[0];
+      return apiError(res, 400, first?.message ?? "Invalid team selection.", {
+        code: "VALIDATION_FAILED",
+      });
+    }
+    const ids = Array.from(new Set(parsed.data.participantIds));
+    // Atomic all-or-nothing: update inside a transaction and roll back when
+    // fewer rows matched than requested, so a concurrently removed slot can
+    // never produce a silent partial hide.
+    let hiddenCount: number | null = null;
+    await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(tournamentParticipants)
+        .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+        .where(
+          and(
+            eq(tournamentParticipants.tournamentId, tournament.id),
+            inArray(tournamentParticipants.id, ids),
+          ),
+        )
+        .returning({ id: tournamentParticipants.id });
+      if (updated.length !== ids.length) {
+        tx.rollback();
+        return;
+      }
+      hiddenCount = updated.length;
+    }).catch((err) => {
+      // drizzle's tx.rollback() throws to abort — swallow only that path
+      // (hiddenCount stays null → 400 below); real DB errors still bubble.
+      if (!(err instanceof TransactionRollbackError)) throw err;
+    });
+    if (hiddenCount === null) {
+      return apiError(
+        res,
+        400,
+        "Some of the selected teams aren't part of this competition anymore. Refresh the page and try again.",
+      );
+    }
+    res.json({ ok: true, hiddenCount });
   }),
 );
 

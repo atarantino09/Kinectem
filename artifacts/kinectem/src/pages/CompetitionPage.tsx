@@ -9,6 +9,7 @@ import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -205,6 +206,49 @@ export default function CompetitionPage() {
   const { toast } = useToast();
   // Hide / unhide a team slot from the public Teams list (operators only).
   const [pendingHide, setPendingHide] = useState<Participant | null>(null);
+  // Task #866 — bulk hide: operators tick checkboxes next to visible teams,
+  // then "Hide All (N)" hides the whole selection in one request.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkHideOpen, setBulkHideOpen] = useState(false);
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const bulkHideMutation = useMutation({
+    mutationFn: ({
+      participantIds,
+      competitionId,
+    }: {
+      participantIds: string[];
+      competitionId: string;
+    }) =>
+      customFetch<{ ok: true; hiddenCount: number }>(
+        `/api/v1/competitions/${competitionId}/participants/bulk-hide`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ participantIds }),
+        },
+      ),
+    onSuccess: (r) => {
+      setSelectedIds(new Set());
+      qcTop.invalidateQueries({ queryKey: ["competition", slug] });
+      toast({
+        title: r.hiddenCount === 1 ? "1 team hidden" : `${r.hiddenCount} teams hidden`,
+        description:
+          "They no longer appear in the public Teams list. Only competition admins can see them.",
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't hide those teams",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      }),
+  });
   const hideMutation = useMutation({
     mutationFn: ({
       participantId,
@@ -816,6 +860,38 @@ export default function CompetitionPage() {
                     )}
                   </p>
                 </div>
+                {c.canManage && selectedIds.size > 0 ? (
+                  <div
+                    className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-sm"
+                    data-testid="bar-bulk-hide"
+                  >
+                    <p className="text-sm font-bold">
+                      {selectedIds.size} team{selectedIds.size === 1 ? "" : "s"}{" "}
+                      selected
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="font-bold text-muted-foreground"
+                        onClick={() => setSelectedIds(new Set())}
+                        data-testid="btn-clear-selection"
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="font-bold"
+                        disabled={bulkHideMutation.isPending}
+                        onClick={() => setBulkHideOpen(true)}
+                        data-testid="btn-bulk-hide"
+                      >
+                        <EyeOff className="h-3.5 w-3.5 mr-1" />
+                        Hide All ({selectedIds.size})
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-3">
                   {teamSections.map((section) => (
                     <div key={section.key} className="space-y-2">
@@ -854,6 +930,14 @@ export default function CompetitionPage() {
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        {c.canManage && !p.hidden ? (
+                          <Checkbox
+                            checked={selectedIds.has(p.id)}
+                            onCheckedChange={() => toggleSelected(p.id)}
+                            aria-label={`Select ${p.name} to hide`}
+                            data-testid={`checkbox-select-participant-${p.id}`}
+                          />
+                        ) : null}
                         {c.canManage ? (
                           p.hidden ? (
                             <Button
@@ -1055,6 +1139,48 @@ export default function CompetitionPage() {
               }}
             >
               Hide team
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Task #866 — bulk hide confirmation (operators only). */}
+      <AlertDialog open={bulkHideOpen} onOpenChange={setBulkHideOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Hide {selectedIds.size} team{selectedIds.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The selected teams will no longer appear in the public Teams
+              list, and they can't be claimed while hidden. Their scheduled
+              games stay on the schedule. You can unhide any of them anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="btn-cancel-bulk-hide">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="btn-confirm-bulk-hide"
+              onClick={() => {
+                // Guard against a stale selection (a refetch may have removed
+                // or already hidden a team since it was ticked).
+                const ids = Array.from(selectedIds).filter((id) =>
+                  participants.some((p) => p.id === id && !p.hidden),
+                );
+                if (ids.length > 0) {
+                  bulkHideMutation.mutate({
+                    participantIds: ids,
+                    competitionId: c.id,
+                  });
+                } else {
+                  setSelectedIds(new Set());
+                }
+                setBulkHideOpen(false);
+              }}
+            >
+              Hide teams
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
