@@ -691,6 +691,24 @@ router.get(
     // (organizer_admins → all competitions attached to that hub, including
     // ones attached later). Each row carries accessRole so the UI can show
     // an "Admin" badge and hide owner-only controls.
+    //
+    // Task #873 — platform admins see every competition (server write-checks
+    // already allow them via canOperateCompetition; this makes the console UI
+    // reachable). Their accessRole is "owner" so no console controls are
+    // hidden.
+    if (me.role === "admin") {
+      const allRows = await db
+        .select()
+        .from(tournaments)
+        .orderBy(desc(tournaments.createdAt));
+      const data = await Promise.all(
+        allRows.map(async (row) => ({
+          ...(await competitionListRow(row)),
+          accessRole: "owner" as const,
+        })),
+      );
+      return res.json({ data });
+    }
     const myHubAdminIds = db
       .select({ id: organizerAdmins.organizerId })
       .from(organizerAdmins)
