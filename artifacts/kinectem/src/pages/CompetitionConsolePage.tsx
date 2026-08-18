@@ -894,6 +894,13 @@ function buildPromoReferralMessage(
     b.priceYearly < a.priceYearly ? b : a,
   );
   const discounted = cheapest.priceYearly * (1 - REFERRAL_DISCOUNT);
+  // Build an absolute deep link that opens signup and, on completion, lands
+  // the new user in the org-creation wizard — matches the pattern used by
+  // other invite/share links throughout the app.
+  const base = (typeof window !== "undefined" ? window.location.origin : "") +
+    import.meta.env.BASE_URL.replace(/\/$/, "");
+  const returnTo = encodeURIComponent("/organizations/mine?new=1");
+  const signupLink = `${base}/login?signup=1&returnTo=${returnTo}`;
   return `Hi coaches and club directors,
 
 First, a quick introduction: Kinectem is the youth-sports platform where the story of your season comes to life. Every club gets its own team pages — schedules, photo albums, and written game recaps that capture the moments families don't want to miss. With the AI Assist tool built right into the recap composer, coaches can turn a few quick notes into a polished game story in moments — and parents, grandparents, and fans follow along all season long, all built around safe, COPPA-compliant profiles for players and parents.
@@ -905,7 +912,7 @@ If your club isn't on Kinectem yet, now is a great time to join.
 Every new organization gets its first 90 days on Kinectem completely free — your card isn't charged until day 90, and you can cancel anytime during the free period at no cost. On top of that, as a team in our competition, your organization gets 25% off your first year on any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)} for your first year to get your whole club on board.
 
 Here's how to claim it:
-1. Go to Kinectem and create your organization — your 90-day free period starts right away.
+1. Create your organization at ${signupLink} — your 90-day free period starts right away.
 2. Pick the plan that fits your club's size.
 3. Enter promo code ${promoCode ?? "[YOUR PROMO CODE]"} when you pick your plan — it's applied automatically at checkout, and the 25% discount comes off your first charge.
 
