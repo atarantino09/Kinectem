@@ -896,7 +896,9 @@ function buildPromoReferralMessage(
   const discounted = cheapest.priceYearly * (1 - REFERRAL_DISCOUNT);
   return `Hi coaches and club directors,
 
-If your club isn't on Kinectem yet, now is a great time to join. Kinectem is the youth-sports platform we use for ${competitionName} — team pages, schedules, game recaps, and safe, COPPA-compliant profiles for players and parents.
+First, a quick introduction: Kinectem is the youth-sports platform we use to run ${competitionName}. It gives every club its own team pages with schedules, scores, photo albums, and written game recaps that families can follow all season long — all built around safe, COPPA-compliant profiles for players and parents. Coaches post updates in minutes, and parents, grandparents, and fans never miss a game.
+
+If your club isn't on Kinectem yet, now is a great time to join.
 
 Every new organization gets its first 90 days on Kinectem completely free — your card isn't charged until day 90, and you can cancel anytime during the free period at no cost. On top of that, as a team in our competition, your organization gets 25% off your first year on any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)} for your first year to get your whole club on board.
 
