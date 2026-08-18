@@ -896,7 +896,9 @@ function buildPromoReferralMessage(
   const discounted = cheapest.priceYearly * (1 - REFERRAL_DISCOUNT);
   return `Hi coaches and club directors,
 
-First, a quick introduction: Kinectem is the youth-sports platform we use to run ${competitionName}. It gives every club its own team pages with schedules, scores, photo albums, and written game recaps that families can follow all season long — all built around safe, COPPA-compliant profiles for players and parents. Coaches post updates in minutes, and parents, grandparents, and fans never miss a game.
+First, a quick introduction: Kinectem is the youth-sports platform where the story of your season comes to life. Every club gets its own team pages — schedules, photo albums, and written game recaps that capture the moments families don't want to miss. With the AI Assist tool built right into the recap composer, coaches can turn a few quick notes into a polished game story in moments — and parents, grandparents, and fans follow along all season long, all built around safe, COPPA-compliant profiles for players and parents.
+
+By the end of the season, you'll have a collection of game recaps that capture every big moment — and season after season, that collection grows into the complete story and legacy of your teams and players.
 
 If your club isn't on Kinectem yet, now is a great time to join.
 
