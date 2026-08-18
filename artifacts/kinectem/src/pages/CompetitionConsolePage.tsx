@@ -3546,7 +3546,12 @@ export default function CompetitionConsolePage() {
 
   // Claim-preview visitors have no /my/competitions row — fall back to the
   // slug the claim token resolved to (same public endpoint either way).
-  const detailSlug = row?.slug ?? claimPreview?.competition.slug ?? "";
+  // Task #877 — platform admins reach competitions not in their list via
+  // search → public page → "Edit competition". In that case row is absent, so
+  // fall back to competitionId (a UUID): the detail endpoint now accepts both
+  // slugs and UUIDs, and canManage drives whether the console renders.
+  const detailSlug =
+    row?.slug ?? claimPreview?.competition.slug ?? competitionId ?? "";
 
   const detailQ = useQuery<CompetitionDetail>({
     queryKey: ["competition", detailSlug],
@@ -3613,12 +3618,64 @@ export default function CompetitionConsolePage() {
     );
   }
 
-  if (listQ.isLoading || (!row && claimToken && claimResolve.isLoading)) {
+  // Task #877 — when row is absent but detailQ loaded canManage=true (e.g. a
+  // platform admin arriving via search → public page → "Edit competition"),
+  // synthesize a ConsoleRow from the detail response, just like the claim-
+  // preview path does. This keeps the fallback path out of the skeleton budget
+  // so it waits for detail, not just the list.
+  const fallbackDetail =
+    !row && !claimPreview ? detailQ.data?.competition : undefined;
+  const fallbackCanManage =
+    fallbackDetail &&
+    (fallbackDetail as { canManage?: boolean }).canManage === true;
+
+  if (
+    listQ.isLoading ||
+    (!row && claimToken && claimResolve.isLoading) ||
+    (!row && !claimPreview && detailQ.isLoading)
+  ) {
     return (
       <div className="max-w-3xl mx-auto space-y-4">
         <Skeleton className="h-24 rounded-xl" />
         <Skeleton className="h-48 rounded-xl" />
       </div>
+    );
+  }
+
+  if (!row && fallbackCanManage && fallbackDetail) {
+    const pub = fallbackDetail as typeof fallbackDetail & {
+      participantCount?: number;
+      claimedCount?: number;
+    };
+    const matchCount =
+      (detailQ.data as { matches?: unknown[] } | undefined)?.matches?.length ??
+      0;
+    const adminRow: CompetitionRow = {
+      id: fallbackDetail.id,
+      slug: fallbackDetail.slug,
+      name: fallbackDetail.name,
+      type: fallbackDetail.type,
+      startDate: fallbackDetail.startDate,
+      endDate: fallbackDetail.endDate,
+      location: fallbackDetail.location,
+      organizerId: null,
+      autoApproveClaims: fallbackDetail.autoApproveClaims,
+      logoUrl: fallbackDetail.logoUrl,
+      brandColor: fallbackDetail.brandColor,
+      matchCount,
+      participantCount: pub.participantCount ?? 0,
+      claimedCount: pub.claimedCount ?? 0,
+      pendingClaimCount: 0,
+    };
+    return (
+      <ConsoleWithTour
+        row={adminRow}
+        detail={fallbackDetail}
+        tourOpen={false}
+        setTourOpen={setTourOpen}
+        finishTour={finishTour}
+        tourSteps={tourSteps}
+      />
     );
   }
 

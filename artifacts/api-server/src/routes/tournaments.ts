@@ -692,23 +692,10 @@ router.get(
     // ones attached later). Each row carries accessRole so the UI can show
     // an "Admin" badge and hide owner-only controls.
     //
-    // Task #873 — platform admins see every competition (server write-checks
-    // already allow them via canOperateCompetition; this makes the console UI
-    // reachable). Their accessRole is "owner" so no console controls are
-    // hidden.
-    if (me.role === "admin") {
-      const allRows = await db
-        .select()
-        .from(tournaments)
-        .orderBy(desc(tournaments.createdAt));
-      const data = await Promise.all(
-        allRows.map(async (row) => ({
-          ...(await competitionListRow(row)),
-          accessRole: "owner" as const,
-        })),
-      );
-      return res.json({ data });
-    }
+    // Task #877 — list is membership-scoped for everyone including platform
+    // admins. Admins reach non-listed competitions via search → public page →
+    // "Edit competition", which resolves the console by ID via the detail
+    // endpoint's UUID fallback (see GET /competitions/:slug below).
     const myHubAdminIds = db
       .select({ id: organizerAdmins.organizerId })
       .from(organizerAdmins)
@@ -934,11 +921,17 @@ router.get(
 // competitions — the content model is game recaps only.
 // ---------------------------------------------------------------------------
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const publicCompetitionRead = asyncHandler(async (req, res) => {
+    // Task #877 — platform admins reach the console via "Edit competition" on
+    // the public page, which passes the competition's UUID as the route param.
+    // Accept either a slug or a UUID so the detail endpoint works for both.
+    const param = req.params.slug;
     const [tournament] = await db
       .select()
       .from(tournaments)
-      .where(eq(tournaments.slug, req.params.slug))
+      .where(UUID_RE.test(param) ? eq(tournaments.id, param) : eq(tournaments.slug, param))
       .limit(1);
     if (!tournament) return apiError(res, 404, "Competition not found");
 
