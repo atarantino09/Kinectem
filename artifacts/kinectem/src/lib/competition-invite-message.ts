@@ -68,49 +68,38 @@ export function formatDateRange(startDate: string, endDate: string): string {
 export function buildCompetitionInviteMessage(
   c: CompetitionInviteInput,
 ): string {
-  const typeLabel = c.type === "league" ? "league" : "tournament";
   const dates = formatDateRange(c.startDate, c.endDate);
-  const where = c.location ? ` at ${c.location}` : "";
+  const promoCode = c.promoCode?.trim() || "[PROMO CODE]";
 
   const lines: string[] = [
+    `Subject: Your team page for ${c.name} is ready to claim`,
+    ``,
     `Hi coaches and team managers,`,
     ``,
-    `${c.name} (${dates}${where}) is on Kinectem this year — and your team already has a page waiting for you. Claiming it is free and takes about two minutes.`,
+    `${c.name} (${dates}) is on Kinectem this year — and your team already has a page waiting for you. Claiming it is free and takes about two minutes.`,
     ``,
-    `Kinectem is a storytelling platform for youth sports organizations, where coaches publish game recaps that live on team pages and tag to each player's profile — going beyond the box score, capturing the hustle plays and turning points the stat sheet misses.`,
+    `Kinectem is the youth-sports platform where the story of your season comes to life. Coaches publish game recaps that live on the team page and tag all rostered players — so every game recap lands on each of your players' pages, not just the team's. It goes beyond the box score: the hustle plays, the turning points, the kids the stat sheet never mentions.`,
     ``,
-    `Why claim your team's page:`,
-    `- It's completely free to claim (teams new to Kinectem get a standalone team page free for 2 weeks after our event starts — after that, just create or join an organization on Kinectem; a new organization's first 90 days are free, so your team keeps going without interruption)`,
-    `- Your ${typeLabel} schedule shows up on your team page automatically`,
-    `- Share game recaps and highlights after every game`,
-    `- Parents and players can follow your team page for updates`,
-    `- Built for youth sports — COPPA-safe for players under 13`,
+    `And it's less work than it sounds. AI Assist is built right into the game recap composer, so a few quick notes after the game turn into a polished game story in a couple of minutes.`,
+    ``,
+    `Once you claim your page, your schedule shows up automatically, parents and players can follow along all season, and everything runs on safe, COPPA-compliant profiles built for youth sports.`,
     ``,
     `How to claim your team:`,
-    `1. Open the ${typeLabel} page: ${c.url}`,
+    `1. Open the event page: ${c.url}`,
     `2. Find your team's name in the Teams list`,
     `3. Tap "Claim" next to your team`,
     `4. Sign up for a free Kinectem account (or log in if you already have one)`,
-    `5. Pick your existing Kinectem team — or create a new one just for this ${typeLabel}`,
-    `6. That's it! Your games are added to your team page automatically.`,
+    `5. Pick your existing Kinectem team — or create a new one`,
+    `6. That's it. Your games are added to your team page automatically.`,
+    ``,
+    `What it costs: nothing to claim. If your team is new to Kinectem, your standalone team page is free through our event and for two weeks after it starts. To keep going after that, just create or join an organization on Kinectem — and a new organization's first 90 days are free, so there's no interruption and no charge along the way.`,
+    ``,
+    `One more thing: if your club isn't on Kinectem yet, use promo code ${promoCode} when you pick your organization's plan — it takes 25% off your first year.`,
+    ``,
+    `Questions about claiming your team? competitions@kinectem.com will get you sorted.`,
+    ``,
+    `See you on Kinectem!`,
   ];
-
-  const promoCode = c.promoCode?.trim();
-  if (promoCode) {
-    lines.push(
-      ``,
-      `One more thing: if your club isn't on Kinectem yet, use our promo code ${promoCode} when you pick your organization's plan — it takes 25% off your first year on Kinectem.`,
-    );
-  }
-
-  if (!c.autoApproveClaims) {
-    lines.push(
-      ``,
-      `One note: we review each claim, so your team may show as "pending" for a little while before it's approved.`,
-    );
-  }
-
-  lines.push(``, `See you on Kinectem!`);
 
   return lines.join("\n");
 }

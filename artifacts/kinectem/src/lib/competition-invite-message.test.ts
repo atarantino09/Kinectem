@@ -30,18 +30,34 @@ describe("resolveEffectivePromoCode", () => {
   });
 });
 
-describe("buildCompetitionInviteMessage promo mention", () => {
-  it("mentions the code and the 25% first-year discount when saved", () => {
+describe("buildCompetitionInviteMessage", () => {
+  it("builds the updated claim email with personalized event details", () => {
     const msg = buildCompetitionInviteMessage({ ...base, promoCode: "SUMMER25" });
+
+    expect(msg).toContain(
+      "Subject: Your team page for Summer Cup is ready to claim",
+    );
+    expect(msg).toContain("Summer Cup (August 1 – August 3, 2026)");
+    expect(msg).toContain(
+      "Kinectem is the youth-sports platform where the story of your season comes to life",
+    );
+    expect(msg).toContain("AI Assist is built right into the game recap composer");
+    expect(msg).toContain(
+      "1. Open the event page: https://example.com/app/c/summer-cup",
+    );
+    expect(msg).toContain(
+      "your standalone team page is free through our event and for two weeks after it starts",
+    );
     expect(msg).toContain("promo code SUMMER25");
     expect(msg).toContain("25% off your first year");
+    expect(msg).toContain("competitions@kinectem.com");
   });
 
-  it("reads normally without any promo mention when no code is saved", () => {
+  it("leaves a visible promo-code placeholder when no code is saved", () => {
     for (const promoCode of [null, undefined, "", "   "]) {
       const msg = buildCompetitionInviteMessage({ ...base, promoCode });
-      expect(msg).not.toContain("promo code");
-      expect(msg).not.toContain("25% off");
+      expect(msg).toContain("promo code [PROMO CODE]");
+      expect(msg).toContain("25% off your first year");
     }
   });
 });
