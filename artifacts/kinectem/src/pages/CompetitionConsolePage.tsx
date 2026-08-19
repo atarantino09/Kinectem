@@ -930,9 +930,7 @@ Here's how to claim it:
 Questions? Reach out to competitions@kinectem.com — they're happy to walk you through it.
 
 Thanks,
-The ${competitionName} team
-
-P.S. Promo code ${promoCode ?? "[YOUR PROMO CODE]"} gets you 25% off your first year, on top of 90 days free before your card is ever charged.`;
+The ${competitionName} team`;
 }
 
 function PromoReferralPanel({
