@@ -901,27 +901,38 @@ function buildPromoReferralMessage(
     import.meta.env.BASE_URL.replace(/\/$/, "");
   const returnTo = encodeURIComponent("/organizations/mine?new=1");
   const signupLink = `${base}/login?signup=1&returnTo=${returnTo}`;
-  return `Hi coaches and club directors,
+  return `Subject: Get your club on Kinectem before ${competitionName}
 
-${competitionName} is on Kinectem — and we'd love to have your club join us there too.
+Hi coaches and club directors,
 
-In case you haven't heard of Kinectem: it's the youth-sports platform where the story of your season comes to life. Every club gets its own team pages — schedules, photo albums, and written game recaps that capture the moments families don't want to miss. With the AI Assist tool built right into the recap composer, coaches can turn a few quick notes into a polished game story in moments — and parents, grandparents, and fans follow along all season long, all built around safe, COPPA-compliant profiles for players and parents.
+${competitionName} is on Kinectem — and we'd love to have your teams join us there too.
 
-By the end of the season, you'll have a collection of game recaps that capture every big moment — and season after season, that collection grows into the complete story and legacy of your teams and players.
+In case you haven't heard of Kinectem: it's the youth-sports platform where the story of your season comes to life. Your club gets its own team pages — schedules, photo albums, and written game recaps that capture the moments families don't want to miss — all built around safe, COPPA-compliant profiles for players and parents.
 
-If your club isn't on Kinectem yet, now is a great time to join.
+Here's the part that matters most. Every game recap your coaches write automatically tags all rostered players, so the story doesn't just sit on the team page — it lands on every player's page too. And because your coaches are the ones telling it, a game recap can hold what a final score never will: the hustle play nobody in the stands noticed, the defensive stop that swung the game, the player who came off the bench and changed the energy, the kid who shook off a mistake and kept going. Not just the same few players who fill up the stat sheet every week. Season after season, that collection grows into the complete story of your teams and every athlete on them — their whole journey, in your club's own words.
 
-Every new organization gets its first 90 days on Kinectem completely free — your card isn't charged until day 90, and you can cancel anytime during the free period at no cost. On top of that, as a team in our competition, your organization gets 25% off your first year on any Kinectem plan for signing up with our promo code. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year, so with the discount that's just ${formatUsdExact(discounted)} for your first year to get your whole club on board.
+The lift is lighter than you'd expect. Upload your rosters once, then coaches use AI Assist inside the game recap composer to turn a few quick notes into a polished game story in a couple of minutes.
+
+You don't have to wait on us to get started. When we publish the ${competitionName} schedule on Kinectem, your games with us land directly on your team pages. But if your club isn't on Kinectem yet, you can get set up today and start using it right away for whatever your next games are — so by the time our schedule goes live, your pages are already filling up and your season carries straight through without a break in the story.
+
+Pricing is simple: one flat annual price for your whole club, set by how many teams you have. Never per player. Parents and players are always free — no family ever gets a bill. Plans start at ${formatUsdExact(cheapest.priceYearly)}/year.
+
+And as a club playing with us, you get both:
+
+• 90 days free — your card isn't charged until day 90, and you can cancel anytime before then at no cost.
+• 25% off your first year with our promo code. On the ${formatUsdExact(cheapest.priceYearly)} plan, that's ${formatUsdExact(discounted)} for the year, charged when your free period ends.
 
 Here's how to claim it:
-1. Create your organization at ${signupLink} — your 90-day free period starts right away.
+1. Create your organization here — ${signupLink} — your 90 free days start right away.
 2. Pick the plan that fits your club's size.
-3. Enter promo code ${promoCode ?? "[YOUR PROMO CODE]"} when you pick your plan — it's applied automatically at checkout, and the 25% discount comes off your first charge.
+3. Enter promo code ${promoCode ?? "[YOUR PROMO CODE]"} at checkout. The 25% comes off automatically.
 
-Feel free to reach out if you have any questions — we'd love to see your club on Kinectem.
+Questions? Reach out to competitions@kinectem.com — they're happy to walk you through it.
 
 Thanks,
-The ${competitionName} team`;
+The ${competitionName} team
+
+P.S. Promo code ${promoCode ?? "[YOUR PROMO CODE]"} gets you 25% off your first year, on top of 90 days free before your card is ever charged.`;
 }
 
 function PromoReferralPanel({
