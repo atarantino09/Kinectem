@@ -18,12 +18,13 @@ export function AuthAside() {
           <span className="brand-gradient-text-shine">Shine</span>
         </h1>
         <p className="text-white/85 text-lg leading-relaxed max-w-lg">
-          Kinectem is a storytelling platform for youth sports organizations,
-          where coaches publish game recaps that live on team pages and tag to
-          each player's profile, going beyond the box score—capturing the
-          hustle plays and turning points the stat sheet misses. Season after
-          season, it all compounds into a permanent, searchable storybook of
-          every athlete's journey and every team's legacy.
+          Kinectem is the youth-sports platform where the story of your season
+          comes to life. Coaches publish game recaps that live on team pages
+          and tag to every rostered player's profile, going beyond the box
+          score — capturing the hustle plays and turning points the stat sheet
+          misses. Season after season, it all compounds into a permanent,
+          searchable storybook of every athlete's journey and every team's
+          legacy.
         </p>
       </div>
 
