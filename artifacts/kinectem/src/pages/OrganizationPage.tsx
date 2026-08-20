@@ -55,6 +55,7 @@ import {
   Pencil,
   Plus,
   Settings,
+  Share2,
   Shield,
   UserPlus,
   Users,
@@ -97,6 +98,7 @@ import { PLANS, type OrgPlanUsage } from "@/lib/plans";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import { useWhoami } from "@/hooks/useWhoami";
 import { OrgClaimBanner } from "@/components/ClaimTokenBanner";
+import { OrgPageShareDialog } from "@/components/OrgPageShareDialog";
 
 type TeamRailItem = {
   id: string;
@@ -129,6 +131,7 @@ export default function OrganizationPage() {
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
   const [adminQueueOpen, setAdminQueueOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [sharePageOpen, setSharePageOpen] = useState(false);
   // Task #443 — celebratory popup shown once right after a successful
   // org create. CreateOrgDialog stashes the org name under
   // `kinectem:welcome-org:<orgId>` and we consume it on mount so a
@@ -601,6 +604,14 @@ export default function OrganizationPage() {
           }}
         />
       )}
+      {isOrgManager && (
+        <OrgPageShareDialog
+          orgId={orgId}
+          organizationName={organization.name}
+          open={sharePageOpen}
+          onOpenChange={setSharePageOpen}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
         {/* Main column */}
@@ -791,6 +802,16 @@ export default function OrganizationPage() {
                     data-testid="btn-manage-admins-hero"
                   >
                     <Shield className="w-4 h-4 mr-1.5" /> Manage members
+                  </Button>
+                )}
+                {isOrgManager && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setSharePageOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-share-org-page"
+                  >
+                    <Share2 className="w-4 h-4 mr-1.5" /> Share page
                   </Button>
                 )}
                 {isOrgManager && (

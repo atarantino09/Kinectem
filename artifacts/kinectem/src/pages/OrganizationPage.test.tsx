@@ -96,6 +96,11 @@ vi.mock("@workspace/api-client-react", () => ({
   useListArchivedOrgTeams: (...args: unknown[]) =>
     useListArchivedOrgTeamsMock(...args),
   useListOrgPosts: (...args: unknown[]) => useListOrgPostsMock(...args),
+  listOrgPosts: () =>
+    Promise.resolve({
+      data: [],
+      pagination: { hasMore: false, nextCursor: null },
+    }),
   useListMembers: (...args: unknown[]) => useListMembersMock(...args),
   useListOrgJoinRequests: () => ({ data: { data: [] } }),
   useListOrgPostApprovals: () => ({ data: { data: [] } }),
@@ -109,6 +114,9 @@ vi.mock("@workspace/api-client-react", () => ({
     `/api/v1/organizations/${orgId}`,
   ],
   getListFeedQueryKey: () => ["/api/v1/feed"],
+  getListOrgPostsQueryKey: (orgId: string) => [
+    `/api/v1/organizations/${orgId}/posts`,
+  ],
 }));
 
 // Now safe to import the component under test.
@@ -198,6 +206,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(
       await screen.findByTestId("btn-manage-admins-hero"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
   });
 
   it("shows the hero 'Manage members' control for an admin viewer", async () => {
@@ -208,6 +217,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(
       await screen.findByTestId("btn-manage-admins-hero"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
   });
 
   it("hides every admin control from a non-member viewer", async () => {
@@ -222,5 +232,6 @@ describe("OrganizationPage — admin control gating", () => {
       screen.queryByTestId("btn-manage-admins-hero"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-org-more-menu")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-share-org-page")).not.toBeInTheDocument();
   });
 });
