@@ -110,6 +110,10 @@ export const ShareRecapCanvas = forwardRef<
     post.context.type === "team" && post.context.orgName
       ? formatOrgName(post.context.orgName)
       : null;
+  const orgLogoUrl =
+    post.context.type === "team" && "orgAvatarUrl" in post.context
+      ? post.context.orgAvatarUrl ?? null
+      : null;
 
   return (
     <div
@@ -268,11 +272,52 @@ export const ShareRecapCanvas = forwardRef<
                 marginBottom: 26,
               }}
             >
-              {[orgName, teamName]
-                .filter((v): v is string => !!v)
-                .map((label) => (
+              {orgName && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 18px",
+                    borderRadius: 999,
+                    border: "2px solid #E2E0EC",
+                    color: "#3F3A55",
+                    fontSize: 22,
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: 500,
+                  }}
+                >
+                  {orgLogoUrl && (
+                    <img
+                      src={orgLogoUrl}
+                      alt=""
+                      crossOrigin="anonymous"
+                      data-testid="share-image-org-logo"
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: "50%",
+                        objectFit: "contain",
+                        background: "#FFFFFF",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
                   <span
-                    key={label}
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {orgName}
+                  </span>
+                </span>
+              )}
+              {teamName && (
+                  <span
                     style={{
                       display: "inline-block",
                       padding: "8px 18px",
@@ -287,9 +332,9 @@ export const ShareRecapCanvas = forwardRef<
                       maxWidth: 500,
                     }}
                   >
-                    {label}
+                    {teamName}
                   </span>
-                ))}
+              )}
               <img
                 src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
                 alt=""
