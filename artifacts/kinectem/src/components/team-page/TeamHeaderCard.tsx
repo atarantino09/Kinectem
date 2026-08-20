@@ -39,6 +39,7 @@ import {
   CalendarDays,
   Compass,
   Megaphone,
+  Settings,
 } from "lucide-react";
 
 export type TeamPanel = "posts" | "roster" | "schedule" | "admin";
@@ -79,7 +80,7 @@ interface TeamHeaderCardProps {
   onClaimCompetition?: () => void;
   /** When provided (broadcaster), shows the "Message team" pill. */
   onMessageTeam?: () => void;
-  /** When provided, shows a "Show me around" control that replays the tour. */
+  /** When provided, shows a contextual page-tour action. */
   onReplayTour?: () => void;
 }
 
@@ -330,8 +331,7 @@ export function TeamHeaderCard({
               tour buttons push the name up under the banner and clip it. */}
           <div className="flex-1 min-w-0 sm:pt-20 sm:pb-2">
             {/* Name gets its own full-width row so long team names use the
-                whole hero instead of getting squeezed (and truncated) next
-                to the Edit / tour buttons, which now sit on a row below. */}
+                whole hero instead of getting squeezed by contextual tools. */}
             <FitText
               as="h1"
               max={48}
@@ -340,34 +340,6 @@ export function TeamHeaderCard({
             >
               {team.name}
             </FitText>
-            {(isAdmin || onReplayTour) && (
-              <div className="flex items-center gap-2 flex-wrap mt-2">
-                {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-3 font-bold rounded-full"
-                    onClick={onEdit}
-                    data-testid="btn-edit-team"
-                  >
-                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                    Edit
-                  </Button>
-                )}
-                {onReplayTour && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-3 font-bold rounded-full"
-                    onClick={onReplayTour}
-                    data-testid="btn-team-replay-tour"
-                  >
-                    <Compass className="w-3.5 h-3.5 mr-1.5" />
-                    Show me around
-                  </Button>
-                )}
-              </div>
-            )}
             {team.description && (
               <TeamDescription
                 description={team.description}
@@ -376,7 +348,8 @@ export function TeamHeaderCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap mt-4">
+        <div className="mt-5 space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
           {team.sport && (
             <div className="font-bold text-foreground flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-md text-sm">
               <Trophy className="w-4 h-4 text-amber-500" />
@@ -396,7 +369,17 @@ export function TeamHeaderCard({
               {team.gender}
             </div>
           )}
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
+          </div>
+
+          <div
+            className="rounded-xl border border-border bg-muted/30 p-3"
+            data-testid="team-section-navigation"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Explore team
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
               variant={expanded === "posts" ? "default" : "outline"}
@@ -430,18 +413,30 @@ export function TeamHeaderCard({
                 Schedule
               </Button>
             )}
-            {isAdmin && (
-              <Button
-                size="sm"
-                variant={expanded === "admin" ? "default" : "outline"}
-                className="font-bold rounded-full"
-                onClick={() => onSetExpanded("admin")}
-                data-testid="btn-toggle-admin"
-              >
-                <Shield className="w-3.5 h-3.5 mr-1.5" />
-                Admin Tools
-              </Button>
-            )}
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant={expanded === "admin" ? "default" : "outline"}
+                    className="font-bold rounded-full"
+                    onClick={() => onSetExpanded("admin")}
+                    data-testid="btn-toggle-admin"
+                  >
+                    <Shield className="w-3.5 h-3.5 mr-1.5" />
+                    Admin Tools
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div
+              className="flex items-center gap-2 flex-wrap"
+              data-testid="team-community-actions"
+            >
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
+                Community
+              </span>
             <Button
               variant="brand"
               onClick={onToggleFollow}
@@ -459,29 +454,68 @@ export function TeamHeaderCard({
               <Users className="w-4 h-4 mr-1.5" />
               {team.followerCount} Followers
             </Button>
-            {onClaimCompetition && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="font-bold rounded-full"
-                onClick={onClaimCompetition}
-                data-testid="btn-claim-competition"
+            </div>
+
+            {(isAdmin ||
+              onClaimCompetition ||
+              onMessageTeam ||
+              onReplayTour) && (
+              <div
+                className="sm:ml-auto"
+                data-testid="team-contextual-tools"
               >
-                <Trophy className="w-3.5 h-3.5 mr-1.5" />
-                Claim competition games
-              </Button>
-            )}
-            {onMessageTeam && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="font-bold rounded-full"
-                onClick={onMessageTeam}
-                data-testid="btn-team-broadcast"
-              >
-                <Megaphone className="w-3.5 h-3.5 mr-1.5" />
-                Message team
-              </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="font-bold rounded-full"
+                      data-testid="btn-team-manage-menu"
+                    >
+                      <Settings className="w-3.5 h-3.5 mr-1.5" />
+                      Team tools
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {isAdmin && (
+                      <DropdownMenuItem
+                        onClick={onEdit}
+                        data-testid="btn-edit-team"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit team
+                      </DropdownMenuItem>
+                    )}
+                    {onClaimCompetition && (
+                      <DropdownMenuItem
+                        onClick={onClaimCompetition}
+                        data-testid="btn-claim-competition"
+                      >
+                        <Trophy className="w-4 h-4 mr-2" />
+                        Claim competition games
+                      </DropdownMenuItem>
+                    )}
+                    {onMessageTeam && (
+                      <DropdownMenuItem
+                        onClick={onMessageTeam}
+                        data-testid="btn-team-broadcast"
+                      >
+                        <Megaphone className="w-4 h-4 mr-2" />
+                        Message team
+                      </DropdownMenuItem>
+                    )}
+                    {onReplayTour && (
+                      <DropdownMenuItem
+                        onClick={onReplayTour}
+                        data-testid="btn-team-replay-tour"
+                      >
+                        <Compass className="w-4 h-4 mr-2" />
+                        Take a page tour
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 
 import { renderWithProviders } from "@/test";
 import { setMockSearch, wouterMock } from "@/test/mocks/wouter";
@@ -203,10 +203,19 @@ describe("OrganizationPage — admin control gating", () => {
 
     renderWithProviders(<OrganizationPage />);
 
+    const communityActions = await screen.findByTestId("org-community-actions");
+    const managerActions = screen.getByTestId("org-manager-actions");
     expect(
-      await screen.findByTestId("btn-manage-admins-hero"),
+      within(managerActions).getByTestId("btn-manage-admins-hero"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
+    expect(within(managerActions).getByTestId("btn-share-org-page")).toBeInTheDocument();
+    expect(within(communityActions).getByTestId("btn-follow-org")).toBeInTheDocument();
+    expect(
+      within(communityActions).getByTestId("btn-view-org-followers"),
+    ).toBeInTheDocument();
+    // This suite renders the single-column layout: action groups must stack
+    // cleanly rather than depending on a desktop-only inline row.
+    expect(managerActions.className).toContain("flex-wrap");
   });
 
   it("shows the hero 'Manage members' control for an admin viewer", async () => {
@@ -228,10 +237,16 @@ describe("OrganizationPage — admin control gating", () => {
     // Wait for the org to load (the follow button appears for everyone).
     await screen.findByTestId("btn-follow-org");
 
+    const communityActions = screen.getByTestId("org-community-actions");
+    expect(within(communityActions).getByTestId("btn-follow-org")).toBeInTheDocument();
+    expect(
+      within(communityActions).getByTestId("btn-view-org-followers"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("btn-manage-admins-hero"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-org-more-menu")).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-share-org-page")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("org-manager-actions")).not.toBeInTheDocument();
   });
 });

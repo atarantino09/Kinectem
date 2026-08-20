@@ -750,7 +750,7 @@ export default function OrganizationPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-full sm:w-auto space-y-2">
                 {isUnclaimed && (
                   <Badge
                     variant="outline"
@@ -760,147 +760,163 @@ export default function OrganizationPage() {
                     Unclaimed
                   </Badge>
                 )}
-                {isUnclaimed && isPlatformAdmin && (
+                <div
+                  className="flex items-center gap-2 flex-wrap sm:justify-end"
+                  data-testid="org-community-actions"
+                >
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
+                    Community
+                  </span>
+                  <Button
+                    variant="brand"
+                    onClick={onToggleFollow}
+                    disabled={followOrg.isPending || unfollowOrg.isPending}
+                    data-testid="btn-follow-org"
+                  >
+                    {organization.isFollowing ? "Following" : "Follow"}
+                  </Button>
                   <Button
                     variant="outline"
                     className="font-bold rounded-full"
-                    onClick={() => setStageCoachesOpen(true)}
-                    data-testid="btn-stage-coaches"
+                    onClick={() => setFollowersOpen(true)}
+                    data-testid="btn-view-org-followers"
                   >
-                    Stage coaches
+                    <Users className="w-4 h-4 mr-1.5" />
+                    {(organization as { followerCount?: number }).followerCount ?? 0}
+                    <span className="ml-1 hidden sm:inline">Followers</span>
                   </Button>
-                )}
-                {isOrgManager && planUsage && (
-                  <Button
-                    asChild
-                    variant={atTeamLimit ? "brand" : "outline"}
-                    className="font-bold rounded-full"
-                    data-testid="pill-plan-name"
-                  >
-                    <Link href={`/organizations/${orgId}/subscribe`}>
-                      <Shield className="w-4 h-4 mr-1.5" />
-                      {PLANS.find((p) => p.id === planUsage.plan)?.name ??
-                        planUsage.plan.charAt(0).toUpperCase() +
-                          planUsage.plan.slice(1)}{" "}
-                      plan
-                      <span
-                        className="ml-1.5 font-medium opacity-80"
-                        data-testid="text-plan-usage"
-                      >
-                        {planUsage.teamsLimit == null
-                          ? `· ${planUsage.teamsUsed} teams`
-                          : `· ${planUsage.teamsUsed}/${planUsage.teamsLimit} teams`}
-                      </span>
-                    </Link>
-                  </Button>
-                )}
+                </div>
                 {isOrgManager && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setManageMembersOpen(true)}
-                    className="font-bold rounded-full"
-                    data-testid="btn-manage-admins-hero"
+                  <div
+                    className="flex items-center gap-2 flex-wrap rounded-xl border border-border bg-muted/30 p-2 sm:justify-end"
+                    data-testid="org-manager-actions"
                   >
-                    <Shield className="w-4 h-4 mr-1.5" /> Manage members
-                  </Button>
-                )}
-                {isOrgManager && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setSharePageOpen(true)}
-                    className="font-bold rounded-full"
-                    data-testid="btn-share-org-page"
-                  >
-                    <Share2 className="w-4 h-4 mr-1.5" /> Share page
-                  </Button>
-                )}
-                {isOrgManager && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
+                      Organization tools
+                    </span>
+                    {isUnclaimed && isPlatformAdmin && (
                       <Button
+                        size="sm"
                         variant="outline"
                         className="font-bold rounded-full"
-                        data-testid="btn-org-more-menu"
+                        onClick={() => setStageCoachesOpen(true)}
+                        data-testid="btn-stage-coaches"
                       >
-                        <Settings className="w-4 h-4 mr-1.5" /> More
-                        <ChevronDown className="w-4 h-4 ml-1" />
+                        Stage coaches
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuItem
-                        onClick={() => setEditOpen(true)}
-                        data-testid="btn-edit-org"
-                      >
-                        <Pencil className="w-4 h-4 mr-2" /> Edit organization
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setBroadcastOpen(true)}
-                        data-testid="btn-org-broadcast"
-                      >
-                        <Megaphone className="w-4 h-4 mr-2" /> Send announcement
-                      </DropdownMenuItem>
-                      {orgTourSteps.length > 0 && (
-                        <DropdownMenuItem
-                          onClick={() => setOrgTourOpen(true)}
-                          data-testid="btn-org-replay-tour"
-                        >
-                          <Compass className="w-4 h-4 mr-2" /> Show me around
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        asChild
-                        data-testid="link-org-getting-started"
-                      >
-                        <a
-                          href="/getting-started.html"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Getting started guide
-                        </a>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                <Button
-                  variant="brand"
-                  onClick={onToggleFollow}
-                  disabled={followOrg.isPending || unfollowOrg.isPending}
-                  data-testid="btn-follow-org"
-                >
-                  {organization.isFollowing ? "Following" : "Follow"}
-                </Button>
-                {isOrgManager && (
-                  <Button
-                    variant="outline"
-                    className="font-bold rounded-full relative"
-                    onClick={() => setAdminQueueOpen(true)}
-                    data-testid="btn-org-admin-queue"
-                  >
-                    <Shield className="w-4 h-4 mr-1.5" />
-                    <span className="hidden sm:inline">Admin queue</span>
-                    <span className="sm:hidden">Queue</span>
-                    {pendingAdminCount > 0 && (
-                      <Badge
-                        className="ml-1.5 px-1.5 min-w-5 justify-center rounded-full font-bold"
-                        data-testid="badge-admin-queue-count"
-                      >
-                        {pendingAdminCount}
-                      </Badge>
                     )}
-                  </Button>
+                    {planUsage && (
+                      <Button
+                        asChild
+                        size="sm"
+                        variant={atTeamLimit ? "brand" : "outline"}
+                        className="font-bold rounded-full"
+                        data-testid="pill-plan-name"
+                      >
+                        <Link href={`/organizations/${orgId}/subscribe`}>
+                          <Shield className="w-4 h-4 mr-1.5" />
+                          {PLANS.find((p) => p.id === planUsage.plan)?.name ??
+                            planUsage.plan.charAt(0).toUpperCase() +
+                              planUsage.plan.slice(1)}{" "}
+                          plan
+                          <span
+                            className="ml-1.5 font-medium opacity-80"
+                            data-testid="text-plan-usage"
+                          >
+                            {planUsage.teamsLimit == null
+                              ? `· ${planUsage.teamsUsed} teams`
+                              : `· ${planUsage.teamsUsed}/${planUsage.teamsLimit} teams`}
+                          </span>
+                        </Link>
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setManageMembersOpen(true)}
+                      className="font-bold rounded-full"
+                      data-testid="btn-manage-admins-hero"
+                    >
+                      <Shield className="w-4 h-4 mr-1.5" /> Manage members
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setAdminQueueOpen(true)}
+                      className="font-bold rounded-full relative"
+                      data-testid="btn-org-admin-queue"
+                    >
+                      <Shield className="w-4 h-4 mr-1.5" />
+                      <span className="hidden sm:inline">Admin queue</span>
+                      <span className="sm:hidden">Queue</span>
+                      {pendingAdminCount > 0 && (
+                        <Badge
+                          className="ml-1.5 px-1.5 min-w-5 justify-center rounded-full font-bold"
+                          data-testid="badge-admin-queue-count"
+                        >
+                          {pendingAdminCount}
+                        </Badge>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSharePageOpen(true)}
+                      className="font-bold rounded-full"
+                      data-testid="btn-share-org-page"
+                    >
+                      <Share2 className="w-4 h-4 mr-1.5" /> Share page
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="font-bold rounded-full"
+                          data-testid="btn-org-more-menu"
+                        >
+                          <Settings className="w-4 h-4 mr-1.5" /> More
+                          <ChevronDown className="w-4 h-4 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem
+                          onClick={() => setEditOpen(true)}
+                          data-testid="btn-edit-org"
+                        >
+                          <Pencil className="w-4 h-4 mr-2" /> Edit organization
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setBroadcastOpen(true)}
+                          data-testid="btn-org-broadcast"
+                        >
+                          <Megaphone className="w-4 h-4 mr-2" /> Send announcement
+                        </DropdownMenuItem>
+                        {orgTourSteps.length > 0 && (
+                          <DropdownMenuItem
+                            onClick={() => setOrgTourOpen(true)}
+                            data-testid="btn-org-replay-tour"
+                          >
+                            <Compass className="w-4 h-4 mr-2" /> Take a page tour
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          asChild
+                          data-testid="link-org-getting-started"
+                        >
+                          <a
+                            href="/getting-started.html"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Getting started guide
+                          </a>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 )}
-                <Button
-                  variant="outline"
-                  className="font-bold rounded-full"
-                  onClick={() => setFollowersOpen(true)}
-                  data-testid="btn-view-org-followers"
-                >
-                  <Users className="w-4 h-4 mr-1.5" />
-                  {(organization as { followerCount?: number }).followerCount ?? 0}
-                  <span className="ml-1 hidden sm:inline">Followers</span>
-                </Button>
               </div>
             </div>
             {(organization.description || organization.website) && (
@@ -978,10 +994,24 @@ export default function OrganizationPage() {
 
           {/* Posts */}
           <section>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 className="text-xl font-black tracking-tight">Recent Posts</h2>
               {isOrgManager && (
-                <div className="flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2 flex-wrap"
+                  data-testid="org-post-actions"
+                >
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
+                    Publish
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => setNewPostOpen(true)}
+                    className="font-bold rounded-full"
+                    data-testid="btn-new-org-post"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> New post
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -990,14 +1020,6 @@ export default function OrganizationPage() {
                     data-testid="btn-org-newsletter"
                   >
                     <Newspaper className="w-4 h-4 mr-1" /> Newsletter
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setNewPostOpen(true)}
-                    className="font-bold rounded-full"
-                    data-testid="btn-new-org-post"
-                  >
-                    <Plus className="w-4 h-4 mr-1" /> New post
                   </Button>
                 </div>
               )}

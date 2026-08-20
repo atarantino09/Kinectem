@@ -220,12 +220,12 @@ export default function TeamPage() {
     const s: TourStep[] = [];
     if (isAdmin) {
       s.push({
-        targetTestId: "btn-edit-team",
+        targetTestId: "btn-team-manage-menu",
         onEnter: () => setExpanded("posts"),
-        title: "Edit your team",
+        title: "Manage your team",
         body: (
           <>
-            Click <strong>Edit</strong> at the top of the page to change your
+            Open <strong>Team tools</strong> at the top of the page to edit your
             team's name, sport, level, and cover photo anytime.
           </>
         ),

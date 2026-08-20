@@ -213,16 +213,22 @@ export function TeamPostsSection({
   };
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
           <Newspaper className="w-5 h-5" />
           Recent Posts
         </h2>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div
+          className="flex items-center gap-2 flex-wrap"
+          data-testid="team-post-actions"
+        >
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
+            Share
+          </span>
           {canPostHighlight && (
             <Link href={`/posts/new?type=short&teamId=${teamId}`}>
               <Button
-                variant="brand"
+                variant={canPostRecap ? "outline" : "brand"}
                 size="sm"
                 data-testid="btn-create-highlight"
               >
@@ -245,7 +251,7 @@ export function TeamPostsSection({
           )}
           {canPostRecap && (
             <Button
-              variant="brand"
+              variant="outline"
               size="sm"
               onClick={() => setSeasonRecapOpen(true)}
               data-testid="btn-season-recap"
