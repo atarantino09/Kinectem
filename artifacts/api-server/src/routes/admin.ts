@@ -1800,6 +1800,12 @@ router.post(
 router.get(
   "/org-claim-links",
   asyncHandler(async (req, res) => {
+    // The recent "Orgs I set up" section launched on 2026-08-14. Until the
+    // inline add route was brought into parity, it created operator-set-up
+    // organizations without stamping createdViaQuickSetupAt. Treat rows
+    // created during that short gap as recent setups so existing saves are
+    // not stranded in the bulk-imported list.
+    const operatorSetupCompatCutoff = new Date("2026-08-14T00:00:00.000Z");
     const ownerExists = sql`EXISTS (
       SELECT 1 FROM ${organizationAdmins}
       WHERE ${organizationAdmins.organizationId} = ${organizations.id}
@@ -1816,6 +1822,7 @@ router.get(
         outreachMessagedAt: organizations.outreachMessagedAt,
         outreachFacebookAddedAt: organizations.outreachFacebookAddedAt,
         createdViaQuickSetupAt: organizations.createdViaQuickSetupAt,
+        createdAt: organizations.createdAt,
       })
       .from(organizations)
       .where(sql`NOT ${ownerExists}`)
@@ -1855,11 +1862,13 @@ router.get(
         facebookAddedAt: r.outreachFacebookAddedAt
           ? r.outreachFacebookAddedAt.toISOString()
           : null,
-        // Task #860 — non-null for orgs created via Quick setup ("orgs I
-        // know"); the Claim links tab lists those in a section on top.
-        quickSetupAt: r.createdViaQuickSetupAt
-          ? r.createdViaQuickSetupAt.toISOString()
-          : null,
+        // Non-null for operator-created orgs so the Claim Links tab lists
+        // them in its recent section. createdAt is a compatibility fallback
+        // for inline saves made between that section's launch and this fix.
+        quickSetupAt: (
+          r.createdViaQuickSetupAt ??
+          (r.createdAt >= operatorSetupCompatCutoff ? r.createdAt : null)
+        )?.toISOString() ?? null,
       });
     }
     res.json({ data: out });
@@ -2004,6 +2013,9 @@ router.post(
         brandSecondaryColor: brandSecondaryColor ?? undefined,
         pendingPlan: pendingPlan ?? undefined,
         pendingPromoCodeId: pendingPromoCodeId ?? undefined,
+        // Inline "Add an organization" is also an operator setup flow. Mark
+        // it so Claim Links puts it in "Orgs I set up" alongside Quick setup.
+        createdViaQuickSetupAt: new Date(),
       })
       .returning();
     return res.status(201).json({

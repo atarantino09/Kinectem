@@ -39,7 +39,7 @@ type ClaimLinkRow = {
   token: string;
   messagedAt: string | null;
   facebookAddedAt: string | null;
-  // Task #860 — non-null when the org was created through Quick setup
+  // Non-null when the org was created through either admin setup flow
   // ("orgs I set up"); those rows render in their own section on top.
   quickSetupAt: string | null;
 };
@@ -268,8 +268,8 @@ export default function AdminOrgClaimLinks() {
     );
   }, [rows, q]);
 
-  // Task #860 — split into "Orgs I set up" (quick-setup created, most recent
-  // first) and everything else. Search filters both sections.
+  // Split into "Orgs I set up" (created through either admin setup flow,
+  // most recent first) and everything else. Search filters both sections.
   const quickSetupRows = useMemo(
     () =>
       filtered
@@ -710,14 +710,14 @@ export default function AdminOrgClaimLinks() {
         );
         return (
           <>
-            {/* Task #860 — orgs the operator created through Quick setup
-                ("orgs I set up") get their own section on top, most recent
-                first, above the ~1,000 bulk-imported orgs below. */}
+            {/* Orgs the operator created through either setup flow get their
+                own section on top, most recent first, above the bulk-imported
+                organizations below. */}
             {quickSetupRows.length > 0 && (
               <div className="mb-6" data-testid="section-quick-setup-orgs">
                 <h2 className="text-sm font-bold mb-1">Orgs I set up</h2>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Created through Quick setup — most recent first.
+                  Created here or through Quick setup — most recent first.
                 </p>
                 <Table>
                   {header}

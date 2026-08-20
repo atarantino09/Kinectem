@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { db, organizations } from "@workspace/db";
 import { request, app, loginAs } from "./helpers";
 
 // Task #829 — one-page org quick setup. Platform admin posts org info +
@@ -174,33 +175,61 @@ describe("POST /api/v1/admin/org-quick-setup", () => {
     expect(row).toBeUndefined();
   });
 
-  // Task #860 — quick-setup orgs are "orgs I know": the claim-links list
-  // carries a non-null quickSetupAt for them, while orgs added through the
-  // plain POST /org-claim-links form stay null (lower list).
-  it("stamps quick-setup orgs and exposes quickSetupAt on the claim-links list", async () => {
+  it("puts organizations from both admin setup flows in the recent list", async () => {
     const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
     const qs = await agent
       .post("/api/v1/admin/org-quick-setup")
       .send({ name: "Known Quick Org", teams: [] });
     expect(qs.status).toBe(201);
-    const plain = await agent
+    const inline = await agent
       .post("/api/v1/admin/org-claim-links")
-      .send({ name: "Unknown Bulk Org" });
-    expect(plain.status).toBe(201);
+      .send({ name: "Known Inline Org" });
+    expect(inline.status).toBe(201);
 
     const list = await agent.get("/api/v1/admin/org-claim-links");
     expect(list.status).toBe(200);
-    const known = list.body.data.find(
+    const quickRow = list.body.data.find(
       (r: { id: string }) => r.id === qs.body.data.id,
     );
-    const unknown = list.body.data.find(
-      (r: { id: string }) => r.id === plain.body.data.id,
+    const inlineRow = list.body.data.find(
+      (r: { id: string }) => r.id === inline.body.data.id,
     );
-    expect(known).toBeTruthy();
-    expect(typeof known.quickSetupAt).toBe("string");
-    expect(new Date(known.quickSetupAt).getTime()).not.toBeNaN();
-    expect(unknown).toBeTruthy();
-    expect(unknown.quickSetupAt).toBeNull();
+    expect(quickRow).toBeTruthy();
+    expect(typeof quickRow!.quickSetupAt).toBe("string");
+    expect(new Date(quickRow!.quickSetupAt).getTime()).not.toBeNaN();
+    expect(inlineRow).toBeTruthy();
+    expect(typeof inlineRow!.quickSetupAt).toBe("string");
+    expect(new Date(inlineRow!.quickSetupAt).getTime()).not.toBeNaN();
+  });
+
+  it("keeps inline saves from the rollout gap in the recent list", async () => {
+    const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
+    const gapCreatedAt = new Date("2026-08-20T17:05:43.052Z");
+    const [gapOrg] = await db
+      .insert(organizations)
+      .values({
+        name: "Inline Org Saved During Gap",
+        createdAt: gapCreatedAt,
+      })
+      .returning({ id: organizations.id });
+    const [olderImportedOrg] = await db
+      .insert(organizations)
+      .values({
+        name: "Older Bulk Imported Org",
+        createdAt: new Date("2026-08-13T23:59:59.999Z"),
+      })
+      .returning({ id: organizations.id });
+
+    const list = await agent.get("/api/v1/admin/org-claim-links");
+    expect(list.status).toBe(200);
+    const gapRow = list.body.data.find(
+      (r: { id: string }) => r.id === gapOrg.id,
+    );
+    const olderRow = list.body.data.find(
+      (r: { id: string }) => r.id === olderImportedOrg.id,
+    );
+    expect(gapRow?.quickSetupAt).toBe(gapCreatedAt.toISOString());
+    expect(olderRow?.quickSetupAt).toBeNull();
   });
 
   it("non-admin gets 403; unauthenticated 401", async () => {
