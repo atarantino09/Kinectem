@@ -1264,6 +1264,42 @@ export const COMBINED_RECAP_TAG_BACKFILL_SQL = `
           ON CONFLICT DO NOTHING;
 `;
 
+// Legacy organizations that had already selected a plan when the Aug 20
+// rollout shipped cannot receive their first annual charge before Nov 1.
+// Trialing rows only: active/canceled subscriptions are deliberately untouched.
+export const LEGACY_ORG_BILLING_FLOOR_SQL = `
+UPDATE org_subscriptions s
+SET billing_starts_at = '2026-11-01 00:00:00'::timestamp,
+    updated_at = NOW()
+FROM organizations o
+WHERE o.id = s.organization_id
+  AND o.created_at < '2026-08-20 00:00:00'::timestamp
+  AND s.status = 'trialing'
+  AND (
+    s.billing_starts_at IS NULL
+    OR s.billing_starts_at < '2026-11-01 00:00:00'::timestamp
+  );
+`;
+
+// Task #794's rolling-date conversion remains part of every startup. It must
+// exclude the legacy-floor population and non-trialing rows or it would undo
+// and reapply Task #878 on every boot (and alter paid/canceled history).
+export const ROLLING_90_DAY_BILLING_SQL = `
+ALTER TABLE org_subscriptions
+  ADD COLUMN IF NOT EXISTS trial_reminder_sent_at timestamp;
+UPDATE org_subscriptions s
+SET billing_starts_at = GREATEST(
+      o.created_at + interval '90 days',
+      NOW() + interval '3 days'
+    ),
+    updated_at = NOW()
+FROM organizations o
+WHERE o.id = s.organization_id
+  AND o.created_at >= '2026-08-20 00:00:00'::timestamp
+  AND s.status = 'trialing'
+  AND s.billing_starts_at = '2026-11-01 00:00:00'::timestamp;
+`;
+
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
@@ -1862,19 +1898,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     // Rows with a live Stripe subscription also need their Stripe trial_end
     // moved via the API — run scripts/sync-stripe-trial-ends for those.
     name: "2026-07-21-task-794-rolling-90-day-free-period",
-    sql: `
-      ALTER TABLE org_subscriptions
-        ADD COLUMN IF NOT EXISTS trial_reminder_sent_at timestamp;
-      UPDATE org_subscriptions s
-      SET billing_starts_at = GREATEST(
-            o.created_at + interval '90 days',
-            NOW() + interval '3 days'
-          ),
-          updated_at = NOW()
-      FROM organizations o
-      WHERE o.id = s.organization_id
-        AND s.billing_starts_at = '2026-11-01T00:00:00Z';
-    `,
+    sql: ROLLING_90_DAY_BILLING_SQL,
   },
   {
     // Task #800 — recap tags now auto-approve by default; per-tag review
@@ -2281,6 +2305,14 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     sql: `
       ALTER TYPE post_kind ADD VALUE IF NOT EXISTS 'news';
     `,
+  },
+  {
+    // Task #878 — organizations that existed before this rollout keep their
+    // rolling free period but cannot receive a first charge before Nov 1.
+    // The guarded update is idempotent and leaves post-cutoff, active, and
+    // canceled subscriptions untouched.
+    name: "2026-08-20-task-878-legacy-org-billing-floor",
+    sql: LEGACY_ORG_BILLING_FLOOR_SQL,
   },
 ];
 

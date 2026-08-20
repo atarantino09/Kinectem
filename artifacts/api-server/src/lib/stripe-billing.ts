@@ -17,11 +17,16 @@ const PLAN_PRODUCT_NAME: Record<PlanTier, string> = {
   elite: "Kinectem Elite",
 };
 
-// Every organization gets a rolling free period: 90 days from the moment the
-// org is created. Card-on-file subscriptions are created with a trial that
-// ends at that instant, so Stripe collects the card now and runs the first
-// charge automatically on day 90 — nothing is charged today.
+// Organizations created on/after the rollout cutoff get a rolling free period:
+// 90 days from creation. Organizations that already existed when this policy
+// shipped keep the same rolling calculation but cannot receive their first
+// charge before the explicit legacy floor.
 export const FREE_PERIOD_DAYS = 90;
+export const LEGACY_BILLING_ROLLOUT_CUTOFF_ISO =
+  "2026-08-20T00:00:00.000Z";
+export const LEGACY_FIRST_CHARGE_FLOOR_ISO = "2026-11-01T00:00:00.000Z";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Stripe Checkout requires trial_end to be at least 48 hours in the future.
 // For orgs already older than (90 days - 48h) we floor the trial end at the
@@ -29,12 +34,56 @@ export const FREE_PERIOD_DAYS = 90;
 // the next minimum Stripe allows.
 const MIN_TRIAL_END_MS = 49 * 60 * 60 * 1000; // 48h Stripe minimum + 1h buffer
 
-// The instant an org's card is charged: creation + 90 days, floored at the
-// Stripe-safe minimum from `now`.
-export function billingStartDate(orgCreatedAt: Date, now = new Date()): Date {
-  const target = new Date(
-    orgCreatedAt.getTime() + FREE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+// The product-policy charge date before Stripe's operational minimum is
+// applied. This never shortens a rolling 90-day period: legacy orgs receive
+// the later of day 90 or Nov 1, while newer orgs receive day 90.
+export function policyBillingStartDate(orgCreatedAt: Date): Date {
+  const rollingTarget = new Date(
+    orgCreatedAt.getTime() + FREE_PERIOD_DAYS * DAY_MS,
   );
+  const isLegacy =
+    orgCreatedAt.getTime() <
+    new Date(LEGACY_BILLING_ROLLOUT_CUTOFF_ISO).getTime();
+  if (!isLegacy) return rollingTarget;
+
+  const legacyFloor = new Date(LEGACY_FIRST_CHARGE_FLOOR_ISO);
+  return rollingTarget.getTime() > legacyFloor.getTime()
+    ? rollingTarget
+    : legacyFloor;
+}
+
+// Keep a persisted or Stripe-provided date from moving below the policy floor.
+// A later persisted date remains authoritative and is never shortened.
+export function billingStartAtOrAfterPolicy(
+  orgCreatedAt: Date,
+  candidate: Date,
+): Date {
+  const policyTarget = policyBillingStartDate(orgCreatedAt);
+  return candidate.getTime() > policyTarget.getTime() ? candidate : policyTarget;
+}
+
+// A Stripe trial that is already on/after the product-policy date stays exact.
+// If it is below policy, move it to the later of policy or Stripe's current
+// minimum. This avoids repeatedly drifting a valid trial forward as `now`
+// advances while still making an old sub-policy trial safe to update.
+export function stripeTrialEndAtOrAfterPolicy(
+  orgCreatedAt: Date,
+  candidate: Date,
+  now = new Date(),
+): Date {
+  const policyTarget = policyBillingStartDate(orgCreatedAt);
+  if (candidate.getTime() >= policyTarget.getTime()) return candidate;
+
+  const stripeFloor = new Date(now.getTime() + MIN_TRIAL_END_MS);
+  return policyTarget.getTime() > stripeFloor.getTime()
+    ? policyTarget
+    : stripeFloor;
+}
+
+// The first date that can safely be sent to a new Stripe Checkout Session:
+// product policy, then Stripe's minimum from `now`.
+export function billingStartDate(orgCreatedAt: Date, now = new Date()): Date {
+  const target = policyBillingStartDate(orgCreatedAt);
   const floor = new Date(now.getTime() + MIN_TRIAL_END_MS);
   return target.getTime() > floor.getTime() ? target : floor;
 }
@@ -142,7 +191,7 @@ export type CheckoutInput = {
   customerEmail: string | null;
   existingCustomerId: string | null;
   promo: PromoInput | null;
-  // When the org was created — drives the 90-day trial end.
+  // When the org was created — drives the rolling trial and legacy floor.
   orgCreatedAt: Date;
   // The persisted charge date (org_subscriptions.billing_starts_at). When
   // set, it is the source of truth for trial_end so Stripe matches what the
@@ -150,26 +199,37 @@ export type CheckoutInput = {
   billingStartsAt?: Date | null;
 };
 
-// The trial_end sent to Stripe: the persisted charge date when one exists
-// (so Stripe stays aligned with the date the UI/reminders show), otherwise
-// the computed 90-day date — always floored at Stripe's minimum from now.
-function checkoutTrialEnd(input: CheckoutInput, now = new Date()): Date {
-  const target =
-    input.billingStartsAt ?? billingStartDate(input.orgCreatedAt, now);
-  const floor = new Date(now.getTime() + MIN_TRIAL_END_MS);
-  return target.getTime() > floor.getTime() ? target : floor;
+// The trial_end sent to Stripe: the persisted charge date when one exists,
+// never earlier than the policy target, and always floored at Stripe's
+// minimum from now.
+export function checkoutTrialEnd(input: CheckoutInput, now = new Date()): Date {
+  const candidate =
+    input.billingStartsAt ?? policyBillingStartDate(input.orgCreatedAt);
+  const policySafeCandidate = billingStartAtOrAfterPolicy(
+    input.orgCreatedAt,
+    candidate,
+  );
+  const stripeFloor = new Date(now.getTime() + MIN_TRIAL_END_MS);
+  return policySafeCandidate.getTime() > stripeFloor.getTime()
+    ? policySafeCandidate
+    : stripeFloor;
 }
 
 // Create a Checkout Session that saves a card on file and schedules the first
-// charge for 90 days after the org was created. No charge happens today.
+// charge for the org's policy billing date. No charge happens today.
 export async function createCardOnFileCheckout(
   input: CheckoutInput,
-): Promise<{ url: string } | { error: string }> {
+): Promise<{ url: string; trialEnd: Date } | { error: string }> {
   const stripe = await getStripeClient();
   if (!stripe) return { error: "STRIPE_NOT_CONFIGURED" };
 
   try {
     const priceId = await ensurePlanPriceId(stripe, input.plan);
+    // Stripe stores trial_end at whole-second precision. Persist and return the
+    // exact same instant we send so local state cannot differ by milliseconds.
+    const trialEnd = new Date(
+      Math.floor(checkoutTrialEnd(input).getTime() / 1000) * 1000,
+    );
 
     let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
     if (input.promo) {
@@ -189,7 +249,7 @@ export async function createCardOnFileCheckout(
           : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_end: Math.floor(checkoutTrialEnd(input).getTime() / 1000),
+        trial_end: Math.floor(trialEnd.getTime() / 1000),
         metadata: { orgId: input.orgId, plan: input.plan },
       },
       ...(discounts ? { discounts } : {}),
@@ -200,11 +260,46 @@ export async function createCardOnFileCheckout(
     });
 
     if (!session.url) return { error: "CHECKOUT_FAILED" };
-    return { url: session.url };
+    return { url: session.url, trialEnd };
   } catch {
     // Provisioning a price/coupon or creating the session failed (transient
     // Stripe error, bad key, etc.). Surface a controlled error to the caller.
     return { error: "CHECKOUT_FAILED" };
+  }
+}
+
+// Reconcile an already-created Stripe subscription after verifying that its
+// Checkout Session belongs to the requested organization. Old sessions made
+// before the legacy floor shipped may still carry an early trial_end, so extend
+// the live Stripe trial before persisting/displaying the corrected date.
+export async function ensureStripeTrialEndAtPolicy(input: {
+  subscriptionId: string;
+  status: "trialing" | "active" | "past_due" | "canceled";
+  trialEnd: Date;
+  orgCreatedAt: Date;
+}): Promise<{ trialEnd: Date } | { error: string }> {
+  if (input.status !== "trialing") return { trialEnd: input.trialEnd };
+
+  const safeTrialEnd = stripeTrialEndAtOrAfterPolicy(
+    input.orgCreatedAt,
+    input.trialEnd,
+  );
+  const safeTrialEndUnix = Math.floor(safeTrialEnd.getTime() / 1000);
+  const normalizedSafeTrialEnd = new Date(safeTrialEndUnix * 1000);
+  if (input.trialEnd.getTime() >= normalizedSafeTrialEnd.getTime()) {
+    return { trialEnd: input.trialEnd };
+  }
+
+  const stripe = await getStripeClient();
+  if (!stripe) return { error: "STRIPE_NOT_CONFIGURED" };
+  try {
+    await stripe.subscriptions.update(input.subscriptionId, {
+      trial_end: safeTrialEndUnix,
+      proration_behavior: "none",
+    });
+    return { trialEnd: normalizedSafeTrialEnd };
+  } catch {
+    return { error: "TRIAL_SYNC_FAILED" };
   }
 }
 

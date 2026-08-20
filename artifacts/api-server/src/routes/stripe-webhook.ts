@@ -1,18 +1,20 @@
 import type { Request, Response } from "express";
-import { db, orgSubscriptions } from "@workspace/db";
+import { db, organizations, orgSubscriptions } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripeClient } from "../lib/stripeClient.js";
-import { mapStripeStatus } from "../lib/stripe-billing.js";
+import {
+  mapStripeStatus,
+  stripeTrialEndAtOrAfterPolicy,
+} from "../lib/stripe-billing.js";
 import { logger } from "../lib/logger.js";
 
 // Optional Stripe webhook. Only active when STRIPE_WEBHOOK_SECRET is set:
 // create an endpoint in the Stripe dashboard pointing at
 // <APP_BASE_URL>/api/stripe/webhook and paste its signing secret into Secrets.
 // Without it the card-on-file flow still works via the Checkout success-redirect
-// reconcile; this handler just keeps org_subscriptions.status fresh after the
-// first charge at the end of the org's 90-day free period
-// (active / past_due / canceled).
+// reconcile. When configured, this handler also keeps status + first-charge date
+// aligned and extends any trialing subscription below its org policy floor.
 export async function stripeWebhookHandler(
   req: Request,
   res: Response,
@@ -62,16 +64,69 @@ export async function stripeWebhookHandler(
       const status = mapStripeStatus(sub.status);
       const customerId =
         typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-      if (orgId) {
+      const [knownSub] = orgId
+        ? await db
+            .select({
+              orgId: orgSubscriptions.organizationId,
+              orgCreatedAt: organizations.createdAt,
+            })
+            .from(orgSubscriptions)
+            .innerJoin(
+              organizations,
+              eq(organizations.id, orgSubscriptions.organizationId),
+            )
+            .where(eq(orgSubscriptions.organizationId, orgId))
+            .limit(1)
+        : await db
+            .select({
+              orgId: orgSubscriptions.organizationId,
+              orgCreatedAt: organizations.createdAt,
+            })
+            .from(orgSubscriptions)
+            .innerJoin(
+              organizations,
+              eq(organizations.id, orgSubscriptions.organizationId),
+            )
+            .where(eq(orgSubscriptions.stripeSubscriptionId, sub.id))
+            .limit(1);
+
+      const resolvedOrgId = orgId ?? knownSub?.orgId ?? null;
+      let effectiveTrialEnd = sub.trial_end
+        ? new Date(sub.trial_end * 1000)
+        : null;
+      if (
+        sub.status === "trialing" &&
+        effectiveTrialEnd &&
+        knownSub?.orgCreatedAt
+      ) {
+        const safeTrialEnd = stripeTrialEndAtOrAfterPolicy(
+          knownSub.orgCreatedAt,
+          effectiveTrialEnd,
+        );
+        const safeTrialEndUnix = Math.floor(safeTrialEnd.getTime() / 1000);
+        const normalizedSafeTrialEnd = new Date(safeTrialEndUnix * 1000);
+        if (effectiveTrialEnd.getTime() < normalizedSafeTrialEnd.getTime()) {
+          await stripe.subscriptions.update(sub.id, {
+            trial_end: safeTrialEndUnix,
+            proration_behavior: "none",
+          });
+          effectiveTrialEnd = normalizedSafeTrialEnd;
+        }
+      }
+
+      if (resolvedOrgId) {
         await db
           .update(orgSubscriptions)
           .set({
             stripeSubscriptionId: sub.id,
             stripeCustomerId: customerId,
             status,
+            ...(sub.status === "trialing" && effectiveTrialEnd
+              ? { billingStartsAt: effectiveTrialEnd }
+              : {}),
             updatedAt: new Date(),
           })
-          .where(eq(orgSubscriptions.organizationId, orgId));
+          .where(eq(orgSubscriptions.organizationId, resolvedOrgId));
       } else {
         await db
           .update(orgSubscriptions)

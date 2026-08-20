@@ -8,3 +8,5 @@ Startup migrations (MIGRATIONS array) execute on EVERY boot — there is no appl
 **Why:** the task-819 cleanup removes platform-admin org/roster rows that existed before the hand-off change; an admin could later legitimately join, and an unguarded delete-on-boot would remove them again.
 
 **How to apply:** wrap one-shot data migrations in a `DO` block gated on `one_time_migration_markers` (table exists; `name text PRIMARY KEY`): run only if no marker row, then insert the marker inside the same block. Pair with a dry-run-capable script in `scripts/src/` for dev verification, keeping criteria/allowlists in sync. Since the agent can't run scripts in prod, the marker-gated boot migration is the prod execution vehicle (runs once at next publish).
+
+**Policy-change corollary:** a later corrective migration is not sufficient when an earlier startup entry still matches the same rows. Audit and narrow every older entry that touches the policy sentinel, then test the relevant ordered sequence twice; otherwise boot can undo/reapply the correction or churn `updated_at` forever.

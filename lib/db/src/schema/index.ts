@@ -1536,9 +1536,9 @@ export const promoCodes = pgTable("promo_codes", {
 });
 
 // One subscription record per organization (the org's chosen plan). Created /
-// updated from the post-creation checkout page. During the 90-day free period
-// (from org creation) the status stays "trialing" and `billingStartsAt` marks
-// when real billing begins (org.createdAt + 90 days).
+// updated from the post-creation checkout page. During the free period the
+// status stays "trialing" and `billingStartsAt` marks when real billing begins
+// (normally org.createdAt + 90 days; legacy orgs have a Nov 1, 2026 floor).
 export const orgSubscriptions = pgTable("org_subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")

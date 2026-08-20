@@ -131,7 +131,7 @@ export default function OrgSubscribePage() {
           toast({
             title: "Card saved! 🎉",
             description:
-              "You're all set — your first charge comes at the end of your 90-day free period. Nothing until then, and you can cancel anytime before it at no cost.",
+              "You're all set — your first charge comes at the end of your free period. Nothing until then, and you can cancel anytime before it at no cost.",
           });
           queryClient.invalidateQueries({
             queryKey: ["org-subscription", orgId],
@@ -299,15 +299,14 @@ export default function OrgSubscribePage() {
           </div>
           <div className="space-y-1">
             <h2 className="text-lg font-black tracking-tight">
-              Your first 90 days are free 🎉
+              Your free period is on us 🎉
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Pick the plan that fits your club and start building right away —
-              you won't be charged a cent today. Your free period runs 90 days
-              from the day you created your organization, so your first charge
-              lands on {billingDateLabel}. We'll email you a reminder about two
-              weeks before, and you can cancel any time during your free period
-              and pay nothing at all.
+              you won't be charged a cent today. Your first charge lands on{" "}
+              {billingDateLabel}. We'll email you a reminder about two weeks
+              before, and you can cancel any time during your free period and
+              pay nothing at all.
             </p>
           </div>
         </CardContent>
@@ -506,9 +505,8 @@ export default function OrgSubscribePage() {
         </div>
       ) : (
         <p className="text-center text-xs text-muted-foreground">
-          No charge today — your first 90 days are free. Annual billing begins{" "}
-          {billingDateLabel}, and you can cancel any time before then at no
-          cost.
+          No charge today — annual billing begins {billingDateLabel}, and you
+          can cancel any time before then at no cost.
         </p>
       )}
     </div>

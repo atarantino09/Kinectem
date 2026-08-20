@@ -27,6 +27,7 @@
     "send-billing-reminders": "tsx ./src/send-billing-reminders.ts",
     "send-trial-ending-reminders": "tsx ./src/send-trial-ending-reminders.ts",
     "sync-stripe-trial-ends": "tsx ./src/sync-stripe-trial-ends.ts",
+    "test:stripe-trial-sync": "tsx --test ./src/sync-stripe-trial-ends.test.ts",
     "send-weekly-digest": "tsx ./src/send-weekly-digest.ts",
     "send-inactivity-nudge": "tsx ./src/send-inactivity-nudge.ts",
     "send-daily-admin-digest": "tsx ./src/send-daily-admin-digest.ts",

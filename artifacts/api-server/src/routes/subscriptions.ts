@@ -16,8 +16,10 @@ import { canManageOrganization } from "../lib/permissions";
 import {
   createCardOnFileCheckout,
   readCheckoutSession,
+  ensureStripeTrialEndAtPolicy,
   cancelStripeSubscription,
   billingStartDate,
+  billingStartAtOrAfterPolicy,
   FREE_PERIOD_DAYS,
 } from "../lib/stripe-billing";
 
@@ -29,9 +31,9 @@ const ONE_MINUTE = 60 * 1000;
 // Plan catalog + launch window
 //
 // Prices mirror the public marketing pricing page. Every organization gets
-// FREE_PERIOD_DAYS (90) free from the moment the org is created; during that
-// window the subscription stays "trialing" and the first charge lands on
-// billingStartDate(org.createdAt) — see lib/stripe-billing.ts.
+// New organizations receive FREE_PERIOD_DAYS (90) free from creation. Legacy
+// organizations cannot be charged before the Nov 1 floor. In both cases the
+// first charge lands on billingStartDate(org.createdAt).
 // ---------------------------------------------------------------------------
 type PlanTier = "starter" | "pro" | "elite";
 
@@ -278,8 +280,11 @@ router.get(
     // computed fallback only covers orgs that haven't picked a plan yet. The
     // computed value has a rolling now+49h floor, so re-deriving it on every
     // request would let the displayed date drift.
-    const billingStartsAt =
-      sub?.billingStartsAt ?? (createdAt ? billingStartDate(createdAt) : null);
+    const billingStartsAt = createdAt
+      ? sub?.billingStartsAt
+        ? billingStartAtOrAfterPolicy(createdAt, sub.billingStartsAt)
+        : billingStartDate(createdAt)
+      : null;
 
     res.json({
       subscription: serializeSubscription(sub, promo),
@@ -287,7 +292,7 @@ router.get(
       pendingPromo,
       pendingPlan,
       plans: PLAN_CATALOG,
-      // The org's real charge date: creation + 90 days (Stripe-safe floor).
+      // The org's real policy charge date (including the legacy floor).
       billingStartsAt: billingStartsAt?.toISOString() ?? null,
       freePeriodDays: FREE_PERIOD_DAYS,
       usage: {
@@ -413,10 +418,9 @@ router.put(
           set: {
             plan,
             promoCodeId: newPromoId,
-            // Stamp the charge date exactly once. Re-deriving it on every
-            // plan edit would move the date (the computed value has a
-            // rolling now+49h floor) and drift from the Stripe trial_end
-            // already fixed at checkout.
+            // Stamp the charge date exactly once. Existing rows are reconciled
+            // by the legacy-floor migration; preserving later stored dates
+            // avoids moving the date on repeated plan edits.
             billingStartsAt: sql`COALESCE(${orgSubscriptions.billingStartsAt}, ${startsAt})`,
             updatedAt: new Date(),
           },
@@ -457,8 +461,8 @@ router.put(
 // ---------------------------------------------------------------------------
 // POST /organizations/:orgId/billing/checkout-session — start the "add a card
 // on file" flow. Returns a Stripe Checkout URL. The card is saved now and the
-// first charge runs automatically 90 days after the org was created; nothing
-// is charged today. The org must have chosen a plan first (PUT subscription).
+// first charge runs automatically on its policy billing date; nothing is
+// charged today. The org must have chosen a plan first (PUT subscription).
 // ---------------------------------------------------------------------------
 router.post(
   "/organizations/:orgId/billing/checkout-session",
@@ -533,6 +537,13 @@ router.post(
       apiError(res, 503, msg, { code: result.error });
       return;
     }
+    // Persist the exact date sent to Stripe before returning the Checkout URL.
+    // This keeps UI/reminders aligned even if the user completes Checkout but
+    // closes the tab before the success-redirect reconciliation runs.
+    await db
+      .update(orgSubscriptions)
+      .set({ billingStartsAt: result.trialEnd, updatedAt: new Date() })
+      .where(eq(orgSubscriptions.organizationId, orgId));
     res.json({ url: result.url });
   }),
 );
@@ -585,16 +596,46 @@ router.post(
       return;
     }
 
+    const createdAt = await orgCreatedAt(orgId);
+    let effectiveTrialEnd = info.trialEnd;
+    if (
+      createdAt &&
+      info.subscriptionId &&
+      info.trialEnd &&
+      info.status === "trialing"
+    ) {
+      const synced = await ensureStripeTrialEndAtPolicy({
+        subscriptionId: info.subscriptionId,
+        status: info.status,
+        trialEnd: info.trialEnd,
+        orgCreatedAt: createdAt,
+      });
+      if ("error" in synced) {
+        apiError(
+          res,
+          503,
+          "Couldn't align the scheduled billing date. Please try again.",
+          { code: synced.error },
+        );
+        return;
+      }
+      effectiveTrialEnd = synced.trialEnd;
+    }
+
     const set: Partial<typeof orgSubscriptions.$inferInsert> = {
       status: info.status,
       updatedAt: new Date(),
     };
     if (info.customerId) set.stripeCustomerId = info.customerId;
     if (info.subscriptionId) set.stripeSubscriptionId = info.subscriptionId;
-    // Stripe's trial_end is the actual charge instant — align our persisted
-    // date to it so the UI and reminder emails can never drift from what
-    // Stripe will really do (e.g. the 49h floor kicked in at checkout).
-    if (info.trialEnd) set.billingStartsAt = info.trialEnd;
+    // Stripe's trial_end is the actual charge instant. Keep it as the local
+    // source of truth, but never let an old/malformed Checkout Session move a
+    // legacy organization back below its first-charge floor.
+    if (effectiveTrialEnd) {
+      set.billingStartsAt = createdAt
+        ? billingStartAtOrAfterPolicy(createdAt, effectiveTrialEnd)
+        : effectiveTrialEnd;
+    }
 
     const [sub] = await db
       .update(orgSubscriptions)
@@ -624,9 +665,9 @@ router.post(
 
 // ---------------------------------------------------------------------------
 // POST /organizations/:orgId/billing/cancel — cancel the scheduled billing.
-// During the 90-day free period this cancels the Stripe subscription (still
-// trialing, so nothing was ever charged) and removes the card on file. The
-// org keeps its chosen plan and stays usable through the free period.
+// During the free period this cancels the Stripe subscription (still trialing,
+// so nothing was ever charged) and removes the card on file. The org keeps its
+// chosen plan and stays usable through the free period.
 // ---------------------------------------------------------------------------
 router.post(
   "/organizations/:orgId/billing/cancel",

@@ -1,5 +1,5 @@
 // Send the "your first charge is coming up" reminder to org admins whose
-// organization HAS a card on file and whose 90-day free period ends within
+// organization HAS a card on file and whose free period ends within
 // the next 14 days. Quotes the exact charge date and amount (promo-discounted
 // when a promo is applied) and reminds them they can cancel any time before
 // the charge at no cost.
@@ -190,7 +190,7 @@ function buildEmail(args: {
 
   const text = `Hi ${greeting},
 
-Your 90-day free period for ${args.orgName} ends soon. On ${dateLabel}, the card on file will be charged ${charge} for your first year on the ${planName} plan.${promoLine}
+Your free period for ${args.orgName} ends soon. On ${dateLabel}, the card on file will be charged ${charge} for your first year on the ${planName} plan.${promoLine}
 
 Want to make a change first? You can switch plans — or cancel billing entirely and pay nothing — any time before ${dateLabel}:
 
@@ -201,7 +201,7 @@ If everything looks good, there's nothing to do. Thanks for building your club's
 — The Kinectem Team`;
 
   const html = `<p>Hi ${escapeHtml(greeting)},</p>
-<p>Your 90-day free period for <strong>${escapeHtml(args.orgName)}</strong> ends soon. On <strong>${escapeHtml(dateLabel)}</strong>, the card on file will be charged <strong>${escapeHtml(charge)}</strong> for your first year on the <strong>${escapeHtml(planName)}</strong> plan.${escapeHtml(promoLine)}</p>
+<p>Your free period for <strong>${escapeHtml(args.orgName)}</strong> ends soon. On <strong>${escapeHtml(dateLabel)}</strong>, the card on file will be charged <strong>${escapeHtml(charge)}</strong> for your first year on the <strong>${escapeHtml(planName)}</strong> plan.${escapeHtml(promoLine)}</p>
 <p>Want to make a change first? You can switch plans — or cancel billing entirely and pay nothing — any time before ${escapeHtml(dateLabel)}:</p>
 <p><a href="${escapeHtml(url)}">Manage your plan →</a></p>
 <p>If everything looks good, there's nothing to do. Thanks for building your club's story on Kinectem!</p>

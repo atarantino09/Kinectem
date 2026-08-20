@@ -1,7 +1,7 @@
 // Send the "add a card before your free period ends" reminder to org admins
 // whose organization has chosen a plan but has NOT yet put a card on file.
-// Each org's free period is 90 days from its creation, so the email quotes
-// that org's own billing start date (org_subscriptions.billing_starts_at).
+// The email quotes the org's persisted billing start date, including any
+// legacy first-charge floor (org_subscriptions.billing_starts_at).
 //
 // Run from the repo root:
 //   pnpm --filter @workspace/scripts run send-billing-reminders -- --dry-run
@@ -170,7 +170,7 @@ function buildEmail(args: {
 
 It's been a joy watching ${args.orgName} bring its teams, players, and families onto Kinectem.
 
-Your 90-day free period wraps up on ${dateLabel}, when annual billing begins for your ${planName} plan (${price}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. You won't be charged until ${dateLabel}, and you can cancel any time during your free period at no cost.
+Your free period wraps up on ${dateLabel}, when annual billing begins for your ${planName} plan (${price}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. You won't be charged until ${dateLabel}, and you can cancel any time during your free period at no cost.
 
 Add your card: ${url}
 
@@ -182,7 +182,7 @@ Thanks for being one of our founding organizations — here's to a great season 
 
   const html = `<p>Hi ${escapeHtml(greeting)},</p>
 <p>It's been a joy watching <strong>${escapeHtml(args.orgName)}</strong> bring its teams, players, and families onto Kinectem. 🎉</p>
-<p>Your 90-day free period wraps up on <strong>${escapeHtml(dateLabel)}</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until ${escapeHtml(dateLabel)}</strong>, and you can cancel any time during your free period at no cost.</p>
+<p>Your free period wraps up on <strong>${escapeHtml(dateLabel)}</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until ${escapeHtml(dateLabel)}</strong>, and you can cancel any time during your free period at no cost.</p>
 <p><a href="${escapeHtml(url)}">Add your card →</a></p>
 <p>It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts.</p>
 <p>Thanks for being one of our founding organizations — here's to a great season ahead.</p>
