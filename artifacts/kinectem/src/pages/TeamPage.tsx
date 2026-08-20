@@ -225,7 +225,7 @@ export default function TeamPage() {
         title: "Manage your team",
         body: (
           <>
-            Open <strong>Team tools</strong> at the top of the page to edit your
+            Open <strong>Manage</strong> at the top of the page to edit your
             team's name, sport, level, and cover photo anytime.
           </>
         ),

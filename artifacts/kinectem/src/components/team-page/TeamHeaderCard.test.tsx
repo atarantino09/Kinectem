@@ -41,24 +41,34 @@ function renderHeader(
 }
 
 describe("TeamHeaderCard action hierarchy", () => {
-  it("keeps a public viewer's navigation and community actions separate", () => {
-    renderHeader();
+  it("places a public viewer's community actions in the blue menu", async () => {
+    const user = userEvent.setup();
+    const onToggleFollow = vi.fn();
+    const onOpenFollowers = vi.fn();
+
+    renderHeader({ onToggleFollow, onOpenFollowers });
 
     const navigation = screen.getByTestId("team-section-navigation");
     const community = screen.getByTestId("team-community-actions");
 
     expect(within(navigation).getByTestId("btn-toggle-posts")).toBeInTheDocument();
     expect(within(navigation).getByTestId("btn-toggle-roster")).toBeInTheDocument();
-    expect(within(community).getByTestId("btn-follow-team")).toBeInTheDocument();
-    expect(
-      within(community).getByTestId("btn-view-team-followers"),
-    ).toBeInTheDocument();
+    expect(within(community).getByTestId("btn-team-community-menu")).toHaveTextContent(
+      "Community",
+    );
+    expect(community.innerHTML).toContain("blue");
+    expect(screen.queryByTestId("btn-follow-team")).not.toBeInTheDocument();
     expect(screen.queryByTestId("team-contextual-tools")).not.toBeInTheDocument();
-    // The mobile-first action row stacks before switching to a horizontal row.
-    expect(community.parentElement?.className).toContain("flex-col");
+
+    await user.click(screen.getByTestId("btn-team-community-menu"));
+    await user.click(screen.getByTestId("btn-follow-team"));
+    expect(onToggleFollow).toHaveBeenCalledOnce();
+    await user.click(screen.getByTestId("btn-team-community-menu"));
+    await user.click(screen.getByTestId("btn-view-team-followers"));
+    expect(onOpenFollowers).toHaveBeenCalledOnce();
   });
 
-  it("places manager-only controls and the page tour in Team tools", async () => {
+  it("separates manager controls from guides for a manager", async () => {
     const user = userEvent.setup();
     const onReplayTour = vi.fn();
     const onEdit = vi.fn();
@@ -74,6 +84,8 @@ describe("TeamHeaderCard action hierarchy", () => {
 
     expect(screen.getByTestId("btn-toggle-admin")).toBeInTheDocument();
     expect(screen.getByTestId("team-contextual-tools")).toBeInTheDocument();
+    expect(screen.getByTestId("team-manage-actions").innerHTML).toContain("purple");
+    expect(screen.getByTestId("team-guides-actions").innerHTML).toContain("indigo");
     expect(screen.queryByTestId("btn-edit-team")).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("btn-team-manage-menu"));
@@ -81,9 +93,13 @@ describe("TeamHeaderCard action hierarchy", () => {
     expect(screen.getByTestId("btn-edit-team")).toHaveTextContent("Edit team");
     expect(screen.getByTestId("btn-claim-competition")).toBeInTheDocument();
     expect(screen.getByTestId("btn-team-broadcast")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("btn-team-guides-menu"));
     expect(screen.getByTestId("btn-team-replay-tour")).toHaveTextContent(
       "Take a page tour",
     );
+    expect(screen.getByTestId("link-team-getting-started")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("btn-team-replay-tour"));
     expect(onReplayTour).toHaveBeenCalledOnce();

@@ -54,7 +54,6 @@ import {
   Newspaper,
   Pencil,
   Plus,
-  Settings,
   Share2,
   Shield,
   UserPlus,
@@ -299,21 +298,22 @@ export default function OrganizationPage() {
   const orgTourSteps = useMemo<TourStep[]>(
     () => [
       {
-        targetTestId: "btn-manage-admins-hero",
+        targetTestId: "btn-org-manage-menu",
         title: "Manage admins & members",
         body: (
           <>
-            Click <strong>Manage members</strong> to add co-admins, promote
-            members, and invite people to help you run the organization.
+            Open <strong>Manage</strong>, then choose{" "}
+            <strong>Manage members</strong> to add co-admins, promote members,
+            and invite people to help you run the organization.
           </>
         ),
       },
       {
-        targetTestId: "btn-org-more-menu",
-        title: "Edit & announce",
+        targetTestId: "btn-org-manage-menu",
+        title: "Manage your organization",
         body: (
           <>
-            The <strong>More</strong> menu is where you{" "}
+            The <strong>Manage</strong> menu is where you{" "}
             <strong>edit the organization</strong> (name, logo, details) and{" "}
             <strong>send an announcement</strong> to everyone in your teams.
           </>
@@ -750,7 +750,7 @@ export default function OrganizationPage() {
                   </div>
                 </div>
               </div>
-              <div className="w-full sm:w-auto space-y-2">
+              <div className="w-full sm:w-auto">
                 {isUnclaimed && (
                   <Badge
                     variant="outline"
@@ -760,163 +760,183 @@ export default function OrganizationPage() {
                     Unclaimed
                   </Badge>
                 )}
-                <div
-                  className="flex items-center gap-2 flex-wrap sm:justify-end"
-                  data-testid="org-community-actions"
-                >
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
-                    Community
-                  </span>
-                  <Button
-                    variant="brand"
-                    onClick={onToggleFollow}
-                    disabled={followOrg.isPending || unfollowOrg.isPending}
-                    data-testid="btn-follow-org"
-                  >
-                    {organization.isFollowing ? "Following" : "Follow"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="font-bold rounded-full"
-                    onClick={() => setFollowersOpen(true)}
-                    data-testid="btn-view-org-followers"
-                  >
-                    <Users className="w-4 h-4 mr-1.5" />
-                    {(organization as { followerCount?: number }).followerCount ?? 0}
-                    <span className="ml-1 hidden sm:inline">Followers</span>
-                  </Button>
-                </div>
-                {isOrgManager && (
-                  <div
-                    className="flex items-center gap-2 flex-wrap rounded-xl border border-border bg-muted/30 p-2 sm:justify-end"
-                    data-testid="org-manager-actions"
-                  >
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
-                      Organization tools
-                    </span>
-                    {isUnclaimed && isPlatformAdmin && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="font-bold rounded-full"
-                        onClick={() => setStageCoachesOpen(true)}
-                        data-testid="btn-stage-coaches"
-                      >
-                        Stage coaches
-                      </Button>
-                    )}
-                    {planUsage && (
-                      <Button
-                        asChild
-                        size="sm"
-                        variant={atTeamLimit ? "brand" : "outline"}
-                        className="font-bold rounded-full"
-                        data-testid="pill-plan-name"
-                      >
-                        <Link href={`/organizations/${orgId}/subscribe`}>
-                          <Shield className="w-4 h-4 mr-1.5" />
-                          {PLANS.find((p) => p.id === planUsage.plan)?.name ??
-                            planUsage.plan.charAt(0).toUpperCase() +
-                              planUsage.plan.slice(1)}{" "}
-                          plan
-                          <span
-                            className="ml-1.5 font-medium opacity-80"
-                            data-testid="text-plan-usage"
-                          >
-                            {planUsage.teamsLimit == null
-                              ? `· ${planUsage.teamsUsed} teams`
-                              : `· ${planUsage.teamsUsed}/${planUsage.teamsLimit} teams`}
-                          </span>
-                        </Link>
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setManageMembersOpen(true)}
-                      className="font-bold rounded-full"
-                      data-testid="btn-manage-admins-hero"
-                    >
-                      <Shield className="w-4 h-4 mr-1.5" /> Manage members
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setAdminQueueOpen(true)}
-                      className="font-bold rounded-full relative"
-                      data-testid="btn-org-admin-queue"
-                    >
-                      <Shield className="w-4 h-4 mr-1.5" />
-                      <span className="hidden sm:inline">Admin queue</span>
-                      <span className="sm:hidden">Queue</span>
-                      {pendingAdminCount > 0 && (
-                        <Badge
-                          className="ml-1.5 px-1.5 min-w-5 justify-center rounded-full font-bold"
-                          data-testid="badge-admin-queue-count"
-                        >
-                          {pendingAdminCount}
-                        </Badge>
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSharePageOpen(true)}
-                      className="font-bold rounded-full"
-                      data-testid="btn-share-org-page"
-                    >
-                      <Share2 className="w-4 h-4 mr-1.5" /> Share page
-                    </Button>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <div data-testid="org-community-actions">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="font-bold rounded-full"
-                          data-testid="btn-org-more-menu"
+                          className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
+                          data-testid="btn-org-community-menu"
                         >
-                          <Settings className="w-4 h-4 mr-1.5" /> More
-                          <ChevronDown className="w-4 h-4 ml-1" />
+                          <Users className="w-4 h-4" />
+                          Community
+                          <ChevronDown className="w-3.5 h-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuItem
-                          onClick={() => setEditOpen(true)}
-                          data-testid="btn-edit-org"
+                          onClick={onToggleFollow}
+                          disabled={followOrg.isPending || unfollowOrg.isPending}
+                          data-testid="btn-follow-org"
                         >
-                          <Pencil className="w-4 h-4 mr-2" /> Edit organization
+                          <Users className="w-4 h-4 mr-2" />
+                          {organization.isFollowing ? "Following" : "Follow"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => setBroadcastOpen(true)}
-                          data-testid="btn-org-broadcast"
+                          onClick={() => setFollowersOpen(true)}
+                          data-testid="btn-view-org-followers"
                         >
-                          <Megaphone className="w-4 h-4 mr-2" /> Send announcement
-                        </DropdownMenuItem>
-                        {orgTourSteps.length > 0 && (
-                          <DropdownMenuItem
-                            onClick={() => setOrgTourOpen(true)}
-                            data-testid="btn-org-replay-tour"
-                          >
-                            <Compass className="w-4 h-4 mr-2" /> Take a page tour
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          asChild
-                          data-testid="link-org-getting-started"
-                        >
-                          <a
-                            href="/getting-started.html"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Getting started guide
-                          </a>
+                          <Users className="w-4 h-4 mr-2" />
+                          View{" "}
+                          {(organization as { followerCount?: number })
+                            .followerCount ?? 0}{" "}
+                          followers
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                )}
+
+                  {isOrgManager && (
+                    <>
+                      <div data-testid="org-manager-actions">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full border-purple-200 bg-purple-50 font-bold text-purple-800 hover:bg-purple-100 focus-visible:ring-purple-500 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200 dark:hover:bg-purple-950/70"
+                              data-testid="btn-org-manage-menu"
+                            >
+                              <Shield className="w-4 h-4" />
+                              Manage
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
+                            {isUnclaimed && isPlatformAdmin && (
+                              <DropdownMenuItem
+                                onClick={() => setStageCoachesOpen(true)}
+                                data-testid="btn-stage-coaches"
+                              >
+                                <UserPlus className="w-4 h-4 mr-2" />
+                                Stage coaches
+                              </DropdownMenuItem>
+                            )}
+                            {planUsage && (
+                              <DropdownMenuItem
+                                asChild
+                                data-testid="pill-plan-name"
+                              >
+                                <Link href={`/organizations/${orgId}/subscribe`}>
+                                  <Shield className="w-4 h-4 mr-2" />
+                                  {PLANS.find((p) => p.id === planUsage.plan)
+                                    ?.name ??
+                                    planUsage.plan.charAt(0).toUpperCase() +
+                                      planUsage.plan.slice(1)}{" "}
+                                  plan{" "}
+                                  <span
+                                    className="font-medium text-muted-foreground"
+                                    data-testid="text-plan-usage"
+                                  >
+                                    {planUsage.teamsLimit == null
+                                      ? `· ${planUsage.teamsUsed} teams`
+                                      : `· ${planUsage.teamsUsed}/${planUsage.teamsLimit} teams`}
+                                  </span>
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => setManageMembersOpen(true)}
+                              data-testid="btn-manage-admins-hero"
+                            >
+                              <Shield className="w-4 h-4 mr-2" />
+                              Manage members
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setAdminQueueOpen(true)}
+                              data-testid="btn-org-admin-queue"
+                            >
+                              <Shield className="w-4 h-4 mr-2" />
+                              Admin queue
+                              {pendingAdminCount > 0 && (
+                                <Badge
+                                  className="ml-auto px-1.5 min-w-5 justify-center rounded-full font-bold"
+                                  data-testid="badge-admin-queue-count"
+                                >
+                                  {pendingAdminCount}
+                                </Badge>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setSharePageOpen(true)}
+                              data-testid="btn-share-org-page"
+                            >
+                              <Share2 className="w-4 h-4 mr-2" />
+                              Share page
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setEditOpen(true)}
+                              data-testid="btn-edit-org"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit organization
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setBroadcastOpen(true)}
+                              data-testid="btn-org-broadcast"
+                            >
+                              <Megaphone className="w-4 h-4 mr-2" />
+                              Send announcement
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div data-testid="org-guides-actions">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full border-indigo-200 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 focus-visible:ring-indigo-500 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-950/70"
+                              data-testid="btn-org-guides-menu"
+                            >
+                              <Compass className="w-4 h-4" />
+                              Guides
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            {orgTourSteps.length > 0 && (
+                              <DropdownMenuItem
+                                onClick={() => setOrgTourOpen(true)}
+                                data-testid="btn-org-replay-tour"
+                              >
+                                <Compass className="w-4 h-4 mr-2" />
+                                Take a page tour
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              asChild
+                              data-testid="link-org-getting-started"
+                            >
+                              <a
+                                href="/getting-started.html"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <ExternalLink className="w-4 h-4 mr-2" />
+                                Getting started guide
+                              </a>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             {(organization.description || organization.website) && (

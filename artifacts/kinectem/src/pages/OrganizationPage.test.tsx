@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
 import { setMockSearch, wouterMock } from "@/test/mocks/wouter";
@@ -198,35 +199,51 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
-  it("shows the hero 'Manage members' control for a sole owner", async () => {
+  it("groups a manager's controls into color-coded menus", async () => {
+    const user = userEvent.setup();
     installHandlers({ role: "owner", extraAdmin: false });
 
     renderWithProviders(<OrganizationPage />);
 
     const communityActions = await screen.findByTestId("org-community-actions");
     const managerActions = screen.getByTestId("org-manager-actions");
+    const guidesActions = screen.getByTestId("org-guides-actions");
+    expect(within(communityActions).getByTestId("btn-org-community-menu")).toHaveTextContent(
+      "Community",
+    );
+    expect(communityActions.innerHTML).toContain("blue");
+    expect(within(managerActions).getByTestId("btn-org-manage-menu")).toHaveTextContent(
+      "Manage",
+    );
+    expect(managerActions.innerHTML).toContain("purple");
+    expect(guidesActions.innerHTML).toContain("indigo");
+
+    await user.click(screen.getByTestId("btn-org-community-menu"));
+    expect(screen.getByTestId("btn-follow-org")).toBeInTheDocument();
     expect(
-      within(managerActions).getByTestId("btn-manage-admins-hero"),
+      screen.getByTestId("btn-view-org-followers"),
     ).toBeInTheDocument();
-    expect(within(managerActions).getByTestId("btn-share-org-page")).toBeInTheDocument();
-    expect(within(communityActions).getByTestId("btn-follow-org")).toBeInTheDocument();
-    expect(
-      within(communityActions).getByTestId("btn-view-org-followers"),
-    ).toBeInTheDocument();
-    // This suite renders the single-column layout: action groups must stack
-    // cleanly rather than depending on a desktop-only inline row.
-    expect(managerActions.className).toContain("flex-wrap");
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("btn-org-manage-menu"));
+    expect(screen.getByTestId("btn-manage-admins-hero")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("btn-org-guides-menu"));
+    expect(screen.getByTestId("btn-org-replay-tour")).toBeInTheDocument();
+    expect(screen.getByTestId("link-org-getting-started")).toBeInTheDocument();
   });
 
-  it("shows the hero 'Manage members' control for an admin viewer", async () => {
+  it("shows management and guides menus for an admin viewer", async () => {
     installHandlers({ role: "admin", extraAdmin: true });
 
     renderWithProviders(<OrganizationPage />);
 
     expect(
-      await screen.findByTestId("btn-manage-admins-hero"),
+      await screen.findByTestId("btn-org-manage-menu"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-guides-menu")).toBeInTheDocument();
   });
 
   it("hides every admin control from a non-member viewer", async () => {
@@ -234,19 +251,17 @@ describe("OrganizationPage — admin control gating", () => {
 
     renderWithProviders(<OrganizationPage />);
 
-    // Wait for the org to load (the follow button appears for everyone).
-    await screen.findByTestId("btn-follow-org");
+    // Wait for the org to load (the community menu appears for everyone).
+    await screen.findByTestId("btn-org-community-menu");
 
     const communityActions = screen.getByTestId("org-community-actions");
-    expect(within(communityActions).getByTestId("btn-follow-org")).toBeInTheDocument();
-    expect(
-      within(communityActions).getByTestId("btn-view-org-followers"),
-    ).toBeInTheDocument();
+    expect(within(communityActions).getByTestId("btn-org-community-menu")).toBeInTheDocument();
     expect(
       screen.queryByTestId("btn-manage-admins-hero"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("btn-org-more-menu")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-org-manage-menu")).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-share-org-page")).not.toBeInTheDocument();
     expect(screen.queryByTestId("org-manager-actions")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("org-guides-actions")).not.toBeInTheDocument();
   });
 });
