@@ -248,6 +248,9 @@ export function InviteRosterDialog({
         : activeTab === "search"
           ? position
           : "player";
+  const selectedPositionLabel =
+    POSITION_LABELS[selectedPosition] ?? "Selected role";
+  const showingStaffInviteMessage = isStaffInvitePosition(selectedPosition);
   const inviteMessage =
     fullLink && coachName
       ? isStaffInvitePosition(selectedPosition)
@@ -740,70 +743,103 @@ export function InviteRosterDialog({
                 <p className="text-[11px] text-muted-foreground">
                   Anyone with this link can request to join the team.
                 </p>
-                <div className="mt-3 border-t border-border pt-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-black tracking-tight text-sm">
-                      Message to copy &amp; share
-                    </h3>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={onCopyMessage}
-                      disabled={!inviteMessage}
-                      className="gap-1 font-bold shrink-0"
-                      data-testid="button-copy-invite-message"
-                    >
-                      {messageCopied ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Sharing the link somewhere else (a group text, GroupMe,
-                    TeamSnap)? Paste this message too — it already has your name
-                    and the join link.
+                {activeTab === "csv" ? (
+                  <p
+                    className="mt-3 border-t border-border pt-3 text-[11px] text-muted-foreground"
+                    data-testid="csv-invite-message-note"
+                  >
+                    CSV imports send each person an invite based on the role in
+                    their own row. There isn&apos;t one copy-and-paste message
+                    for this tab.
                   </p>
-                  {inviteMessage ? (
-                    <div>
-                      <div className="relative">
-                        <pre
-                          className={
-                            "whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
-                            (showFullMessage ? "" : " max-h-40 overflow-hidden")
-                          }
-                          data-testid="text-invite-message"
-                        >
-                          {inviteMessage}
-                        </pre>
-                        {!showFullMessage && (
-                          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-lg bg-gradient-to-t from-muted to-transparent" />
-                        )}
-                      </div>
-                      <button
+                ) : (
+                  <div className="mt-3 border-t border-border pt-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-black tracking-tight text-sm">
+                        Message to copy &amp; share
+                      </h3>
+                      <Button
                         type="button"
-                        onClick={() => setShowFullMessage((v) => !v)}
-                        className="mt-1 text-xs font-medium text-primary hover:underline"
-                        data-testid="button-toggle-invite-message"
+                        size="sm"
+                        variant="outline"
+                        onClick={onCopyMessage}
+                        disabled={!inviteMessage}
+                        className="gap-1 font-bold shrink-0"
+                        data-testid="button-copy-invite-message"
                       >
-                        {showFullMessage ? "Show less" : "Show full message"}
-                      </button>
+                        {messageCopied ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground flex items-center gap-2">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Preparing
-                      message…
+                    <p className="text-[11px] text-muted-foreground">
+                      Sharing the link somewhere else (a group text, GroupMe,
+                      TeamSnap)? Paste this message too — it already has your name
+                      and the join link.
                     </p>
-                  )}
-                </div>
+                    <div
+                      className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/5 p-2.5 text-xs text-foreground"
+                      data-testid="invite-message-role-notice"
+                    >
+                      <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <p>
+                        <span
+                          className="font-bold"
+                          data-testid="invite-message-current-role"
+                        >
+                          Showing: {selectedPositionLabel} (
+                          {showingStaffInviteMessage
+                            ? "staff invitation"
+                            : "parent / player invitation"}
+                          ).
+                        </span>{" "}
+                        This message updates when you choose a different Position
+                        below. Parent/player invitations use family setup wording;
+                        coach and staff invitations use staff wording. Select the
+                        correct invite type before copying.
+                      </p>
+                    </div>
+                    {inviteMessage ? (
+                      <div>
+                        <div className="relative">
+                          <pre
+                            className={
+                              "whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
+                              (showFullMessage ? "" : " max-h-40 overflow-hidden")
+                            }
+                            data-testid="text-invite-message"
+                          >
+                            {inviteMessage}
+                          </pre>
+                          {!showFullMessage && (
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-lg bg-gradient-to-t from-muted to-transparent" />
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowFullMessage((v) => !v)}
+                          className="mt-1 text-xs font-medium text-primary hover:underline"
+                          data-testid="button-toggle-invite-message"
+                        >
+                          {showFullMessage ? "Show less" : "Show full message"}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Preparing
+                        message…
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             ) : linkErrored ? (
               <p className="text-xs text-muted-foreground">
@@ -854,7 +890,7 @@ export function InviteRosterDialog({
                   setPosition(v as AddTeamMemberRequestPosition)
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-existing-invite-position">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1070,7 +1106,7 @@ export function InviteRosterDialog({
                     setEmailPosition(v as AddTeamMemberRequestPosition)
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-email-invite-position">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1269,7 +1305,7 @@ export function InviteRosterDialog({
                     }
                     disabled={bulkSending}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger data-testid="select-bulk-invite-position">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
