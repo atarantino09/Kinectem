@@ -268,7 +268,7 @@ export function TeamPostsSection({
                     data-testid="btn-open-post-options"
                   >
                     <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    Post options
+                    Other post options
                     <ChevronDown className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </DropdownMenuTrigger>

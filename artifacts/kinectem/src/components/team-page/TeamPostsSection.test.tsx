@@ -43,7 +43,7 @@ describe("TeamPostsSection action hierarchy", () => {
     const actions = screen.getByTestId("team-post-actions");
     expect(within(actions).getByTestId("btn-create-recap")).toBeInTheDocument();
     expect(within(actions).getByTestId("btn-open-post-options")).toHaveTextContent(
-      "Post options",
+      "Other post options",
     );
     expect(actions).not.toHaveTextContent("Share");
     expect(actions.className).toContain("flex-col");

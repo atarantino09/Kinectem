@@ -272,7 +272,7 @@ export default function TeamPage() {
             In <strong>Recent Posts</strong>,{" "}
             {canPostRecap ? (
               <>
-                open <strong>Post options</strong>, then choose{" "}
+                open <strong>Other post options</strong>, then choose{" "}
                 <strong>Post Highlight</strong>
               </>
             ) : (
@@ -307,7 +307,7 @@ export default function TeamPage() {
         body: (
           <>
             In <strong>Recent Posts</strong>, open{" "}
-            <strong>Post options</strong>, then choose{" "}
+            <strong>Other post options</strong>, then choose{" "}
             <strong>Combined Recap</strong> to roll several games into one story
             — perfect for a tournament weekend or a full-season wrap-up.
           </>
