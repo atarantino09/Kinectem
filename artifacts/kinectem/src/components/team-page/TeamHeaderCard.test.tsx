@@ -17,6 +17,8 @@ const team = {
     id: "org-1",
     name: "Westfield Athletic Club",
     avatarUrl: null,
+    brandPrimaryColor: "#2563eb",
+    brandSecondaryColor: "#7c3aed",
   },
 };
 
@@ -123,11 +125,14 @@ describe("TeamHeaderCard action hierarchy", () => {
 });
 
 describe("TeamHeaderCard identity metadata", () => {
-  it("places sport, league, and gender in muted chips below the team name", () => {
+  it("places sport, gender, and league in muted chips below the team name", () => {
     renderHeader();
 
     const identity = screen.getByTestId("team-identity-details");
     const metadata = screen.getByTestId("team-identity-metadata");
+    const strip = screen.getByTestId("strip-org-brand");
+    const sport = within(metadata).getByText("Soccer");
+    const gender = screen.getByTestId("chip-team-gender");
     const league = screen.getByTestId("chip-team-league");
     const teamName = screen.getByRole("heading", { name: team.name });
 
@@ -138,17 +143,29 @@ describe("TeamHeaderCard identity metadata", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(metadata).toHaveClass("flex-wrap", "min-w-0");
-    expect(within(metadata).getByText("Soccer")).toBeInTheDocument();
+    expect(sport).toBeInTheDocument();
+    expect(gender).toBeInTheDocument();
     expect(league).toHaveTextContent("Hudson Valley Youth Soccer League");
+    expect(
+      sport.compareDocumentPosition(gender) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      gender.compareDocumentPosition(league) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(league).toHaveClass(
       "bg-muted",
       "rounded-md",
       "max-w-full",
       "break-words",
     );
-    expect(within(metadata).getByTestId("chip-team-gender")).toHaveTextContent(
-      "coed",
-    );
+    expect(gender).toHaveTextContent("coed");
+    expect(strip).toHaveClass("h-2");
+    expect(strip).toHaveStyle({
+      background:
+        "linear-gradient(135deg, #2563eb 0%, #2563eb 40%, #7c3aed 100%)",
+    });
     expect(
       screen.getByTestId("team-identity-row").compareDocumentPosition(
         screen.getByTestId("team-header-action-menus"),

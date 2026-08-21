@@ -185,7 +185,7 @@ export function TeamHeaderCard({
     <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
       {orgBrand && (
         <div
-          className="h-1.5"
+          className="h-2"
           style={{ background: orgStripGradient(orgBrand) }}
           data-testid="strip-org-brand"
         />
@@ -364,20 +364,20 @@ export function TeamHeaderCard({
                     {team.sport}
                   </div>
                 )}
-                {team.level && (
-                  <div
-                    className="max-w-full break-words rounded-md bg-muted px-3 py-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground"
-                    data-testid="chip-team-league"
-                  >
-                    {team.level}
-                  </div>
-                )}
                 {team.gender && (
                   <div
                     className="rounded-md bg-muted px-3 py-1.5 text-sm font-bold capitalize text-foreground"
                     data-testid="chip-team-gender"
                   >
                     {team.gender}
+                  </div>
+                )}
+                {team.level && (
+                  <div
+                    className="max-w-full break-words rounded-md bg-muted px-3 py-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground"
+                    data-testid="chip-team-league"
+                  >
+                    {team.level}
                   </div>
                 )}
               </div>
