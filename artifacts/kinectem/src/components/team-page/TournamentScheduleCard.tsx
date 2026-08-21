@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
@@ -346,6 +346,9 @@ export function TournamentScheduleCard({
   canManage?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // Keep the panel open by default so this adds a way to declutter the team
+  // page without changing what existing visitors see on first load.
+  const [competitionsOpen, setCompetitionsOpen] = useState(true);
   const { toast } = useToast();
   const qc = useQueryClient();
   // Pending hide-confirmation target (null = dialog closed). Unhide
@@ -401,215 +404,229 @@ export function TournamentScheduleCard({
 
   return (
     <Card data-testid="card-tournament-schedule">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Trophy className="w-4 h-4" />
-          Competitions
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <FreeRecapNotice groups={groups} />
-        {visible.map((g) => (
-          <Collapsible key={g.tournamentId} className="space-y-2">
-            {/* Branded competition strip — same look as the banner on a
-                published game recap (PostCard). The strip toggles the
-                schedule; the external-link icon navigates to the
-                competition's public page. */}
-            <div
-              className="flex items-center gap-2.5 rounded-lg px-4 py-2"
-              style={{
-                background: g.brandColor
-                  ? g.secondaryColor
-                    ? `linear-gradient(135deg, ${g.brandColor} 0%, ${g.brandColor} 60%, ${g.secondaryColor} 100%)`
-                    : g.brandColor
-                  : "hsl(var(--primary))",
-              }}
-              data-testid={`banner-tournament-${g.tournamentId}`}
-            >
-              <CollapsibleTrigger
-                className="group flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                data-testid={`toggle-tournament-${g.tournamentId}`}
-              >
-                {g.logoUrl ? (
-                  <img
-                    src={g.logoUrl}
-                    alt=""
-                    className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
-                  />
-                ) : (
-                  <Trophy className="h-4 w-4 shrink-0 text-white/90" />
-                )}
-                <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
-                  {g.tournamentName}
-                </span>
-                <StatusPill group={g} />
-                <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-white/80 transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <Link
-                href={`/competitions/c/${encodeURIComponent(g.tournamentSlug)}`}
-                aria-label={`View ${g.tournamentName} page`}
-                className="shrink-0 rounded p-1 hover:bg-white/15"
-                data-testid={`link-tournament-${g.tournamentId}`}
-              >
-                <ExternalLink className="h-3.5 w-3.5 text-white/80" />
-              </Link>
-            </div>
-            <CollapsibleContent>
-              <ul className="space-y-1.5">
-                {g.matches.map((m) => (
-                  <li
-                    key={m.id}
-                    className={`rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3 ${
-                      m.hidden ? "opacity-60 bg-muted/40" : ""
-                    }`}
-                    data-testid={`tournament-match-${m.id}`}
-                  >
-                    <div className="min-w-0">
-                      <p
-                        className={`text-sm font-bold truncate ${
-                          m.status === "canceled"
-                            ? "line-through text-muted-foreground"
-                            : ""
-                        }`}
-                      >
-                        <span className="text-muted-foreground font-semibold">
-                          {m.isHome ? "vs" : "@"}
-                        </span>{" "}
-                        {m.opponentName ?? "TBD"}
-                      </p>
-                      {/* Task #765 — organizer-set postponed/canceled
-                          status (+ optional public reason). */}
-                      {(m.status === "postponed" ||
-                        m.status === "canceled") && (
-                        <p
-                          className={`text-[11px] font-black uppercase tracking-wider ${
-                            m.status === "postponed"
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}
-                          data-testid={`status-game-${m.id}`}
-                        >
-                          {m.status === "postponed" ? "Postponed" : "Canceled"}
-                          {m.statusReason ? (
-                            <span className="normal-case font-semibold text-muted-foreground tracking-normal">
-                              {" "}
-                              — {m.statusReason}
-                            </span>
-                          ) : null}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {fmtDate(m.matchDate)}
-                        {m.startTime ? ` · ${fmtTime(m.startTime)}` : ""}
-                      </p>
-                      {venueLine(m) && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{venueLine(m)}</span>
-                        </p>
-                      )}
-                      {/* Task #746 — admin-only notice on hidden games
-                          (public viewers never receive them). */}
-                      {m.hidden && (
-                        <p
-                          className="text-[11px] font-bold text-muted-foreground flex items-center gap-1 mt-1"
-                          data-testid={`notice-hidden-game-${m.id}`}
-                        >
-                          <EyeOff className="w-3 h-3 shrink-0" />
-                          Hidden — only team admins can see this game.
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0 flex flex-col items-end gap-1">
-                      {(m.division || m.bracket) && (
-                        <Badge variant="outline" className="text-[10px]">
-                          {[m.division, m.bracket].filter(Boolean).join(" · ")}
-                        </Badge>
-                      )}
-                      {/* Task #746 — published recap linked to this game.
-                          Takes the place of "Write recap" (the game already
-                          has one). */}
-                      {m.recapPostId ? (
-                        <Link href={`/posts/${m.recapPostId}`}>
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 cursor-pointer"
-                            data-testid={`pill-game-recap-${m.id}`}
-                          >
-                            <Newspaper className="w-3 h-3" />
-                            Game recap
-                          </span>
-                        </Link>
-                      ) : (
-                        canPostRecap &&
-                        isRecappable(m) && (
-                          <Link href={recapHrefFor(teamId, g.tournamentId, m)}>
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
-                              data-testid={`btn-write-recap-${m.id}`}
-                            >
-                              <FileText className="w-3 h-3" />
-                              Write recap
-                            </span>
-                          </Link>
-                        )
-                      )}
-                      {/* Task #746 — admin hide/unhide controls. Hide asks
-                          for confirmation; unhide is immediate. */}
-                      {canManage &&
-                        (m.hidden ? (
-                          <button
-                            type="button"
-                            disabled={hideMutation.isPending}
-                            onClick={() =>
-                              hideMutation.mutate({
-                                matchId: m.id,
-                                hide: false,
-                              })
-                            }
-                            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
-                            data-testid={`btn-unhide-game-${m.id}`}
-                          >
-                            <Eye className="w-3 h-3" />
-                            Unhide
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={hideMutation.isPending}
-                            onClick={() =>
-                              setConfirmHide({
-                                matchId: m.id,
-                                opponentName: m.opponentName,
-                              })
-                            }
-                            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
-                            data-testid={`btn-hide-game-${m.id}`}
-                          >
-                            <EyeOff className="w-3 h-3" />
-                            Hide
-                          </button>
-                        ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CollapsibleContent>
-          </Collapsible>
-        ))}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-muted"
-            data-testid="btn-toggle-more-competitions"
+      <Collapsible open={competitionsOpen} onOpenChange={setCompetitionsOpen}>
+        <CardHeader className="py-3">
+          <CollapsibleTrigger
+            className="group -mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-md px-2 py-1 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            data-testid="toggle-competitions-panel"
           >
-            {showAll ? "Show less" : `Show ${hiddenCount} more`}
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${showAll ? "rotate-180" : ""}`}
-            />
-          </button>
-        )}
-      </CardContent>
+            <Trophy className="h-4 w-4 shrink-0" />
+            <span className="text-base font-semibold">Competitions</span>
+            <span
+              className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground group-hover:bg-background"
+              data-testid="competition-count"
+            >
+              {groups.length} {groups.length === 1 ? "competition" : "competitions"}
+            </span>
+            <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+        </CardHeader>
+        <CollapsibleContent data-testid="content-competitions-panel">
+          <CardContent className="space-y-5">
+            <FreeRecapNotice groups={groups} />
+            {visible.map((g) => (
+              <Collapsible key={g.tournamentId} className="space-y-2">
+                {/* Branded competition strip — same look as the banner on a
+                    published game recap (PostCard). The strip toggles the
+                    schedule; the external-link icon navigates to the
+                    competition's public page. */}
+                <div
+                  className="flex items-center gap-2.5 rounded-lg px-4 py-2"
+                  style={{
+                    background: g.brandColor
+                      ? g.secondaryColor
+                        ? `linear-gradient(135deg, ${g.brandColor} 0%, ${g.brandColor} 60%, ${g.secondaryColor} 100%)`
+                        : g.brandColor
+                      : "hsl(var(--primary))",
+                  }}
+                  data-testid={`banner-tournament-${g.tournamentId}`}
+                >
+                  <CollapsibleTrigger
+                    className="group flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    data-testid={`toggle-tournament-${g.tournamentId}`}
+                  >
+                    {g.logoUrl ? (
+                      <img
+                        src={g.logoUrl}
+                        alt=""
+                        className="h-6 w-6 rounded bg-white/90 object-contain p-0.5 shrink-0"
+                      />
+                    ) : (
+                      <Trophy className="h-4 w-4 shrink-0 text-white/90" />
+                    )}
+                    <span className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-white drop-shadow-sm">
+                      {g.tournamentName}
+                    </span>
+                    <StatusPill group={g} />
+                    <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-white/80 transition-transform group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <Link
+                    href={`/competitions/c/${encodeURIComponent(g.tournamentSlug)}`}
+                    aria-label={`View ${g.tournamentName} page`}
+                    className="shrink-0 rounded p-1 hover:bg-white/15"
+                    data-testid={`link-tournament-${g.tournamentId}`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 text-white/80" />
+                  </Link>
+                </div>
+                <CollapsibleContent>
+                  <ul className="space-y-1.5">
+                    {g.matches.map((m) => (
+                      <li
+                        key={m.id}
+                        className={`rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3 ${
+                          m.hidden ? "opacity-60 bg-muted/40" : ""
+                        }`}
+                        data-testid={`tournament-match-${m.id}`}
+                      >
+                        <div className="min-w-0">
+                          <p
+                            className={`text-sm font-bold truncate ${
+                              m.status === "canceled"
+                                ? "line-through text-muted-foreground"
+                                : ""
+                            }`}
+                          >
+                            <span className="text-muted-foreground font-semibold">
+                              {m.isHome ? "vs" : "@"}
+                            </span>{" "}
+                            {m.opponentName ?? "TBD"}
+                          </p>
+                          {/* Task #765 — organizer-set postponed/canceled
+                              status (+ optional public reason). */}
+                          {(m.status === "postponed" ||
+                            m.status === "canceled") && (
+                            <p
+                              className={`text-[11px] font-black uppercase tracking-wider ${
+                                m.status === "postponed"
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
+                              data-testid={`status-game-${m.id}`}
+                            >
+                              {m.status === "postponed" ? "Postponed" : "Canceled"}
+                              {m.statusReason ? (
+                                <span className="normal-case font-semibold text-muted-foreground tracking-normal">
+                                  {" "}
+                                  — {m.statusReason}
+                                </span>
+                              ) : null}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {fmtDate(m.matchDate)}
+                            {m.startTime ? ` · ${fmtTime(m.startTime)}` : ""}
+                          </p>
+                          {venueLine(m) && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{venueLine(m)}</span>
+                            </p>
+                          )}
+                          {/* Task #746 — admin-only notice on hidden games
+                              (public viewers never receive them). */}
+                          {m.hidden && (
+                            <p
+                              className="text-[11px] font-bold text-muted-foreground flex items-center gap-1 mt-1"
+                              data-testid={`notice-hidden-game-${m.id}`}
+                            >
+                              <EyeOff className="w-3 h-3 shrink-0" />
+                              Hidden — only team admins can see this game.
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end gap-1">
+                          {(m.division || m.bracket) && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {[m.division, m.bracket].filter(Boolean).join(" · ")}
+                            </Badge>
+                          )}
+                          {/* Task #746 — published recap linked to this game.
+                              Takes the place of "Write recap" (the game already
+                              has one). */}
+                          {m.recapPostId ? (
+                            <Link href={`/posts/${m.recapPostId}`}>
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                data-testid={`pill-game-recap-${m.id}`}
+                              >
+                                <Newspaper className="w-3 h-3" />
+                                Game recap
+                              </span>
+                            </Link>
+                          ) : (
+                            canPostRecap &&
+                            isRecappable(m) && (
+                              <Link href={recapHrefFor(teamId, g.tournamentId, m)}>
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                                  data-testid={`btn-write-recap-${m.id}`}
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  Write recap
+                                </span>
+                              </Link>
+                            )
+                          )}
+                          {/* Task #746 — admin hide/unhide controls. Hide asks
+                              for confirmation; unhide is immediate. */}
+                          {canManage &&
+                            (m.hidden ? (
+                              <button
+                                type="button"
+                                disabled={hideMutation.isPending}
+                                onClick={() =>
+                                  hideMutation.mutate({
+                                    matchId: m.id,
+                                    hide: false,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
+                                data-testid={`btn-unhide-game-${m.id}`}
+                              >
+                                <Eye className="w-3 h-3" />
+                                Unhide
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={hideMutation.isPending}
+                                onClick={() =>
+                                  setConfirmHide({
+                                    matchId: m.id,
+                                    opponentName: m.opponentName,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-bold text-muted-foreground hover:bg-muted disabled:opacity-50"
+                                data-testid={`btn-hide-game-${m.id}`}
+                              >
+                                <EyeOff className="w-3 h-3" />
+                                Hide
+                              </button>
+                            ))}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-muted"
+                data-testid="btn-toggle-more-competitions"
+              >
+                {showAll ? "Show less" : `Show ${hiddenCount} more`}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${showAll ? "rotate-180" : ""}`}
+                />
+              </button>
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Task #746 — hide-game confirmation. Scoped to the team page:
           the game stays in the competition's own schedule and imports,
