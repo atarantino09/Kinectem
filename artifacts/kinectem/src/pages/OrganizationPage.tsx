@@ -50,6 +50,7 @@ import {
   X,
   ExternalLink,
   ListPlus,
+  Mail,
   Megaphone,
   Newspaper,
   Pencil,
@@ -896,6 +897,18 @@ export default function OrganizationPage() {
                             >
                               <Megaphone className="w-4 h-4 mr-2" />
                               Send announcement
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              asChild
+                              data-testid="btn-org-roster-outreach"
+                            >
+                              <Link
+                                href={`/organizations/${orgId}/roster-outreach`}
+                                className="flex items-center w-full cursor-pointer"
+                              >
+                                <Mail className="w-4 h-4 mr-2" />
+                                Roster outreach
+                              </Link>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

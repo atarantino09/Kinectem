@@ -1300,6 +1300,49 @@ WHERE o.id = s.organization_id
   AND s.billing_starts_at = '2026-11-01 00:00:00'::timestamp;
 `;
 
+// Task #895 — durable, shared manual-outreach state for every active
+// organization team. The row is retained when a manager unchecks it so the
+// shared checklist remains a real persistent record rather than browser state.
+const TASK_895_ROSTER_OUTREACH = `
+CREATE TABLE IF NOT EXISTS organization_roster_outreach (
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  sent_at timestamp,
+  sent_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (organization_id, team_id)
+);
+
+CREATE INDEX IF NOT EXISTS organization_roster_outreach_team_id_idx
+  ON organization_roster_outreach (team_id);
+`;
+
+// Shared team join links are bearer capabilities: protect their entropy and
+// enforce one pending email-less player link per team.
+const TASK_895_SECURE_ROSTER_JOIN_LINKS = `
+DELETE FROM roster_invites duplicate
+USING roster_invites canonical
+WHERE duplicate.team_id = canonical.team_id
+  AND duplicate.invited_email IS NULL
+  AND duplicate.status = 'pending'
+  AND duplicate.role = 'player'
+  AND canonical.invited_email IS NULL
+  AND canonical.status = 'pending'
+  AND canonical.role = 'player'
+  AND (
+    duplicate.created_at > canonical.created_at
+    OR (
+      duplicate.created_at = canonical.created_at
+      AND duplicate.id::text > canonical.id::text
+    )
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS roster_invites_pending_email_less_player_team_uniq
+  ON roster_invites (team_id)
+  WHERE invited_email IS NULL AND status = 'pending' AND role = 'player';
+`;
+
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
@@ -2313,6 +2356,14 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     // canceled subscriptions untouched.
     name: "2026-08-20-task-878-legacy-org-billing-floor",
     sql: LEGACY_ORG_BILLING_FLOOR_SQL,
+  },
+  {
+    name: "2026-08-21-task-895-roster-outreach",
+    sql: TASK_895_ROSTER_OUTREACH,
+  },
+  {
+    name: "2026-08-21-task-895-secure-roster-join-links",
+    sql: TASK_895_SECURE_ROSTER_JOIN_LINKS,
   },
 ];
 

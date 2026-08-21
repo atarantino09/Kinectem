@@ -63,6 +63,7 @@ import {
   notFound,
   type PostKind,
 } from "../lib/spec-helpers";
+import { getOrCreateTeamJoinLink } from "../lib/team-join-link";
 import {
   loadPostStats,
   statsFor,
@@ -2174,38 +2175,7 @@ router.post(
     // ones until the team is unarchived.
     if (team.archivedAt)
       return apiError(res, 409, "Team is archived", { code: "team_archived" });
-    // Reuse a pending email-less player invite for this team if one exists,
-    // so admins always share a stable parent-onboarding link.
-    const [existing] = await db
-      .select()
-      .from(rosterInvites)
-      .where(
-        and(
-          eq(rosterInvites.teamId, teamId),
-          eq(rosterInvites.status, "pending"),
-          isNull(rosterInvites.invitedEmail),
-        ),
-      )
-      .limit(1);
-    let token = existing?.token;
-    let createdAt = existing?.createdAt ?? new Date();
-    if (!existing) {
-      const newToken = `join-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
-      const [row] = await db
-        .insert(rosterInvites)
-        .values({
-          token: newToken,
-          teamId,
-          invitedEmail: null,
-          invitedName: null,
-          role: "player",
-          position: "player",
-          invitedById: me?.id ?? null,
-        })
-        .returning();
-      token = row.token;
-      createdAt = row.createdAt;
-    }
+    const { token, createdAt } = await getOrCreateTeamJoinLink(teamId, me.id);
     res.json({
       token,
       teamId,

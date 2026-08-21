@@ -584,6 +584,25 @@ export const teams = pgTable("teams", {
     .where(sql`${t.adoptToken} IS NOT NULL`),
 }));
 
+// Organization-wide roster outreach is a manager-facing checklist, one row
+// per organization/team. Keeping sentAt nullable lets managers explicitly
+// reopen a team for follow-up without losing the shared record itself.
+export const organizationRosterOutreach = pgTable("organization_roster_outreach", {
+  organizationId: uuid("organization_id")
+    .references(() => organizations.id, { onDelete: "cascade" })
+    .notNull(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  sentAt: timestamp("sent_at"),
+  sentByUserId: uuid("sent_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.organizationId, t.teamId] }),
+  teamIdIdx: index("organization_roster_outreach_team_id_idx").on(t.teamId),
+}));
+
 export const teamFollowers = pgTable("team_followers", {
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
@@ -666,6 +685,16 @@ export const rosterInvites = pgTable("roster_invites", {
   // up by invitee email when matching an invite to a signing-up user.
   teamIdIdx: index("roster_invites_team_id_idx").on(t.teamId),
   invitedEmailIdx: index("roster_invites_invited_email_idx").on(t.invitedEmail),
+  // Shared team-join links use one pending, email-less player invite per team.
+  // This is a partial unique index because normal roster invitations are
+  // email-addressed and should remain independently actionable.
+  pendingEmailLessPlayerInviteUnique: uniqueIndex(
+    "roster_invites_pending_email_less_player_team_uniq",
+  )
+    .on(t.teamId)
+    .where(
+      sql`${t.invitedEmail} IS NULL AND ${t.status} = 'pending' AND ${t.role} = 'player'`,
+    ),
 }));
 
 // Task #808 — coach emails a platform admin pre-stages on an unclaimed

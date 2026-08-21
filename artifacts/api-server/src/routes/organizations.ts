@@ -23,6 +23,7 @@ import {
   stagedCoachInvites,
   promoCodes,
   teamNewsLinks,
+  organizationRosterOutreach,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -37,6 +38,7 @@ import {
   buildPostUrl,
   buildFollowEmail,
   buildFirstRecapMilestoneEmail,
+  buildInviteAcceptUrl,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
@@ -109,6 +111,8 @@ import {
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { normalizeWebsite } from "../lib/normalize-website";
+import { buildCoachInviteText } from "@workspace/invite-copy";
+import { getOrCreateTeamJoinLink } from "../lib/team-join-link";
 import {
   blockMinorAction,
   gateFollowOfMinor,
@@ -1238,6 +1242,166 @@ router.get(
         hasCoach: coachTeams.has(id),
         hasPendingCoachInvite: pendingTeams.has(id),
       })),
+    });
+  }),
+);
+
+// Task #895 — organization managers coordinate one manual roster-outreach
+// message per active team. This intentionally lives outside the locked
+// OpenAPI contract and is consumed with customFetch, like coach status.
+router.get(
+  "/organizations/:orgId/roster-outreach",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Org owner or admin only");
+    }
+
+    const rows = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        sport: teams.sport,
+        season: teams.season,
+        level: teams.level,
+        gender: teams.gender,
+        sentAt: organizationRosterOutreach.sentAt,
+        sentById: users.id,
+        sentByName: users.name,
+      })
+      .from(teams)
+      .leftJoin(
+        organizationRosterOutreach,
+        and(
+          eq(organizationRosterOutreach.organizationId, org.id),
+          eq(organizationRosterOutreach.teamId, teams.id),
+        ),
+      )
+      .leftJoin(users, eq(users.id, organizationRosterOutreach.sentByUserId))
+      .where(and(eq(teams.organizationId, org.id), isNull(teams.archivedAt)))
+      .orderBy(sql`nullif(btrim(lower(${teams.name})), '') asc nulls last`);
+
+    res.json({
+      data: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        sport: row.sport,
+        season: row.season,
+        level: row.level,
+        gender: row.gender,
+        sentAt: row.sentAt?.toISOString() ?? null,
+        sentBy: row.sentById && row.sentByName
+          ? { id: row.sentById, displayName: row.sentByName }
+          : null,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/organizations/:orgId/roster-outreach/:teamId/message",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Org owner or admin only");
+    }
+    const [team] = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(
+        and(
+          eq(teams.id, req.params.teamId),
+          eq(teams.organizationId, org.id),
+          isNull(teams.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (!team) return notFound(res);
+
+    const { token } = await getOrCreateTeamJoinLink(team.id, me.id);
+    const joinLink = buildInviteAcceptUrl(token);
+    res.json({
+      teamId: team.id,
+      joinLink,
+      message: buildCoachInviteText({
+        coachName: displayName(me),
+        link: joinLink,
+      }),
+    });
+  }),
+);
+
+router.patch(
+  "/organizations/:orgId/roster-outreach/:teamId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    if (typeof req.body?.sent !== "boolean") {
+      return apiError(res, 400, "sent must be a boolean");
+    }
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return notFound(res);
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Org owner or admin only");
+    }
+    const [team] = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(
+        and(
+          eq(teams.id, req.params.teamId),
+          eq(teams.organizationId, org.id),
+          isNull(teams.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (!team) return notFound(res);
+
+    const now = new Date();
+    const sentAt = req.body.sent ? now : null;
+    const sentByUserId = req.body.sent ? me.id : null;
+    const [outreach] = await db
+      .insert(organizationRosterOutreach)
+      .values({
+        organizationId: org.id,
+        teamId: team.id,
+        sentAt,
+        sentByUserId,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationRosterOutreach.organizationId,
+          organizationRosterOutreach.teamId,
+        ],
+        set: { sentAt, sentByUserId, updatedAt: now },
+      })
+      .returning();
+
+    res.json({
+      teamId: team.id,
+      sentAt: outreach.sentAt?.toISOString() ?? null,
+      sentBy: outreach.sentByUserId
+        ? { id: outreach.sentByUserId, displayName: displayName(me) }
+        : null,
     });
   }),
 );

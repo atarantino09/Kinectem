@@ -247,6 +247,7 @@ describe("OrganizationPage — admin control gating", () => {
     await user.keyboard("{Escape}");
     await user.click(screen.getByTestId("btn-org-manage-menu"));
     expect(screen.getByTestId("btn-manage-admins-hero")).toBeInTheDocument();
+    expect(screen.getByText("Roster outreach")).toBeInTheDocument();
     expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
