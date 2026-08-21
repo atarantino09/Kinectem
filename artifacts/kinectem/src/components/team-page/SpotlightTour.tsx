@@ -26,6 +26,23 @@ type Rect = { top: number; left: number; width: number; height: number };
 const RING_PAD = 8;
 const CARD_W = 340;
 
+function layoutViewport(): { width: number; height: number } {
+  if (typeof window === "undefined") {
+    return { width: 1200, height: 800 };
+  }
+
+  // Fixed-position CSS and getBoundingClientRect() both use the layout
+  // viewport. `innerWidth` includes a classic scrollbar, while an inset-0
+  // fixed element does not. Using it in the SVG viewBox shrinks every x/y
+  // coordinate toward the top-left and visibly shifts the ring off its
+  // control, especially on the right side of a page.
+  const root = document.documentElement;
+  return {
+    width: root.clientWidth || window.innerWidth,
+    height: root.clientHeight || window.innerHeight,
+  };
+}
+
 function targetTestIds(step: TourStep): string[] {
   return Array.from(
     new Set([step.targetTestId, ...(step.additionalTargetTestIds ?? [])]),
@@ -172,8 +189,7 @@ export function SpotlightTour({
   const next = () => (isLast ? onFinish() : setIndex((i) => i + 1));
   const back = () => setIndex((i) => Math.max(0, i - 1));
 
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const { width: vw, height: vh } = layoutViewport();
   const bounds = boundsFor(rects);
 
   let cardStyle: CSSProperties;

@@ -43,7 +43,7 @@ export function TeamRosterRail({
           onClick={() => setOpen((v) => !v)}
           className="flex items-center gap-2 min-w-0 text-left"
           aria-expanded={open}
-          data-testid="btn-toggle-roster"
+          data-testid="btn-toggle-rail-roster"
         >
           <Users className="w-5 h-5 text-primary shrink-0" />
           <h2 className="text-base font-black tracking-tight truncate">
