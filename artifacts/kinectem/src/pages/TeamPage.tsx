@@ -41,8 +41,8 @@ import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
 import {
   SpotlightTour,
-  type TourStep,
 } from "@/components/team-page/SpotlightTour";
+import { buildTeamTourSteps } from "@/components/team-page/teamTourSteps";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { ClaimCompetitionDialog } from "@/components/team-page/ClaimCompetitionDialog";
 import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamSchedulePanel";
@@ -216,127 +216,18 @@ export default function TeamPage() {
   // First-run guided walkthrough. Built only from the buttons this viewer can
   // actually see (org admins get "Edit team"; coaches get the manage steps),
   // so nobody is pointed at a control that isn't there.
-  const tourSteps = useMemo<TourStep[]>(() => {
-    const s: TourStep[] = [];
-    if (isAdmin) {
-      s.push({
-        targetTestId: "btn-team-manage-menu",
-        onEnter: () => setExpanded("posts"),
-        title: "Manage your team",
-        body: (
-          <>
-            Open <strong>Manage</strong> at the top of the page to edit your
-            team's name, sport, level, and cover photo anytime.
-          </>
-        ),
-      });
-    }
-    if (canManage) {
-      s.push({
-        targetTestId: "btn-toggle-roster",
-        additionalTargetTestIds: ["btn-invite-roster"],
-        onEnter: () => setExpanded("roster"),
-        title: "Build your roster",
-        body: (
-          <>
-            Open the <strong>Roster</strong> tab, then click{" "}
-            <strong>Invite</strong> to add coaches, players, and parents — by
-            email or a shareable join link. Coaches you add become team admins
-            who can help you run everything.
-          </>
-        ),
-      });
-    }
-    if (canManage && canViewSchedule) {
-      s.push({
-        targetTestId: "btn-toggle-schedule",
-        additionalTargetTestIds: ["btn-add-event", "btn-import-csv"],
-        onEnter: () => setExpanded("schedule"),
-        title: "Add your schedule",
-        body: (
-          <>
-            Open the <strong>Schedule</strong> tab, then click{" "}
-            <strong>Add Event</strong> to post practices and games — or{" "}
-            <strong>Import CSV</strong> to load a whole season at once.
-          </>
-        ),
-      });
-    }
-    if (canPostHighlight) {
-      s.push({
-        targetTestId: "btn-toggle-posts",
-        additionalTargetTestIds: [
-          canPostRecap
-          ? "btn-open-post-options"
-          : "btn-create-highlight",
-        ],
-        onEnter: () => setExpanded("posts"),
-        title: "Post highlights",
-        body: (
-          <>
-            In <strong>Recent Posts</strong>,{" "}
-            {canPostRecap ? (
-              <>
-                open <strong>Other post options</strong>, then choose{" "}
-                <strong>Post Highlight</strong>
-              </>
-            ) : (
-              <>
-                click <strong>Post Highlight</strong>
-              </>
-            )}{" "}
-            to share a clip. Paste a YouTube or Vimeo link so it plays right on
-            the page — other links still work but show as a plain link.
-          </>
-        ),
-      });
-    }
-    if (canPostRecap) {
-      s.push({
-        targetTestId: "btn-toggle-posts",
-        additionalTargetTestIds: ["btn-create-recap"],
-        onEnter: () => setExpanded("posts"),
-        title: "Write game recaps",
-        body: (
-          <>
-            In <strong>Recent Posts</strong>, click{" "}
-            <strong>Create Game Recap</strong>. Short on time? The built-in{" "}
-            <strong>AI Assist</strong> button drafts and polishes the write-up
-            from a few quick notes.
-          </>
-        ),
-      });
-      s.push({
-        targetTestId: "btn-toggle-posts",
-        additionalTargetTestIds: ["btn-open-post-options"],
-        onEnter: () => setExpanded("posts"),
-        title: "Combined recaps",
-        body: (
-          <>
-            In <strong>Recent Posts</strong>, open{" "}
-            <strong>Other post options</strong>, then choose{" "}
-            <strong>Combined Recap</strong> to roll several games into one story
-            — perfect for a tournament weekend or a full-season wrap-up.
-          </>
-        ),
-      });
-      s.push({
-        targetTestId: "btn-create-recap",
-        onEnter: () => setExpanded("posts"),
-        title: "Start with your past games",
-        body: (
-          <>
-            Don't leave your team page blank — hit{" "}
-            <strong>Create Game Recap</strong> and back-log recaps from past
-            weeks and seasons. Filling in your history gives players and families
-            something to scroll from day one, and it only takes a few minutes per
-            game with <strong>AI Assist</strong>.
-          </>
-        ),
-      });
-    }
-    return s;
-  }, [isAdmin, canManage, canViewSchedule, canPostHighlight, canPostRecap]);
+  const tourSteps = useMemo(
+    () =>
+      buildTeamTourSteps({
+        isAdmin,
+        canManage,
+        canViewSchedule,
+        canPostHighlight,
+        canPostRecap,
+        onExpand: setExpanded,
+      }),
+    [isAdmin, canManage, canViewSchedule, canPostHighlight, canPostRecap],
+  );
 
   // Open the walkthrough once per account (per browser), the first time a
   // manager lands on any team. Suppressed when `?welcome=1` is present so it
