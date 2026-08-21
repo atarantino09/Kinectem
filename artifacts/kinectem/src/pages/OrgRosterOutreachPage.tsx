@@ -136,24 +136,26 @@ export default function OrgRosterOutreachPage() {
         
         <div className="relative rounded-2xl overflow-hidden bg-card border shadow-sm">
           <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pointer-events-none" />
-          <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center justify-center p-3 bg-primary/10 text-primary rounded-xl mb-4">
+          <div className="relative flex flex-col gap-4 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-4 sm:gap-5">
+              <div className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary/10 p-3 text-primary">
                 <Mail className="w-8 h-8" />
               </div>
-              <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground">
-                Roster Outreach
-              </h1>
-              <p className="text-muted-foreground mt-2 max-w-2xl font-medium text-lg leading-relaxed">
-                Prepare a team-specific message, paste it into the communication tool you already use, then track outreach together.
-              </p>
+              <div className="min-w-0">
+                <h1 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
+                  Roster Outreach
+                </h1>
+                <p className="mt-1 max-w-2xl text-base font-medium leading-relaxed text-muted-foreground sm:text-lg">
+                  Prepare a team-specific message, paste it into the communication tool you already use, then track outreach together.
+                </p>
+              </div>
             </div>
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => refetch()} 
               disabled={isRefetching}
-              className="shrink-0 font-bold rounded-full bg-background shadow-sm hover:bg-muted"
+              className="shrink-0 self-start rounded-full bg-background font-bold shadow-sm hover:bg-muted lg:self-center"
               data-testid="btn-refresh-outreach"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} />
@@ -163,8 +165,24 @@ export default function OrgRosterOutreachPage() {
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-3 items-start">
-        <section className="lg:col-span-2 overflow-hidden rounded-2xl border bg-card shadow-sm">
+      <aside className="rounded-xl border border-primary/20 bg-primary/5 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center">
+          <div className="flex shrink-0 items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-primary" />
+            <div>
+              <h2 className="font-bold text-primary">Send through your team tool</h2>
+              <p className="mt-1 text-sm font-medium text-muted-foreground">
+                Kinectem prepares the team’s message and join link, but you stay in control of delivery.
+              </p>
+            </div>
+          </div>
+          <p className="border-t border-primary/15 pt-4 text-sm font-medium text-muted-foreground md:ml-auto md:max-w-md md:border-l md:border-t-0 md:pl-5 md:pt-0">
+            Paste it into TeamSnap, LeagueApps, PlayMetrics, or another roster communication tool—then check the team off once it is sent.
+          </p>
+        </div>
+      </aside>
+
+      <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
           <div className="flex flex-col gap-4 border-b bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Shared checklist</p>
@@ -236,23 +254,7 @@ export default function OrgRosterOutreachPage() {
               </table>
             </div>
           )}
-        </section>
-
-        <aside className="rounded-xl border border-primary/20 bg-primary/5 p-6 lg:sticky lg:top-24">
-          <h3 className="font-bold text-primary flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5" />
-            Send through your team tool
-          </h3>
-          <div className="space-y-4 text-sm text-muted-foreground font-medium">
-            <p>
-              Kinectem prepares the team’s message and join link, but you stay in control of delivery.
-            </p>
-            <p>
-              Paste it into TeamSnap, LeagueApps, PlayMetrics, or another roster communication tool—then check the team off once it is sent.
-            </p>
-          </div>
-        </aside>
-      </div>
+      </section>
 
       {selectedTeam && (
         <MessageDialog 
