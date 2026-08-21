@@ -233,7 +233,8 @@ export default function TeamPage() {
     }
     if (canManage) {
       s.push({
-        targetTestId: "btn-invite-roster",
+        targetTestId: "btn-toggle-roster",
+        additionalTargetTestIds: ["btn-invite-roster"],
         onEnter: () => setExpanded("roster"),
         title: "Build your roster",
         body: (
@@ -248,7 +249,8 @@ export default function TeamPage() {
     }
     if (canManage && canViewSchedule) {
       s.push({
-        targetTestId: "btn-add-event",
+        targetTestId: "btn-toggle-schedule",
+        additionalTargetTestIds: ["btn-add-event", "btn-import-csv"],
         onEnter: () => setExpanded("schedule"),
         title: "Add your schedule",
         body: (
@@ -262,9 +264,12 @@ export default function TeamPage() {
     }
     if (canPostHighlight) {
       s.push({
-        targetTestId: canPostRecap
+        targetTestId: "btn-toggle-posts",
+        additionalTargetTestIds: [
+          canPostRecap
           ? "btn-open-post-options"
           : "btn-create-highlight",
+        ],
         onEnter: () => setExpanded("posts"),
         title: "Post highlights",
         body: (
@@ -288,7 +293,8 @@ export default function TeamPage() {
     }
     if (canPostRecap) {
       s.push({
-        targetTestId: "btn-create-recap",
+        targetTestId: "btn-toggle-posts",
+        additionalTargetTestIds: ["btn-create-recap"],
         onEnter: () => setExpanded("posts"),
         title: "Write game recaps",
         body: (
@@ -301,7 +307,8 @@ export default function TeamPage() {
         ),
       });
       s.push({
-        targetTestId: "btn-open-post-options",
+        targetTestId: "btn-toggle-posts",
+        additionalTargetTestIds: ["btn-open-post-options"],
         onEnter: () => setExpanded("posts"),
         title: "Combined recaps",
         body: (

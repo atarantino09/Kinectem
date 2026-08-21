@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useId,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -12,6 +13,8 @@ import { Button } from "@/components/ui/button";
 export type TourStep = {
   /** Highlighted element, located via `[data-testid="..."]`. */
   targetTestId: string;
+  /** Additional visible controls that belong to the same instruction. */
+  additionalTargetTestIds?: string[];
   title: string;
   body: ReactNode;
   /** Run before locating the target (e.g. switch the active tab). */
@@ -23,12 +26,39 @@ type Rect = { top: number; left: number; width: number; height: number };
 const RING_PAD = 8;
 const CARD_W = 340;
 
+function targetTestIds(step: TourStep): string[] {
+  return Array.from(
+    new Set([step.targetTestId, ...(step.additionalTargetTestIds ?? [])]),
+  );
+}
+
+function targetElements(testIds: string[]): HTMLElement[] {
+  return Array.from(
+    new Set(
+      testIds
+        .map((testId) =>
+          document.querySelector<HTMLElement>(`[data-testid="${testId}"]`),
+        )
+        .filter((element): element is HTMLElement => element !== null),
+    ),
+  );
+}
+
+function boundsFor(rects: Rect[]): Rect | null {
+  if (rects.length === 0) return null;
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const bottom = Math.max(...rects.map((rect) => rect.top + rect.height));
+  const right = Math.max(...rects.map((rect) => rect.left + rect.width));
+  return { top, left, width: right - left, height: bottom - top };
+}
+
 /**
  * A forced, numbered "spotlight" walkthrough. It dims the page, rings the
- * current target element, and shows a tooltip card with Back / Next. Only the
- * tour controls are interactive (a transparent full-screen layer blocks page
- * clicks) so users can't wander off mid-tour. Steps whose target never mounts
- * fall back to a centered card so the tour never gets stuck.
+ * current target element(s), and shows a tooltip card with Back / Next. Only
+ * the tour controls are interactive (a transparent full-screen layer blocks
+ * page clicks) so users can't wander off mid-tour. Steps whose targets never
+ * mount fall back to a centered card so the tour never gets stuck.
  */
 export function SpotlightTour({
   steps,
@@ -38,44 +68,44 @@ export function SpotlightTour({
   onFinish: () => void;
 }) {
   const [index, setIndex] = useState(0);
-  const [rect, setRect] = useState<Rect | null>(null);
+  const [rects, setRects] = useState<Rect[]>([]);
   const retryRef = useRef<number | null>(null);
   const settleRef = useRef<number[]>([]);
+  const maskId = `tour-mask-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const step = steps[index];
   const total = steps.length;
 
-  const measure = useCallback((el: HTMLElement) => {
-    const r = el.getBoundingClientRect();
-    setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+  const measure = useCallback((elements: HTMLElement[]) => {
+    setRects(
+      elements.map((element) => {
+        const r = element.getBoundingClientRect();
+        return { top: r.top, left: r.left, width: r.width, height: r.height };
+      }),
+    );
   }, []);
 
-  // Locate + measure the current target, retrying briefly while the tab
+  // Locate + measure the current targets, retrying briefly while the tab
   // content (and any queries) settle after onEnter().
   const locate = useCallback(
-    (testId: string) => {
+    (testIds: string[]) => {
       if (retryRef.current) window.clearTimeout(retryRef.current);
       settleRef.current.forEach((t) => window.clearTimeout(t));
       settleRef.current = [];
       let tries = 0;
       const attempt = () => {
-        const el = document.querySelector<HTMLElement>(
-          `[data-testid="${testId}"]`,
-        );
-        if (el) {
-          el.scrollIntoView({ block: "center", inline: "nearest" });
+        const elements = targetElements(testIds);
+        if (elements.length > 0) {
+          elements[0].scrollIntoView({ block: "center", inline: "nearest" });
           // Re-measure on the next frame so the value reflects the scroll.
-          window.requestAnimationFrame(() => measure(el));
+          window.requestAnimationFrame(() => measure(targetElements(testIds)));
           // Layout can still shift after the target is found — e.g. an image
           // above it (org logo / avatar) finishing loading pushes it
-          // sideways or down. Re-measure a few times so the ring lands on the
-          // element's final resting position instead of a stale rect.
+          // sideways or down. Re-measure a few times so every ring lands on
+          // its target's final resting position instead of a stale rect.
           settleRef.current = [100, 250, 500, 900, 1400].map((d) =>
             window.setTimeout(() => {
-              const cur = document.querySelector<HTMLElement>(
-                `[data-testid="${testId}"]`,
-              );
-              if (cur) measure(cur);
+              measure(targetElements(testIds));
             }, d),
           );
           return;
@@ -84,7 +114,7 @@ export function SpotlightTour({
         if (tries < 24) {
           retryRef.current = window.setTimeout(attempt, 50);
         } else {
-          setRect(null); // centered fallback — no target found
+          setRects([]); // centered fallback — no target found
         }
       };
       attempt();
@@ -95,9 +125,9 @@ export function SpotlightTour({
   // On step change: prep the page, then locate the target.
   useEffect(() => {
     if (!step) return;
-    setRect(null);
+    setRects([]);
     step.onEnter?.();
-    const id = window.setTimeout(() => locate(step.targetTestId), 60);
+    const id = window.setTimeout(() => locate(targetTestIds(step)), 60);
     return () => {
       window.clearTimeout(id);
       if (retryRef.current) window.clearTimeout(retryRef.current);
@@ -110,10 +140,8 @@ export function SpotlightTour({
   useEffect(() => {
     if (!step) return;
     const onMove = () => {
-      const el = document.querySelector<HTMLElement>(
-        `[data-testid="${step.targetTestId}"]`,
-      );
-      if (el) measure(el);
+      const elements = targetElements(targetTestIds(step));
+      if (elements.length > 0) measure(elements);
     };
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
@@ -124,13 +152,12 @@ export function SpotlightTour({
     // ring.
     const ro = new ResizeObserver(onMove);
     ro.observe(document.body);
-    const el = document.querySelector<HTMLElement>(
-      `[data-testid="${step.targetTestId}"]`,
-    );
-    if (el) {
-      ro.observe(el);
-      if (el.offsetParent instanceof HTMLElement) ro.observe(el.offsetParent);
-    }
+    targetElements(targetTestIds(step)).forEach((element) => {
+      ro.observe(element);
+      if (element.offsetParent instanceof HTMLElement) {
+        ro.observe(element.offsetParent);
+      }
+    });
     return () => {
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
@@ -147,13 +174,14 @@ export function SpotlightTour({
 
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const bounds = boundsFor(rects);
 
   let cardStyle: CSSProperties;
-  if (rect) {
-    // Pin the card to whichever vertical half is opposite the target so it
-    // never sits on top of the highlighted button (or its neighbours). Center
-    // it horizontally in the viewport, clamped to stay fully on-screen.
-    const targetCenterY = rect.top + rect.height / 2;
+  if (bounds) {
+    // Pin the card to whichever vertical half is opposite the highlighted
+    // group so it never sits on top of any target. Center it horizontally in
+    // the viewport, clamped to stay fully on-screen.
+    const targetCenterY = bounds.top + bounds.height / 2;
     const targetInTopHalf = targetCenterY < vh / 2;
     const left = Math.min(
       Math.max(14, vw / 2 - CARD_W / 2),
@@ -176,21 +204,50 @@ export function SpotlightTour({
     <div className="fixed inset-0 z-[9999]" data-testid="team-tour">
       {/* Transparent click-blocker so only the tour controls are usable. */}
       <div className="absolute inset-0" style={{ pointerEvents: "auto" }} />
-      {rect ? (
-        <div
-          className="absolute rounded-lg"
-          style={{
-            top: rect.top - RING_PAD,
-            left: rect.left - RING_PAD,
-            width: rect.width + RING_PAD * 2,
-            height: rect.height + RING_PAD * 2,
-            boxShadow: "0 0 0 9999px rgba(2,6,23,0.68)",
-            outline: "3px solid rgb(255,255,255)",
-            outlineOffset: "2px",
-            pointerEvents: "none",
-            transition: "top 0.15s ease, left 0.15s ease, width 0.15s ease, height 0.15s ease",
-          }}
-        />
+      {rects.length > 0 ? (
+        <svg
+          className="absolute inset-0 h-full w-full pointer-events-none"
+          viewBox={`0 0 ${vw} ${vh}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <mask id={maskId}>
+              <rect width={vw} height={vh} fill="white" />
+              {rects.map((rect, index) => (
+                <rect
+                  key={index}
+                  x={rect.left - RING_PAD}
+                  y={rect.top - RING_PAD}
+                  width={rect.width + RING_PAD * 2}
+                  height={rect.height + RING_PAD * 2}
+                  rx="8"
+                  fill="black"
+                />
+              ))}
+            </mask>
+          </defs>
+          <rect
+            width={vw}
+            height={vh}
+            fill="rgba(2,6,23,0.68)"
+            mask={`url(#${maskId})`}
+          />
+          {rects.map((rect, index) => (
+            <rect
+              key={index}
+              x={rect.left - RING_PAD}
+              y={rect.top - RING_PAD}
+              width={rect.width + RING_PAD * 2}
+              height={rect.height + RING_PAD * 2}
+              rx="8"
+              fill="none"
+              stroke="white"
+              strokeWidth="3"
+              data-testid="tour-spotlight-ring"
+            />
+          ))}
+        </svg>
       ) : (
         <div
           className="absolute inset-0"

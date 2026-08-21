@@ -321,6 +321,7 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-add-team",
+        additionalTargetTestIds: ["btn-bulk-add-teams"],
         title: "Add your teams",
         body: (
           <>

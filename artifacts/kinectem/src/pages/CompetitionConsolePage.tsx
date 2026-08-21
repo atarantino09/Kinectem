@@ -3515,6 +3515,7 @@ export default function CompetitionConsolePage() {
       },
       {
         targetTestId: "btn-view-public",
+        additionalTargetTestIds: ["btn-competition-replay-tour"],
         title: "See the public page",
         body: (
           <>

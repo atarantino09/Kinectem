@@ -60,6 +60,9 @@ export default function GuardianPage() {
       },
       {
         targetTestId: "card-linked-children",
+        additionalTargetTestIds: firstChildId
+          ? [`btn-invite-guardian-${firstChildId}`]
+          : undefined,
         title: "Manage your children",
         body: (
           <>
