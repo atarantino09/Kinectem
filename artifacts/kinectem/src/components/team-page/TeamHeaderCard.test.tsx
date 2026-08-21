@@ -9,7 +9,7 @@ const team = {
   id: "team-1",
   name: "Westfield Wolves",
   sport: "Soccer",
-  level: "Varsity",
+  level: "Hudson Valley Youth Soccer League",
   gender: "coed" as const,
   isFollowing: false,
   followerCount: 18,
@@ -119,5 +119,40 @@ describe("TeamHeaderCard action hierarchy", () => {
 
     await user.click(screen.getByTestId("btn-team-replay-tour"));
     expect(onReplayTour).toHaveBeenCalledOnce();
+  });
+});
+
+describe("TeamHeaderCard identity metadata", () => {
+  it("places sport, league, and gender in muted chips below the team name", () => {
+    renderHeader();
+
+    const identity = screen.getByTestId("team-identity-details");
+    const metadata = screen.getByTestId("team-identity-metadata");
+    const league = screen.getByTestId("chip-team-league");
+    const teamName = screen.getByRole("heading", { name: team.name });
+
+    expect(identity).toContainElement(teamName);
+    expect(identity).toContainElement(metadata);
+    expect(
+      teamName.compareDocumentPosition(metadata) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(metadata).toHaveClass("flex-wrap", "min-w-0");
+    expect(within(metadata).getByText("Soccer")).toBeInTheDocument();
+    expect(league).toHaveTextContent("Hudson Valley Youth Soccer League");
+    expect(league).toHaveClass(
+      "bg-muted",
+      "rounded-md",
+      "max-w-full",
+      "break-words",
+    );
+    expect(within(metadata).getByTestId("chip-team-gender")).toHaveTextContent(
+      "coed",
+    );
+    expect(
+      screen.getByTestId("team-identity-row").compareDocumentPosition(
+        screen.getByTestId("team-header-action-menus"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

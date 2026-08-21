@@ -284,7 +284,10 @@ export function TeamHeaderCard({
             otherwise CSS paints positioned descendants above non-positioned
             siblings in the same stacking context, which would let the
             uploaded team photo cover the logo square. */}
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6 -mt-16">
+        <div
+          className="relative z-10 flex flex-col gap-4 -mt-16 sm:flex-row sm:items-start sm:gap-6"
+          data-testid="team-identity-row"
+        >
           <div className="shrink-0 flex flex-col items-center sm:items-start">
             <AvatarLightbox
               avatarUrl={orgLogoUrl || null}
@@ -330,7 +333,10 @@ export function TeamHeaderCard({
           {/* pt-20 > the row's -mt-16 pull, so the name always starts BELOW
               the banner — bottom-aligning it next to the logo let the Edit /
               tour buttons push the name up under the banner and clip it. */}
-          <div className="flex-1 min-w-0 sm:pt-20 sm:pb-2">
+          <div
+            className="flex-1 min-w-0 sm:pt-20 sm:pb-2"
+            data-testid="team-identity-details"
+          >
             {/* Name gets its own full-width row so long team names use the
                 whole hero instead of getting squeezed by contextual tools. */}
             <FitText
@@ -347,31 +353,38 @@ export function TeamHeaderCard({
                 teamName={team.name}
               />
             )}
+            {(team.sport || team.level || team.gender) && (
+              <div
+                className="mt-2 flex min-w-0 flex-wrap items-center gap-2"
+                data-testid="team-identity-metadata"
+              >
+                {team.sport && (
+                  <div className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-sm font-bold text-foreground">
+                    <Trophy className="w-4 h-4 text-amber-500" />
+                    {team.sport}
+                  </div>
+                )}
+                {team.level && (
+                  <div
+                    className="max-w-full break-words rounded-md bg-muted px-3 py-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground"
+                    data-testid="chip-team-league"
+                  >
+                    {team.level}
+                  </div>
+                )}
+                {team.gender && (
+                  <div
+                    className="rounded-md bg-muted px-3 py-1.5 text-sm font-bold capitalize text-foreground"
+                    data-testid="chip-team-gender"
+                  >
+                    {team.gender}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <div className="mt-5 space-y-3">
-          <div className="flex items-center gap-3 flex-wrap">
-          {team.sport && (
-            <div className="font-bold text-foreground flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-md text-sm">
-              <Trophy className="w-4 h-4 text-amber-500" />
-              {team.sport}
-            </div>
-          )}
-          {team.level && (
-            <div className="font-bold text-muted-foreground text-sm uppercase tracking-wider">
-              {team.level}
-            </div>
-          )}
-          {team.gender && (
-            <div
-              className="font-bold text-foreground bg-muted px-3 py-1.5 rounded-md text-sm capitalize"
-              data-testid="chip-team-gender"
-            >
-              {team.gender}
-            </div>
-          )}
-          </div>
-
+        <div className="mt-3 space-y-3">
           <div
             className="rounded-xl border border-border bg-muted/30 p-3"
             data-testid="team-header-action-menus"
