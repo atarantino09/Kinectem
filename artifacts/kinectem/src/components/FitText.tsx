@@ -14,6 +14,21 @@ interface FitTextProps {
   className?: string;
 }
 
+export function fitFontSize({
+  available,
+  natural,
+  max,
+  min,
+}: {
+  available: number;
+  natural: number;
+  max: number;
+  min: number;
+}): number {
+  if (!available || !natural || natural <= available) return max;
+  return Math.max(min, Math.floor((available / natural) * max));
+}
+
 /**
  * Renders a single line of text that automatically shrinks its font size to fit
  * the container width. A hidden measurer (always at `max`) provides the natural
@@ -40,18 +55,26 @@ export function FitText({
     const recompute = () => {
       const available = container.clientWidth;
       const natural = measure.scrollWidth;
-      if (!available || !natural) return;
-      const next =
-        natural <= available
-          ? max
-          : Math.max(min, Math.floor((available / natural) * max));
-      setFontSize(next);
+      setFontSize(fitFontSize({ available, natural, max, min }));
     };
 
     recompute();
     const ro = new ResizeObserver(recompute);
     ro.observe(container);
-    return () => ro.disconnect();
+    // The first measurement can happen while a fallback font is visible. Font
+    // metrics changing after that do not necessarily resize the container, so
+    // ResizeObserver alone can leave a title permanently too small in a
+    // production first-load. Re-measure once the real font is ready and after
+    // any later font loading event.
+    const fontSet = "fonts" in document ? document.fonts : undefined;
+    const onFontsLoaded = () => recompute();
+    void fontSet?.ready.then(onFontsLoaded);
+    fontSet?.addEventListener("loadingdone", onFontsLoaded);
+
+    return () => {
+      ro.disconnect();
+      fontSet?.removeEventListener("loadingdone", onFontsLoaded);
+    };
   }, [children, max, min]);
 
   return (

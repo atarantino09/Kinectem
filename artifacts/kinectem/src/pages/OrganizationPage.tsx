@@ -678,8 +678,11 @@ export default function OrganizationPage() {
                 <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
               );
             })()}
-            <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-16 sm:-mt-20 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 sm:flex-wrap relative z-10">
-              <div className="flex items-end gap-3 sm:gap-4 min-w-0">
+            <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-16 sm:-mt-20 space-y-4 relative z-10">
+              <div
+                className="flex w-full items-end gap-3 sm:gap-4 min-w-0"
+                data-testid="org-header-identity"
+              >
                 <div className="shrink-0">
                   <AvatarLightbox
                     avatarUrl={organization.logoUrl}
@@ -751,7 +754,7 @@ export default function OrganizationPage() {
                   </div>
                 </div>
               </div>
-              <div className="w-full sm:w-auto">
+              <div className="w-full">
                 {isUnclaimed && (
                   <Badge
                     variant="outline"

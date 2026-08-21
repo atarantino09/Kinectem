@@ -199,6 +199,21 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
+  it("gives the organization identity a full hero row for a prominent name", async () => {
+    installHandlers({ role: "owner" });
+
+    renderWithProviders(<OrganizationPage />);
+
+    const identity = await screen.findByTestId("org-header-identity");
+    expect(identity).toHaveClass("w-full");
+    const heading = screen.getByRole("heading", {
+      name: "WESTFIELD ATHLETIC CLUB",
+    });
+    const visibleName = heading.querySelector("span:not([aria-hidden])");
+    if (!visibleName) throw new Error("Organization name text did not render");
+    expect(visibleName).toHaveStyle({ fontSize: "36px" });
+  });
+
   it("groups a manager's controls into color-coded menus", async () => {
     const user = userEvent.setup();
     installHandlers({ role: "owner", extraAdmin: false });
