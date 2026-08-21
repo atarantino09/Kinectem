@@ -127,6 +127,21 @@ describe("OrgRosterOutreachPage", () => {
     expect(await screen.findByTestId("text-prepared-message")).toHaveTextContent(
       "join-blue",
     );
+    expect(screen.getByTestId("dialog-message-team-blue")).toHaveClass(
+      "max-h-[calc(100dvh-2rem)]",
+      "!flex",
+      "flex-col",
+    );
+    expect(screen.getByTestId("dialog-message-content")).toHaveClass(
+      "overflow-y-auto",
+    );
+    expect(screen.getByTestId("text-prepared-message")).toHaveClass(
+      "font-sans",
+      "whitespace-pre-wrap",
+    );
+    expect(screen.getByTestId("dialog-message-footer")).toHaveClass(
+      "shrink-0",
+    );
     expect(customFetchMock).toHaveBeenCalledWith(
       `/api/v1/organizations/${ORG_ID}/roster-outreach/team-blue/message`,
       expect.objectContaining({ method: "POST" }),

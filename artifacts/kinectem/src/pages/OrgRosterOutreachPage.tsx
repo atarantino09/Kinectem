@@ -395,8 +395,11 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
 
   return (
     <Dialog open={true} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-xl p-0 overflow-hidden gap-0 border-0 shadow-2xl" data-testid={`dialog-message-${team.id}`}>
-        <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6 border-b border-border/50">
+      <DialogContent
+        className="!flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 !overflow-hidden border-0 p-0 shadow-2xl sm:max-w-xl"
+        data-testid={`dialog-message-${team.id}`}
+      >
+        <div className="shrink-0 border-b border-border/50 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black flex items-center gap-2 tracking-tight">
               Outreach for {team.name}
@@ -407,7 +410,10 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
           </DialogHeader>
         </div>
 
-        <div className="p-6 space-y-6 bg-card">
+        <div
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto bg-card p-4 sm:p-6"
+          data-testid="dialog-message-content"
+        >
           <div className="space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <label className="text-sm font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-2">
@@ -428,7 +434,7 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
               )}
             </div>
             
-            <div className="relative rounded-xl border bg-muted/20 p-5 font-mono text-sm leading-relaxed whitespace-pre-wrap min-h-[160px] shadow-inner">
+            <div className="relative min-h-[160px] rounded-xl border bg-muted/30 p-4 text-sm leading-6 text-foreground shadow-inner sm:p-5">
               {isPreparing ? (
                 <div className="space-y-4 animate-pulse">
                   <div className="h-4 bg-muted/60 rounded w-3/4"></div>
@@ -437,7 +443,10 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
                   <div className="h-4 bg-muted/60 rounded w-1/2"></div>
                 </div>
               ) : preparedData ? (
-                <div className="text-foreground" data-testid="text-prepared-message">
+                <div
+                  className="whitespace-pre-wrap break-words font-sans [overflow-wrap:anywhere]"
+                  data-testid="text-prepared-message"
+                >
                   {preparedData.message}
                 </div>
               ) : (
@@ -457,33 +466,36 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
               <li>Send it there, then return here and mark this team as sent.</li>
             </ol>
           </section>
-
-          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4 border-t">
-            {isSent ? (
-              <Button 
-                variant="outline" 
-                onClick={handleUndoSent} 
-                disabled={isUpdating}
-                className="w-full font-bold rounded-full"
-                data-testid="btn-undo-sent"
-              >
-                <Undo className="w-4 h-4 mr-2" />
-                Undo, mark as pending
-              </Button>
-            ) : (
-              <Button 
-                variant="brand" 
-                onClick={handleMarkSent} 
-                disabled={isUpdating || isPreparing || !preparedData}
-                className="w-full font-bold shadow-md rounded-full text-base h-11"
-                data-testid="btn-mark-sent"
-              >
-                {isUpdating ? "Updating..." : "I've sent this message"}
-                {!isUpdating && <CheckCircle2 className="w-5 h-5 ml-2 opacity-80" />}
-              </Button>
-            )}
-          </DialogFooter>
         </div>
+
+        <DialogFooter
+          className="shrink-0 gap-3 border-t bg-card p-4 sm:flex-row sm:p-6"
+          data-testid="dialog-message-footer"
+        >
+          {isSent ? (
+            <Button
+              variant="outline"
+              onClick={handleUndoSent}
+              disabled={isUpdating}
+              className="w-full font-bold rounded-full"
+              data-testid="btn-undo-sent"
+            >
+              <Undo className="w-4 h-4 mr-2" />
+              Undo, mark as pending
+            </Button>
+          ) : (
+            <Button
+              variant="brand"
+              onClick={handleMarkSent}
+              disabled={isUpdating || isPreparing || !preparedData}
+              className="w-full font-bold shadow-md rounded-full text-base h-11"
+              data-testid="btn-mark-sent"
+            >
+              {isUpdating ? "Updating..." : "I've sent this message"}
+              {!isUpdating && <CheckCircle2 className="w-5 h-5 ml-2 opacity-80" />}
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
