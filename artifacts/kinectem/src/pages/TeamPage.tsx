@@ -262,15 +262,26 @@ export default function TeamPage() {
     }
     if (canPostHighlight) {
       s.push({
-        targetTestId: "btn-create-highlight",
+        targetTestId: canPostRecap
+          ? "btn-open-post-options"
+          : "btn-create-highlight",
         onEnter: () => setExpanded("posts"),
         title: "Post highlights",
         body: (
           <>
-            In <strong>Recent Posts</strong>, click{" "}
-            <strong>Post Highlight</strong> to share a clip. Paste a YouTube or
-            Vimeo link so it plays right on the page — other links still work but
-            show as a plain link.
+            In <strong>Recent Posts</strong>,{" "}
+            {canPostRecap ? (
+              <>
+                open <strong>Post options</strong>, then choose{" "}
+                <strong>Post Highlight</strong>
+              </>
+            ) : (
+              <>
+                click <strong>Post Highlight</strong>
+              </>
+            )}{" "}
+            to share a clip. Paste a YouTube or Vimeo link so it plays right on
+            the page — other links still work but show as a plain link.
           </>
         ),
       });
@@ -290,12 +301,13 @@ export default function TeamPage() {
         ),
       });
       s.push({
-        targetTestId: "btn-season-recap",
+        targetTestId: "btn-open-post-options",
         onEnter: () => setExpanded("posts"),
         title: "Combined recaps",
         body: (
           <>
-            In <strong>Recent Posts</strong>, click{" "}
+            In <strong>Recent Posts</strong>, open{" "}
+            <strong>Post options</strong>, then choose{" "}
             <strong>Combined Recap</strong> to roll several games into one story
             — perfect for a tournament weekend or a full-season wrap-up.
           </>

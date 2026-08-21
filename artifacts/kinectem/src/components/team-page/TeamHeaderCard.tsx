@@ -374,63 +374,9 @@ export function TeamHeaderCard({
 
           <div
             className="rounded-xl border border-border bg-muted/30 p-3"
-            data-testid="team-section-navigation"
+            data-testid="team-header-action-menus"
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Explore team
-              </span>
-              <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant={expanded === "posts" ? "default" : "outline"}
-              className="font-bold rounded-full"
-              onClick={() => onSetExpanded("posts")}
-              data-testid="btn-toggle-posts"
-            >
-              <Newspaper className="w-3.5 h-3.5 mr-1.5" />
-              Recent Posts
-            </Button>
-            <Button
-              size="sm"
-              variant={expanded === "roster" ? "default" : "outline"}
-              className="font-bold rounded-full"
-              onClick={() => onSetExpanded("roster")}
-              data-testid="btn-toggle-roster"
-            >
-              <Users className="w-3.5 h-3.5 mr-1.5" />
-              Roster ({playerCount}
-              {staffCount > 0 ? ` · ${staffCount}` : ""})
-            </Button>
-            {canViewSchedule && (
-              <Button
-                size="sm"
-                variant={expanded === "schedule" ? "default" : "outline"}
-                className="font-bold rounded-full"
-                onClick={() => onSetExpanded("schedule")}
-                data-testid="btn-toggle-schedule"
-              >
-                <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
-                Schedule
-              </Button>
-            )}
-                {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant={expanded === "admin" ? "default" : "outline"}
-                    className="font-bold rounded-full"
-                    onClick={() => onSetExpanded("admin")}
-                    data-testid="btn-toggle-admin"
-                  >
-                    <Shield className="w-3.5 h-3.5 mr-1.5" />
-                    Admin Tools
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div
               className="flex items-center"
               data-testid="team-community-actions"
@@ -564,6 +510,65 @@ export function TeamHeaderCard({
                 )}
               </div>
             )}
+            </div>
+          </div>
+
+          <div
+            className="rounded-xl border border-border bg-muted/30 p-3"
+            data-testid="team-section-navigation"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Explore team
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant={expanded === "posts" ? "default" : "outline"}
+                  className="font-bold rounded-full"
+                  onClick={() => onSetExpanded("posts")}
+                  data-testid="btn-toggle-posts"
+                >
+                  <Newspaper className="w-3.5 h-3.5 mr-1.5" />
+                  Recent Posts
+                </Button>
+                <Button
+                  size="sm"
+                  variant={expanded === "roster" ? "default" : "outline"}
+                  className="font-bold rounded-full"
+                  onClick={() => onSetExpanded("roster")}
+                  data-testid="btn-toggle-roster"
+                >
+                  <Users className="w-3.5 h-3.5 mr-1.5" />
+                  Roster ({playerCount}
+                  {staffCount > 0 ? ` · ${staffCount}` : ""})
+                </Button>
+                {canViewSchedule && (
+                  <Button
+                    size="sm"
+                    variant={expanded === "schedule" ? "default" : "outline"}
+                    className="font-bold rounded-full"
+                    onClick={() => onSetExpanded("schedule")}
+                    data-testid="btn-toggle-schedule"
+                  >
+                    <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+                    Schedule
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant={expanded === "admin" ? "default" : "outline"}
+                    className="font-bold rounded-full"
+                    onClick={() => onSetExpanded("admin")}
+                    data-testid="btn-toggle-admin"
+                  >
+                    <Shield className="w-3.5 h-3.5 mr-1.5" />
+                    Admin Tools
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>

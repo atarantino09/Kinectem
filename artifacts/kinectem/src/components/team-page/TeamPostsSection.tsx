@@ -4,6 +4,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -38,6 +45,8 @@ import {
   Check,
   X,
   Trophy,
+  ChevronDown,
+  Plus,
 } from "lucide-react";
 
 interface TeamPostsSectionProps {
@@ -115,6 +124,7 @@ export function TeamPostsSection({
     onLoadMore: onLoadMorePosts,
   });
   const canPostHighlight = isAdmin || isTeamMember;
+  const hasPostOptions = canPostRecap || (canPostHighlight && canManage);
   const [seasonRecapOpen, setSeasonRecapOpen] = useState(false);
   // "In the News" — paste a newspaper article's link; the server fetches
   // the headline/source/photo and posts a read-only news card.
@@ -218,60 +228,98 @@ export function TeamPostsSection({
           <Newspaper className="w-5 h-5" />
           Recent Posts
         </h2>
-        <div
-          className="flex items-center gap-2 flex-wrap"
-          data-testid="team-post-actions"
-        >
-          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
-            Share
-          </span>
-          {canPostHighlight && (
-            <Link href={`/posts/new?type=short&teamId=${teamId}`}>
-              <Button
-                variant={canPostRecap ? "outline" : "brand"}
-                size="sm"
-                data-testid="btn-create-highlight"
-              >
-                <Clapperboard className="w-3.5 h-3.5 mr-1.5" />
-                Post Highlight
-              </Button>
-            </Link>
-          )}
-          {canPostRecap && (
-            <Link href={`/posts/new?type=long&teamId=${teamId}`}>
+        {(canPostHighlight || canPostRecap || canManage) && (
+          <div
+            className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end"
+            data-testid="team-post-actions"
+          >
+            {canPostRecap ? (
+              <Link href={`/posts/new?type=long&teamId=${teamId}`}>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  className="w-full font-bold sm:w-auto"
+                  data-testid="btn-create-recap"
+                >
+                  <FileText className="w-3.5 h-3.5 mr-1.5" />
+                  Create Game Recap
+                </Button>
+              </Link>
+            ) : canPostHighlight ? (
+              <Link href={`/posts/new?type=short&teamId=${teamId}`}>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  className="w-full font-bold sm:w-auto"
+                  data-testid="btn-create-highlight"
+                >
+                  <Clapperboard className="w-3.5 h-3.5 mr-1.5" />
+                  Post Highlight
+                </Button>
+              </Link>
+            ) : null}
+            {hasPostOptions && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full font-bold sm:w-auto"
+                    data-testid="btn-open-post-options"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Post options
+                    <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  {canPostHighlight && canPostRecap && (
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href={`/posts/new?type=short&teamId=${teamId}`}
+                        data-testid="btn-create-highlight"
+                      >
+                        <Clapperboard className="w-4 h-4 mr-2" />
+                        Post Highlight
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {canPostRecap && (
+                    <DropdownMenuItem
+                      onSelect={() => setSeasonRecapOpen(true)}
+                      data-testid="btn-season-recap"
+                    >
+                      <Trophy className="w-4 h-4 mr-2" />
+                      Combined Recap
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && canPostRecap && <DropdownMenuSeparator />}
+                  {canManage && (
+                    <DropdownMenuItem
+                      onSelect={() => setAddNewsOpen(true)}
+                      data-testid="btn-add-news"
+                    >
+                      <Newspaper className="w-4 h-4 mr-2" />
+                      Add News Article
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {!canPostHighlight && !canPostRecap && canManage && (
               <Button
                 variant="brand"
                 size="sm"
-                data-testid="btn-create-recap"
+                className="w-full font-bold sm:w-auto"
+                onClick={() => setAddNewsOpen(true)}
+                data-testid="btn-add-news"
               >
-                <FileText className="w-3.5 h-3.5 mr-1.5" />
-                Create Game Recap
+                <Newspaper className="w-3.5 h-3.5 mr-1.5" />
+                Add News Article
               </Button>
-            </Link>
-          )}
-          {canPostRecap && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSeasonRecapOpen(true)}
-              data-testid="btn-season-recap"
-            >
-              <Trophy className="w-3.5 h-3.5 mr-1.5" />
-              Combined Recap
-            </Button>
-          )}
-          {canManage && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAddNewsOpen(true)}
-              data-testid="btn-add-news"
-            >
-              <Newspaper className="w-3.5 h-3.5 mr-1.5" />
-              Add News Article
-            </Button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
       {canManage && (
         <Dialog open={addNewsOpen} onOpenChange={(o) => !addingNews && setAddNewsOpen(o)}>

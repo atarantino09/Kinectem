@@ -50,6 +50,7 @@ describe("TeamHeaderCard action hierarchy", () => {
 
     const navigation = screen.getByTestId("team-section-navigation");
     const community = screen.getByTestId("team-community-actions");
+    const actionMenus = screen.getByTestId("team-header-action-menus");
 
     expect(within(navigation).getByTestId("btn-toggle-posts")).toBeInTheDocument();
     expect(within(navigation).getByTestId("btn-toggle-roster")).toBeInTheDocument();
@@ -57,6 +58,10 @@ describe("TeamHeaderCard action hierarchy", () => {
       "Community",
     );
     expect(community.innerHTML).toContain("blue");
+    expect(
+      actionMenus.compareDocumentPosition(navigation) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByTestId("btn-follow-team")).not.toBeInTheDocument();
     expect(screen.queryByTestId("team-contextual-tools")).not.toBeInTheDocument();
 

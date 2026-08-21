@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
 
@@ -21,7 +22,9 @@ vi.mock("./SeasonRecapDialog", () => ({
 import { TeamPostsSection } from "./TeamPostsSection";
 
 describe("TeamPostsSection action hierarchy", () => {
-  it("groups sharing choices and keeps the game recap as the main author action", () => {
+  it("keeps the game recap primary and places the other options in one menu", async () => {
+    const user = userEvent.setup();
+
     renderWithProviders(
       <TeamPostsSection
         teamId="team-1"
@@ -38,11 +41,41 @@ describe("TeamPostsSection action hierarchy", () => {
     );
 
     const actions = screen.getByTestId("team-post-actions");
-    expect(within(actions).getByTestId("btn-create-highlight")).toBeInTheDocument();
     expect(within(actions).getByTestId("btn-create-recap")).toBeInTheDocument();
-    expect(within(actions).getByTestId("btn-season-recap")).toBeInTheDocument();
-    expect(within(actions).getByTestId("btn-add-news")).toBeInTheDocument();
-    expect(actions).toHaveTextContent("Share");
-    expect(actions.className).toContain("flex-wrap");
+    expect(within(actions).getByTestId("btn-open-post-options")).toHaveTextContent(
+      "Post options",
+    );
+    expect(actions).not.toHaveTextContent("Share");
+    expect(actions.className).toContain("flex-col");
+    expect(screen.queryByTestId("btn-create-highlight")).not.toBeInTheDocument();
+
+    await user.click(within(actions).getByTestId("btn-open-post-options"));
+
+    expect(screen.getByTestId("btn-create-highlight")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-season-recap")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-add-news")).toBeInTheDocument();
+  });
+
+  it("keeps a member's single highlight action direct", () => {
+    renderWithProviders(
+      <TeamPostsSection
+        teamId="team-1"
+        isAdmin={false}
+        canManage={false}
+        isTeamMember
+        canPostRecap={false}
+        teamName="Westfield Wolves"
+        posts={[]}
+        hasMorePosts={false}
+        isLoadingMorePosts={false}
+        onLoadMorePosts={vi.fn()}
+      />,
+    );
+
+    const actions = screen.getByTestId("team-post-actions");
+    expect(within(actions).getByTestId("btn-create-highlight")).toBeInTheDocument();
+    expect(
+      within(actions).queryByTestId("btn-open-post-options"),
+    ).not.toBeInTheDocument();
   });
 });
