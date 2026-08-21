@@ -134,7 +134,7 @@ export default function OrgRosterOutreachPage() {
           </Link>
         </div>
         
-        <div className="relative rounded-2xl overflow-hidden bg-card border shadow-sm">
+        <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
           <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent pointer-events-none" />
           <div className="relative flex flex-col gap-4 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-4 sm:gap-5">
@@ -146,7 +146,7 @@ export default function OrgRosterOutreachPage() {
                   Roster Outreach
                 </h1>
                 <p className="mt-1 max-w-2xl text-base font-medium leading-relaxed text-muted-foreground sm:text-lg">
-                  Prepare a team-specific message, paste it into the communication tool you already use, then track outreach together.
+                  Review a team-specific message, send it through the communication tool you already use, then track outreach together.
                 </p>
               </div>
             </div>
@@ -162,25 +162,28 @@ export default function OrgRosterOutreachPage() {
               Refresh status
             </Button>
           </div>
-        </div>
-      </div>
 
-      <aside className="rounded-xl border border-primary/20 bg-primary/5 p-5 sm:p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center">
-          <div className="flex shrink-0 items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 text-primary" />
-            <div>
-              <h2 className="font-bold text-primary">Send through your team tool</h2>
-              <p className="mt-1 text-sm font-medium text-muted-foreground">
-                Kinectem prepares the team’s message and join link, but you stay in control of delivery.
+          <div className="relative grid gap-4 border-t border-primary/15 bg-primary/[0.035] px-6 py-5 sm:px-8 lg:grid-cols-2 lg:gap-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <div>
+                <h2 className="font-bold text-primary">Send the right invite to the right team</h2>
+                <p className="mt-1 text-sm font-medium leading-relaxed text-muted-foreground">
+                  Every message includes a unique Kinectem invite link for the team in that row. It is ready to share with that team’s parents and players.
+                </p>
+              </div>
+            </div>
+            <div className="border-t border-primary/15 pt-4 text-sm font-medium leading-relaxed text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <p>
+                Before you send, double-check that the team named in the message matches the team you selected in TeamSnap, LeagueApps, PlayMetrics, or your other team tool.
+              </p>
+              <p className="mt-2">
+                Invite coaches from the individual team page so they receive the right coach invitation.
               </p>
             </div>
           </div>
-          <p className="border-t border-primary/15 pt-4 text-sm font-medium text-muted-foreground md:ml-auto md:max-w-md md:border-l md:border-t-0 md:pl-5 md:pt-0">
-            Paste it into TeamSnap, LeagueApps, PlayMetrics, or another roster communication tool—then check the team off once it is sent.
-          </p>
         </div>
-      </aside>
+      </div>
 
       <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
           <div className="flex flex-col gap-4 border-b bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -333,10 +336,10 @@ function TeamRow({
           size="sm"
           className="rounded-full font-bold"
           onClick={onSelect}
-          data-testid={`btn-copy-roster-message-${team.id}`}
+          data-testid={`btn-view-roster-message-${team.id}`}
         >
-          <Copy className="mr-1.5 h-3.5 w-3.5" />
-          Copy message
+          <Mail className="mr-1.5 h-3.5 w-3.5" />
+          View message
         </Button>
       </td>
     </tr>

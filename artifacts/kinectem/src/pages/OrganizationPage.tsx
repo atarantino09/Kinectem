@@ -114,7 +114,7 @@ type TeamRailItem = {
 // "seen" flag is a single global key — the first time an owner/admin lands on
 // any org page they get the tour, and never again on any other org. Bump the
 // key to re-show the tour to everyone after a meaningful revision.
-const ORG_TOUR_KEY = "kinectem:org-tour-v1";
+const ORG_TOUR_KEY = "kinectem:org-tour-v2";
 
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
@@ -138,6 +138,7 @@ export default function OrganizationPage() {
   // refresh / revisit can never re-trigger the modal.
   const [welcomeOrgName, setWelcomeOrgName] = useState<string | null>(null);
   const [orgTourOpen, setOrgTourOpen] = useState(false);
+  const [manageMenuOpen, setManageMenuOpen] = useState(false);
   // Gate the first-run tour until the post-create welcome / bulk-add popups
   // have been resolved on mount, so the tour never flashes on top of them.
   const [firstRunResolved, setFirstRunResolved] = useState(false);
@@ -300,6 +301,7 @@ export default function OrganizationPage() {
     () => [
       {
         targetTestId: "btn-org-manage-menu",
+        onEnter: () => setManageMenuOpen(false),
         title: "Manage admins & members",
         body: (
           <>
@@ -311,6 +313,7 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-org-manage-menu",
+        onEnter: () => setManageMenuOpen(false),
         title: "Manage your organization",
         body: (
           <>
@@ -323,6 +326,7 @@ export default function OrganizationPage() {
       {
         targetTestId: "btn-add-team",
         additionalTargetTestIds: ["btn-bulk-add-teams"],
+        onEnter: () => setManageMenuOpen(false),
         title: "Add your teams",
         body: (
           <>
@@ -334,6 +338,7 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-new-org-post",
+        onEnter: () => setManageMenuOpen(false),
         title: "Post an update",
         body: (
           <>
@@ -344,11 +349,26 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-org-newsletter",
+        onEnter: () => setManageMenuOpen(false),
         title: "Send a newsletter",
         body: (
           <>
             <strong>Newsletter</strong> emails a roundup to your followers —
             perfect for a monthly recap or a big announcement.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-org-manage-menu",
+        additionalTargetTestIds: ["btn-org-roster-outreach"],
+        onEnter: () => setManageMenuOpen(true),
+        title: "Invite every team",
+        body: (
+          <>
+            Open <strong>Roster outreach</strong> to review the right
+            team-specific invite for every roster. Each message includes that
+            team’s unique link, ready for parents and players in the team tool
+            you already use.
           </>
         ),
       },
@@ -394,6 +414,7 @@ export default function OrganizationPage() {
       // ignore storage failures (private mode etc.) — tour just won't persist
     }
     setOrgTourOpen(false);
+    setManageMenuOpen(false);
   };
 
   const onToggleFollow = async () => {
@@ -809,7 +830,11 @@ export default function OrganizationPage() {
                   {isOrgManager && (
                     <>
                       <div data-testid="org-manager-actions">
-                        <DropdownMenu>
+                        <DropdownMenu
+                          modal={!orgTourOpen}
+                          open={manageMenuOpen}
+                          onOpenChange={setManageMenuOpen}
+                        >
                           <DropdownMenuTrigger asChild>
                             <Button
                               size="sm"

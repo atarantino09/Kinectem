@@ -116,6 +116,16 @@ describe("OrgRosterOutreachPage", () => {
     expect(await screen.findByText("1 of 2 teams contacted")).toBeInTheDocument();
     expect(screen.getByTestId("check-roster-outreach-team-blue")).not.toBeChecked();
     expect(screen.getByTestId("check-roster-outreach-team-red")).toBeChecked();
+    expect(screen.getByText("Send the right invite to the right team")).toBeInTheDocument();
+    expect(
+      screen.getByText(/unique Kinectem invite link for the team in that row/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Invite coaches from the individual team page/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("btn-view-roster-message-team-blue"),
+    ).toHaveTextContent("View message");
 
     expect(
       customFetchMock.mock.calls.some(([path]) =>
@@ -123,7 +133,7 @@ describe("OrgRosterOutreachPage", () => {
       ),
     ).toBe(false);
 
-    await user.click(screen.getByTestId("btn-copy-roster-message-team-blue"));
+    await user.click(screen.getByTestId("btn-view-roster-message-team-blue"));
     expect(await screen.findByTestId("text-prepared-message")).toHaveTextContent(
       "join-blue",
     );

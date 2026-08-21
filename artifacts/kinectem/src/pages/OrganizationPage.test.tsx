@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
@@ -12,6 +12,7 @@ import { useToastMock } from "@/test/mocks/toast";
 // ---------------------------------------------------------------------------
 
 const ORG_ID = "org-1";
+const ORG_TOUR_STORAGE_KEY = "kinectem:org-tour-v2";
 
 vi.mock("wouter", () => ({
   ...wouterMock,
@@ -191,6 +192,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setMockSearch("");
+  localStorage.removeItem(ORG_TOUR_STORAGE_KEY);
   vi.clearAllMocks();
 });
 
@@ -265,6 +267,35 @@ describe("OrganizationPage — admin control gating", () => {
       await screen.findByTestId("btn-org-manage-menu"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("btn-org-guides-menu")).toBeInTheDocument();
+  });
+
+  it("ends the manager tour with Roster Outreach open in the Manage menu", async () => {
+    const user = userEvent.setup();
+    installHandlers({ role: "owner" });
+    localStorage.removeItem(ORG_TOUR_STORAGE_KEY);
+
+    renderWithProviders(<OrganizationPage />);
+
+    expect(await screen.findByTestId("team-tour")).toBeInTheDocument();
+    for (let step = 0; step < 5; step += 1) {
+      await user.click(screen.getByTestId("btn-tour-next"));
+    }
+
+    expect(await screen.findByText("Invite every team")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-org-manage-menu")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      ),
+    );
+
+    await user.click(screen.getByTestId("btn-tour-next"));
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-org-manage-menu")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      ),
+    );
   });
 
   it("hides every admin control from a non-member viewer", async () => {
