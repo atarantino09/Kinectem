@@ -51,6 +51,7 @@ describe("TeamHeaderCard action hierarchy", () => {
     const navigation = screen.getByTestId("team-section-navigation");
     const community = screen.getByTestId("team-community-actions");
     const actionMenus = screen.getByTestId("team-header-action-menus");
+    const actionGroup = screen.getByTestId("team-header-action-group");
 
     expect(within(navigation).getByTestId("btn-toggle-posts")).toBeInTheDocument();
     expect(within(navigation).getByTestId("btn-toggle-roster")).toBeInTheDocument();
@@ -62,6 +63,8 @@ describe("TeamHeaderCard action hierarchy", () => {
       actionMenus.compareDocumentPosition(navigation) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(actionGroup).toHaveClass("items-end", "sm:justify-end");
+    expect(actionGroup.firstElementChild).toBe(community);
     expect(screen.queryByTestId("btn-follow-team")).not.toBeInTheDocument();
     expect(screen.queryByTestId("team-contextual-tools")).not.toBeInTheDocument();
 
@@ -89,6 +92,14 @@ describe("TeamHeaderCard action hierarchy", () => {
 
     expect(screen.getByTestId("btn-toggle-admin")).toBeInTheDocument();
     expect(screen.getByTestId("team-contextual-tools")).toBeInTheDocument();
+    expect(screen.getByTestId("team-header-action-group")).toHaveClass(
+      "sm:justify-end",
+    );
+    expect(
+      screen
+        .getByTestId("team-header-action-group")
+        .querySelector('[data-testid="team-community-actions"]'),
+    ).toBeTruthy();
     expect(screen.getByTestId("team-manage-actions").innerHTML).toContain("purple");
     expect(screen.getByTestId("team-guides-actions").innerHTML).toContain("indigo");
     expect(screen.queryByTestId("btn-edit-team")).not.toBeInTheDocument();

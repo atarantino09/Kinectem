@@ -760,7 +760,10 @@ export default function OrganizationPage() {
                     Unclaimed
                   </Badge>
                 )}
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <div
+                  className="flex flex-wrap items-center justify-end gap-2"
+                  data-testid="org-header-action-menus"
+                >
                   <div data-testid="org-community-actions">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

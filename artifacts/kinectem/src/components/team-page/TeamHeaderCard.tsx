@@ -376,7 +376,10 @@ export function TeamHeaderCard({
             className="rounded-xl border border-border bg-muted/30 p-3"
             data-testid="team-header-action-menus"
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              className="flex flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end"
+              data-testid="team-header-action-group"
+            >
             <div
               className="flex items-center"
               data-testid="team-community-actions"
@@ -419,7 +422,7 @@ export function TeamHeaderCard({
               onMessageTeam ||
               onReplayTour) && (
               <div
-                className="flex flex-wrap items-center gap-2 sm:ml-auto"
+                className="flex flex-wrap items-center justify-end gap-2"
                 data-testid="team-contextual-tools"
               >
                 {(isAdmin || onClaimCompetition || onMessageTeam) && (

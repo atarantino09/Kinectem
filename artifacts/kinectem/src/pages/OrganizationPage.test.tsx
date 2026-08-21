@@ -208,6 +208,11 @@ describe("OrganizationPage — admin control gating", () => {
     const communityActions = await screen.findByTestId("org-community-actions");
     const managerActions = screen.getByTestId("org-manager-actions");
     const guidesActions = screen.getByTestId("org-guides-actions");
+    const headerActions = screen.getByTestId("org-header-action-menus");
+    expect(headerActions).toHaveClass("justify-end");
+    expect(headerActions.firstElementChild).toBe(communityActions);
+    expect(communityActions.nextElementSibling).toBe(managerActions);
+    expect(managerActions.nextElementSibling).toBe(guidesActions);
     expect(within(communityActions).getByTestId("btn-org-community-menu")).toHaveTextContent(
       "Community",
     );
@@ -255,6 +260,7 @@ describe("OrganizationPage — admin control gating", () => {
     await screen.findByTestId("btn-org-community-menu");
 
     const communityActions = screen.getByTestId("org-community-actions");
+    expect(screen.getByTestId("org-header-action-menus")).toHaveClass("justify-end");
     expect(within(communityActions).getByTestId("btn-org-community-menu")).toBeInTheDocument();
     expect(
       screen.queryByTestId("btn-manage-admins-hero"),
