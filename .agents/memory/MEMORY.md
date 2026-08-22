@@ -64,3 +64,4 @@
 - [Shared team join-link security](shared-team-join-link-security.md) — team-wide roster links are long-lived bearer capabilities: cryptographic tokens + one-pending-link-per-team invariant are mandatory.
 - [Tour dropdown portal testing](tour-dropdown-portal-testing.md) — SpotlightTour + Radix menu content needs real-browser coverage; JSDOM reliably verifies controlled trigger state, not the portaled item.
 - [JSDOM file reads](jsdom-file-reads.md) — use FileReader for browser file-upload tests; JSDOM's File does not reliably implement File.text().
+- [Locked Kinectem brand assets](locked-kinectem-brand-assets.md) — 2026-08-22 package supersedes prior exports; use its light/dark/no-shadow and icon families.

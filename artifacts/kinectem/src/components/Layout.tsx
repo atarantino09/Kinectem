@@ -39,6 +39,7 @@ import { MobileTopBar } from "@/components/MobileTopBar";
 import { useWhoami } from "@/hooks/useWhoami";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser, error: currentUserError } = useGetLoggedInUser({
@@ -248,11 +249,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="flex items-center shrink-0 cursor-pointer"
               aria-label="Kinectem"
             >
-              <img
-                src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
-                alt="Kinectem"
-                className="block h-8 md:h-9 w-auto"
-              />
+              <BrandLogo className="block h-8 md:h-9 w-auto" />
             </a>
             <div className="flex-1" />
             <Button
@@ -327,11 +324,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
             className="flex items-center w-full px-6 h-16 border-b border-border"
           >
-            <img
-              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
-              alt="Kinectem"
-              className="block h-8 w-auto"
-            />
+            <BrandLogo className="block h-8 w-auto" />
           </Link>
           <nav className="flex flex-col gap-1 p-3">
             {drawerNavItems.map((item) => {
@@ -397,11 +390,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="hidden md:block sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
           <Link href="/" className="flex items-center shrink-0 cursor-pointer">
-            <img
-              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
-              alt="Kinectem"
-              className="block h-9 w-auto"
-            />
+            <BrandLogo className="block h-9 w-auto" />
           </Link>
 
           <form onSubmit={onSearchSubmit} className="flex-1 max-w-md relative">
