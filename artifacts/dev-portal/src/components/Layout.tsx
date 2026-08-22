@@ -97,7 +97,7 @@ function Header({ onMenu }: { onMenu: () => void }) {
             className="flex items-center gap-2 text-[var(--color-fg)] no-underline hover:!no-underline"
           >
             <img
-              src="/logo-horizontal.png"
+              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
               className="h-6 w-auto"
             />
