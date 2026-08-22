@@ -839,7 +839,7 @@ export default function OrganizationPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="rounded-full border-purple-200 bg-purple-50 font-bold text-purple-800 hover:bg-purple-100 focus-visible:ring-purple-500 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200 dark:hover:bg-purple-950/70"
+                              className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
                               data-testid="btn-org-manage-menu"
                             >
                               <Shield className="w-4 h-4" />
@@ -945,7 +945,7 @@ export default function OrganizationPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="rounded-full border-indigo-200 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 focus-visible:ring-indigo-500 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-950/70"
+                              className="rounded-full border-purple-200 bg-purple-50 font-bold text-purple-800 hover:bg-purple-100 focus-visible:ring-purple-500 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200 dark:hover:bg-purple-950/70"
                               data-testid="btn-org-guides-menu"
                             >
                               <Compass className="w-4 h-4" />

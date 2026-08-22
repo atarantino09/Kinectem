@@ -237,8 +237,8 @@ describe("OrganizationPage — admin control gating", () => {
     expect(within(managerActions).getByTestId("btn-org-manage-menu")).toHaveTextContent(
       "Manage",
     );
-    expect(managerActions.innerHTML).toContain("purple");
-    expect(guidesActions.innerHTML).toContain("indigo");
+    expect(managerActions.innerHTML).toContain("blue");
+    expect(guidesActions.innerHTML).toContain("purple");
 
     await user.click(screen.getByTestId("btn-org-community-menu"));
     expect(screen.getByTestId("btn-follow-org")).toBeInTheDocument();

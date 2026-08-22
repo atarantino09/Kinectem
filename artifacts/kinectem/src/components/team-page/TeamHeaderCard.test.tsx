@@ -102,8 +102,8 @@ describe("TeamHeaderCard action hierarchy", () => {
         .getByTestId("team-header-action-group")
         .querySelector('[data-testid="team-community-actions"]'),
     ).toBeTruthy();
-    expect(screen.getByTestId("team-manage-actions").innerHTML).toContain("purple");
-    expect(screen.getByTestId("team-guides-actions").innerHTML).toContain("indigo");
+    expect(screen.getByTestId("team-manage-actions").innerHTML).toContain("blue");
+    expect(screen.getByTestId("team-guides-actions").innerHTML).toContain("purple");
     expect(screen.queryByTestId("btn-edit-team")).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("btn-team-manage-menu"));
