@@ -30,6 +30,11 @@ import {
   type TourStep,
 } from "@/components/team-page/SpotlightTour";
 import {
+  competitionWeekForDate,
+  formatCompetitionWeek,
+  type CompetitionWeek,
+} from "@/lib/competition-weeks";
+import {
   Upload,
   Compass,
   ExternalLink,
@@ -1766,6 +1771,30 @@ interface CurationRecap {
   featured: boolean;
   bracketId: string | null;
   createdAt: string;
+  effectiveGameDate: string | null;
+  groupDivision: string | null;
+  groupBracket: string | null;
+  groupingSource: "competition-game" | "recap";
+  week: CompetitionWeek | null;
+}
+
+function recapWeekSections(recaps: CurationRecap[]) {
+  const grouped = new Map<
+    string,
+    { key: string; week: CompetitionWeek | null; recaps: CurationRecap[] }
+  >();
+  for (const recap of recaps) {
+    const week = recap.week ?? competitionWeekForDate(recap.effectiveGameDate);
+    const key = week?.key ?? "__undated__";
+    const current = grouped.get(key) ?? { key, week, recaps: [] };
+    current.recaps.push(recap);
+    grouped.set(key, current);
+  }
+  return Array.from(grouped.values()).sort((a, b) => {
+    if (!a.week) return 1;
+    if (!b.week) return -1;
+    return a.week.key.localeCompare(b.week.key);
+  });
 }
 
 function CurationPanel({
@@ -1860,6 +1889,32 @@ function CurationPanel({
   });
 
   const recaps = recapsQ.data?.data ?? [];
+  const bracketIds = new Set(brackets.map((b) => b.id));
+  const recapsByBracket = new Map<string, CurationRecap[]>();
+  const otherRecaps: CurationRecap[] = [];
+  for (const recap of recaps) {
+    if (recap.bracketId && bracketIds.has(recap.bracketId)) {
+      const current = recapsByBracket.get(recap.bracketId) ?? [];
+      current.push(recap);
+      recapsByBracket.set(recap.bracketId, current);
+    } else {
+      otherRecaps.push(recap);
+    }
+  }
+  const recapSections = brackets
+    .filter((bracket) => (recapsByBracket.get(bracket.id) ?? []).length > 0)
+    .map((bracket) => ({
+      key: bracket.id,
+      label: bracket.label,
+      recaps: recapsByBracket.get(bracket.id) ?? [],
+    }));
+  if (otherRecaps.length > 0) {
+    recapSections.push({
+      key: "__other__",
+      label: "Other / unassigned",
+      recaps: otherRecaps,
+    });
+  }
 
   return (
     <Card id="recaps" ref={anchorRef} className="scroll-mt-6">
@@ -1890,87 +1945,123 @@ function CurationPanel({
             No game recaps yet — they appear as claimed teams write them.
           </p>
         ) : (
-          <div className="space-y-2">
-            {recaps.map((r) => (
+          <div className="space-y-5">
+            {recapSections.map((section) => (
               <div
-                key={r.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 flex-wrap"
-                data-testid={`row-recap-${r.id}`}
+                key={section.key}
+                className="space-y-3"
+                data-testid={`section-curation-bracket-${section.key}`}
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-bold truncate">
-                    {r.title}
-                    {r.featured && (
-                      <Star className="inline w-3.5 h-3.5 ml-1.5 -mt-0.5 fill-amber-400 text-amber-400" />
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {r.teamName}
-                    {r.opponentName ? ` vs ${r.opponentName}` : ""}
-                    {r.teamScore != null && r.opponentScore != null
-                      ? ` · ${r.teamScore}-${r.opponentScore}`
-                      : ""}
-                    {r.gameDate
-                      ? ` · ${new Date(r.gameDate).toLocaleDateString()}`
-                      : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {brackets.length > 0 && (
-                    <Select
-                      value={r.bracketId ?? "none"}
-                      onValueChange={(v) =>
-                        setBracket.mutate({
-                          articleId: r.id,
-                          bracketId: v === "none" ? null : v,
-                        })
-                      }
-                    >
-                      <SelectTrigger
-                        className="h-8 w-36"
-                        data-testid={`select-recap-bracket-${r.id}`}
-                      >
-                        <SelectValue placeholder="No bracket" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No bracket</SelectItem>
-                        {brackets.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <a href={`/app/posts/${r.id}`} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm" variant="ghost" className="font-bold text-muted-foreground">
-                      View
-                    </Button>
-                  </a>
-                  {r.featured ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="font-bold"
-                      disabled={feature.isPending}
-                      onClick={() => feature.mutate({ articleId: r.id, featured: false })}
-                      data-testid={`btn-unfeature-${r.id}`}
-                    >
-                      Hide
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="brand"
-                      disabled={feature.isPending}
-                      onClick={() => feature.mutate({ articleId: r.id, featured: true })}
-                      data-testid={`btn-feature-${r.id}`}
-                    >
-                      <Star className="w-3.5 h-3.5 mr-1" />
-                      Feature
-                    </Button>
-                  )}
-                </div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  {section.label}{" "}
+                  <span className="font-bold normal-case tracking-normal">
+                    ({section.recaps.length})
+                  </span>
+                </h3>
+                {recapWeekSections(section.recaps).map((weekSection) => (
+                  <div
+                    key={weekSection.key}
+                    className="space-y-2"
+                    data-testid={`section-curation-week-${section.key}-${weekSection.key}`}
+                  >
+                    <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80">
+                      {weekSection.week
+                        ? formatCompetitionWeek(weekSection.week)
+                        : "Undated"}
+                    </h4>
+                    <div className="space-y-2">
+                      {weekSection.recaps.map((r) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 flex-wrap"
+                          data-testid={`row-recap-${r.id}`}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold truncate">
+                              {r.title}
+                              {r.featured && (
+                                <Star className="inline w-3.5 h-3.5 ml-1.5 -mt-0.5 fill-amber-400 text-amber-400" />
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {r.teamName}
+                              {r.opponentName ? ` vs ${r.opponentName}` : ""}
+                              {r.teamScore != null && r.opponentScore != null
+                                ? ` · ${r.teamScore}-${r.opponentScore}`
+                                : ""}
+                              {r.effectiveGameDate
+                                ? ` · ${r.effectiveGameDate}`
+                                : " · Date unavailable"}
+                              {r.groupDivision
+                                ? ` · ${r.groupDivision}${
+                                    r.groupBracket ? ` / ${r.groupBracket}` : ""
+                                  }`
+                                : r.groupBracket
+                                  ? ` · ${r.groupBracket}`
+                                  : " · Division unavailable"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {brackets.length > 0 && (
+                              <Select
+                                value={r.bracketId ?? "none"}
+                                onValueChange={(v) =>
+                                  setBracket.mutate({
+                                    articleId: r.id,
+                                    bracketId: v === "none" ? null : v,
+                                  })
+                                }
+                              >
+                                <SelectTrigger
+                                  className="h-8 w-36"
+                                  data-testid={`select-recap-bracket-${r.id}`}
+                                >
+                                  <SelectValue placeholder="No bracket" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">No bracket</SelectItem>
+                                  {brackets.map((b) => (
+                                    <SelectItem key={b.id} value={b.id}>
+                                      {b.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <a href={`/app/posts/${r.id}`} target="_blank" rel="noopener noreferrer">
+                              <Button size="sm" variant="ghost" className="font-bold text-muted-foreground">
+                                View
+                              </Button>
+                            </a>
+                            {r.featured ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="font-bold"
+                                disabled={feature.isPending}
+                                onClick={() => feature.mutate({ articleId: r.id, featured: false })}
+                                data-testid={`btn-unfeature-${r.id}`}
+                              >
+                                Hide
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="brand"
+                                disabled={feature.isPending}
+                                onClick={() => feature.mutate({ articleId: r.id, featured: true })}
+                                data-testid={`btn-feature-${r.id}`}
+                              >
+                                <Star className="w-3.5 h-3.5 mr-1" />
+                                Feature
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

@@ -67,6 +67,10 @@ import {
   notifyGameStatusChanged,
   notifyBulkGamesChanged,
 } from "../lib/game-change-notifications";
+import {
+  competitionWeekForDate,
+  timestampToCompetitionDate,
+} from "../lib/competition-weeks";
 
 const router: IRouter = Router();
 
@@ -1001,9 +1005,23 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
     // The card carries the AUTHORING TEAM's identity (name), sitting inside
     // the competition-branded page.
     const featuredRows = await db
-      .select({ article: articles, teamName: teams.name })
+      .select({
+        article: articles,
+        teamName: teams.name,
+        matchId: tournamentMatches.id,
+        matchDate: tournamentMatches.matchDate,
+        matchDivision: tournamentMatches.division,
+        matchBracket: tournamentMatches.bracket,
+      })
       .from(articles)
       .innerJoin(teams, eq(teams.id, articles.teamId))
+      .leftJoin(
+        tournamentMatches,
+        and(
+          eq(tournamentMatches.id, articles.competitionGameId),
+          eq(tournamentMatches.tournamentId, tournament.id),
+        ),
+      )
       .where(
         and(
           eq(articles.competitionId, tournament.id),
@@ -1022,6 +1040,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .from(competitionBrackets)
       .where(eq(competitionBrackets.tournamentId, tournament.id))
       .orderBy(asc(competitionBrackets.sortOrder), asc(competitionBrackets.createdAt));
+    const bracketLabelById = new Map(bracketRows.map((b) => [b.id, b.label]));
 
     const competitionMeta = {
       id: tournament.id,
@@ -1076,7 +1095,24 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         gender: b.gender,
         ageGroup: b.ageGroup,
       })),
-      featuredRecaps: featuredRows.map(({ article: a, teamName }) => ({
+      featuredRecaps: featuredRows.map(
+        ({ article: a, teamName, matchId, matchDate, matchDivision, matchBracket }) => {
+          const linkedMatch = matchId != null;
+          const effectiveGameDate =
+            linkedMatch && matchDate
+              ? matchDate
+              : timestampToCompetitionDate(a.gameDate);
+          const groupDivision =
+            linkedMatch && matchDivision?.trim()
+              ? matchDivision.trim()
+              : null;
+          const groupBracket =
+            linkedMatch && matchBracket?.trim()
+              ? matchBracket.trim()
+              : a.bracketId
+                ? bracketLabelById.get(a.bracketId) ?? null
+                : null;
+          return {
         // Post ids are prefixed ("article-<uuid>") — the client links to
         // /posts/:id which 404s on a raw uuid.
         id: `article-${a.id}`,
@@ -1093,7 +1129,15 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         // Task #852 — used only for the public page's bracket filter;
         // never rendered on the post itself.
         bracketId: a.bracketId,
-      })),
+            // Grouping metadata is derived on read; it is never persisted.
+            effectiveGameDate,
+            groupDivision,
+            groupBracket,
+            groupingSource: linkedMatch ? "competition-game" : "recap",
+            week: competitionWeekForDate(effectiveGameDate),
+          };
+        },
+      ),
       participants: partRows.map((p) => ({
         id: p.id,
         name: p.name,
@@ -1135,6 +1179,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
             // treatment instead of silently disappearing.
             status: m.status,
             statusReason: m.statusReason,
+             week: competitionWeekForDate(m.matchDate),
           };
         })
         .sort((a, b) => {
@@ -3060,9 +3105,23 @@ router.get(
     }
 
     const rows = await db
-      .select({ article: articles, teamName: teams.name })
+      .select({
+        article: articles,
+        teamName: teams.name,
+        matchId: tournamentMatches.id,
+        matchDate: tournamentMatches.matchDate,
+        matchDivision: tournamentMatches.division,
+        matchBracket: tournamentMatches.bracket,
+      })
       .from(articles)
       .innerJoin(teams, eq(teams.id, articles.teamId))
+      .leftJoin(
+        tournamentMatches,
+        and(
+          eq(tournamentMatches.id, articles.competitionGameId),
+          eq(tournamentMatches.tournamentId, competition.id),
+        ),
+      )
       .where(
         and(
           eq(articles.competitionId, competition.id),
@@ -3073,8 +3132,33 @@ router.get(
       .orderBy(desc(articles.createdAt))
       .limit(100);
 
+    const [bracketRows] = await Promise.all([
+      db
+        .select({ id: competitionBrackets.id, label: competitionBrackets.label })
+        .from(competitionBrackets)
+        .where(eq(competitionBrackets.tournamentId, competition.id)),
+    ]);
+    const bracketLabelById = new Map(bracketRows.map((b) => [b.id, b.label]));
+
     res.json({
-      data: rows.map(({ article: a, teamName }) => ({
+      data: rows.map(
+        ({ article: a, teamName, matchId, matchDate, matchDivision, matchBracket }) => {
+          const linkedMatch = matchId != null;
+          const effectiveGameDate =
+            linkedMatch && matchDate
+              ? matchDate
+              : timestampToCompetitionDate(a.gameDate);
+          const groupDivision =
+            linkedMatch && matchDivision?.trim()
+              ? matchDivision.trim()
+              : null;
+          const groupBracket =
+            linkedMatch && matchBracket?.trim()
+              ? matchBracket.trim()
+              : a.bracketId
+                ? bracketLabelById.get(a.bracketId) ?? null
+                : null;
+          return {
         id: a.id,
         title: a.title,
         summary: a.summary,
@@ -3090,7 +3174,14 @@ router.get(
         // Task #852 — current bracket assignment for the curation dropdown.
         bracketId: a.bracketId,
         createdAt: a.createdAt.toISOString(),
-      })),
+            effectiveGameDate,
+            groupDivision,
+            groupBracket,
+            groupingSource: linkedMatch ? "competition-game" : "recap",
+            week: competitionWeekForDate(effectiveGameDate),
+          };
+        },
+      ),
     });
   }),
 );

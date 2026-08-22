@@ -32,6 +32,11 @@ import {
   useClaimTokenParams,
   useCompetitionClaimResolve,
 } from "@/components/ClaimTokenBanner";
+import {
+  competitionWeekForDate,
+  formatCompetitionWeek,
+  type CompetitionWeek,
+} from "@/lib/competition-weeks";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
 // from org/team pages on purpose: the hero is themed with the operator's
@@ -76,6 +81,7 @@ type Match = {
   // optional reason) instead of silently disappearing.
   status?: "scheduled" | "postponed" | "canceled";
   statusReason?: string | null;
+  week?: CompetitionWeek | null;
 };
 
 export type CompetitionMeta = {
@@ -124,6 +130,11 @@ type FeaturedRecap = {
   publishedAt: string | null;
   // Task #852 — organizer-assigned sorting bracket (null = unbracketed).
   bracketId?: string | null;
+  effectiveGameDate?: string | null;
+  groupDivision?: string | null;
+  groupBracket?: string | null;
+  groupingSource?: "competition-game" | "recap";
+  week?: CompetitionWeek | null;
 };
 
 // Task #852 — bracket labels in the organizer's saved order, driving the
@@ -146,6 +157,34 @@ type CompetitionResponse = {
 function groupLabel(division: string, bracket: string): string {
   const parts = [division, bracket].filter((p) => p && p.trim() !== "");
   return parts.length ? parts.join(" · ") : "General";
+}
+
+function weekForItem(
+  date: string | null | undefined,
+  week: CompetitionWeek | null | undefined,
+): CompetitionWeek | null {
+  return week ?? competitionWeekForDate(date);
+}
+
+export function weekGroups<T extends {
+  week?: CompetitionWeek | null;
+  matchDate?: string | null;
+}>(
+  items: T[],
+): { key: string; week: CompetitionWeek | null; items: T[] }[] {
+  const grouped = new Map<string, { key: string; week: CompetitionWeek | null; items: T[] }>();
+  for (const item of items) {
+    const week = weekForItem(item.matchDate, item.week);
+    const key = week?.key ?? "__undated__";
+    const current = grouped.get(key) ?? { key, week, items: [] };
+    current.items.push(item);
+    grouped.set(key, current);
+  }
+  return Array.from(grouped.values()).sort((a, b) => {
+    if (!a.week) return 1;
+    if (!b.week) return -1;
+    return a.week.key.localeCompare(b.week.key);
+  });
 }
 
 // Pick a readable text color for the brand band (simple luminance check).
@@ -178,7 +217,6 @@ export default function CompetitionPage() {
   // Task #854 — optional grouped layout: recaps under bracket headings in
   // the organizer's saved order, unbracketed last under "Other". Grouping
   // supersedes the chip filter, so chips hide while grouped.
-  const [groupedView, setGroupedView] = useState(false);
 
   // Task #851 — a valid, unclaimed claim token means the viewer is the
   // prospective operator: show the "How your competition works" walkthrough
@@ -598,16 +636,18 @@ export default function CompetitionPage() {
           const shownRecaps = bracketFilter
             ? allRecaps.filter((r) => r.bracketId === bracketFilter)
             : allRecaps;
-          // Task #854 — grouped sections: brackets in the organizer's saved
-          // order (only those with recaps), then unbracketed under "Other".
+          // Brackets stay in the organizer's saved order, then unbracketed
+          // recaps trail under "Other"; each section is always split by week.
           const bracketIds = new Set(brackets.map((b) => b.id));
           const groupedSections: { key: string; label: string; recaps: FeaturedRecap[] }[] =
-            usedBrackets.map((b) => ({
+            usedBrackets
+              .filter((b) => shownRecaps.some((r) => r.bracketId === b.id))
+              .map((b) => ({
               key: b.id,
               label: b.label,
-              recaps: allRecaps.filter((r) => r.bracketId === b.id),
+              recaps: shownRecaps.filter((r) => r.bracketId === b.id),
             }));
-          const otherRecaps = allRecaps.filter(
+          const otherRecaps = shownRecaps.filter(
             (r) => !r.bracketId || !bracketIds.has(r.bracketId),
           );
           if (otherRecaps.length > 0) {
@@ -686,76 +726,75 @@ export default function CompetitionPage() {
                 ) : null}
               </div>
             </div>
-            {/* Task #852 — bracket filter chips (organizer order + All).
-                Unbracketed recaps only show under All.
-                Task #854 — a "Group by bracket" toggle swaps chips for
-                grouped sections with one heading per bracket. */}
+            {/* Bracket filter chips retain the organizer's saved ordering.
+                Week headings stay visible for every filter, including All. */}
             {usedBrackets.length > 0 && (
               <div
                 className="flex items-center gap-2 flex-wrap"
                 data-testid="filter-bracket-chips"
               >
-                {!groupedView && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant={bracketFilter === "" ? "default" : "outline"}
-                      className="h-7 rounded-full font-bold text-xs"
-                      onClick={() => setBracketFilter("")}
-                      data-testid="chip-bracket-all"
-                    >
-                      All
-                    </Button>
-                    {usedBrackets.map((b) => (
-                      <Button
-                        key={b.id}
-                        size="sm"
-                        variant={bracketFilter === b.id ? "default" : "outline"}
-                        className="h-7 rounded-full font-bold text-xs"
-                        onClick={() => setBracketFilter(b.id)}
-                        data-testid={`chip-bracket-${b.id}`}
-                      >
-                        {b.label}
-                      </Button>
-                    ))}
-                  </>
-                )}
                 <Button
                   size="sm"
-                  variant={groupedView ? "default" : "outline"}
-                  className="h-7 rounded-full font-bold text-xs ml-auto"
-                  onClick={() => setGroupedView((v) => !v)}
-                  data-testid="btn-toggle-grouped-view"
+                  variant={bracketFilter === "" ? "default" : "outline"}
+                  className="h-7 rounded-full font-bold text-xs"
+                  onClick={() => setBracketFilter("")}
+                  data-testid="chip-bracket-all"
                 >
-                  Group by bracket
+                  All
                 </Button>
+                {usedBrackets.map((b) => (
+                  <Button
+                    key={b.id}
+                    size="sm"
+                    variant={bracketFilter === b.id ? "default" : "outline"}
+                    className="h-7 rounded-full font-bold text-xs"
+                    onClick={() => setBracketFilter(b.id)}
+                    data-testid={`chip-bracket-${b.id}`}
+                  >
+                    {b.label}
+                  </Button>
+                ))}
               </div>
             )}
-            {groupedView && usedBrackets.length > 0 ? (
-              <div className="space-y-5" data-testid="rail-grouped-sections">
-                {groupedSections.map((s) => (
-                  <div
-                    key={s.key}
-                    className="space-y-2"
-                    data-testid={`section-bracket-${s.key}`}
-                  >
-                    <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+            <div className="space-y-5" data-testid="rail-grouped-sections">
+              {groupedSections.map((s) => (
+                <div
+                  key={s.key}
+                  className="space-y-2"
+                  data-testid={`section-bracket-${s.key}`}
+                >
+                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
                       {s.label}{" "}
                       <span className="font-bold normal-case tracking-normal">
                         ({s.recaps.length})
                       </span>
-                    </h3>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {s.recaps.map(renderRecapCard)}
-                    </div>
+                  </h3>
+                  <div className="space-y-4">
+                    {weekGroups(
+                      s.recaps.map((r) => ({
+                        ...r,
+                        matchDate: r.effectiveGameDate ?? null,
+                      })),
+                    ).map((weekGroup) => (
+                      <div
+                        key={weekGroup.key}
+                        className="space-y-2"
+                        data-testid={`section-recap-week-${s.key}-${weekGroup.key}`}
+                      >
+                        <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80">
+                          {weekGroup.week
+                            ? formatCompetitionWeek(weekGroup.week)
+                            : "Undated"}
+                        </h4>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {weekGroup.items.map(renderRecapCard)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {shownRecaps.map(renderRecapCard)}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </section>
           );
         })()}
@@ -1034,64 +1073,79 @@ export default function CompetitionPage() {
                 No games have been scheduled yet.
               </p>
             ) : (
-              matchGroups.map(([label, matches]) => (
+               matchGroups.map(([label, matches]) => (
                 <div key={label} className="space-y-2">
                   <h3 className="text-sm font-black uppercase tracking-wide text-muted-foreground">
                     {label}
                   </h3>
-                  <div className="space-y-1">
-                    {matches.map((m) => (
-                      <div
-                        key={m.id}
-                        className={`flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm ${
-                          m.status === "postponed" || m.status === "canceled"
-                            ? "bg-muted/40"
-                            : ""
-                        }`}
-                        data-testid={`row-match-${m.id}`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>#{m.matchNumber}</span>
-                            {m.matchDate ? <span>{m.matchDate}</span> : null}
-                            {m.startTime ? <span>{m.startTime}</span> : null}
-                            {m.field ? <span>{m.field}</span> : null}
-                          </div>
-                          <div
-                            className={`truncate font-medium ${
-                              m.status === "canceled"
-                                ? "line-through text-muted-foreground"
-                                : ""
-                            }`}
-                          >
-                            {m.homeName ?? "TBD"}{" "}
-                            <span className="text-muted-foreground">vs</span>{" "}
-                            {m.awayName ?? "TBD"}
-                          </div>
-                          {(m.status === "postponed" ||
-                            m.status === "canceled") &&
-                          m.statusReason ? (
-                            <p className="text-xs text-muted-foreground italic mt-0.5 truncate">
-                              {m.statusReason}
-                            </p>
-                          ) : null}
-                        </div>
-                        {m.status === "postponed" ||
-                        m.status === "canceled" ? (
-                          <span
-                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                              m.status === "postponed"
-                                ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400"
-                                : "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-400"
-                            }`}
-                            data-testid={`badge-match-status-${m.id}`}
-                          >
-                            {m.status === "postponed" ? "Postponed" : "Canceled"}
-                          </span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
+                   <div className="space-y-4">
+                     {weekGroups(matches).map((weekGroup) => (
+                       <div
+                         key={weekGroup.key}
+                         className="space-y-1"
+                         data-testid={`section-match-week-${weekGroup.key}`}
+                       >
+                         <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80">
+                           {weekGroup.week
+                             ? formatCompetitionWeek(weekGroup.week)
+                             : "Undated"}
+                         </h4>
+                         <div className="space-y-1">
+                           {weekGroup.items.map((m) => (
+                             <div
+                               key={m.id}
+                               className={`flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm ${
+                                 m.status === "postponed" || m.status === "canceled"
+                                   ? "bg-muted/40"
+                                   : ""
+                               }`}
+                               data-testid={`row-match-${m.id}`}
+                             >
+                               <div className="min-w-0 flex-1">
+                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                   <span>#{m.matchNumber}</span>
+                                   {m.matchDate ? <span>{m.matchDate}</span> : null}
+                                   {m.startTime ? <span>{m.startTime}</span> : null}
+                                   {m.field ? <span>{m.field}</span> : null}
+                                 </div>
+                                 <div
+                                   className={`truncate font-medium ${
+                                     m.status === "canceled"
+                                       ? "line-through text-muted-foreground"
+                                       : ""
+                                   }`}
+                                 >
+                                   {m.homeName ?? "TBD"}{" "}
+                                   <span className="text-muted-foreground">vs</span>{" "}
+                                   {m.awayName ?? "TBD"}
+                                 </div>
+                                 {(m.status === "postponed" ||
+                                   m.status === "canceled") &&
+                                 m.statusReason ? (
+                                   <p className="text-xs text-muted-foreground italic mt-0.5 truncate">
+                                     {m.statusReason}
+                                   </p>
+                                 ) : null}
+                               </div>
+                               {m.status === "postponed" ||
+                               m.status === "canceled" ? (
+                                 <span
+                                   className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                     m.status === "postponed"
+                                       ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                                       : "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-400"
+                                   }`}
+                                   data-testid={`badge-match-status-${m.id}`}
+                                 >
+                                   {m.status === "postponed" ? "Postponed" : "Canceled"}
+                                 </span>
+                               ) : null}
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+                     ))}
+                   </div>
                 </div>
               ))
             )}

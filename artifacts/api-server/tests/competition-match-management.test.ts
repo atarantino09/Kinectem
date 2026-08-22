@@ -6,7 +6,7 @@
 // and the public read surfacing status + statusReason.
 import { afterEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { db, tournaments } from "@workspace/db";
+import { articles, db, teams, tournaments } from "@workspace/db";
 import { loginAs, request, app } from "./helpers";
 import type { Agent } from "supertest";
 
@@ -31,8 +31,12 @@ async function createCompetition(
 }
 
 const createdComps: string[] = [];
+const createdArticles: string[] = [];
 
 afterEach(async () => {
+  for (const id of createdArticles.splice(0)) {
+    await db.delete(articles).where(eq(articles.id, id));
+  }
   for (const id of createdComps.splice(0)) {
     await db.delete(tournaments).where(eq(tournaments.id, id));
   }
@@ -82,6 +86,99 @@ describe("competition single-game management (Task #765)", () => {
     const names = pub.body.participants.map((p: { name: string }) => p.name);
     expect(names).toContain("Thunder FC");
     expect(names).toContain("Lightning SC");
+  });
+
+  it("uses a linked match's date and division for recap week metadata", async () => {
+    const { agent: owner, user } = await loginAs("coach@kinectem.demo");
+    const comp = await createCompetition(owner);
+    const created = await owner
+      .post(`/api/v1/competitions/${comp.id}/matches`)
+      .send({ ...baseGame, matchDate: "2026-08-03" });
+    expect(created.status).toBe(201);
+
+    const [team] = await db.select({ id: teams.id }).from(teams).limit(1);
+    if (!team) throw new Error("Expected a seeded team");
+    const [recap] = await db
+      .insert(articles)
+      .values({
+        teamId: team.id,
+        authorId: user.id,
+        title: uniq("Linked recap"),
+        body: "A recap whose own date is intentionally stale.",
+        gameDate: new Date("2026-08-16T00:00:00.000Z"),
+        competitionId: comp.id,
+        competitionGameId: created.body.matchId,
+        featured: true,
+        status: "published",
+        publishedAt: new Date(),
+      })
+      .returning({ id: articles.id });
+    createdArticles.push(recap.id);
+    const [unlinkedRecap] = await db
+      .insert(articles)
+      .values({
+        teamId: team.id,
+        authorId: user.id,
+        title: uniq("Unlinked recap"),
+        body: "A recap that falls back to its own game date.",
+        gameDate: new Date("2026-08-16T00:00:00.000Z"),
+        competitionId: comp.id,
+        featured: true,
+        status: "published",
+        publishedAt: new Date(),
+      })
+      .returning({ id: articles.id });
+    createdArticles.push(unlinkedRecap.id);
+
+    const publicRead = await request(app).get(`/api/v1/competitions/${comp.slug}`);
+    expect(publicRead.status).toBe(200);
+    expect(publicRead.body.matches[0].week).toEqual({
+      key: "2026-08-03",
+      start: "2026-08-03",
+      end: "2026-08-09",
+    });
+    expect(
+      publicRead.body.featuredRecaps.find(
+        (item: { id: string }) => item.id === `article-${recap.id}`,
+      ),
+    ).toMatchObject({
+      effectiveGameDate: "2026-08-03",
+      groupDivision: "Gold",
+      groupBracket: "A",
+      groupingSource: "competition-game",
+      week: { key: "2026-08-03", start: "2026-08-03", end: "2026-08-09" },
+    });
+    expect(
+      publicRead.body.featuredRecaps.find(
+        (item: { id: string }) => item.id === `article-${unlinkedRecap.id}`,
+      ),
+    ).toMatchObject({
+      effectiveGameDate: "2026-08-16",
+      groupDivision: null,
+      groupingSource: "recap",
+      week: { key: "2026-08-10", start: "2026-08-10", end: "2026-08-16" },
+    });
+
+    const curation = await owner.get(`/api/v1/competitions/${comp.id}/recaps`);
+    expect(curation.status).toBe(200);
+    expect(
+      curation.body.data.find((item: { id: string }) => item.id === recap.id),
+    ).toMatchObject({
+      id: recap.id,
+      effectiveGameDate: "2026-08-03",
+      groupDivision: "Gold",
+      groupingSource: "competition-game",
+      week: { key: "2026-08-03", start: "2026-08-03", end: "2026-08-09" },
+    });
+    expect(
+      curation.body.data.find(
+        (item: { id: string }) => item.id === unlinkedRecap.id,
+      ),
+    ).toMatchObject({
+      effectiveGameDate: "2026-08-16",
+      groupingSource: "recap",
+      week: { key: "2026-08-10", start: "2026-08-10", end: "2026-08-16" },
+    });
   });
 
   it("reuses an existing participant slot instead of duplicating it", async () => {
