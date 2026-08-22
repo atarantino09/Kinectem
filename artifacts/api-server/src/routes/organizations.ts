@@ -21,6 +21,7 @@ import {
   organizationClaimRequests,
   guardianLinks,
   stagedCoachInvites,
+  coachInviteGroups,
   promoCodes,
   teamNewsLinks,
   organizationRosterOutreach,
@@ -29,7 +30,10 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzl
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
-import { notifyAllGuardiansOfPendingItem } from "../lib/guardian-links";
+import {
+  getActiveGuardianIds,
+  notifyAllGuardiansOfPendingItem,
+} from "../lib/guardian-links";
 import {
   sendGuardianConfirmationEmail,
   sendGuardianExpiredEmail,
@@ -39,6 +43,7 @@ import {
   buildFollowEmail,
   buildFirstRecapMilestoneEmail,
   buildInviteAcceptUrl,
+  sendMultiTeamStaffInviteEmail,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
@@ -112,6 +117,12 @@ import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import { normalizeWebsite } from "../lib/normalize-website";
 import { buildCoachInviteText } from "@workspace/invite-copy";
+import { staffInviteRoleLabel } from "@workspace/invite-copy";
+import {
+  ensureOrgFollowedForTeam,
+  ensureTeamFollowed,
+  ensureTeamFollowedAsGuardian,
+} from "../lib/team-follow";
 import { getOrCreateTeamJoinLink } from "../lib/team-join-link";
 import {
   blockMinorAction,
@@ -653,6 +664,278 @@ router.post(
 
 const STAGED_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const STAGED_COACH_MAX_PER_ORG = 500;
+
+// Multi-team coach invitations deliberately live outside the locked OpenAPI
+// surface. Each child row remains a normal roster_invite, which keeps every
+// team's pending-invite list and per-team withdrawal behavior intact while the
+// envelope below supplies one secure token and one email for the recipient.
+router.post(
+  "/organizations/:orgId/coach-invites",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const orgId = req.params.orgId as string;
+    if (!(await canManageOrganization(me.id, orgId))) {
+      return apiError(res, 403, "Forbidden");
+    }
+
+    const rawAssignments =
+      req.body?.assignments ?? req.body?.invites ?? req.body?.entries;
+    if (!Array.isArray(rawAssignments) || rawAssignments.length === 0) {
+      return apiError(res, 400, "assignments array required");
+    }
+    if (rawAssignments.length > STAGED_COACH_MAX_PER_ORG) {
+      return apiError(
+        res,
+        400,
+        `Too many coach assignments (max ${STAGED_COACH_MAX_PER_ORG})`,
+      );
+    }
+
+    const assignments: Array<{ teamId: string; email: string }> = [];
+    const seen = new Set<string>();
+    for (const raw of rawAssignments) {
+      const teamId = String(raw?.teamId ?? "");
+      const email = String(raw?.email ?? "").trim().toLowerCase();
+      if (!teamId || !STAGED_EMAIL_RE.test(email)) {
+        return apiError(res, 400, "Every assignment needs a valid teamId and email");
+      }
+      const key = `${teamId}:${email}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        assignments.push({ teamId, email });
+      }
+    }
+
+    const teamIds = Array.from(new Set(assignments.map((a) => a.teamId)));
+    const activeTeams = await db
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(
+        and(
+          eq(teams.organizationId, orgId),
+          inArray(teams.id, teamIds),
+          isNull(teams.archivedAt),
+        ),
+      );
+    const teamById = new Map(activeTeams.map((team) => [team.id, team]));
+    if (teamById.size !== teamIds.length) {
+      return apiError(
+        res,
+        400,
+        "Every assigned team must be active and belong to this organization",
+      );
+    }
+    const [organization] = await db
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    if (!organization) return notFound(res);
+
+    const byEmail = new Map<string, Array<{ teamId: string; email: string }>>();
+    for (const assignment of assignments) {
+      const group = byEmail.get(assignment.email) ?? [];
+      group.push(assignment);
+      byEmail.set(assignment.email, group);
+    }
+
+    const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+    const outcomes: Array<{
+      email: string;
+      teamIds: string[];
+      teamNames: string[];
+      emailSent: boolean | null;
+      notified: boolean;
+      acceptUrl?: string;
+      groupId?: string;
+    }> = [];
+
+    for (const [email, groupedAssignments] of byEmail) {
+      const groupTeamIds = groupedAssignments.map((a) => a.teamId);
+      const groupTeamNames = groupTeamIds.map((id) => teamById.get(id)!.name);
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (existingUser) {
+        // Preserve the existing-account path: each team gets its familiar
+        // pending row + in-app roster notification, but the browser only made
+        // one manager action for the whole email group.
+        const notificationRows: Array<{ teamId: string; entryId: string }> = [];
+        await db.transaction(async (tx) => {
+          for (const assignment of groupedAssignments) {
+            await tx.insert(rosterInvites).values({
+              token: generateToken(),
+              teamId: assignment.teamId,
+              invitedEmail: email,
+              role: "coach",
+              position: null,
+              invitedById: me.id,
+            });
+            const [existingEntry] = await tx
+              .select()
+              .from(rosterEntries)
+              .where(
+                and(
+                  eq(rosterEntries.teamId, assignment.teamId),
+                  eq(rosterEntries.userId, existingUser.id),
+                ),
+              )
+              .limit(1);
+            let entry = existingEntry;
+            if (!entry || entry.status !== "accepted") {
+              if (entry) {
+                [entry] = await tx
+                  .update(rosterEntries)
+                  .set({
+                    role: "coach",
+                    status: "pending",
+                    position: null,
+                    invitedById: me.id,
+                  })
+                  .where(eq(rosterEntries.id, entry.id))
+                  .returning();
+              } else {
+                [entry] = await tx
+                  .insert(rosterEntries)
+                  .values({
+                    teamId: assignment.teamId,
+                    userId: existingUser.id,
+                    role: "coach",
+                    status: "pending",
+                    position: null,
+                    invitedById: me.id,
+                  })
+                  .returning();
+              }
+            }
+            if (entry) {
+              notificationRows.push({ teamId: assignment.teamId, entryId: entry.id });
+            }
+          }
+        });
+        for (const row of notificationRows) {
+          const team = teamById.get(row.teamId)!;
+          await ensureOrgFollowedForTeam(existingUser.id, row.teamId);
+          try {
+            await ensureTeamFollowed(existingUser.id, row.teamId);
+            for (const guardianId of await getActiveGuardianIds(existingUser.id)) {
+              await ensureTeamFollowedAsGuardian(guardianId, row.teamId);
+            }
+          } catch (err) {
+            req.log.warn(
+              { err, userId: existingUser.id, teamId: row.teamId },
+              "auto-follow on grouped coach invite failed",
+            );
+          }
+          await db.insert(notifications).values({
+            userId: existingUser.id,
+            kind: "roster_invite",
+            message: `${actorName} invited you to ${team.name}. Tap to accept or decline.`,
+            link: `/teams/${row.teamId}?roster=1&entryId=${row.entryId}`,
+            actorUserId: me.id,
+          });
+        }
+        outcomes.push({
+          email,
+          teamIds: groupTeamIds,
+          teamNames: groupTeamNames,
+          emailSent: null,
+          notified: true,
+        });
+        continue;
+      }
+
+      const token = generateToken();
+      const [group] = await db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(coachInviteGroups)
+          .values({
+            organizationId: orgId,
+            invitedEmail: email,
+            role: "coach",
+            tokenHash: hashToken(token),
+            invitedById: me.id,
+          })
+          .returning();
+        await tx.insert(rosterInvites).values(
+          groupedAssignments.map((assignment) => ({
+            token: generateToken(),
+            teamId: assignment.teamId,
+            invitedEmail: email,
+            role: "coach" as const,
+            position: null,
+            invitedById: me.id,
+            coachInviteGroupId: created.id,
+          })),
+        );
+        return [created];
+      });
+
+      let emailSent = false;
+      try {
+        await sendMultiTeamStaffInviteEmail(email, {
+          inviterName: actorName,
+          organizationName: organization.name,
+          teamNames: groupTeamNames,
+          roleLabel: staffInviteRoleLabel("coach"),
+          token,
+          groupId: group.id,
+        });
+        emailSent = true;
+        await db.transaction(async (tx) => {
+          await tx
+            .update(coachInviteGroups)
+            .set({ deliveryStatus: "sent", updatedAt: new Date() })
+            .where(eq(coachInviteGroups.id, group.id));
+          await tx
+            .update(rosterInvites)
+            .set({ deliveryStatus: "sent" })
+            .where(eq(rosterInvites.coachInviteGroupId, group.id));
+        });
+      } catch (err) {
+        req.log.warn(
+          { err, orgId, kind: "grouped_coach_invite" },
+          "grouped coach invite email send failed",
+        );
+        await db.transaction(async (tx) => {
+          await tx
+            .update(coachInviteGroups)
+            .set({
+              // `unknown` is the persisted "not handed to a provider" state.
+              // Keep it valid for the existing delivery enum while exposing a
+              // concrete reason and the copy-link fallback in the response.
+              deliveryStatus: "unknown",
+              deliveryReason: "Unable to send invite email",
+              updatedAt: new Date(),
+            })
+            .where(eq(coachInviteGroups.id, group.id));
+          await tx
+            .update(rosterInvites)
+            .set({
+              deliveryStatus: "unknown",
+              deliveryReason: "Unable to send invite email",
+            })
+            .where(eq(rosterInvites.coachInviteGroupId, group.id));
+        });
+      }
+      outcomes.push({
+        email,
+        teamIds: groupTeamIds,
+        teamNames: groupTeamNames,
+        emailSent,
+        notified: false,
+        acceptUrl: buildInviteAcceptUrl(token),
+        groupId: group.id,
+      });
+    }
+
+    return res.status(201).json({ data: outcomes });
+  }),
+);
 
 router.get(
   "/organizations/:orgId/staged-coaches",

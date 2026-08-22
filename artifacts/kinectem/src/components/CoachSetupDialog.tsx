@@ -20,6 +20,11 @@ import {
   useStagedCoaches,
   type StagedCoachRow,
 } from "@/components/StageCoachesDialog";
+import {
+  groupCoachInviteAssignments,
+  stagedIdsForSuccessfulCoachInvite,
+  type CoachInviteAssignment,
+} from "@/lib/coach-invite-grouping";
 
 // Task #808 / #836 — post-claim coach setup for the new org owner. Staged
 // coach drafts (pre-filled by the platform admin before the claim) are shown
@@ -51,6 +56,7 @@ export function canReopenCoachSetup(args: {
 type TeamResult = {
   teamName: string;
   email: string;
+  grouped?: boolean;
   status: "success" | "failed";
   reason?: string;
 };
@@ -163,8 +169,7 @@ export function CoachSetupDialog({
     setBusy(true);
     const collected: TeamResult[] = [];
     const invitedStagedIds: string[] = [];
-    // Sequential on purpose — keeps rate limiting predictable and lets a
-    // mid-run failure keep the successes.
+    const assignments: CoachInviteAssignment[] = [];
     for (const t of teams) {
       const stagedRows = stagedByTeam[t.id] ?? [];
       const stagedEmails = new Set(stagedRows.map((r) => r.email));
@@ -176,24 +181,56 @@ export function CoachSetupDialog({
         ...extras.map((email) => ({ email })),
       ];
       for (const { email, stagedId } of targets) {
-        try {
-          await customFetch(`/api/v1/teams/${t.id}/invites`, {
+        assignments.push({
+          teamId: t.id,
+          teamName: t.name,
+          email,
+          stagedId,
+        });
+      }
+    }
+    // One unknown email across staged teams gets one envelope and one email.
+    // Known accounts still follow the familiar per-team pending/in-app route
+    // inside the grouped server operation.
+    for (const group of groupCoachInviteAssignments(assignments)) {
+      const grouped = group.assignments.length > 1;
+      try {
+        if (grouped) {
+          await customFetch(`/api/v1/organizations/${orgId}/coach-invites`, {
             method: "POST",
-            body: JSON.stringify({ email, position: "coach" }),
+            body: JSON.stringify({
+              assignments: group.assignments.map(({ teamId, email }) => ({
+                teamId,
+                email,
+              })),
+            }),
           });
-          collected.push({ teamName: t.name, email, status: "success" });
-          if (stagedId) invitedStagedIds.push(stagedId);
-        } catch (err) {
-          collected.push({
-            teamName: t.name,
-            email,
-            status: "failed",
-            reason:
-              err instanceof Error ? err.message : "Failed to send invite",
+        } else {
+          await customFetch(`/api/v1/teams/${group.assignments[0].teamId}/invites`, {
+            method: "POST",
+            body: JSON.stringify({ email: group.email, position: "coach" }),
           });
         }
-        setResults([...collected]);
+        collected.push({
+          teamName: group.assignments.map((a) => a.teamName).join(", "),
+          email: group.email,
+          grouped,
+          status: "success",
+        });
+        invitedStagedIds.push(
+          ...stagedIdsForSuccessfulCoachInvite(group.assignments),
+        );
+      } catch (err) {
+        collected.push({
+          teamName: group.assignments.map((a) => a.teamName).join(", "),
+          email: group.email,
+          grouped,
+          status: "failed",
+          reason:
+            err instanceof Error ? err.message : "Failed to send invite",
+        });
       }
+      setResults([...collected]);
     }
     // Task #836 — clear only the staged entries that were actually invited;
     // failed ones stay staged so the owner can retry later.
@@ -337,6 +374,11 @@ export function CoachSetupDialog({
                       → {r.teamName}
                     </span>
                   </p>
+                  {r.status === "success" && r.grouped && (
+                    <p className="text-muted-foreground">
+                      One shared invitation covers these teams
+                    </p>
+                  )}
                   {r.status === "failed" && r.reason && (
                     <p className="text-muted-foreground">{r.reason}</p>
                   )}
@@ -378,7 +420,7 @@ export function CoachSetupDialog({
               >
                 {busy
                   ? "Sending…"
-                  : `Confirm & send ${totalCount > 0 ? totalCount : ""} invite${totalCount === 1 ? "" : "s"}`}
+                  : `Confirm & send ${totalCount > 0 ? totalCount : ""} coach assignment${totalCount === 1 ? "" : "s"}`}
               </Button>
             </>
           )}

@@ -24,6 +24,13 @@ interface InviteEnvelope {
     status: string;
   };
   team: { id: string; name: string };
+  teams?: Array<{
+    id: string;
+    name: string;
+    status: string;
+    available?: boolean;
+  }>;
+  multiTeam?: boolean;
   organization: { id: string; name: string };
 }
 
@@ -113,6 +120,7 @@ export default function InviteAcceptPage() {
 
   const isPlayerInvite = envelope?.invite.position === "player";
   const childHint = envelope?.invite.invitedName ?? "";
+  const acceptedState = accepted || envelope?.invite.status === "accepted";
 
   const onAccept = async () => {
     if (!me) {
@@ -121,7 +129,11 @@ export default function InviteAcceptPage() {
     }
     setAccepting(true);
     try {
-      const r = await customFetch<{ requiresChildSetup?: boolean }>(
+      const r = await customFetch<{
+        requiresChildSetup?: boolean;
+        multiTeam?: boolean;
+        teamIds?: string[];
+      }>(
         `/api/v1/invites/${token}/accept`,
         { method: "POST" },
       );
@@ -136,7 +148,10 @@ export default function InviteAcceptPage() {
             Array.isArray(q.queryKey) && typeof q.queryKey[0] === "string"
               ? q.queryKey[0]
               : "";
-          return url.includes(`/teams/${envelope!.team.id}`);
+          const teamIds = envelope!.teams?.map((team) => team.id) ?? [
+            envelope!.team.id,
+          ];
+          return teamIds.some((teamId) => url.includes(`/teams/${teamId}`));
         },
       });
       if (r.requiresChildSetup) {
@@ -147,7 +162,9 @@ export default function InviteAcceptPage() {
           setLastName(parts.slice(1).join(" "));
         }
       } else {
-        toast({ title: "Welcome to the team!" });
+        toast({
+          title: r.multiTeam ? "Welcome to your teams!" : "Welcome to the team!",
+        });
         navigate(`/teams/${envelope!.team.id}`);
       }
     } catch (e) {
@@ -288,11 +305,12 @@ export default function InviteAcceptPage() {
       <InviteHeaderCard
         organizationName={envelope.organization.name}
         teamName={envelope.team.name}
+        teamNames={envelope.teams?.map((team) => team.name)}
         isPlayerInvite={isPlayerInvite}
         positionLabel={envelope.invite.position ?? envelope.invite.role}
         childHint={childHint}
         loggedIn={!!me}
-        accepted={accepted}
+        accepted={acceptedState}
         needsChildSetup={needsChildSetup}
         accepting={accepting}
         token={token}
@@ -300,7 +318,7 @@ export default function InviteAcceptPage() {
       />
       {/* Hide the explainer once the invite is accepted so attention
           moves to the success state / child-setup next action. */}
-      {!accepted && <InviteBenefitsCard />}
+      {!acceptedState && <InviteBenefitsCard />}
       {needsChildSetup && (
         <ChildSetupCard
           children={children}

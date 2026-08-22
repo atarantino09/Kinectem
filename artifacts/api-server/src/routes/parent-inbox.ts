@@ -8,6 +8,7 @@ import {
   teams,
   rosterEntries,
   rosterInvites,
+  coachInviteGroups,
   articles,
   articleTags,
   highlights,
@@ -31,6 +32,7 @@ import {
   isNull,
   ne,
   or,
+  sql,
 } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
@@ -1942,6 +1944,48 @@ router.get(
 router.get(
   "/invites/:token",
   asyncHandler(async (req, res) => {
+    const inviteToken = req.params.token as string;
+    const tokenHash = hashToken(inviteToken);
+    const [groupRow] = await db
+      .select({ group: coachInviteGroups, org: organizations })
+      .from(coachInviteGroups)
+      .innerJoin(
+        organizations,
+        eq(coachInviteGroups.organizationId, organizations.id),
+      )
+      .where(eq(coachInviteGroups.tokenHash, tokenHash))
+      .limit(1);
+    if (groupRow) {
+      const groupTeams = await db
+        .select({ invite: rosterInvites, team: teams })
+        .from(rosterInvites)
+        .innerJoin(teams, eq(rosterInvites.teamId, teams.id))
+        .where(eq(rosterInvites.coachInviteGroupId, groupRow.group.id))
+        .orderBy(rosterInvites.createdAt);
+      const firstTeam = groupTeams[0]?.team;
+      if (!firstTeam) return notFound(res);
+      return res.json({
+        multiTeam: true,
+        invite: {
+          id: groupRow.group.id,
+          role: "coach",
+          position: null,
+          invitedEmail: groupRow.group.invitedEmail,
+          invitedName: null,
+          status: groupRow.group.status,
+        },
+        // Retained for the existing client route and for callers that expect
+        // a primary destination after acceptance.
+        team: { id: firstTeam.id, name: firstTeam.name },
+        teams: groupTeams.map((row) => ({
+          id: row.team.id,
+          name: row.team.name,
+          status: row.invite.status,
+          available: !row.team.archivedAt && row.invite.status === "pending",
+        })),
+        organization: { id: groupRow.org.id, name: groupRow.org.name },
+      });
+    }
     const [row] = await db
       .select({ i: rosterInvites, t: teams, org: organizations })
       .from(rosterInvites)
@@ -1963,6 +2007,199 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    const inviteToken = req.params.token as string;
+    const tokenHash = hashToken(inviteToken);
+    const [group] = await db
+      .select()
+      .from(coachInviteGroups)
+      .where(eq(coachInviteGroups.tokenHash, tokenHash))
+      .limit(1);
+    if (group) {
+      const acceptingEmail = me.email?.trim().toLowerCase();
+      if (!acceptingEmail || acceptingEmail !== group.invitedEmail) {
+        return apiError(
+          res,
+          403,
+          "This invite is for a different email address",
+        );
+      }
+      type GroupAcceptance = {
+        status: "accepted" | "already_accepted" | "no_teams" | "unavailable";
+        teamIds: string[];
+      };
+      const accepted = await db.transaction(async (tx): Promise<GroupAcceptance> => {
+        // Fast path for a browser retry after a successful accept. It must
+        // happen before looking for pending children, because all children are
+        // correctly accepted by the first request.
+        if (group.status !== "pending") {
+          if (group.status === "accepted" && group.resolvedUserId === me.id) {
+            const acceptedChildren = await tx
+              .select({ teamId: rosterInvites.teamId })
+              .from(rosterInvites)
+              .where(
+                and(
+                  eq(rosterInvites.coachInviteGroupId, group.id),
+                  eq(rosterInvites.status, "accepted"),
+                ),
+              );
+            return {
+              status: "already_accepted",
+              teamIds: acceptedChildren.map((child) => child.teamId),
+            };
+          }
+          return { status: "unavailable", teamIds: [] };
+        }
+        // Claim the envelope before touching its child records. This makes
+        // retried or concurrent accepts safe even though roster_entries has no
+        // composite uniqueness constraint.
+        const claimed = await tx
+          .update(coachInviteGroups)
+          .set({
+            status: "accepted",
+            resolvedUserId: me.id,
+            acceptedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(coachInviteGroups.id, group.id),
+              eq(coachInviteGroups.status, "pending"),
+            ),
+          )
+          .returning({ id: coachInviteGroups.id });
+        if (claimed.length === 0) {
+          const [latest] = await tx
+            .select({
+              status: coachInviteGroups.status,
+              resolvedUserId: coachInviteGroups.resolvedUserId,
+            })
+            .from(coachInviteGroups)
+            .where(eq(coachInviteGroups.id, group.id))
+            .limit(1);
+          if (latest?.status === "accepted" && latest.resolvedUserId === me.id) {
+            const acceptedChildren = await tx
+              .select({ teamId: rosterInvites.teamId })
+              .from(rosterInvites)
+              .where(
+                and(
+                  eq(rosterInvites.coachInviteGroupId, group.id),
+                  eq(rosterInvites.status, "accepted"),
+                ),
+              );
+            return {
+              status: "already_accepted",
+              teamIds: acceptedChildren.map((child) => child.teamId),
+            };
+          }
+          return { status: "unavailable", teamIds: [] };
+        }
+
+        // Claim child rows conditionally in the database rather than using a
+        // stale read snapshot. A concurrent withdrawal/archive that wins this
+        // race leaves its row pending/revoked and cannot receive membership.
+        const rawClaimed = await tx.execute<{
+          id: string;
+          team_id: string;
+          invited_by_id: string | null;
+        }>(sql`
+          UPDATE roster_invites AS invite
+             SET status = 'accepted'
+            FROM teams AS team
+           WHERE invite.coach_invite_group_id = ${group.id}
+             AND invite.status = 'pending'
+             AND invite.team_id = team.id
+             AND team.archived_at IS NULL
+          RETURNING invite.id, invite.team_id, invite.invited_by_id
+        `);
+        const claimedChildren = (rawClaimed.rows ?? rawClaimed) as Array<{
+          id: string;
+          team_id: string;
+          invited_by_id: string | null;
+        }>;
+        if (claimedChildren.length === 0) {
+          await tx
+            .update(coachInviteGroups)
+            .set({ status: "revoked", updatedAt: new Date() })
+            .where(eq(coachInviteGroups.id, group.id));
+          return { status: "no_teams", teamIds: [] };
+        }
+
+        const claimedTeamIds = claimedChildren.map((row) => row.team_id);
+        for (const row of claimedChildren) {
+          const [entry] = await tx
+            .select()
+            .from(rosterEntries)
+            .where(
+              and(
+                eq(rosterEntries.teamId, row.team_id),
+                eq(rosterEntries.userId, me.id),
+              ),
+            )
+            .limit(1);
+          if (entry) {
+            if (entry.status !== "accepted") {
+              await tx
+                .update(rosterEntries)
+                .set({
+                  role: "coach",
+                  status: "accepted",
+                  position: null,
+                  invitedById: row.invited_by_id,
+                })
+                .where(eq(rosterEntries.id, entry.id));
+            }
+          } else {
+            await tx.insert(rosterEntries).values({
+              teamId: row.team_id,
+              userId: me.id,
+              role: "coach",
+              status: "accepted",
+              position: null,
+              invitedById: row.invited_by_id,
+            });
+          }
+        }
+        // A child invite may have been withdrawn independently or its team
+        // archived. It remains visible as withdrawn and is never granted.
+        await tx
+          .update(rosterInvites)
+          .set({ status: "revoked" })
+          .where(
+            and(
+              eq(rosterInvites.coachInviteGroupId, group.id),
+              eq(rosterInvites.status, "pending"),
+            ),
+          );
+        return { status: "accepted", teamIds: claimedTeamIds };
+      });
+
+      if (
+        accepted.status === "no_teams" ||
+        accepted.status === "unavailable"
+      ) {
+        return apiError(res, 409, "Invite no longer has any available teams");
+      }
+      for (const teamId of accepted.teamIds) {
+        await ensureOrgFollowedForTeam(me.id, teamId);
+        try {
+          await ensureTeamFollowed(me.id, teamId);
+          for (const guardianId of await getActiveGuardianIds(me.id)) {
+            await ensureTeamFollowedAsGuardian(guardianId, teamId);
+          }
+        } catch (err) {
+          req.log.warn(
+            { err, userId: me.id, teamId },
+            "auto-follow on grouped token accept failed",
+          );
+        }
+      }
+      return res.status(accepted.status === "accepted" ? 201 : 200).json({
+        multiTeam: true,
+        teamIds: accepted.teamIds,
+        teamId: accepted.teamIds[0] ?? null,
+        alreadyAccepted: accepted.status === "already_accepted",
+      });
+    }
     const [invite] = await db
       .select()
       .from(rosterInvites)

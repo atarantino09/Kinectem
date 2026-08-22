@@ -19,6 +19,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
+  groupCoachInviteAssignments,
+  type CoachInviteAssignment,
+} from "@/lib/coach-invite-grouping";
+import {
   Building2,
   CheckCircle2,
   XCircle,
@@ -50,6 +54,8 @@ type RowResult = {
   teamId: string;
   teamName: string;
   email: string;
+  teamIds?: string[];
+  grouped?: boolean;
   // emailed: invite email handed to SendGrid; notified: existing account got
   // an in-app notification (no email attempted); emailFailed: invite was
   // created but the email couldn't be sent (copy-link fallback shown);
@@ -145,9 +151,13 @@ export function BulkAddCoachesDialog({
       });
       return;
     }
-    const rows = teams.flatMap((t) =>
+    const rows: CoachInviteAssignment[] = teams.flatMap((t) =>
       emailsForTeam(t.id).map((email) => ({ team: t, email })),
-    );
+    ).map(({ team, email }) => ({
+      teamId: team.id,
+      teamName: team.name,
+      email,
+    }));
     if (rows.length === 0) {
       toast({
         title: "Enter at least one coach email",
@@ -157,30 +167,59 @@ export function BulkAddCoachesDialog({
     }
     setBusy(true);
     setResults(null);
-    setProgress({ done: 0, total: rows.length });
+    const emailGroups = groupCoachInviteAssignments(rows);
+    setProgress({ done: 0, total: emailGroups.length });
     const collected: RowResult[] = [];
     // Sequential on purpose — keeps rate limiting predictable and lets a
-    // mid-run failure keep the successes.
-    for (let i = 0; i < rows.length; i++) {
-      const { team, email } = rows[i];
+    // mid-run failure keep the successes. Each email group produces one
+    // outcome, even when it covers several teams.
+    for (let i = 0; i < emailGroups.length; i++) {
+      const group = emailGroups[i];
+      const grouped = group.assignments.length > 1;
+      const teamNames = group.assignments.map((a) => a.teamName);
+      const teamIds = group.assignments.map((a) => a.teamId);
       try {
-        const resp = await customFetch<Record<string, unknown>>(
-          `/api/v1/teams/${team.id}/invites`,
-          {
-            method: "POST",
-            body: JSON.stringify({ email, position: "coach" }),
-          },
-        );
+        const resp =
+          grouped
+            ? await customFetch<{
+                data: Array<{ emailSent?: boolean | null; acceptUrl?: string; notified?: boolean }>;
+              }>(`/api/v1/organizations/${orgId}/coach-invites`, {
+                method: "POST",
+                body: JSON.stringify({
+                  assignments: group.assignments.map(({ teamId, email }) => ({
+                    teamId,
+                    email,
+                  })),
+                }),
+              })
+            : await customFetch<Record<string, unknown>>(
+                `/api/v1/teams/${teamIds[0]}/invites`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({ email: group.email, position: "coach" }),
+                },
+              );
         // `emailSent` + `acceptUrl` are appended by the server outside the
         // locked openapi.yaml (same pattern as the single-invite flow).
-        const extra = resp as {
+        const extra = (grouped
+          ? (
+              resp as {
+                data: Array<{
+                  emailSent?: boolean | null;
+                  acceptUrl?: string;
+                }>;
+              }
+            ).data[0]
+          : resp) as {
           emailSent?: boolean | null;
           acceptUrl?: string;
         };
         collected.push({
-          teamId: team.id,
-          teamName: team.name,
-          email,
+          teamId: teamIds[0],
+          teamIds,
+          teamName: teamNames.join(", "),
+          email: group.email,
+          grouped,
           status:
             extra.emailSent === true
               ? "emailed"
@@ -191,19 +230,23 @@ export function BulkAddCoachesDialog({
         });
       } catch (err) {
         collected.push({
-          teamId: team.id,
-          teamName: team.name,
-          email,
+          teamId: teamIds[0],
+          teamIds,
+          teamName: teamNames.join(", "),
+          email: group.email,
+          grouped,
           status: "error",
           reason: apiErrorMessage(err) ?? "Couldn't send the invite",
         });
       }
-      setProgress({ done: i + 1, total: rows.length });
+      setProgress({ done: i + 1, total: emailGroups.length });
       setResults([...collected]);
     }
     setBusy(false);
     // Refresh each touched team's staff/invite lists and the indicators.
-    const touchedTeams = Array.from(new Set(rows.map((r) => r.team)));
+    const touchedTeams = teams.filter((team) =>
+      rows.some((row) => row.teamId === team.id),
+    );
     await Promise.all([
       ...touchedTeams.flatMap((t) => [
         qc.invalidateQueries({ queryKey: getListTeamMembersQueryKey(t.id) }),
@@ -216,7 +259,10 @@ export function BulkAddCoachesDialog({
     const ok = collected.length - failed;
     if (failed === 0 && emailFailed === 0) {
       toast({
-        title: ok === 1 ? "Coach invite sent!" : `${ok} coach invites sent!`,
+        title:
+          ok === 1
+            ? "Coach invite sent!"
+            : `${ok} coach invitation${ok === 1 ? "" : "s"} sent!`,
       });
     } else if (failed === 0) {
       toast({
@@ -255,8 +301,8 @@ export function BulkAddCoachesDialog({
           </DialogTitle>
           <DialogDescription>
             Add a coach email next to any team and send every invite at once.
-            Rows left blank are skipped. Each coach gets the standard invite
-            for that specific team.
+            Rows left blank are skipped. When the same new coach is assigned to
+            multiple teams, they receive one secure invitation listing them all.
           </DialogDescription>
         </DialogHeader>
 
@@ -441,7 +487,10 @@ export function BulkAddCoachesDialog({
                   </p>
                   {r.status === "emailed" && (
                     <p className="text-muted-foreground flex items-center gap-1">
-                      <Mail className="w-3 h-3" /> Invite email sent
+                      <Mail className="w-3 h-3" />{" "}
+                      {r.grouped
+                        ? "One invite email covers these teams"
+                        : "Invite email sent"}
                     </p>
                   )}
                   {r.status === "notified" && (

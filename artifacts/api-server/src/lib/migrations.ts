@@ -1343,6 +1343,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS roster_invites_pending_email_less_player_team_
   WHERE invited_email IS NULL AND status = 'pending' AND role = 'player';
 `;
 
+// Task #906 — one hashed envelope token can cover several team-level coach
+// invites. Child roster_invites retain their normal per-team status so a
+// manager can withdraw one team without granting it during group acceptance.
+const TASK_906_GROUPED_COACH_INVITES = `
+CREATE TABLE IF NOT EXISTS coach_invite_groups (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invited_email      text NOT NULL,
+  role               roster_role NOT NULL DEFAULT 'coach',
+  token_hash         text NOT NULL UNIQUE,
+  status             invite_status NOT NULL DEFAULT 'pending',
+  delivery_status    invite_delivery_status NOT NULL DEFAULT 'unknown',
+  delivery_event_at  timestamp,
+  delivery_reason    text,
+  invited_by_id      uuid REFERENCES users(id) ON DELETE SET NULL,
+  resolved_user_id   uuid REFERENCES users(id) ON DELETE SET NULL,
+  accepted_at        timestamp,
+  created_at         timestamp NOT NULL DEFAULT now(),
+  updated_at         timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS coach_invite_groups_organization_id_idx
+  ON coach_invite_groups (organization_id);
+CREATE INDEX IF NOT EXISTS coach_invite_groups_invited_email_idx
+  ON coach_invite_groups (invited_email);
+
+ALTER TABLE roster_invites
+  ADD COLUMN IF NOT EXISTS coach_invite_group_id uuid
+    REFERENCES coach_invite_groups(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS roster_invites_coach_invite_group_id_idx
+  ON roster_invites (coach_invite_group_id);
+`;
+
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
@@ -2364,6 +2397,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-08-21-task-895-secure-roster-join-links",
     sql: TASK_895_SECURE_ROSTER_JOIN_LINKS,
+  },
+  {
+    name: "2026-08-22-task-906-grouped-coach-invites",
+    sql: TASK_906_GROUPED_COACH_INVITES,
   },
 ];
 

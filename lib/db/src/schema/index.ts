@@ -663,6 +663,31 @@ export const organizationInvites = pgTable("organization_invites", {
   invitedEmailIdx: index("organization_invites_invited_email_idx").on(t.invitedEmail),
 }));
 
+// A single secure envelope for inviting one new coach to several teams in an
+// organization. The per-team roster_invites rows below remain the source of
+// truth for each team's pending roster view and can be withdrawn independently.
+export const coachInviteGroups = pgTable("coach_invite_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .references(() => organizations.id, { onDelete: "cascade" })
+    .notNull(),
+  invitedEmail: text("invited_email").notNull(),
+  role: rosterRoleEnum("role").notNull().default("coach"),
+  tokenHash: text("token_hash").notNull().unique(),
+  status: inviteStatusEnum("status").notNull().default("pending"),
+  deliveryStatus: inviteDeliveryStatusEnum("delivery_status").notNull().default("unknown"),
+  deliveryEventAt: timestamp("delivery_event_at"),
+  deliveryReason: text("delivery_reason"),
+  invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
+  resolvedUserId: uuid("resolved_user_id").references(() => users.id, { onDelete: "set null" }),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  organizationIdIdx: index("coach_invite_groups_organization_id_idx").on(t.organizationId),
+  invitedEmailIdx: index("coach_invite_groups_invited_email_idx").on(t.invitedEmail),
+}));
+
 export const rosterInvites = pgTable("roster_invites", {
   id: uuid("id").primaryKey().defaultRandom(),
   token: text("token").notNull().unique(),
@@ -678,6 +703,10 @@ export const rosterInvites = pgTable("roster_invites", {
   deliveryStatus: inviteDeliveryStatusEnum("delivery_status").notNull().default("unknown"),
   deliveryEventAt: timestamp("delivery_event_at"),
   deliveryReason: text("delivery_reason"),
+  coachInviteGroupId: uuid("coach_invite_group_id").references(
+    () => coachInviteGroups.id,
+    { onDelete: "cascade" },
+  ),
   invitedById: uuid("invited_by_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
@@ -685,6 +714,9 @@ export const rosterInvites = pgTable("roster_invites", {
   // up by invitee email when matching an invite to a signing-up user.
   teamIdIdx: index("roster_invites_team_id_idx").on(t.teamId),
   invitedEmailIdx: index("roster_invites_invited_email_idx").on(t.invitedEmail),
+  coachInviteGroupIdx: index("roster_invites_coach_invite_group_id_idx").on(
+    t.coachInviteGroupId,
+  ),
   // Shared team-join links use one pending, email-less player invite per team.
   // This is a partial unique index because normal roster invitations are
   // email-addressed and should remain independently actionable.
@@ -1270,6 +1302,26 @@ export const rosterEntriesRelations = relations(rosterEntries, ({ one }) => ({
 export const rosterInvitesRelations = relations(rosterInvites, ({ one }) => ({
   team: one(teams, { fields: [rosterInvites.teamId], references: [teams.id] }),
   invitedBy: one(users, { fields: [rosterInvites.invitedById], references: [users.id] }),
+  coachInviteGroup: one(coachInviteGroups, {
+    fields: [rosterInvites.coachInviteGroupId],
+    references: [coachInviteGroups.id],
+  }),
+}));
+
+export const coachInviteGroupsRelations = relations(coachInviteGroups, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [coachInviteGroups.organizationId],
+    references: [organizations.id],
+  }),
+  invitedBy: one(users, {
+    fields: [coachInviteGroups.invitedById],
+    references: [users.id],
+  }),
+  resolvedUser: one(users, {
+    fields: [coachInviteGroups.resolvedUserId],
+    references: [users.id],
+  }),
+  invites: many(rosterInvites),
 }));
 
 export const articlesRelations = relations(articles, ({ one, many }) => ({

@@ -24,6 +24,10 @@ import {
   type StagedCoachRow,
 } from "@/components/StageCoachesDialog";
 import {
+  groupCoachInviteAssignments,
+  type CoachInviteAssignment,
+} from "@/lib/coach-invite-grouping";
+import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -107,6 +111,7 @@ type LineResult = {
   // Outcome for the paired coach (only set when the team was created and an
   // email was given).
   coach?: "invited" | "staged" | "failed";
+  coachGrouped?: boolean;
   coachReason?: string;
 };
 
@@ -268,6 +273,10 @@ export function BulkAddTeamsDialog({
     const failedRows: Array<BulkRow & { emails: string[] }> = [];
     // teamId → email pairs to stage after the loop (platform-admin path).
     const toStage: Array<{ teamId: string; email: string; index: number }> = [];
+    // On the normal (non-staging) path, teams must exist before we can send a
+    // consolidated invitation. Collect successful assignments first, then
+    // group them by normalized email below.
+    const toInvite: CoachInviteAssignment[] = [];
     // Sequential on purpose: keeps slug-collision and rate-limit behavior
     // predictable, and lets a mid-list failure not lose the rest.
     for (let i = 0; i < rows.length; i++) {
@@ -299,32 +308,13 @@ export function BulkAddTeamsDialog({
               });
             }
           } else {
-            // Same behavior as inviting a coach from the team page: email
-            // invite for new accounts, in-app pending membership for
-            // existing accounts. A failed invite never undoes the team.
-            const failedEmails: string[] = [];
-            let lastReason: string | null = null;
             for (const email of row.emails) {
-              try {
-                await customFetch(
-                  `/api/v1/teams/${(team as { id: string }).id}/invites`,
-                  {
-                    method: "POST",
-                    body: JSON.stringify({ email, position: "coach" }),
-                  },
-                );
-              } catch (err) {
-                failedEmails.push(email);
-                lastReason = apiErrorMessage(err) ?? null;
-              }
-            }
-            if (failedEmails.length === 0) {
-              result.coach = "invited";
-            } else {
-              result.coach = "failed";
-              result.email = failedEmails.join(", ");
-              result.coachReason =
-                lastReason ?? "Couldn't send the coach invite";
+              toInvite.push({
+                teamId: (team as { id: string }).id,
+                teamName: row.name,
+                email,
+                resultIndex: collected.length,
+              });
             }
           }
         }
@@ -340,6 +330,45 @@ export function BulkAddTeamsDialog({
       }
       setProgress({ done: i + 1, total: rows.length });
       setResults([...collected]);
+    }
+
+    let coachInvitationCount = 0;
+    if (!staging && toInvite.length > 0) {
+      for (const group of groupCoachInviteAssignments(toInvite)) {
+        const grouped = group.assignments.length > 1;
+        try {
+          if (grouped) {
+            await customFetch(`/api/v1/organizations/${orgId}/coach-invites`, {
+              method: "POST",
+              body: JSON.stringify({
+                assignments: group.assignments.map(({ teamId, email }) => ({
+                  teamId,
+                  email,
+                })),
+              }),
+            });
+          } else {
+            await customFetch(`/api/v1/teams/${group.assignments[0].teamId}/invites`, {
+              method: "POST",
+              body: JSON.stringify({ email: group.email, position: "coach" }),
+            });
+          }
+          coachInvitationCount++;
+          for (const assignment of group.assignments) {
+            const result = collected[assignment.resultIndex!];
+            result.coach = "invited";
+            result.coachGrouped = grouped;
+          }
+        } catch (err) {
+          const reason = apiErrorMessage(err) ?? "Couldn't send the coach invite";
+          for (const assignment of group.assignments) {
+            const result = collected[assignment.resultIndex!];
+            result.coach = "failed";
+            result.coachReason = reason;
+          }
+        }
+        setResults([...collected]);
+      }
     }
 
     // Platform-admin staging: merge the new pairs with any coaches already
@@ -405,9 +434,9 @@ export function BulkAddTeamsDialog({
       })),
     );
     if (failed === 0 && coachFailed === 0) {
-      const coachDone = collected.filter(
-        (r) => r.coach === "invited" || r.coach === "staged",
-      ).length;
+      const coachDone = staging
+        ? collected.filter((r) => r.coach === "staged").length
+        : coachInvitationCount;
       toast({
         title:
           succeeded === 1 ? "Team created!" : `${succeeded} teams created!`,
@@ -416,7 +445,7 @@ export function BulkAddTeamsDialog({
             ? undefined
             : staging
               ? `${coachDone} coach${coachDone === 1 ? "" : "es"} staged for the owner to confirm.`
-              : `${coachDone} coach invite${coachDone === 1 ? "" : "s"} sent.`,
+              : `${coachDone} coach invitation${coachDone === 1 ? "" : "s"} sent.`,
       });
     } else if (failed === 0) {
       toast({
@@ -634,7 +663,9 @@ export function BulkAddTeamsDialog({
                     {r.coach === "invited" && (
                       <p className="text-muted-foreground flex items-center gap-1">
                         <Mail className="w-3 h-3 shrink-0" />
-                        Coach invited: {r.email}
+                        {r.coachGrouped
+                          ? `One shared coach invite: ${r.email}`
+                          : `Coach invited: ${r.email}`}
                       </p>
                     )}
                     {r.coach === "staged" && (

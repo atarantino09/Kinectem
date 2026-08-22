@@ -1235,11 +1235,28 @@ router.delete(
       // Clean up the matching still-pending entry in the same
       // transaction so the two records stay consistent. An
       // already-accepted membership is never touched.
-      await db.transaction(async (tx) => {
-        await tx
+      const finalStatus = await db.transaction(async (tx) => {
+        // The acceptance flow can race with a manager withdrawal. Claim the
+        // state transition conditionally so the operation that commits first
+        // wins; never report a successful withdrawal after acceptance did.
+        const [revoked] = await tx
           .update(rosterInvites)
           .set({ status: "revoked" })
-          .where(eq(rosterInvites.id, invite.id));
+          .where(
+            and(
+              eq(rosterInvites.id, invite.id),
+              eq(rosterInvites.status, "pending"),
+            ),
+          )
+          .returning({ status: rosterInvites.status });
+        if (!revoked) {
+          const [latest] = await tx
+            .select({ status: rosterInvites.status })
+            .from(rosterInvites)
+            .where(eq(rosterInvites.id, invite.id))
+            .limit(1);
+          return latest?.status ?? invite.status;
+        }
         if (invite.invitedEmail) {
           const [invitedUser] = await tx
             .select()
@@ -1258,8 +1275,12 @@ router.delete(
               );
           }
         }
+        return revoked.status;
       });
-      return res.json({ id: invite.id, status: "withdrawn" });
+      return res.json({
+        id: invite.id,
+        status: finalStatus === "revoked" ? "withdrawn" : finalStatus,
+      });
     }
     res.json({
       id: invite.id,

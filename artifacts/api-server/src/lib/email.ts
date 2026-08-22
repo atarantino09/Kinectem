@@ -6,6 +6,9 @@ import {
   staffInviteSubject,
   buildStaffInviteText,
   buildStaffInviteHtml,
+  multiTeamStaffInviteSubject,
+  buildMultiTeamStaffInviteText,
+  buildMultiTeamStaffInviteHtml,
 } from "@workspace/invite-copy";
 import { db, emailProviderKeys } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -398,6 +401,41 @@ export async function sendStaffInviteEmail(
   });
 }
 
+export async function sendMultiTeamStaffInviteEmail(
+  to: string,
+  args: {
+    inviterName: string;
+    organizationName: string;
+    teamNames: readonly string[];
+    roleLabel: string;
+    token: string;
+    groupId?: string;
+  },
+): Promise<void> {
+  const link = buildInviteAcceptUrl(args.token);
+  const vars = {
+    inviterName: args.inviterName,
+    organizationName: args.organizationName,
+    teamNames: args.teamNames,
+    roleLabel: args.roleLabel,
+    link,
+  };
+  await sendEmail({
+    to,
+    kind: "staff_invite_group",
+    ...(args.groupId
+      ? {
+          customArgs: {
+            kinectem_invite_id: args.groupId,
+            kinectem_invite_kind: "roster_group",
+          },
+        }
+      : {}),
+    subject: multiTeamStaffInviteSubject(args.organizationName),
+    text: buildMultiTeamStaffInviteText(vars),
+    html: buildMultiTeamStaffInviteHtml(vars),
+  });
+}
 export function buildPostUrl(link: string): string {
   // Callers store post links as relative paths (e.g. "/posts/article-…").
   // Stitch them onto the configured app base url so the email lands users

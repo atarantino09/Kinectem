@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import type { Request, Response } from "express";
-import { db, rosterInvites, organizationInvites } from "@workspace/db";
+import {
+  db,
+  rosterInvites,
+  organizationInvites,
+  coachInviteGroups,
+} from "@workspace/db";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
@@ -97,6 +102,43 @@ async function applyEvent(ev: SendGridEvent): Promise<void> {
           or(
             isNull(organizationInvites.deliveryEventAt),
             lte(organizationInvites.deliveryEventAt, eventAt),
+          ),
+        ),
+      );
+  } else if (kind === "roster_group") {
+    await db
+      .update(coachInviteGroups)
+      .set({
+        deliveryStatus: status as never,
+        deliveryEventAt: eventAt,
+        deliveryReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(coachInviteGroups.id, inviteId),
+          or(
+            isNull(coachInviteGroups.deliveryEventAt),
+            lte(coachInviteGroups.deliveryEventAt, eventAt),
+          ),
+        ),
+      );
+    // The envelope receives SendGrid's single event, while managers still
+    // inspect pending invitations one team at a time. Mirror the current
+    // delivery state onto its children so those team views stay truthful.
+    await db
+      .update(rosterInvites)
+      .set({
+        deliveryStatus: status as never,
+        deliveryEventAt: eventAt,
+        deliveryReason: reason,
+      })
+      .where(
+        and(
+          eq(rosterInvites.coachInviteGroupId, inviteId),
+          or(
+            isNull(rosterInvites.deliveryEventAt),
+            lte(rosterInvites.deliveryEventAt, eventAt),
           ),
         ),
       );

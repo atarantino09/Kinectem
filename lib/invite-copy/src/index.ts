@@ -154,6 +154,13 @@ export const STAFF_INVITE_CONTENT = {
   ctaLabel: STAFF_CTA_LABEL,
 } as const;
 
+export interface MultiTeamStaffInviteVars {
+  inviterName: string;
+  organizationName: string;
+  teamNames: readonly string[];
+  roleLabel: string;
+  link: string;
+}
 /**
  * Plain-text body of the staff invite message. Used verbatim for the in-app
  * copy-to-clipboard block and for the email's text part.
@@ -238,4 +245,47 @@ export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): stri
     `<p><a href="${linkAttr}">${escapeHtml(CTA_LABEL)}</a></p>`,
     `<p>— Coach ${escapeHtml(coachName)}</p>`,
   ].join("\n");
+}
+
+export function buildMultiTeamStaffInviteHtml(
+  vars: MultiTeamStaffInviteVars,
+): string {
+  const list = vars.teamNames
+    .map((name) => `<li>${escapeHtml(name)}</li>`)
+    .join("\n");
+  const linkAttr = escapeHtml(vars.link);
+  return [
+    `<p>${escapeHtml(STAFF_GREETING)}</p>`,
+    `<p>${escapeHtml(`${vars.inviterName} has invited you to join ${vars.organizationName} on Kinectem as ${withArticle(vars.roleLabel)}.`)}</p>`,
+    "<p>You'll be joining these teams:</p>",
+    `<ul>\n${list}\n</ul>`,
+    `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
+    `<p>${escapeHtml(staffAiAssistParagraph({ roleLabel: vars.roleLabel }))}</p>`,
+    `<p>${escapeHtml(STAFF_SETUP)}</p>`,
+    `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
+    `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,
+    `<p>— ${escapeHtml(vars.inviterName)}</p>`,
+  ].join("\n");
+}
+
+export function multiTeamStaffInviteSubject(organizationName: string): string {
+  return `You're invited to join ${organizationName} on Kinectem`;
+}
+
+export function buildMultiTeamStaffInviteText(
+  vars: MultiTeamStaffInviteVars,
+): string {
+  const teams = vars.teamNames.map((name) => `• ${name}`).join("\n");
+  return [
+    STAFF_GREETING,
+    `${vars.inviterName} has invited you to join ${vars.organizationName} on Kinectem as ${withArticle(vars.roleLabel)}.`,
+    "You'll be joining these teams:",
+    teams,
+    STAFF_ABOUT,
+    staffAiAssistParagraph({ roleLabel: vars.roleLabel }),
+    STAFF_SETUP,
+    STAFF_LEARN_MORE,
+    `${STAFF_CTA_LABEL} ${vars.link}`,
+    `— ${vars.inviterName}`,
+  ].join("\n\n");
 }

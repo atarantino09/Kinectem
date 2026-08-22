@@ -8,6 +8,7 @@ import { Shield, CheckCircle2 } from "lucide-react";
 interface InviteHeaderCardProps {
   organizationName: string;
   teamName: string;
+  teamNames?: string[];
   isPlayerInvite: boolean;
   positionLabel: string | null;
   childHint: string;
@@ -22,6 +23,7 @@ interface InviteHeaderCardProps {
 export function InviteHeaderCard({
   organizationName,
   teamName,
+  teamNames,
   isPlayerInvite,
   positionLabel,
   childHint,
@@ -33,6 +35,7 @@ export function InviteHeaderCard({
   onAccept,
 }: InviteHeaderCardProps) {
   const returnTo = encodeURIComponent(`/invites/${token}`);
+  const multipleTeams = (teamNames?.length ?? 0) > 1;
   return (
     <Card className="rounded-xl border-border overflow-hidden">
       <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-6 text-white">
@@ -40,8 +43,10 @@ export function InviteHeaderCard({
           {formatOrgName(organizationName)}
         </p>
         <h1 className="text-3xl font-black tracking-tight mt-1">
-          You're invited to{" "}
-          <span className="underline decoration-white/40">{teamName}</span>
+          {multipleTeams ? "You're invited to join these teams" : "You're invited to "}
+          {!multipleTeams && (
+            <span className="underline decoration-white/40">{teamName}</span>
+          )}
         </h1>
         <Badge className="mt-3 bg-white/20 text-white border-white/30 font-bold">
           {isPlayerInvite ? "Player roster" : positionLabel}
@@ -49,6 +54,21 @@ export function InviteHeaderCard({
       </div>
 
       <CardContent className="p-6 space-y-4">
+        {multipleTeams && (
+          <div
+            className="rounded-lg border border-border bg-muted/30 p-3"
+            data-testid="list-grouped-invite-teams"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              You’ll join as {positionLabel ?? "Coach"} on:
+            </p>
+            <ul className="mt-2 space-y-1 text-sm font-semibold">
+              {teamNames!.map((name) => (
+                <li key={name}>• {name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {isPlayerInvite && !accepted && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <Shield className="w-4 h-4 mt-0.5 shrink-0" />
