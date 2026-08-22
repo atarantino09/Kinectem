@@ -1,5 +1,3 @@
-import { BrandLogo } from "@/components/BrandLogo";
-
 export function AuthAside() {
   return (
     <aside className="relative hidden md:flex flex-col justify-between p-10 bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 text-white overflow-hidden">
@@ -7,7 +5,11 @@ export function AuthAside() {
       <div className="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-blue-300/20 blur-3xl" />
 
       <div className="relative flex items-center">
-        <BrandLogo variant="dark-noshadow" className="block h-9 w-auto" />
+        <img
+          src={`${import.meta.env.BASE_URL}logo-horizontal-dark.png`}
+          alt="Kinectem"
+          className="block h-9 w-auto"
+        />
       </div>
 
       <div className="relative space-y-6">

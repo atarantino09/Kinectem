@@ -9,7 +9,6 @@ import type { PostResponse } from "@workspace/api-client-react";
 import { formatDateUTC, formatOrgName } from "@/lib/format";
 import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import shareBg from "@/assets/share-bg-portrait.jpg";
-import { BrandLogo } from "@/components/BrandLogo";
 
 /**
  * Task #863 — the fixed 1080×1350 composition that becomes the shareable
@@ -144,8 +143,9 @@ export const ShareRecapCanvas = forwardRef<
       />
 
       {/* Header: white wordmark left, GAME RECAP pill right */}
-      <BrandLogo
-        variant="dark-noshadow"
+      <img
+        src={`${import.meta.env.BASE_URL}logo-horizontal-dark.png`}
+        alt="Kinectem"
         crossOrigin="anonymous"
         style={{
           position: "absolute",
@@ -335,7 +335,8 @@ export const ShareRecapCanvas = forwardRef<
                     {teamName}
                   </span>
               )}
-              <BrandLogo
+              <img
+                src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
                 alt=""
                 crossOrigin="anonymous"
                 style={{

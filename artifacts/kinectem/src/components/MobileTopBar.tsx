@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Bell, Mail, Menu, Search, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BrandLogo } from "@/components/BrandLogo";
 
 type Props = {
   meId: string | undefined;
@@ -41,7 +40,11 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
             className="flex items-center shrink-0"
             data-testid="mobile-top-logo"
           >
-            <BrandLogo className="h-7 w-auto" />
+            <img
+              src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+              alt="Kinectem"
+              className="h-7 w-auto"
+            />
           </Link>
         </div>
 
