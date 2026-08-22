@@ -1,11 +1,16 @@
 import { useRoute, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
+import {
+  customFetch,
+  useGetLoggedInUser,
+  type PostResponse,
+} from "@workspace/api-client-react";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
+import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +20,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, EyeOff, Pencil, Star } from "lucide-react";
+import { ChevronDown, EyeOff, ImageDown, Loader2, Pencil, Star } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -201,6 +206,24 @@ function contrastText(hex: string): string {
 
 const DEFAULT_BRAND = "#1e293b";
 
+export function isPublicFeaturedCompetitionRecap(
+  post: PostResponse,
+  competitionId: string,
+): boolean {
+  const postWithExtras = post as PostResponse & {
+    articleStatus?: string | null;
+    hidden?: boolean;
+    competitionFeatured?: boolean;
+    competition?: { id?: string } | null;
+  };
+  return (
+    postWithExtras.articleStatus === "published" &&
+    !postWithExtras.hidden &&
+    postWithExtras.competitionFeatured === true &&
+    postWithExtras.competition?.id === competitionId
+  );
+}
+
 export default function CompetitionPage() {
   // Matched both as the standalone public page (`/c/<slug>`) and as the
   // in-app view inside the AppShell (`/competitions/c/<slug>`), so
@@ -214,6 +237,14 @@ export default function CompetitionPage() {
   // Task #852 — active bracket filter for the featured-recaps rail
   // ("" = All; unbracketed recaps only ever show under All).
   const [bracketFilter, setBracketFilter] = useState("");
+  // Competition rail cards contain summary data only. Load the canonical
+  // public post detail on demand before opening the reusable image exporter.
+  const [shareImagePost, setShareImagePost] = useState<PostResponse | null>(null);
+  const [shareImageOpen, setShareImageOpen] = useState(false);
+  const [shareImageLoadingId, setShareImageLoadingId] = useState<string | null>(
+    null,
+  );
+  const [shareImageErrorId, setShareImageErrorId] = useState<string | null>(null);
   // Task #854 — optional grouped layout: recaps under bracket headings in
   // the organizer's saved order, unbracketed last under "Other". Grouping
   // supersedes the chip filter, so chips hide while grouped.
@@ -436,6 +467,47 @@ export default function CompetitionPage() {
         : c.isEnded
           ? "Ended"
           : "Upcoming";
+
+  const openRecapImageExporter = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    recap: FeaturedRecap,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (shareImageLoadingId) return;
+
+    setShareImageErrorId(null);
+    setShareImageLoadingId(recap.id);
+    try {
+      const post = await customFetch<PostResponse>(`/api/v1/posts/${recap.id}`, {
+        method: "GET",
+      });
+      if (!isPublicFeaturedCompetitionRecap(post, c.id)) {
+        throw new Error(
+          "This recap is no longer available as a public competition feature.",
+        );
+      }
+      setShareImagePost(post);
+      setShareImageOpen(true);
+    } catch (error) {
+      setShareImageErrorId(recap.id);
+      toast({
+        title: "Couldn't load this recap image",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Please try again while you continue browsing.",
+        variant: "destructive",
+      });
+    } finally {
+      setShareImageLoadingId(null);
+    }
+  };
+
+  const closeRecapImageExporter = (open: boolean) => {
+    setShareImageOpen(open);
+    if (!open) setShareImagePost(null);
+  };
 
   const signupHref = me
     ? `/c/${encodeURIComponent(slug)}/signup`
@@ -694,6 +766,35 @@ export default function CompetitionPage() {
                       {r.summary}
                     </p>
                   ) : null}
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="font-bold rounded-full"
+                      aria-label={`Share ${r.title} as image`}
+                      data-testid={`btn-share-featured-recap-image-${r.id}`}
+                      disabled={shareImageLoadingId === r.id}
+                      onClick={(event) => openRecapImageExporter(event, r)}
+                    >
+                      {shareImageLoadingId === r.id ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <ImageDown className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      {shareImageLoadingId === r.id
+                        ? "Loading image…"
+                        : "Share as image"}
+                    </Button>
+                    {shareImageErrorId === r.id ? (
+                      <p
+                        className="mt-1.5 text-[11px] font-semibold text-destructive"
+                        role="alert"
+                      >
+                        Couldn’t load this image. Try again.
+                      </p>
+                    ) : null}
+                  </div>
                 </CardContent>
               </Card>
             </Link>
@@ -798,6 +899,14 @@ export default function CompetitionPage() {
           </section>
           );
         })()}
+
+        {shareImagePost ? (
+          <ShareRecapImageDialog
+            post={shareImagePost}
+            open={shareImageOpen}
+            onOpenChange={closeRecapImageExporter}
+          />
+        ) : null}
 
         {/* Organizer-only empty state — a clear path to the curation panel
             even before anything has been featured. Hidden from the public. */}

@@ -72,6 +72,45 @@ async function getPost(api: APIRequestContext, postId: string): Promise<FeedPost
 }
 
 test.describe("Share button — end-to-end", () => {
+  test("competition recap card opens the image exporter without navigating", async ({
+    page,
+  }) => {
+    // This is a public seeded competition, so the flow exercises the same
+    // route for logged-out visitors and signed-in users without requiring
+    // organizer privileges.
+    await page.goto("/app/c/columbus-cup-2026-d5df1261");
+    const rail = page.getByTestId("rail-featured-recaps");
+    await expect(rail).toBeVisible();
+
+    const recapCard = page.getByTestId(/^card-featured-recap-/).first();
+    const recapId = await recapCard.getAttribute("data-testid");
+    expect(recapId).toBeTruthy();
+    const shareButton = recapCard.getByRole("button", {
+      name: /Share .* as image/,
+    });
+    await expect(shareButton).toBeVisible();
+
+    const beforeClick = page.url();
+    const canonicalRequest = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/posts/article-") &&
+        response.request().method() === "GET",
+    );
+    await shareButton.click();
+    const response = await canonicalRequest;
+    expect(response.status()).toBe(200);
+    expect(page.url()).toBe(beforeClick);
+
+    const dialog = page.getByTestId("dialog-share-recap-image");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId("share-image-preview")).toBeVisible();
+    await expect(dialog.getByTestId("btn-share-cta-bio")).toBeVisible();
+    await expect(dialog.getByTestId("btn-share-cta-url")).toBeVisible();
+    await expect(
+      dialog.getByTestId("btn-share-image-action"),
+    ).toBeVisible();
+  });
+
   test("share, verify on profile, unshare, verify removed", async ({ page }) => {
     await loginViaUi(page);
     // Reuse the browser context's request so the session cookie is sent.

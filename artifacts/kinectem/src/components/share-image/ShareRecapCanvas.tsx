@@ -33,6 +33,8 @@ const CTA_BOTTOM_PAD = 34;
 const CTA_TOP = SHARE_CANVAS_H - CTA_BOTTOM_PAD - CTA_H; // 1220
 const AVAILABLE_H = CTA_TOP - 30 - CARD_TOP; // 1056
 const FADE_H = 190;
+const DEFAULT_FRAME_PRIMARY = "#7E22CE";
+const DEFAULT_FRAME_SECONDARY = "#2563EB";
 
 /** Strip `@[Name](user:uuid)` mention tokens down to the plain name. */
 export function plainBody(body: string): string {
@@ -75,6 +77,15 @@ export const ShareRecapCanvas = forwardRef<
       } | null;
     }
   ).competition;
+  // Use ordinary painted edge bands instead of CSS border-image. The latter
+  // is rendered as a full fill by html-to-image's SVG snapshotter, which
+  // obscures the export on some browsers.
+  const competitionFrameColors = competition
+    ? {
+        primary: competition.brandColor ?? DEFAULT_FRAME_PRIMARY,
+        secondary: competition.secondaryColor ?? DEFAULT_FRAME_SECONDARY,
+      }
+    : null;
   const paragraphs = useMemo(
     () =>
       plainBody(post.body ?? "")
@@ -147,6 +158,7 @@ export const ShareRecapCanvas = forwardRef<
         src={`${import.meta.env.BASE_URL}logo-horizontal-dark.png`}
         alt="Kinectem"
         crossOrigin="anonymous"
+        data-testid="share-image-kinectem-logo"
         style={{
           position: "absolute",
           left: SIDE,
@@ -162,8 +174,9 @@ export const ShareRecapCanvas = forwardRef<
           top: TOP_PAD + 2,
           padding: "12px 26px",
           borderRadius: 999,
-          border: "2px solid rgba(201,180,255,0.55)",
-          background: "rgba(20,8,44,0.55)",
+          border: "2px solid transparent",
+          background:
+            "linear-gradient(rgba(20,8,44,0.62), rgba(20,8,44,0.62)) padding-box, linear-gradient(135deg, #C084FC 0%, #7C3AED 48%, #2563EB 100%) border-box",
           color: "#E4D9FF",
           fontSize: 24,
           fontWeight: 900,
@@ -171,6 +184,7 @@ export const ShareRecapCanvas = forwardRef<
           textTransform: "uppercase",
           lineHeight: 1.2,
         }}
+        data-testid="share-image-game-recap-badge"
       >
         Game Recap
       </div>
@@ -233,6 +247,7 @@ export const ShareRecapCanvas = forwardRef<
                     src={competition.logoUrl}
                     alt=""
                     crossOrigin="anonymous"
+                    data-testid="share-image-competition-logo"
                     style={{
                       height: 40,
                       width: 40,
@@ -450,13 +465,15 @@ export const ShareRecapCanvas = forwardRef<
           width: CARD_W,
           height: CTA_H,
           borderRadius: 20,
-          background: "linear-gradient(90deg,#4F46E5 0%,#7C3AED 55%,#9333EA 100%)",
+          background:
+            "linear-gradient(135deg,#7E22CE 0%,#6A2BF8 45%,#4A34F5 68%,#2563EB 100%)",
           display: "flex",
           alignItems: "center",
           padding: "0 26px 0 40px",
           boxSizing: "border-box",
           gap: 24,
         }}
+        data-testid="share-image-cta"
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
@@ -508,6 +525,63 @@ export const ShareRecapCanvas = forwardRef<
           </svg>
         </div>
       </div>
+
+      {/* Competition frame: a continuous branded border keeps the
+          competition identity around the whole export without changing the
+          organization/team treatment inside the recap card. */}
+      {competitionFrameColors && (
+        <div
+          aria-hidden
+          data-testid="share-image-competition-frame"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            zIndex: 10,
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 18,
+              background: `linear-gradient(135deg, ${competitionFrameColors.primary} 0%, ${competitionFrameColors.secondary} 100%)`,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: 18,
+              background: competitionFrameColors.secondary,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              bottom: 0,
+              left: 0,
+              height: 18,
+              background: `linear-gradient(135deg, ${competitionFrameColors.secondary} 0%, ${competitionFrameColors.primary} 100%)`,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: 18,
+              background: competitionFrameColors.primary,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 });
