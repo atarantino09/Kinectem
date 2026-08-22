@@ -1,5 +1,6 @@
 import {
   COACH_INVITE_SUBJECT,
+  KINECTEM_INVITE_CONTEXT,
   buildCoachInviteText,
   buildCoachInviteHtml,
   staffInviteSubject,
@@ -270,12 +271,15 @@ export async function sendOrganizationInviteEmail(
       : {}),
     subject: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem`,
     text: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem as ${roleLabel}.
+
+${KINECTEM_INVITE_CONTEXT}
 ${notePlain}
 Open this link to accept:
 ${url}
 
 If you don't have a Kinectem account yet, you can sign up from the same link.`,
     html: `<p><strong>${inviterHtml}</strong> invited you to join <strong>${orgHtml}</strong> on Kinectem as ${roleLabel}.</p>
+<p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 ${noteHtml}
 <p>Open this link to accept:</p>
 <p><a href="${url}">${url}</a></p>
@@ -313,11 +317,14 @@ export async function sendCompetitionAdminInviteEmail(
     subject: `${inviterDisplayName} invited you to help run ${targetName} on Kinectem`,
     text: `${inviterDisplayName} invited you to be an admin of the ${kindLabel} ${targetName} on Kinectem.
 
+${KINECTEM_INVITE_CONTEXT}
+
 Open this link to accept:
 ${url}
 
 If you don't have a Kinectem account yet, you can sign up from the same link.`,
     html: `<p><strong>${inviterHtml}</strong> invited you to be an admin of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
+<p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 <p>Open this link to accept:</p>
 <p><a href="${url}">${url}</a></p>
 <p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
@@ -515,6 +522,8 @@ export async function sendGuardianLinkInviteEmail(
     subject: `${args.inviterName} invited you to be ${args.childName}'s ${roleLabel} on Kinectem`,
     text: `${args.inviterName} invited you to join Kinectem as ${args.childName}'s ${roleLabel}.
 
+${KINECTEM_INVITE_CONTEXT}
+
 Once you accept, you'll see ${args.childName} on your Family dashboard, follow their teams automatically, and receive updates about their activity.
 
 To accept or decline, open your Family dashboard:
@@ -524,6 +533,7 @@ If you don't have a Kinectem account yet, sign up using this email address (${to
 
 If you don't recognize this invitation, you can ignore this email or decline it in the app.`,
     html: `<p><strong>${escapeHtml(args.inviterName)}</strong> invited you to join Kinectem as <strong>${escapeHtml(args.childName)}</strong>'s ${roleLabel}.</p>
+<p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 <p>Once you accept, you'll see ${escapeHtml(args.childName)} on your Family dashboard, follow their teams automatically, and receive updates about their activity.</p>
 <p>To accept or decline, open your Family dashboard:</p>
 <p><a href="${url}">${url}</a></p>

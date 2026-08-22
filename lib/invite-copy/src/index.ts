@@ -13,6 +13,13 @@
 
 export const COACH_INVITE_SUBJECT = "Our game recaps are now on Kinectem!";
 
+/**
+ * Short, audience-neutral explanation for invite emails that do not already
+ * include the richer parent or staff product story.
+ */
+export const KINECTEM_INVITE_CONTEXT =
+  "Kinectem is a youth-sports platform where teams share game recaps, recognize every athlete, and build a lasting story of each season, with privacy and safety at the center.";
+
 export interface CoachInviteVars {
   /** Coach's display name; fills the `[Name]` slot in the sign-off. */
   coachName: string;
