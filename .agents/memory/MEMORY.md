@@ -63,3 +63,4 @@
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.
 - [Shared team join-link security](shared-team-join-link-security.md) — team-wide roster links are long-lived bearer capabilities: cryptographic tokens + one-pending-link-per-team invariant are mandatory.
 - [Tour dropdown portal testing](tour-dropdown-portal-testing.md) — SpotlightTour + Radix menu content needs real-browser coverage; JSDOM reliably verifies controlled trigger state, not the portaled item.
+- [JSDOM file reads](jsdom-file-reads.md) — use FileReader for browser file-upload tests; JSDOM's File does not reliably implement File.text().

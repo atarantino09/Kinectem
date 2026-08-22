@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, CheckCircle2, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileUp, Upload } from "lucide-react";
 import {
   importSchedule,
   scheduleQueryKey,
@@ -42,14 +42,16 @@ export function CsvImportDialog({
   const { toast } = useToast();
   const [csv, setCsv] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
     setCsv("");
     setPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const previewMut = useMutation({
-    mutationFn: () => importSchedule(teamId, csv, false),
+    mutationFn: (csvText: string) => importSchedule(teamId, csvText, false),
     onSuccess: (r) => {
       if (isPreview(r)) setPreview(r);
     },
@@ -81,6 +83,28 @@ export function CsvImportDialog({
   const canImport =
     !!preview && preview.errorCount === 0 && preview.validCount > 0;
 
+  const handleFileChange = (file: File | undefined) => {
+    if (!file) return;
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setPreview(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      setCsv(text);
+      previewMut.mutate(text);
+    };
+    reader.onerror = () => {
+      const error = reader.error ?? new Error("The file could not be read.");
+      toast({
+        title: "Couldn't read that CSV",
+        description:
+          error instanceof Error ? error.message : "Check the format and try again.",
+        variant: "destructive",
+      });
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <Dialog
       open={open}
@@ -106,19 +130,41 @@ export function CsvImportDialog({
             <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
               CSV data
             </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="rounded-full font-bold text-muted-foreground"
-              onClick={() => {
-                setCsv(SAMPLE);
-                setPreview(null);
-              }}
-              data-testid="btn-csv-sample"
-            >
-              Insert sample
-            </Button>
+            <div className="flex items-center gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => handleFileChange(e.target.files?.[0])}
+                data-testid="input-csv-file"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full font-bold"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={previewMut.isPending || importMut.isPending}
+                data-testid="btn-csv-choose-file"
+              >
+                <FileUp className="mr-1.5 h-3.5 w-3.5" />
+                {previewMut.isPending ? "Checking…" : "Choose CSV file"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-full font-bold text-muted-foreground"
+                onClick={() => {
+                  setCsv(SAMPLE);
+                  setPreview(null);
+                }}
+                data-testid="btn-csv-sample"
+              >
+                Insert sample
+              </Button>
+            </div>
           </div>
           <textarea
             value={csv}
@@ -198,7 +244,7 @@ export function CsvImportDialog({
           <Button
             variant="outline"
             className="font-bold rounded-full"
-            onClick={() => previewMut.mutate()}
+            onClick={() => previewMut.mutate(csv)}
             disabled={!csv.trim() || previewMut.isPending}
             data-testid="btn-csv-preview"
           >
