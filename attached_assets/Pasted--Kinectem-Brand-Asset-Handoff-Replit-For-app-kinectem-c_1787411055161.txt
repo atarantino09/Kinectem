@@ -1,0 +1,370 @@
+# Kinectem — Brand Asset Handoff (Replit)
+
+**For:** app.kinectem.com + kinectem.com
+**Brand system locked:** 22 August 2026
+**Source of truth:** `BRAND_SYSTEM_LOCKED.md` in this same folder
+
+---
+
+## THE ASK
+
+> **Replace every Kinectem logo across the web app and the landing page with the
+> new assets in this package. The swap must be complete and consistent — the same
+> mark, at the same proportions, on desktop and on mobile.**
+>
+> This is not a partial rollout. A page that still shows the old icon next to a
+> page that shows the new one is worse than not shipping at all, because the two
+> are close enough that it reads as a rendering bug rather than a redesign.
+>
+> Work through the placement inventory in section 2 and tick every line. Nothing
+> in `kinectem.com` or `app.kinectem.com` should still reference an old file when
+> this is done — including caches, CDN copies, inlined base64, email templates,
+> and social share images.
+
+**Definition of done:** search the entire codebase for the old filenames and for
+any `base64` image blobs. Zero hits outside this package. Then run the QA
+checklist in section 11 on a real desktop browser *and* a real phone.
+
+---
+
+## 1. What changed, and why it can't be a colour-swap
+
+Two things moved:
+
+1. **The gradient** — richer range, a magenta accent at the top-left origin, dark shoulders on the icon.
+2. **The K's position inside the app icon** — it was sitting 38px left and 48px low in a 1024px canvas. It's now optically centred.
+
+Because of (2), **every existing icon export is wrong and must be replaced with the new file, not recoloured.** Any cached, inlined, or base64-embedded copy of the old icon will look subtly misaligned next to the new ones.
+
+The **wordmark and K letterform geometry did not change.** Poppins Bold, 15° lean, same outlines. So anywhere the *lockup* appears, this is a straight file swap with no layout impact.
+
+---
+
+---
+
+## 2. Placement inventory — every logo on the property
+
+Tick each one. Marked **[M]** where the mobile rendering differs and needs its own check.
+
+### Landing page — kinectem.com
+
+- [ ] Header / nav logo **[M]** — mobile nav often swaps the full lockup for the K mark alone; if so, use `kinectem_kmark_gradient.svg`, not a squashed lockup
+- [ ] Hero section logo, if the mark appears in the hero
+- [ ] Footer logo — usually the mono or dark cut
+- [ ] Favicon + tab icon
+- [ ] Open Graph / Twitter card image (`social/og-image-*.png`)
+- [ ] Apple touch icon (add-to-home-screen)
+- [ ] Any pricing, feature, or comparison section using the icon
+- [ ] 404 / error pages
+- [ ] Cookie or consent banner, if it carries the mark
+- [ ] Loading state or splash
+
+### Web app — app.kinectem.com
+
+- [ ] App header / top nav **[M]** — this is the highest-visibility placement, see section 4
+- [ ] Collapsed / mobile header **[M]** — K mark only at narrow widths
+- [ ] Sidebar logo, expanded and collapsed states
+- [ ] Login, signup, password reset, and email-verification screens
+- [ ] Onboarding and empty states
+- [ ] PWA manifest icons + install prompt
+- [ ] PWA splash screen **[M]** — iOS uses its own startup images
+- [ ] Loading spinners or skeleton screens that show the K
+- [ ] Admin console header
+- [ ] Any generated PDF, report, or export header
+- [ ] Game recap share cards — the graphic generated when a recap is shared
+- [ ] Org page and team page default/placeholder avatars
+- [ ] In-app modals or toasts carrying the mark
+
+### Outbound
+
+- [ ] All transactional email templates (see section 8 — PNG only, never SVG)
+- [ ] Outreach email signature
+- [ ] Social profile avatars (`social/social-avatar-*.png`)
+- [ ] LinkedIn / Facebook banner (`social/banner-1584x396.png`)
+
+---
+
+## 3. Keeping the swap consistent
+
+Consistency fails in predictable ways. Guard against these three:
+
+**One directory, no one-offs.** Put every brand file under a single path — `/public/brand/` — and reference it from there everywhere. Do not let a component import a logo from `/assets/img/logo2.png` or paste in a base64 blob. If a logo is referenced from more than one location, the next update will miss one.
+
+**One component, not fifteen `<img>` tags.** Wrap the logo in a single component that takes a variant prop:
+
+```jsx
+// components/Logo.jsx
+const FILES = {
+  horizontal: { light: 'kinectem_logo_horizontal_light.svg',
+                dark:  'kinectem_logo_horizontal_dark.svg' },
+  stacked:    { light: 'kinectem_logo_stacked_light.svg',
+                dark:  'kinectem_logo_stacked_dark.svg' },
+  mark:       { light: 'kinectem_kmark_gradient.svg',
+                dark:  'kinectem_kmark_gradient.svg' },
+};
+
+export default function Logo({ variant = 'horizontal', theme = 'light', height = 34 }) {
+  return (
+    <img src={`/brand/${FILES[variant][theme]}`}
+         alt="Kinectem" style={{ height, width: 'auto', display: 'block' }} />
+  );
+}
+```
+
+Every placement then becomes `<Logo />`, and the next change is one file.
+
+**Never distort the ratio.** Set `height` and let `width` be `auto`. The gap between the K and the wordmark is baked into the file — forcing both dimensions squashes the spacing and the lockup stops matching itself across pages.
+
+---
+
+## 4. Mobile — where the swap usually goes wrong
+
+**[M] Responsive header.** Most narrow headers drop the wordmark and show the K alone. Use the real K mark file, never a CSS-cropped lockup:
+
+```css
+.brand-full { height: 34px; width: auto; }
+.brand-mark { display: none; height: 30px; width: auto; }
+
+@media (max-width: 560px) {
+  .brand-full { display: none; }
+  .brand-mark { display: block; }
+}
+```
+
+**[M] Retina.** SVG handles this automatically — another reason to use SVG for on-screen placements. Where a PNG is unavoidable, serve at 2× the CSS size.
+
+**[M] Dark mode.** If the app has a dark theme, the light lockup on a dark background is a common miss:
+
+```css
+@media (prefers-color-scheme: dark) {
+  .brand img { content: url('/brand/kinectem_logo_horizontal_dark.svg'); }
+}
+```
+
+Better: drive it from your existing theme state through the `Logo` component above.
+
+**[M] Tap target.** The header logo is usually a home link. Keep the tappable area at least 44×44px even when the mark renders smaller — pad the anchor, don't grow the image.
+
+**[M] iOS home screen.** Test `apple-touch-icon.png` by actually adding the site to a home screen. iOS applies its own corner rounding on top of the file's; verify the K isn't clipped.
+
+**[M] Android install.** Verify the maskable icon under a circle mask. See the warning in section 5 — it is a separate file.
+
+---
+
+## 5. Files to deploy
+
+### Favicon + PWA (`favicon/` and `icon_suite/`)
+
+Copy to your static/public root:
+
+```
+public/
+  favicon.ico                 <- favicon/favicon.ico          (multi-res: 16,32,48,64,128,256)
+  favicon-16.png              <- favicon/favicon-16.png
+  favicon-32.png              <- favicon/favicon-32.png
+  favicon-48.png              <- favicon/favicon-48.png
+  favicon-96.png              <- favicon/favicon-96.png
+  favicon-192.png             <- favicon/favicon-192.png
+  favicon-512.png             <- favicon/favicon-512.png
+  apple-touch-icon.png        <- favicon/apple-touch-icon.png (180x180)
+  icons/
+    web-icon-192.png          <- icon_suite/web-icon-192.png
+    web-icon-512.png          <- icon_suite/web-icon-512.png
+    android-maskable-512.png  <- icon_suite/android-maskable-512.png
+```
+
+### Head tags
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#0B1228">
+
+<!-- social share -->
+<meta property="og:image" content="https://kinectem.com/brand/social/og-image-dark-1200x630.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://kinectem.com/brand/social/og-image-dark-1200x630.png">
+```
+
+### `site.webmanifest`
+
+```json
+{
+  "name": "Kinectem",
+  "short_name": "Kinectem",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1228",
+  "theme_color": "#0B1228",
+  "icons": [
+    { "src": "/icons/web-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/web-icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/android-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
+```
+
+**Note on the maskable icon.** It is a *different file* from `web-icon-512.png` — the art is inset to the 80% safe zone on a solid `#4A34F5` plate, because Android crops to a circle and would otherwise clip the K's lean and the magenta corner. Do not point both entries at the same file.
+
+---
+
+## 6. The app header
+
+This is the highest-visibility placement. The current header spacing is what the whole lockup system was derived from, so **keep the rendered result identical** — you are only swapping the image.
+
+Use the SVG:
+
+```
+vector/kinectem_logo_horizontal_light.svg
+```
+
+```html
+<a href="/" class="brand">
+  <img src="/brand/kinectem_logo_horizontal_light.svg" alt="Kinectem" width="157" height="46">
+</a>
+```
+
+```css
+.brand img { height: 34px; width: auto; display: block; }
+```
+
+The SVG's intrinsic ratio is **1152 × 337**. At `height: 34px` that renders 116px wide, which reproduces the current header exactly — K-mark 34px tall, 6px gap, K top flush with the top of the *i* dot.
+
+**Do not set both width and height to fixed values that break the 1152:337 ratio.** The spacing inside the lockup is baked into the file; distorting it distorts the gap.
+
+Dark chrome uses `kinectem_logo_horizontal_dark.svg`.
+
+---
+
+## 7. Which file for which surface
+
+| Surface | File |
+|---|---|
+| App header, white/light chrome | `kinectem_logo_horizontal_light.svg` |
+| Navy chrome, dark mode | `kinectem_logo_horizontal_dark.svg` |
+| Over a photo or mid-tone brand colour | `..._light_noshadow.svg` / `..._dark_noshadow.svg` |
+| Single-colour print, embossing, fax | `..._mono_black.svg` / `..._mono_white.svg` |
+| Square spaces, social profile, hero | `kinectem_logo_stacked_*.svg` |
+| Avatar, watermark, small square | `kinectem_kmark_gradient.svg` |
+| Email signatures, anything without SVG support | `lockup_sizes/*.png` |
+| Open Graph / Twitter card | `social/og-image-dark-1200x630.png` |
+| Social profile avatar | `social/social-avatar-icon-circlesafe-1024.png` |
+| LinkedIn / Facebook banner | `social/banner-1584x396.png` |
+
+**The shadow travels with the mark.** The default light/dark lockups have transparent backgrounds and carry a soft violet shadow behind the K. That's correct on white and on navy. On a photo, a gradient, or a mid-tone colour it will look like a smudge — use the `_noshadow` cut there.
+
+---
+
+## 8. Email
+
+Email clients don't reliably render SVG. Use PNG from `lockup_sizes/`, and serve at 2× the display size:
+
+```html
+<img src="https://.../logo-horizontal-light-480.png"
+     alt="Kinectem" width="240" style="display:block;border:0;">
+```
+
+Available widths: 240 / 360 / 480 / 720 / 1152 (horizontal), 240 / 360 / 480 / 720 / 1000 (stacked).
+
+Do not let an email client scale a 1152px file down to 120px — it renders badly in Outlook.
+
+---
+
+## 9. CSS colour tokens
+
+```css
+:root {
+  /* brand anchors — unchanged */
+  --k-purple:      #7E22CE;
+  --k-indigo:      #5B21B6;
+  --k-violet:      #4C1D95;
+  --k-royal-blue:  #1D4ED8;
+  --k-blue:        #2563EB;
+  --k-navy:        #0B1228;
+
+  /* new */
+  --k-magenta:     #FF1F9E;  /* accent only — never a large fill */
+  --k-ink-violet:  #1C0A56;  /* shoulder — surfaces only */
+  --k-ink-blue:    #0C2A8C;  /* shoulder — surfaces only */
+  --k-shadow:      #3A1470;  /* shadows on light backgrounds */
+
+  /* the two ramps */
+  --k-surface-gradient: linear-gradient(135deg,
+    #1C0A56 0%, #8B22F0 14%, #6A2BF8 38%, #4A34F5 60%, #2563EB 82%, #0C2A8C 100%);
+  --k-glyph-gradient: linear-gradient(135deg,
+    #FF1F9E 0%, #9B22E8 13%, #7E22CE 34%, #5B32E8 56%, #2563EB 80%, #3B82F6 100%);
+}
+```
+
+### Rules that matter in code
+
+- **Always 135°.** Every gradient runs top-left to bottom-right. Magenta at the origin, blue exits. A `to right` or `180deg` gradient is off-system.
+- **Magenta is an accent, never a stop.** Max ~12% of any surface. Never use `--k-magenta` as a button fill, a large background, or body text.
+- **Shoulders are surfaces-only.** `--k-ink-violet` and `--k-ink-blue` belong on filled blocks. Putting them inside a thin shape — text, an icon stroke, a 1px border — turns it muddy at small sizes.
+- **Small objects get a compressed slice, not a shortened ramp.** For anything under ~40px, use `0%→58%` of the glyph ramp so it stays violet-family instead of drifting blue:
+
+```css
+--k-glyph-gradient-small: linear-gradient(135deg,
+  #FF1F9E 0%, #9B22E8 22%, #7E22CE 59%, #5B32E8 97%);
+```
+
+### Gradient text
+
+```css
+.gradient-text {
+  background: var(--k-glyph-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+```
+
+Add a solid `color` fallback for clients that don't support `background-clip: text` — falling through to transparent means invisible text.
+
+---
+
+## 10. Working with the SVGs
+
+- The wordmark is **outlines, not live text.** No webfont needed, and it can't reflow or substitute. It also means you can't edit the wordmark by changing a string.
+- The 15° lean and every glyph position are **baked into the path coordinates**, not applied as `transform` attributes. This is deliberate: nested transforms put a gradient's user space inside the transformed group, which restarts the ramp on every letter. If you refactor these SVGs and wrap paths in `<g transform>`, the gradients will break in exactly that way.
+- Gradient IDs inside the files are short (`kg`, `eg`, `surface`). **If you inline more than one of these SVGs into the same HTML document, the IDs will collide** and the second one will pick up the first one's gradient. Either reference them via `<img>`/`background-image`, or namespace the IDs when inlining.
+
+---
+
+## 11. QA checklist
+
+- [ ] **Every line in the section 2 placement inventory ticked**
+- [ ] Codebase searched for old filenames and base64 image blobs — zero hits
+- [ ] Old icon purged from every cache, CDN, and any base64-inlined copy
+- [ ] Landing page and web app show the same mark, side by side, at the same size
+- [ ] Checked on a real phone, not just a narrow browser window
+- [ ] Favicon renders as a recognisable K at 16px in a real browser tab
+- [ ] `apple-touch-icon` looks right when saved to an iOS home screen
+- [ ] Android maskable icon: K not clipped under a circle mask
+- [ ] Header lockup matches the previous rendered spacing at `height: 34px`
+- [ ] Dark-mode header uses the dark cut, not the light one on a dark background
+- [ ] No lockup with a shadow sitting on a photo or mid-tone colour
+- [ ] Email templates use PNG, not SVG
+- [ ] Inlined SVGs don't share gradient IDs
+- [ ] `theme_color` and `background_color` both `#0B1228`
+- [ ] Narrow-viewport header shows the real K mark, not a cropped lockup
+- [ ] Dark mode serves the dark cut
+- [ ] Header logo tap target at least 44x44px
+- [ ] OG image renders correctly in a link preview (test by pasting a link into Slack)
+- [ ] No logo anywhere with a forced width *and* height
+
+---
+
+## 12. Open items
+
+Two questions aren't resolved yet and may affect implementation:
+
+1. **Circle avatar crops.** Instagram, Facebook and Slack crop profile images to a circle, which cuts the icon's corners — including the magenta accent. Not yet tested. A dedicated circle-safe variant may be needed for social profiles.
+2. **Print / CMYK.** `#FF1F9E` is outside CMYK gamut and will shift toward a duller pink in print. Web-only for now; a print substitute needs defining before any physical collateral.
+
+Neither blocks the web deploy.
