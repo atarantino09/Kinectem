@@ -126,6 +126,14 @@
   --brand-gradient-cover: linear-gradient(135deg, hsl(262 80% 68%) 0%, hsl(217 90% 68%) 100%);
   --brand-gradient-dark: linear-gradient(135deg, hsl(262 60% 20%) 0%, hsl(222 47% 11%) 55%, hsl(217 60% 22%) 100%);
 
+  /* Magenta is an accent only. Keep it separate from the purple-blue surface
+   * gradient so primary actions and broad brand surfaces stay unchanged. */
+  --k-magenta: #FF1F9E;
+  --k-glyph-gradient: linear-gradient(135deg,
+    #FF1F9E 0%, #9B22E8 13%, #7E22CE 34%, #5B32E8 56%, #2563EB 80%, #3B82F6 100%);
+  --k-glyph-gradient-small: linear-gradient(135deg,
+    #FF1F9E 0%, #9B22E8 22%, #7E22CE 59%, #5B32E8 97%);
+
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
@@ -319,10 +327,15 @@
     background-repeat: no-repeat, no-repeat, no-repeat, repeat;
   }
   .brand-gradient-text {
-    background: var(--brand-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    background: var(--k-glyph-gradient);
+    color: hsl(var(--brand-purple));
+  }
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    .brand-gradient-text {
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
   }
   /* Animated "shine" variant of .brand-gradient-text. A bright shimmer band
    * sweeps vertically through the word in a continuous loop. Used on the
@@ -330,7 +343,8 @@
   .brand-gradient-text-shine {
     background-image: linear-gradient(
       180deg,
-      hsl(var(--brand-purple)) 0%,
+      var(--k-magenta) 0%,
+      hsl(var(--brand-purple)) 16%,
       hsl(217 95% 72%) 35%,
       hsl(190 100% 88%) 50%,
       hsl(217 95% 72%) 65%,
@@ -383,13 +397,51 @@
     gap: 0.25rem;
     padding: 0.25rem 0.625rem;
     border-radius: 9999px;
-    background: hsl(262 83% 96%);
-    color: hsl(262 60% 45%);
+    /* A soft tint keeps the 10px label readable while the origin of the
+     * small-object ramp is still recognisably magenta. */
+    background: #fff2fa;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--k-magenta) 14%, white) 0%,
+      hsl(262 83% 96%) 58%,
+      hsl(217 90% 97%) 100%
+    );
+    border: 1px solid color-mix(in srgb, var(--k-magenta) 28%, white);
+    color: #5b21b6;
     font-size: 10px;
     font-weight: 800;
     line-height: 1;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+  }
+  .brand-community-trigger {
+    border-color: color-mix(in srgb, var(--k-magenta) 42%, white);
+    background: #fff5fb;
+    color: #861657;
+  }
+  .brand-community-trigger:hover {
+    background: color-mix(in srgb, var(--k-magenta) 12%, white);
+  }
+  .brand-accent-icon {
+    color: var(--k-magenta);
+  }
+  .brand-unread-dot {
+    background: var(--k-magenta);
+  }
+  .brand-count-marker {
+    /* Keep the badge's primary fill/text pair for numeric contrast; the
+     * magenta ring is the restrained attention cue. */
+    box-shadow:
+      0 0 0 2px hsl(var(--card)),
+      0 0 0 3px var(--k-magenta);
+  }
+  .dark .brand-community-trigger {
+    border-color: color-mix(in srgb, var(--k-magenta) 52%, hsl(222 47% 11%));
+    background: color-mix(in srgb, var(--k-magenta) 14%, hsl(222 47% 11%));
+    color: #ff9ed0;
+  }
+  .dark .brand-community-trigger:hover {
+    background: color-mix(in srgb, var(--k-magenta) 22%, hsl(222 47% 11%));
   }
   .brand-gradient-border {
     position: relative;

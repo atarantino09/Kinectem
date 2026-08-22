@@ -43,7 +43,7 @@ function renderHeader(
 }
 
 describe("TeamHeaderCard action hierarchy", () => {
-  it("places a public viewer's community actions in the blue menu", async () => {
+  it("places a public viewer's community actions in the magenta menu", async () => {
     const user = userEvent.setup();
     const onToggleFollow = vi.fn();
     const onOpenFollowers = vi.fn();
@@ -60,7 +60,7 @@ describe("TeamHeaderCard action hierarchy", () => {
     expect(within(community).getByTestId("btn-team-community-menu")).toHaveTextContent(
       "Community",
     );
-    expect(community.innerHTML).toContain("blue");
+    expect(community.innerHTML).toContain("brand-community-trigger");
     expect(
       actionMenus.compareDocumentPosition(navigation) &
         Node.DOCUMENT_POSITION_FOLLOWING,

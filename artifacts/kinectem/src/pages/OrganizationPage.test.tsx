@@ -233,7 +233,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(within(communityActions).getByTestId("btn-org-community-menu")).toHaveTextContent(
       "Community",
     );
-    expect(communityActions.innerHTML).toContain("blue");
+    expect(communityActions.innerHTML).toContain("brand-community-trigger");
     expect(within(managerActions).getByTestId("btn-org-manage-menu")).toHaveTextContent(
       "Manage",
     );

@@ -402,7 +402,7 @@ export function TeamHeaderCard({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
+                    className="brand-community-trigger rounded-full font-bold focus-visible:ring-[var(--k-magenta)]"
                     data-testid="btn-team-community-menu"
                   >
                     <Users className="w-3.5 h-3.5" />

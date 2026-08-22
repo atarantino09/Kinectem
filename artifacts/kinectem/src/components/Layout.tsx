@@ -355,7 +355,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Icon className="w-5 h-5" />
                   <span className="flex-1">{item.label}</span>
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center">
+                    <span className="brand-count-marker min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center">
                       {item.badge > 9 ? "9+" : item.badge}
                     </span>
                   )}
@@ -437,7 +437,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <Icon className="w-4 h-4 mr-2" /> {item.label}
                     {hasBadge && (
                       <span
-                        className="ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                        className="brand-count-marker ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
                         data-testid={
                           item.testId ? `badge-${item.testId}` : undefined
                         }
@@ -484,7 +484,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   />
                   {menuBadgeTotal > 0 && (
                     <span
-                      className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center ring-2 ring-card"
+                      className="brand-count-marker absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
                       data-testid="badge-user-menu"
                     >
                       {menuBadgeTotal > 9 ? "9+" : menuBadgeTotal}

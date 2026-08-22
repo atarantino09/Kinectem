@@ -89,7 +89,7 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
               <span
                 aria-hidden="true"
                 className={cn(
-                  "absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary",
+                  "brand-unread-dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full",
                 )}
               />
             )}

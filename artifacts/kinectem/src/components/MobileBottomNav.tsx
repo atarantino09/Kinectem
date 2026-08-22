@@ -68,7 +68,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
         active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
-      <Icon className="w-5 h-5" />
+      <Icon className={cn("w-5 h-5", active && "brand-accent-icon")} />
       <span>{label}</span>
     </Link>
   );

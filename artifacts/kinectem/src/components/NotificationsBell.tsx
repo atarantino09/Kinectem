@@ -393,7 +393,7 @@ export function NotificationsBell() {
           <Bell className="w-5 h-5" />
           {unread > 0 && (
             <span
-              className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+              className="brand-count-marker absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
               data-testid="badge-bell-unread"
             >
               {unread > 9 ? "9+" : unread}
@@ -492,7 +492,7 @@ export function NotificationsBell() {
                           </span>
                         ) : (
                           !n.isRead && (
-                            <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                            <span className="brand-unread-dot w-2 h-2 rounded-full mt-1.5 shrink-0" />
                           )
                         )}
                         <div className="flex-1 min-w-0">
