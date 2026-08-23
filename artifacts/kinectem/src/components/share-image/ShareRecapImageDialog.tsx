@@ -15,12 +15,11 @@ import {
   ShareRecapCanvas,
   SHARE_CANVAS_W,
   SHARE_CANVAS_H,
-  type ShareCtaMode,
 } from "./ShareRecapCanvas";
 
 /**
  * Task #863 — "Share as image" dialog. Shows a live preview of the branded
- * 1080×1350 composition, a CTA-line toggle, and a single high-energy action:
+ * 1080×1350 composition and a single high-energy action:
  * the native share sheet where available (mobile), otherwise a PNG download.
  *
  * The full-size canvas renders off-screen (not display:none — fonts and
@@ -38,7 +37,6 @@ export function ShareRecapImageDialog({
 }) {
   const { toast } = useToast();
   const captureRef = useRef<HTMLDivElement | null>(null);
-  const [ctaMode, setCtaMode] = useState<ShareCtaMode>("bio");
   const [busy, setBusy] = useState(false);
   const [captureReady, setCaptureReady] = useState(false);
   // The preview is a RENDERED IMAGE of the capture node, not a live
@@ -47,12 +45,6 @@ export function ShareRecapImageDialog({
   // <img> at width:100% is layout-proof everywhere and doubles as a
   // truthful "this is exactly what you'll download" preview.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const recapUrl = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    return `${window.location.origin}${base}/posts/${post.id}`;
-  }, [post.id]);
 
   // Capture-readiness barrier: don't allow export until webfonts have
   // settled AND every image inside the off-screen capture node has
@@ -180,9 +172,8 @@ export function ShareRecapImageDialog({
     return blob;
   }, []);
 
-  // Generate the preview image once fonts/images are ready, and again
-  // whenever the CTA line toggles. 0.5× is plenty for a dialog-width
-  // preview and keeps regeneration snappy.
+  // Generate the preview image once fonts/images are ready. 0.5× is plenty
+  // for a dialog-width preview and keeps regeneration snappy.
   useEffect(() => {
     if (!open || !captureReady) return;
     let cancelled = false;
@@ -205,7 +196,7 @@ export function ShareRecapImageDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, captureReady, ctaMode, renderCanvas]);
+  }, [open, captureReady, renderCanvas]);
 
   // Drop the object URL when the dialog closes.
   useEffect(() => {
@@ -328,38 +319,6 @@ export function ShareRecapImageDialog({
             </div>
           </div>
 
-          {/* CTA line toggle */}
-          <div className="mt-3 space-y-1.5">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-              Bottom line on the image
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={ctaMode === "bio" ? "default" : "outline"}
-                className="font-bold flex-1"
-                onClick={() => setCtaMode("bio")}
-                data-testid="btn-share-cta-bio"
-              >
-                “Link in bio.”
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={ctaMode === "url" ? "default" : "outline"}
-                className="font-bold flex-1"
-                onClick={() => setCtaMode("url")}
-                data-testid="btn-share-cta-url"
-              >
-                Recap link
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              “Link in bio.” fits Instagram; the full link works better for
-              Facebook.
-            </p>
-          </div>
         </div>
 
         <div className="px-5 py-4 shrink-0 border-t border-border bg-card">
@@ -406,8 +365,6 @@ export function ShareRecapImageDialog({
             <ShareRecapCanvas
               ref={captureRef}
               post={post}
-              ctaMode={ctaMode}
-              recapUrl={recapUrl}
             />
           </div>
         )}

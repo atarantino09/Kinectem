@@ -31,8 +31,6 @@ describe("ShareRecapCanvas organization badge", () => {
     render(
       <ShareRecapCanvas
         post={makePost("data:image/png;base64,organization-logo")}
-        ctaMode="bio"
-        recapUrl="https://example.com/app/posts/post-1"
       />,
     );
 
@@ -50,8 +48,6 @@ describe("ShareRecapCanvas organization badge", () => {
     render(
       <ShareRecapCanvas
         post={makePost(null)}
-        ctaMode="bio"
-        recapUrl="https://example.com/app/posts/post-1"
       />,
     );
 
@@ -70,8 +66,6 @@ describe("ShareRecapCanvas organization badge", () => {
             secondaryColor: "#2563EB",
           },
         })}
-        ctaMode="bio"
-        recapUrl="https://example.com/app/posts/post-1"
       />,
     );
 
@@ -93,8 +87,6 @@ describe("ShareRecapCanvas organization badge", () => {
     render(
       <ShareRecapCanvas
         post={makePost(null)}
-        ctaMode="bio"
-        recapUrl="https://example.com/app/posts/post-1"
       />,
     );
 
@@ -110,5 +102,14 @@ describe("ShareRecapCanvas organization badge", () => {
       background:
         "linear-gradient(135deg,#7E22CE 0%,#6A2BF8 45%,#4A34F5 68%,#2563EB 100%)",
     });
+    expect(screen.getByTestId("share-image-cta")).toHaveTextContent(
+      "Read the full game recap on Kinectem.",
+    );
+    expect(screen.getByTestId("share-image-cta")).not.toHaveTextContent(
+      "Link in bio",
+    );
+    expect(screen.getByTestId("share-image-cta")).not.toHaveTextContent(
+      "Recap link",
+    );
   });
 });

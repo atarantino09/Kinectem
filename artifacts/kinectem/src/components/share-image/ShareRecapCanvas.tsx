@@ -41,16 +41,12 @@ export function plainBody(body: string): string {
   return body.replace(/@\[([^\]]+)\]\(user:[^)]+\)/g, "$1");
 }
 
-export type ShareCtaMode = "bio" | "url";
-
 export const ShareRecapCanvas = forwardRef<
   HTMLDivElement,
   {
     post: PostResponse;
-    ctaMode: ShareCtaMode;
-    recapUrl: string;
   }
->(function ShareRecapCanvas({ post, ctaMode, recapUrl }, ref) {
+>(function ShareRecapCanvas({ post }, ref) {
   // Org brand colors ride on the post context as extra-spec fields with
   // the `orgBrand*` prefix (same block PostPage/PostCard read) — passing
   // the context straight to readOrgBrandColors silently yields null.
@@ -486,20 +482,6 @@ export const ShareRecapCanvas = forwardRef<
             }}
           >
             Read the full game recap on Kinectem.
-          </p>
-          <p
-            style={{
-              margin: "2px 0 0",
-              color: "rgba(255,255,255,0.85)",
-              fontSize: ctaMode === "url" ? 21 : 25,
-              fontWeight: 600,
-              lineHeight: 1.25,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {ctaMode === "bio" ? "Link in bio." : recapUrl}
           </p>
         </div>
         <div
