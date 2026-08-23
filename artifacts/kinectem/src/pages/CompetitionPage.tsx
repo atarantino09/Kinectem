@@ -44,6 +44,7 @@ import {
   inclusiveDateSpan,
   type CompetitionWeek,
 } from "@/lib/competition-weeks";
+import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
 // from org/team pages on purpose: the hero is themed with the operator's
@@ -161,16 +162,6 @@ type CompetitionResponse = {
   featuredRecaps?: FeaturedRecap[];
   brackets?: CompetitionBracketInfo[];
 };
-
-export function featuredRecapPreviewText(
-  recap: Pick<FeaturedRecap, "body" | "summary">,
-): string | null {
-  const body = recap.body?.trim();
-  if (body) return body;
-
-  const summary = recap.summary?.trim();
-  return summary || null;
-}
 
 function groupLabel(division: string, bracket: string): string {
   const parts = [division, bracket].filter((p) => p && p.trim() !== "");
@@ -816,7 +807,7 @@ export default function CompetitionPage() {
                         className="text-[10px] font-black uppercase tracking-[0.18em]"
                         style={{ color: brand }}
                       >
-                        Game recap
+                         From the recap
                       </p>
                       <p className="line-clamp-3 text-sm font-semibold leading-relaxed text-foreground/85">
                         {previewText}

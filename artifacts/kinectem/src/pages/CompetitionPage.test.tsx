@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { featuredRecapPreviewText } from "../lib/featuredRecapPreview";
 import {
-  featuredRecapPreviewText,
   isPublicFeaturedCompetitionRecap,
   isShortTournament,
   recapGroups,
@@ -81,13 +81,37 @@ describe("featured recap week sections", () => {
 });
 
 describe("featured recap preview text", () => {
-  it("uses the published recap body before its summary", () => {
+  it("prefers a later paragraph from the published recap body", () => {
     expect(
       featuredRecapPreviewText({
-        body: "The opening goal set the tone for a complete performance.",
+        body: [
+          "The opening goal set the tone for a complete performance.",
+          "",
+          "After halftime, the midfield pressed higher and created three clear chances.",
+          "",
+          "The team stayed composed through the final whistle.",
+        ].join("\n"),
         summary: "A complete performance.",
       }),
-    ).toBe("The opening goal set the tone for a complete performance.");
+    ).toBe("After halftime, the midfield pressed higher and created three clear chances.");
+  });
+
+  it("uses a later sentence when the recap has no paragraph break", () => {
+    expect(
+      featuredRecapPreviewText({
+        body: "The opening goal set the tone. The midfield pressed higher after halftime. The team stayed composed.",
+        summary: "A complete performance.",
+      }),
+    ).toBe("The midfield pressed higher after halftime. The team stayed composed.");
+  });
+
+  it("keeps a short body when there is no later content to preview", () => {
+    expect(
+      featuredRecapPreviewText({
+        body: "Big win",
+        summary: "A complete performance.",
+      }),
+    ).toBe("Big win");
   });
 
   it("falls back to the summary when the recap body is blank", () => {
