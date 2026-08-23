@@ -719,7 +719,7 @@ export default function CompetitionPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="w-full min-w-0 max-w-4xl mx-auto p-6 pb-12 space-y-10">
         {/* Organizer-only lifecycle explainer — starts collapsed (like the
             Teams and Schedule sections below); the organizer expands it via
             the chevron when they want the walkthrough. */}
@@ -768,9 +768,9 @@ export default function CompetitionPage() {
             });
           }
           const renderRecapCard = (r: FeaturedRecap) => (
-            <Link key={r.id} href={`/posts/${r.id}`}>
+            <Link key={r.id} href={`/posts/${r.id}`} className="block min-w-0">
               <Card
-                className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
+                className="min-w-0 rounded-xl border-border overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg h-full flex flex-col group"
                 data-testid={`card-featured-recap-${r.id}`}
               >
                 <CompetitionBrandStrip
@@ -780,36 +780,42 @@ export default function CompetitionPage() {
                   secondaryColor={c.secondaryColor}
                 />
                 {r.coverImageUrl ? (
-                  <div className="h-32 w-full overflow-hidden">
+                  <div className="h-36 w-full overflow-hidden relative">
                     <img
                       src={r.coverImageUrl}
                       alt=""
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                   </div>
-                ) : null}
-                <CardContent className="p-4 space-y-1.5">
-                  <p className="text-xs font-bold text-muted-foreground truncate">
+                ) : (
+                  <div className="h-36 w-full bg-muted/40 flex items-center justify-center relative overflow-hidden">
+                    <Star className="w-12 h-12 text-muted-foreground/20 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-12" />
+                  </div>
+                )}
+                <CardContent className="min-w-0 p-5 space-y-2 flex-1 flex flex-col bg-card">
+                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest truncate">
                     {r.teamName}
-                    {r.opponentName ? ` vs ${r.opponentName}` : ""}
+                    {r.opponentName ? <span className="lowercase"> vs </span> : ""}
+                    {r.opponentName}
                     {r.teamScore != null && r.opponentScore != null
                       ? ` · ${r.teamScore}-${r.opponentScore}`
                       : ""}
                   </p>
-                  <p className="text-sm font-black tracking-tight line-clamp-2">
+                  <p className="text-base font-black tracking-tight line-clamp-2 leading-snug">
                     {r.title}
                   </p>
                   {r.summary ? (
-                    <p className="text-xs text-muted-foreground line-clamp-2">
+                    <p className="text-xs text-muted-foreground line-clamp-2 flex-1">
                       {r.summary}
                     </p>
-                  ) : null}
-                  <div className="pt-2">
+                  ) : <div className="flex-1" />}
+                  <div className="pt-3 mt-auto border-t border-border/50">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="font-bold rounded-full"
+                      className="w-full font-bold rounded-lg text-xs hover:bg-muted/60"
                       aria-label={`Share ${r.title} as image`}
                       data-testid={`btn-share-featured-recap-image-${r.id}`}
                       disabled={shareImageLoadingId === r.id}
@@ -818,7 +824,7 @@ export default function CompetitionPage() {
                       {shareImageLoadingId === r.id ? (
                         <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                       ) : (
-                        <ImageDown className="w-3.5 h-3.5 mr-1.5" />
+                        <ImageDown className="w-3.5 h-3.5 mr-1.5 opacity-70" />
                       )}
                       {shareImageLoadingId === r.id
                         ? "Loading image…"
@@ -826,7 +832,7 @@ export default function CompetitionPage() {
                     </Button>
                     {shareImageErrorId === r.id ? (
                       <p
-                        className="mt-1.5 text-[11px] font-semibold text-destructive"
+                        className="mt-1.5 text-[11px] font-semibold text-destructive text-center"
                         role="alert"
                       >
                         Couldn’t load this image. Try again.
@@ -838,14 +844,19 @@ export default function CompetitionPage() {
             </Link>
           );
           return (
-          <section className="space-y-3" data-testid="rail-featured-recaps">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="text-lg font-black tracking-tight">
-                Featured game recaps
+          <section className="space-y-4" data-testid="rail-featured-recaps">
+            <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-border/60">
+              <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-5 w-1 rounded-full"
+                  style={{ backgroundColor: brand }}
+                />
+                Featured Game Recaps
               </h2>
               <div className="flex items-center gap-3">
                 <span
-                  className="text-[11px] font-black uppercase tracking-widest"
+                  className="text-[11px] font-black uppercase tracking-widest opacity-80 hidden sm:inline"
                   style={{ color: brand }}
                 >
                   Curated by {c.name}
@@ -855,7 +866,7 @@ export default function CompetitionPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="font-bold"
+                      className="font-bold shadow-sm"
                       data-testid="btn-manage-featured-recaps"
                     >
                       <Star className="w-3.5 h-3.5 mr-1.5" />
@@ -869,7 +880,7 @@ export default function CompetitionPage() {
                 Week headings stay visible for every filter, including All. */}
             {usedBrackets.length > 0 && (
               <div
-                className="flex items-center gap-2 flex-wrap"
+                className="flex items-center gap-2 flex-wrap pt-1"
                 data-testid="filter-bracket-chips"
               >
                 <Button
@@ -895,20 +906,20 @@ export default function CompetitionPage() {
                 ))}
               </div>
             )}
-            <div className="space-y-5" data-testid="rail-grouped-sections">
+            <div className="space-y-8 pt-2" data-testid="rail-grouped-sections">
               {groupedSections.map((s) => (
                 <div
                   key={s.key}
-                  className="space-y-2"
+                  className="space-y-3"
                   data-testid={`section-bracket-${s.key}`}
                 >
-                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-                      {s.label}{" "}
-                      <span className="font-bold normal-case tracking-normal">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      {s.label}
+                      <span className="font-bold normal-case tracking-normal text-muted-foreground/60">
                         ({s.recaps.length})
                       </span>
                   </h3>
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {recapGroups(
                       s.recaps.map((r) => ({
                         ...r,
@@ -932,7 +943,7 @@ export default function CompetitionPage() {
                             ? formatCompetitionWeek(weekGroup.week)
                             : "Undated"}
                         </h4>
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           {weekGroup.items.map(renderRecapCard)}
                         </div>
                       </div>
@@ -957,15 +968,16 @@ export default function CompetitionPage() {
             even before anything has been featured. Hidden from the public. */}
         {(q.data.featuredRecaps?.length ?? 0) === 0 && c.canManage ? (
           <Card
-            className="rounded-xl border-dashed border-border"
+            className="rounded-xl border-l-4 border-dashed border-border bg-muted/20 shadow-none"
+            style={{ borderLeftColor: brand }}
             data-testid="card-featured-recaps-empty"
           >
-            <CardContent className="p-5 flex items-center justify-between gap-3 flex-wrap">
+            <CardContent className="p-6 flex items-center justify-between gap-4 flex-wrap">
               <div className="min-w-0">
-                <h2 className="text-base font-black tracking-tight">
+                <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
                   Featured game recaps
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mt-1 leading-relaxed max-w-xl">
                   Nothing featured yet — review recaps from claimed teams and
                   feature the best ones here on your public page. Only you can
                   see this.
@@ -974,10 +986,10 @@ export default function CompetitionPage() {
               <Link href={`/competitions/${c.id}#recaps`}>
                 <Button
                   variant="outline"
-                  className="font-bold shrink-0"
+                  className="font-bold shrink-0 bg-background shadow-sm"
                   data-testid="btn-feature-recaps"
                 >
-                  <Star className="w-4 h-4 mr-1.5" />
+                  <Star className="w-4 h-4 mr-1.5 text-muted-foreground" />
                   View &amp; feature recaps
                 </Button>
               </Link>
@@ -985,116 +997,126 @@ export default function CompetitionPage() {
           </Card>
         ) : null}
 
-        {/* Teams / claim list — collapsible, one team per line so the full
-            name is readable and nobody claims the wrong slot. */}
-        <Card className="rounded-xl border-border" data-testid="card-participants">
-          <CardContent className="p-6">
-            <Collapsible
-              open={teamsOpen}
-              onOpenChange={setTeamsOpen}
-              className="space-y-3"
-            >
-              <CollapsibleTrigger
-                className="flex w-full items-center justify-between gap-2 text-left"
-                data-testid="btn-toggle-participants"
+        {/* Teams / claim list & Schedule Grid on large screens */}
+        <div className="grid min-w-0 gap-6 md:grid-cols-2 items-start">
+          {/* Teams */}
+          <Card
+            className="min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
+            style={{ borderTopColor: brand }}
+            data-testid="card-participants"
+          >
+            <CardContent className="p-0">
+              <Collapsible
+                open={teamsOpen}
+                onOpenChange={setTeamsOpen}
+                className="flex flex-col"
               >
-                <h2 className="text-lg font-black tracking-tight">
-                  Teams{" "}
-                  <span className="text-sm font-bold text-muted-foreground">
-                    ({participants.length})
-                  </span>
-                </h2>
-                <ChevronDown
-                  className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
-                    teamsOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Spot your team below? Claim it yourself — no invite needed.
-                  Sign up, claim your name, and start telling your team&apos;s
-                  story with game recaps.
-                </p>
-                <div
-                  className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1"
-                  data-testid="text-claim-explainer"
+                <CollapsibleTrigger
+                  className="flex w-full items-center justify-between gap-2 p-5 text-left hover:bg-muted/40 transition-colors"
+                  data-testid="btn-toggle-participants"
                 >
-                  <p>
-                    <span className="font-bold text-foreground">
-                      Claiming a team claims its schedule.
-                    </span>{" "}
-                    Your {typeLabel.toLowerCase()} games are added to your
-                    Kinectem team page, where you can edit all of your team&apos;s
-                    info.
+                  <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="h-5 w-1 rounded-full"
+                      style={{ backgroundColor: brand }}
+                    />
+                    Teams
+                    <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs">
+                      {participants.length}
+                    </Badge>
+                  </h2>
+                  <ChevronDown
+                    className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                      teamsOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-5 pb-5 space-y-4 border-t border-border/50 pt-5">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Spot your team below? Claim it yourself — no invite needed.
+                    Sign up, claim your name, and start telling your team&apos;s
+                    story with game recaps.
                   </p>
-                  <p>
-                    Already have a team on Kinectem? Claiming won&apos;t change
-                    your existing team page — these games are simply added to
-                    your schedule under this competition, and your game recaps
-                    may be shared and featured on this competition page.
-                  </p>
-                  <p data-testid="text-claim-approval-mode">
-                    {c.autoApproveClaims ? (
-                      <>
-                        <span className="font-bold text-foreground">
-                          Claims are instant
-                        </span>{" "}
-                        — click Claim and your spot is locked in right away.
-                      </>
-                    ) : (
-                      <>
-                        <span className="font-bold text-foreground">
-                          Claims are reviewed
-                        </span>{" "}
-                        — the organizer approves each claim before your spot is
-                        locked in.
-                      </>
-                    )}
-                  </p>
-                </div>
-                {c.canManage && selectedIds.size > 0 ? (
                   <div
-                    className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-sm"
-                    data-testid="bar-bulk-hide"
+                    className="rounded-lg border border-border bg-muted/40 p-4 text-xs text-muted-foreground space-y-2 shadow-sm"
+                    data-testid="text-claim-explainer"
                   >
-                    <p className="text-sm font-bold">
-                      {selectedIds.size} team{selectedIds.size === 1 ? "" : "s"}{" "}
-                      selected
+                    <p>
+                      <span className="font-bold text-foreground">
+                        Claiming a team claims its schedule.
+                      </span>{" "}
+                      Your {typeLabel.toLowerCase()} games are added to your
+                      Kinectem team page, where you can edit all of your team&apos;s
+                      info.
                     </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="font-bold text-muted-foreground"
-                        onClick={() => setSelectedIds(new Set())}
-                        data-testid="btn-clear-selection"
-                      >
-                        Clear
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="font-bold"
-                        disabled={bulkHideMutation.isPending}
-                        onClick={() => setBulkHideOpen(true)}
-                        data-testid="btn-bulk-hide"
-                      >
-                        <EyeOff className="h-3.5 w-3.5 mr-1" />
-                        Hide All ({selectedIds.size})
-                      </Button>
-                    </div>
+                    <p>
+                      Already have a team on Kinectem? Claiming won&apos;t change
+                      your existing team page — these games are simply added to
+                      your schedule under this competition, and your game recaps
+                      may be shared and featured on this competition page.
+                    </p>
+                    <p data-testid="text-claim-approval-mode">
+                      {c.autoApproveClaims ? (
+                        <>
+                          <span className="font-bold text-foreground">
+                            Claims are instant
+                          </span>{" "}
+                          — click Claim and your spot is locked in right away.
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-bold text-foreground">
+                            Claims are reviewed
+                          </span>{" "}
+                          — the organizer approves each claim before your spot is
+                          locked in.
+                        </>
+                      )}
+                    </p>
                   </div>
-                ) : null}
-                <div className="flex flex-col gap-3">
+                  {c.canManage && selectedIds.size > 0 ? (
+                    <div
+                      className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                      data-testid="bar-bulk-hide"
+                    >
+                      <p className="text-sm font-bold">
+                        {selectedIds.size} team{selectedIds.size === 1 ? "" : "s"}{" "}
+                        selected
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="font-bold text-muted-foreground"
+                          onClick={() => setSelectedIds(new Set())}
+                          data-testid="btn-clear-selection"
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="font-bold shadow-sm"
+                          disabled={bulkHideMutation.isPending}
+                          onClick={() => setBulkHideOpen(true)}
+                          data-testid="btn-bulk-hide"
+                        >
+                          <EyeOff className="h-3.5 w-3.5 mr-1" />
+                          Hide All ({selectedIds.size})
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-col gap-4">
                   {teamSections.map((section) => (
                     <div key={section.key} className="space-y-2">
                       {section.title ? (
                         <p
-                          className="text-xs font-black uppercase tracking-widest text-muted-foreground pt-1"
+                          className="text-[11px] font-black uppercase tracking-widest text-muted-foreground pb-1 border-b border-border/40"
                           data-testid={`heading-team-group-${section.key}`}
                         >
                           {section.title}{" "}
-                          <span className="font-bold normal-case tracking-normal">
+                          <span className="font-bold normal-case tracking-normal opacity-70">
                             ({section.teams.length})
                           </span>
                         </p>
@@ -1102,19 +1124,19 @@ export default function CompetitionPage() {
                   {section.teams.map((p) => (
                     <div
                       key={p.id}
-                      className={`flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 ${
-                        p.hidden ? "opacity-60 bg-muted/40" : ""
+                      className={`flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-sm transition-shadow hover:shadow-md ${
+                        p.hidden ? "opacity-60 bg-muted/30 shadow-none hover:shadow-none" : ""
                       }`}
                       data-testid={`row-participant-${p.id}`}
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-bold break-words">{p.name}</p>
-                        <p className="text-xs text-muted-foreground break-words">
+                        <p className="text-sm font-bold tracking-tight break-words">{p.name}</p>
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground break-words mt-0.5">
                           {groupLabel(p.division, p.bracket)}
                         </p>
                         {p.hidden ? (
                           <p
-                            className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+                            className="mt-1 flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
                             data-testid={`text-hidden-participant-${p.id}`}
                           >
                             <EyeOff className="h-3 w-3 shrink-0" />
@@ -1122,7 +1144,7 @@ export default function CompetitionPage() {
                           </p>
                         ) : null}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-3 shrink-0">
                         {c.canManage && !p.hidden ? (
                           <Checkbox
                             checked={selectedIds.has(p.id)}
@@ -1136,7 +1158,7 @@ export default function CompetitionPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="font-bold"
+                              className="font-bold shadow-sm bg-background"
                               disabled={hideMutation.isPending}
                               onClick={() =>
                                 hideMutation.mutate({
@@ -1153,18 +1175,19 @@ export default function CompetitionPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="font-bold text-muted-foreground"
+                              className="font-bold text-muted-foreground hover:bg-muted/80"
                               disabled={hideMutation.isPending}
+                              aria-label={`Hide ${p.name}`}
                               onClick={() => setPendingHide(p)}
                               data-testid={`btn-hide-participant-${p.id}`}
                             >
-                              <EyeOff className="h-3.5 w-3.5 mr-1" />
-                              Hide
+                              <EyeOff className="h-3.5 w-3.5 sm:mr-1" />
+                              <span className="hidden sm:inline">Hide</span>
                             </Button>
                           )
                         ) : null}
                         {p.claimed ? (
-                          <Badge variant="secondary" className="shrink-0">
+                          <Badge variant="secondary" className="shrink-0 font-bold px-2.5">
                             Taken
                           </Badge>
                         ) : p.hidden ? null : (
@@ -1177,8 +1200,8 @@ export default function CompetitionPage() {
                           >
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="font-bold shrink-0"
+                              variant="default"
+                              className="font-bold shrink-0 shadow-sm"
                               data-testid={`btn-claim-${p.id}`}
                             >
                               Claim
@@ -1191,7 +1214,7 @@ export default function CompetitionPage() {
                     </div>
                   ))}
                   {participants.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground pt-2">
                       No teams have been added to this {typeLabel.toLowerCase()}{" "}
                       yet.
                     </p>
@@ -1203,80 +1226,99 @@ export default function CompetitionPage() {
         </Card>
 
         {/* Schedule */}
-        <Card className="rounded-xl border-border" data-testid="card-schedule">
-          <CardContent className="p-6">
+        <Card
+          className="min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
+          style={{ borderTopColor: brand }}
+          data-testid="card-schedule"
+        >
+          <CardContent className="p-0">
             <Collapsible
               open={scheduleOpen}
               onOpenChange={setScheduleOpen}
-              className="space-y-4"
+              className="flex flex-col"
             >
               <CollapsibleTrigger
-                className="flex w-full items-center justify-between gap-2 text-left"
+                className="flex w-full items-center justify-between gap-2 p-5 text-left hover:bg-muted/40 transition-colors"
                 data-testid="btn-toggle-schedule"
               >
-                <h2 className="text-lg font-black tracking-tight">Schedule</h2>
+                <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="h-5 w-1 rounded-full"
+                    style={{ backgroundColor: brand }}
+                  />
+                  Schedule
+                  {matchGroups.length > 0 && (
+                    <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs">
+                      {q.data?.matches.length ?? 0}
+                    </Badge>
+                  )}
+                </h2>
                 <ChevronDown
-                  className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                  className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${
                     scheduleOpen ? "rotate-180" : ""
                   }`}
                 />
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4">
+              <CollapsibleContent className="px-5 pb-5 space-y-6 border-t border-border/50 pt-5">
             {matchGroups.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground pt-2">
                 No games have been scheduled yet.
               </p>
             ) : (
                matchGroups.map(([label, matches]) => (
-                <div key={label} className="space-y-2">
-                  <h3 className="text-sm font-black uppercase tracking-wide text-muted-foreground">
+                <div key={label} className="space-y-3">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground pb-1 border-b border-border/40">
                     {label}
                   </h3>
                    <div className="space-y-4">
                      {weekGroups(matches).map((weekGroup) => (
                        <div
                          key={weekGroup.key}
-                         className="space-y-1"
+                         className="space-y-2"
                          data-testid={`section-match-week-${weekGroup.key}`}
                        >
-                         <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80">
+                         <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/80">
                            {weekGroup.week
                              ? formatCompetitionWeek(weekGroup.week)
                              : "Undated"}
                          </h4>
-                         <div className="space-y-1">
+                         <div className="flex flex-col gap-2">
                            {weekGroup.items.map((m) => (
                              <div
                                key={m.id}
-                               className={`flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm ${
+                               className={`flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm transition-shadow hover:shadow-md ${
                                  m.status === "postponed" || m.status === "canceled"
-                                   ? "bg-muted/40"
+                                   ? "bg-muted/30 opacity-75 shadow-none hover:shadow-none"
                                    : ""
                                }`}
                                data-testid={`row-match-${m.id}`}
                              >
                                <div className="min-w-0 flex-1">
-                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
                                    <span>#{m.matchNumber}</span>
+                                   {m.matchDate ? <span className="opacity-70">·</span> : null}
                                    {m.matchDate ? <span>{m.matchDate}</span> : null}
+                                   {m.startTime ? <span className="opacity-70">·</span> : null}
                                    {m.startTime ? <span>{m.startTime}</span> : null}
-                                   {m.field ? <span>{m.field}</span> : null}
+                                   {m.field ? <span className="opacity-70">·</span> : null}
+                                   {m.field ? <span className="truncate">{m.field}</span> : null}
                                  </div>
                                  <div
-                                   className={`truncate font-medium ${
+                                   className={`truncate font-bold tracking-tight ${
                                      m.status === "canceled"
                                        ? "line-through text-muted-foreground"
                                        : ""
                                    }`}
                                  >
                                    {m.homeName ?? "TBD"}{" "}
-                                   <span className="text-muted-foreground">vs</span>{" "}
+                                   <span className="text-muted-foreground font-medium text-xs mx-1">vs</span>{" "}
                                    {m.awayName ?? "TBD"}
                                  </div>
                                  {(m.status === "postponed" ||
                                    m.status === "canceled") &&
                                  m.statusReason ? (
-                                   <p className="text-xs text-muted-foreground italic mt-0.5 truncate">
+                                   <p className="text-[11px] text-muted-foreground italic mt-1 truncate">
                                      {m.statusReason}
                                    </p>
                                  ) : null}
@@ -1284,10 +1326,10 @@ export default function CompetitionPage() {
                                {m.status === "postponed" ||
                                m.status === "canceled" ? (
                                  <span
-                                   className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                   className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
                                      m.status === "postponed"
-                                       ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400"
-                                       : "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-400"
+                                       ? "border-amber-300/50 bg-amber-50/50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/50 dark:text-amber-400"
+                                       : "border-red-300/50 bg-red-50/50 text-red-700 dark:border-red-700/50 dark:bg-red-950/50 dark:text-red-400"
                                    }`}
                                    data-testid={`badge-match-status-${m.id}`}
                                  >
@@ -1307,6 +1349,7 @@ export default function CompetitionPage() {
             </Collapsible>
           </CardContent>
         </Card>
+        </div>
 
         <p className="text-center text-xs text-muted-foreground pb-4">
           Powered by <span className="font-bold">Kinectem</span>

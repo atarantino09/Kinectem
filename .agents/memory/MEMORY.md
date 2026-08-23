@@ -13,6 +13,7 @@
 - [Modal text blur](modal-text-blur.md) — center shadcn Dialog/AlertDialog with flexbox, not `-translate-1/2`; the transform half-pixels odd-sized modals and blurs their text.
 - [FitText production font timing](fit-text-font-timing.md) — fallback-font first paint needs an explicit remeasure; ResizeObserver can miss metric-only font swaps.
 - [Dialog grid overflow](dialog-grid-overflow.md) — long URLs/tokens blow out grid DialogContent width; `break-words` doesn't shrink min-content, use `[overflow-wrap:anywhere]`/`break-all`/`truncate`.
+- [Mobile grid truncation](mobile-grid-truncation.md) — `truncate` text in card grids needs `min-w-0` through its ancestors or phones gain horizontal scroll.
 - [Runtime-error overlay "(unknown runtime error)"](runtime-error-overlay-resizeobserver.md) — empty/dismissable dev overlay = benign ResizeObserver loop (null evt.error); suppressed via inline head guard in index.html.
 - [Tailwind v4 bare CSS-var](tailwind-v4-bare-var.md) — `max-h-[--foo]` silently breaks in v4 (no var()) → no max-height → dropdowns don't scroll; use `[var(--foo)]`.
 - [Radix popper max-height on mobile](radix-popper-max-height.md) — never override Select/Dropdown max-h with fixed caps; use min(var(--radix-…-available-height), cap) or mobile clips off-screen.

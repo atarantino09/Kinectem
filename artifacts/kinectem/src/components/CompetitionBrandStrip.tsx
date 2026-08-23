@@ -31,12 +31,12 @@ export function CompetitionBrandStrip({
         <img
           src={logoUrl}
           alt=""
-          className="h-4 w-4 rounded-sm bg-white/90 object-contain p-px shrink-0"
+          className="h-4 w-4 rounded-sm bg-white/90 object-contain p-px shrink-0 shadow-sm"
         />
       ) : (
-        <Trophy className="h-3 w-3 shrink-0 text-white/90" />
+        <Trophy className="h-3 w-3 shrink-0 text-white/90 drop-shadow-sm" />
       )}
-      <span className="min-w-0 truncate text-[10px] font-black uppercase tracking-widest text-white drop-shadow-sm">
+      <span className="min-w-0 truncate text-[11px] font-black uppercase tracking-widest text-white drop-shadow-sm pt-[1px]">
         {name}
       </span>
     </div>
