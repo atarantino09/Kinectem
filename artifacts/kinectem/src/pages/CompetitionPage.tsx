@@ -799,15 +799,17 @@ export default function CompetitionPage() {
                   >
                     <div
                       aria-hidden="true"
-                      className="absolute -right-10 -top-14 h-36 w-36 rounded-full opacity-10"
-                      style={{ backgroundColor: brand }}
+                      className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 opacity-[0.12]"
+                      style={{
+                        background: `radial-gradient(circle at center, ${brand} 0%, transparent 72%)`,
+                      }}
                     />
                     <div className="relative min-w-0 space-y-1.5 pb-5">
                       <p
                         className="text-[10px] font-black uppercase tracking-[0.18em]"
                         style={{ color: brand }}
                       >
-                         From the recap
+                        From the recap
                       </p>
                       <p className="line-clamp-3 text-sm font-semibold leading-relaxed text-foreground/85">
                         {previewText}
