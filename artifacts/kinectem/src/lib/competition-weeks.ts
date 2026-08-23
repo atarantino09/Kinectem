@@ -48,3 +48,49 @@ function displayDate(value: string): string {
 export function formatCompetitionWeek(week: CompetitionWeek): string {
   return `${displayDate(week.start)} – ${displayDate(week.end)}`;
 }
+
+export function formatCompetitionDateRange(
+  start: string,
+  end: string,
+): string {
+  const startLabel = displayDate(start);
+  if (start === end) return startLabel;
+  return `${startLabel} – ${displayDate(end)}`;
+}
+
+export function inclusiveDateSpan(
+  start: string,
+  end: string,
+): number | null {
+  const startMatch = DATE_ONLY_RE.exec(start);
+  const endMatch = DATE_ONLY_RE.exec(end);
+  if (!startMatch || !endMatch) return null;
+
+  const startDate = new Date(
+    Date.UTC(
+      Number(startMatch[1]),
+      Number(startMatch[2]) - 1,
+      Number(startMatch[3]),
+    ),
+  );
+  const endDate = new Date(
+    Date.UTC(
+      Number(endMatch[1]),
+      Number(endMatch[2]) - 1,
+      Number(endMatch[3]),
+    ),
+  );
+  if (
+    startDate.getUTCFullYear() !== Number(startMatch[1]) ||
+    startDate.getUTCMonth() !== Number(startMatch[2]) - 1 ||
+    startDate.getUTCDate() !== Number(startMatch[3]) ||
+    endDate.getUTCFullYear() !== Number(endMatch[1]) ||
+    endDate.getUTCMonth() !== Number(endMatch[2]) - 1 ||
+    endDate.getUTCDate() !== Number(endMatch[3]) ||
+    endDate < startDate
+  ) {
+    return null;
+  }
+
+  return Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+}

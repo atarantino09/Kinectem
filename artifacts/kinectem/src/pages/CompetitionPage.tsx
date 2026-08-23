@@ -39,7 +39,9 @@ import {
 } from "@/components/ClaimTokenBanner";
 import {
   competitionWeekForDate,
+  formatCompetitionDateRange,
   formatCompetitionWeek,
+  inclusiveDateSpan,
   type CompetitionWeek,
 } from "@/lib/competition-weeks";
 
@@ -190,6 +192,41 @@ export function weekGroups<T extends {
     if (!b.week) return -1;
     return a.week.key.localeCompare(b.week.key);
   });
+}
+
+const SHORT_TOURNAMENT_GROUP_KEY = "__competition_dates__";
+
+export function isShortTournament(
+  competition: Pick<CompetitionMeta, "type" | "startDate" | "endDate">,
+): boolean {
+  const span = inclusiveDateSpan(competition.startDate, competition.endDate);
+  return competition.type === "tournament" && span !== null && span <= 3;
+}
+
+export function recapGroups<T extends {
+  week?: CompetitionWeek | null;
+  matchDate?: string | null;
+}>(
+  items: T[],
+  competition: Pick<CompetitionMeta, "type" | "startDate" | "endDate">,
+): { key: string; week: CompetitionWeek | null; items: T[] }[] {
+  if (!isShortTournament(competition)) return weekGroups(items);
+
+  const dated: T[] = [];
+  const undated: T[] = [];
+  for (const item of items) {
+    if (weekForItem(item.matchDate, item.week)) dated.push(item);
+    else undated.push(item);
+  }
+
+  return [
+    ...(dated.length
+      ? [{ key: SHORT_TOURNAMENT_GROUP_KEY, week: null, items: dated }]
+      : []),
+    ...(undated.length
+      ? [{ key: "__undated__", week: null, items: undated }]
+      : []),
+  ];
 }
 
 // Pick a readable text color for the brand band (simple luminance check).
@@ -447,6 +484,7 @@ export default function CompetitionPage() {
     });
   }
   const brand = c.brandColor ?? DEFAULT_BRAND;
+  const shortTournament = isShortTournament(c);
   const heroText = contrastText(brand);
   // Secondary tints the hero as a subtle gradient; tertiary accents the
   // status badge. Both degrade to primary-only when unset.
@@ -871,11 +909,12 @@ export default function CompetitionPage() {
                       </span>
                   </h3>
                   <div className="space-y-4">
-                    {weekGroups(
+                    {recapGroups(
                       s.recaps.map((r) => ({
                         ...r,
                         matchDate: r.effectiveGameDate ?? null,
                       })),
+                      c,
                     ).map((weekGroup) => (
                       <div
                         key={weekGroup.key}
@@ -883,7 +922,13 @@ export default function CompetitionPage() {
                         data-testid={`section-recap-week-${s.key}-${weekGroup.key}`}
                       >
                         <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80">
-                          {weekGroup.week
+                          {shortTournament &&
+                          weekGroup.key === SHORT_TOURNAMENT_GROUP_KEY
+                            ? formatCompetitionDateRange(
+                                c.startDate,
+                                c.endDate,
+                              )
+                            : weekGroup.week
                             ? formatCompetitionWeek(weekGroup.week)
                             : "Undated"}
                         </h4>
