@@ -788,6 +788,25 @@ export default function CompetitionPage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                   </div>
+                ) : r.summary ? (
+                  <div className="relative flex h-36 w-full items-center overflow-hidden bg-muted/40 px-5 py-4">
+                    <div
+                      aria-hidden="true"
+                      className="absolute -right-10 -top-14 h-36 w-36 rounded-full opacity-10"
+                      style={{ backgroundColor: brand }}
+                    />
+                    <div className="relative min-w-0 space-y-1.5">
+                      <p
+                        className="text-[10px] font-black uppercase tracking-[0.18em]"
+                        style={{ color: brand }}
+                      >
+                        Game recap
+                      </p>
+                      <p className="line-clamp-4 text-sm font-semibold leading-relaxed text-foreground/85">
+                        {r.summary}
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="h-36 w-full bg-muted/40 flex items-center justify-center relative overflow-hidden">
                     <Star className="w-12 h-12 text-muted-foreground/20 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-12" />
@@ -805,11 +824,7 @@ export default function CompetitionPage() {
                   <p className="text-base font-black tracking-tight line-clamp-2 leading-snug">
                     {r.title}
                   </p>
-                  {r.summary ? (
-                    <p className="text-xs text-muted-foreground line-clamp-2 flex-1">
-                      {r.summary}
-                    </p>
-                  ) : <div className="flex-1" />}
+                  <div className="flex-1" />
                   <div className="pt-3 mt-auto border-t border-border/50">
                     <Button
                       type="button"
@@ -997,11 +1012,11 @@ export default function CompetitionPage() {
           </Card>
         ) : null}
 
-        {/* Teams / claim list & Schedule Grid on large screens */}
-        <div className="grid min-w-0 gap-6 md:grid-cols-2 items-start">
+        {/* Teams / claim list and Schedule as full-width reading sections */}
+        <div className="flex w-full min-w-0 flex-col gap-6">
           {/* Teams */}
           <Card
-            className="min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
+            className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
             style={{ borderTopColor: brand }}
             data-testid="card-participants"
           >
@@ -1227,7 +1242,7 @@ export default function CompetitionPage() {
 
         {/* Schedule */}
         <Card
-          className="min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
+          className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
           style={{ borderTopColor: brand }}
           data-testid="card-schedule"
         >
