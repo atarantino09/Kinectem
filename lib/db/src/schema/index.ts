@@ -2201,6 +2201,9 @@ export const teamNewsLinks = pgTable("team_news_links", {
   sourceName: text("source_name"),
   description: text("description"),
   imageUrl: text("image_url"),
+  // Nullable for existing/non-game articles. Stored as a date-only string so
+  // displaying the game date never shifts it across timezones.
+  gameDate: date("game_date", { mode: "string" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({

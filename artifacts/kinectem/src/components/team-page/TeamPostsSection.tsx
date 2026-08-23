@@ -130,6 +130,7 @@ export function TeamPostsSection({
   // the headline/source/photo and posts a read-only news card.
   const [addNewsOpen, setAddNewsOpen] = useState(false);
   const [newsUrl, setNewsUrl] = useState("");
+  const [newsGameDate, setNewsGameDate] = useState("");
   const [addingNews, setAddingNews] = useState(false);
   const submitNewsUrl = async () => {
     const url = newsUrl.trim();
@@ -139,11 +140,15 @@ export function TeamPostsSection({
       await customFetch(`/api/v1/teams/${teamId}/news`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({
+          url,
+          ...(newsGameDate ? { gameDate: newsGameDate } : {}),
+        }),
       });
       toast({ title: "Article added to the team page" });
       setAddNewsOpen(false);
       setNewsUrl("");
+      setNewsGameDate("");
       await qc.invalidateQueries({
         queryKey: getListTeamPostsQueryKey(teamId),
       });
@@ -349,6 +354,26 @@ export function TeamPostsSection({
                 autoFocus
                 data-testid="input-news-url"
               />
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="input-news-game-date"
+                  className="text-sm font-semibold"
+                >
+                  Game played on
+                </label>
+                <Input
+                  id="input-news-game-date"
+                  type="date"
+                  value={newsGameDate}
+                  onChange={(e) => setNewsGameDate(e.target.value)}
+                  disabled={addingNews}
+                  data-testid="input-news-game-date"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional — leave blank for articles that are not about a
+                  specific game.
+                </p>
+              </div>
               <DialogFooter>
                 <Button
                   type="button"

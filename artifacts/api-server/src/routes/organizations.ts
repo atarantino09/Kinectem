@@ -80,6 +80,7 @@ import {
 } from "../lib/auth";
 import { requireAuth } from "../middlewares/auth";
 import { fetchNewsMetadata, NewsFetchError } from "../lib/news-metadata";
+import { normalizeNewsGameDate } from "../lib/news-game-date";
 import {
   displayName,
   toOrganization,
@@ -2255,6 +2256,10 @@ router.post(
     }
     const rawUrl = typeof req.body?.url === "string" ? req.body.url.trim() : "";
     if (!rawUrl) return apiError(res, 400, "Paste the article's link.");
+    const gameDate = normalizeNewsGameDate(req.body?.gameDate);
+    if (gameDate === "invalid") {
+      return apiError(res, 400, "gameDate must be a valid date (YYYY-MM-DD).");
+    }
     let meta;
     try {
       meta = await fetchNewsMetadata(rawUrl);
@@ -2287,6 +2292,7 @@ router.post(
           sourceName: meta.sourceName,
           description: meta.description,
           imageUrl: meta.imageUrl,
+           gameDate,
         })
         .returning();
     } catch (err) {

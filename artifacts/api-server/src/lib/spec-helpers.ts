@@ -1035,6 +1035,9 @@ export function newsLinkToPost(
     isEdited: false,
     createdAt: n.createdAt.toISOString(),
     updatedAt: n.updatedAt.toISOString(),
+    gameDate: n.gameDate
+      ? `${n.gameDate}T00:00:00.000Z`
+      : null,
     newsLink: { url: n.url, sourceName: n.sourceName ?? null },
     extras,
   });
@@ -1117,7 +1120,7 @@ function basePost(p: {
   isEdited: boolean;
   createdAt: string;
   updatedAt: string;
-  // Only article-backed long-form posts ever carry this. Short-form
+  // Article-backed long-form posts and dated news posts carry this. Short-form
   // (highlight) and org posts pass undefined and the response just
   // omits the field downstream consumers expect to see as null.
   gameDate?: string | null;

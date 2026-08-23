@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
+
+const { customFetchMock } = vi.hoisted(() => ({
+  customFetchMock: vi.fn(),
+}));
 
 vi.mock("@workspace/api-client-react", () => ({
   useListTeamPendingPosts: () => ({ data: { data: [] } }),
@@ -11,7 +15,7 @@ vi.mock("@workspace/api-client-react", () => ({
   useDeclineTeamHighlight: () => ({ mutateAsync: vi.fn(), isPending: false }),
   getListTeamPendingHighlightsQueryKey: () => ["pending-highlights"],
   getListTeamPostsQueryKey: () => ["team-posts"],
-  customFetch: vi.fn(),
+  customFetch: customFetchMock,
   queryOpts: <T,>(opts: T) => opts,
 }));
 
@@ -77,5 +81,51 @@ describe("TeamPostsSection action hierarchy", () => {
     expect(
       within(actions).queryByTestId("btn-open-post-options"),
     ).not.toBeInTheDocument();
+  });
+
+  it("submits an optional game-played date with a news link", async () => {
+    const user = userEvent.setup();
+    customFetchMock.mockReset();
+    customFetchMock.mockResolvedValue(null);
+
+    renderWithProviders(
+      <TeamPostsSection
+        teamId="team-1"
+        isAdmin
+        canManage
+        isTeamMember
+        canPostRecap
+        teamName="Westfield Wolves"
+        posts={[]}
+        hasMorePosts={false}
+        isLoadingMorePosts={false}
+        onLoadMorePosts={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByTestId("btn-open-post-options"));
+    await user.click(screen.getByTestId("btn-add-news"));
+    await user.type(
+      screen.getByTestId("input-news-url"),
+      "https://localpaper.example/sports/wolves-win",
+    );
+    fireEvent.change(screen.getByTestId("input-news-game-date"), {
+      target: { value: "2026-08-16" },
+    });
+
+    await user.click(screen.getByTestId("btn-submit-news"));
+
+    await waitFor(() => {
+      expect(customFetchMock).toHaveBeenCalledWith(
+        "/api/v1/teams/team-1/news",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            url: "https://localpaper.example/sports/wolves-win",
+            gameDate: "2026-08-16",
+          }),
+        }),
+      );
+    });
   });
 });

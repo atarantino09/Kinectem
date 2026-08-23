@@ -2402,6 +2402,15 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     name: "2026-08-22-task-906-grouped-coach-invites",
     sql: TASK_906_GROUPED_COACH_INVITES,
   },
+  {
+    // Task #921 — preserve the local calendar date on news cards separately
+    // from created_at, which remains the date the article was posted on Kinectem.
+    name: "2026-08-23-task-921-news-game-date",
+    sql: `
+      ALTER TABLE team_news_links
+        ADD COLUMN IF NOT EXISTS game_date date;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

@@ -271,3 +271,50 @@ describe("PostCard 'Remove me from this post' menu item", () => {
     });
   });
 });
+
+describe("PostCard news chronology", () => {
+  it("labels the Kinectem posting date separately from the game date", () => {
+    const post = basePost({
+      id: "news-article-1",
+      title: "Wolves take the playoff opener",
+      createdAt: "2026-08-23T14:00:00.000Z",
+      gameDate: "2026-08-16T00:00:00.000Z",
+    }) as PostResponse & {
+      newsLink: { url: string; sourceName: string | null };
+    };
+    post.newsLink = {
+      url: "https://localpaper.example/sports/wolves-win",
+      sourceName: "Local Paper",
+    };
+
+    renderWithClient(<PostCard post={post} />);
+
+    expect(screen.getByTestId("news-dates-news-article-1")).toHaveTextContent(
+      "Posted on Kinectem: Aug 23, 2026",
+    );
+    expect(screen.getByTestId("news-dates-news-article-1")).toHaveTextContent(
+      "Game played: Aug 16, 2026",
+    );
+  });
+
+  it("keeps legacy news cards readable when no game date was saved", () => {
+    const post = basePost({
+      id: "news-article-legacy",
+      title: "Wolves in the community",
+      createdAt: "2026-08-23T14:00:00.000Z",
+      gameDate: null,
+    }) as PostResponse & {
+      newsLink: { url: string; sourceName: string | null };
+    };
+    post.newsLink = {
+      url: "https://localpaper.example/sports/wolves-community",
+      sourceName: null,
+    };
+
+    renderWithClient(<PostCard post={post} />);
+
+    const dates = screen.getByTestId("news-dates-news-article-legacy");
+    expect(dates).toHaveTextContent("Posted on Kinectem: Aug 23, 2026");
+    expect(dates).not.toHaveTextContent("Game played:");
+  });
+});

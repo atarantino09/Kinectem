@@ -20,7 +20,7 @@ import {
   type PostResponse,
   type FeedPost,
 } from "@workspace/api-client-react";
-import { timeAgo, formatOrgName } from "@/lib/format";
+import { timeAgo, formatDate, formatDateUTC, formatOrgName } from "@/lib/format";
 import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import { linkify } from "@/lib/linkify";
 import {
@@ -552,6 +552,21 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 {" • "}
                 {timeAgo(post.createdAt)}
               </p>
+              {isNews && (
+                <div
+                  className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+                  data-testid={`news-dates-${post.id}`}
+                >
+                  <span>
+                    Posted on Kinectem: {formatDate(post.createdAt)}
+                  </span>
+                  {post.gameDate && (
+                    <span>
+                      Game played: {formatDateUTC(post.gameDate)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
