@@ -126,6 +126,7 @@ export type CompetitionMeta = {
 type FeaturedRecap = {
   id: string;
   title: string;
+  body: string | null;
   summary: string | null;
   coverImageUrl: string | null;
   gameDate: string | null;
@@ -160,6 +161,16 @@ type CompetitionResponse = {
   featuredRecaps?: FeaturedRecap[];
   brackets?: CompetitionBracketInfo[];
 };
+
+export function featuredRecapPreviewText(
+  recap: Pick<FeaturedRecap, "body" | "summary">,
+): string | null {
+  const body = recap.body?.trim();
+  if (body) return body;
+
+  const summary = recap.summary?.trim();
+  return summary || null;
+}
 
 function groupLabel(division: string, bracket: string): string {
   const parts = [division, bracket].filter((p) => p && p.trim() !== "");
@@ -767,12 +778,14 @@ export default function CompetitionPage() {
               recaps: otherRecaps,
             });
           }
-          const renderRecapCard = (r: FeaturedRecap) => (
-            <Link key={r.id} href={`/posts/${r.id}`} className="block min-w-0">
-              <Card
-                className="min-w-0 rounded-xl border-border overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg h-full flex flex-col group"
-                data-testid={`card-featured-recap-${r.id}`}
-              >
+          const renderRecapCard = (r: FeaturedRecap) => {
+            const previewText = featuredRecapPreviewText(r);
+            return (
+              <Link key={r.id} href={`/posts/${r.id}`} className="block min-w-0">
+                <Card
+                  className="min-w-0 rounded-xl border-border overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg h-full flex flex-col group"
+                  data-testid={`card-featured-recap-${r.id}`}
+                >
                 <CompetitionBrandStrip
                   name={c.name}
                   logoUrl={c.logoUrl}
@@ -788,24 +801,34 @@ export default function CompetitionPage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                   </div>
-                ) : r.summary ? (
-                  <div className="relative flex h-36 w-full items-center overflow-hidden bg-muted/40 px-5 py-4">
+                ) : previewText ? (
+                  <div
+                    className="relative flex h-36 w-full items-center overflow-hidden bg-muted/40 px-5 py-4"
+                    data-testid={`preview-featured-recap-${r.id}`}
+                  >
                     <div
                       aria-hidden="true"
                       className="absolute -right-10 -top-14 h-36 w-36 rounded-full opacity-10"
                       style={{ backgroundColor: brand }}
                     />
-                    <div className="relative min-w-0 space-y-1.5">
+                    <div className="relative min-w-0 space-y-1.5 pb-5">
                       <p
                         className="text-[10px] font-black uppercase tracking-[0.18em]"
                         style={{ color: brand }}
                       >
                         Game recap
                       </p>
-                      <p className="line-clamp-4 text-sm font-semibold leading-relaxed text-foreground/85">
-                        {r.summary}
+                      <p className="line-clamp-3 text-sm font-semibold leading-relaxed text-foreground/85">
+                        {previewText}
                       </p>
                     </div>
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-muted/95 to-transparent"
+                    />
+                    <span className="absolute bottom-2.5 right-5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Read full recap
+                    </span>
                   </div>
                 ) : (
                   <div className="h-36 w-full bg-muted/40 flex items-center justify-center relative overflow-hidden">
@@ -855,9 +878,10 @@ export default function CompetitionPage() {
                     ) : null}
                   </div>
                 </CardContent>
-              </Card>
-            </Link>
-          );
+                </Card>
+              </Link>
+            );
+          };
           return (
           <section className="space-y-4" data-testid="rail-featured-recaps">
             <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-border/60">

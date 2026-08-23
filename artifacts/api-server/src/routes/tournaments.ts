@@ -1117,6 +1117,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         // /posts/:id which 404s on a raw uuid.
         id: `article-${a.id}`,
         title: a.title,
+        body: a.body,
         summary: a.summary,
         coverImageUrl: a.coverImageUrl,
         gameDate: a.gameDate,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  featuredRecapPreviewText,
   isPublicFeaturedCompetitionRecap,
   isShortTournament,
   recapGroups,
@@ -76,6 +77,30 @@ describe("featured recap week sections", () => {
         endDate: "2026-08-15",
       }),
     ).toBe(false);
+  });
+});
+
+describe("featured recap preview text", () => {
+  it("uses the published recap body before its summary", () => {
+    expect(
+      featuredRecapPreviewText({
+        body: "The opening goal set the tone for a complete performance.",
+        summary: "A complete performance.",
+      }),
+    ).toBe("The opening goal set the tone for a complete performance.");
+  });
+
+  it("falls back to the summary when the recap body is blank", () => {
+    expect(
+      featuredRecapPreviewText({
+        body: "   ",
+        summary: "A late winner decided the match.",
+      }),
+    ).toBe("A late winner decided the match.");
+  });
+
+  it("leaves the visual fallback available when neither text field has content", () => {
+    expect(featuredRecapPreviewText({ body: null, summary: "  " })).toBeNull();
   });
 });
 
