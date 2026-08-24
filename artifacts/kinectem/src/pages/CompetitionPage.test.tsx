@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { featuredRecapPreviewText } from "../lib/featuredRecapPreview";
 import {
+  competitionTeamSections,
   isPublicFeaturedCompetitionRecap,
   isShortTournament,
   recapGroups,
@@ -77,6 +78,85 @@ describe("featured recap week sections", () => {
         endDate: "2026-08-15",
       }),
     ).toBe(false);
+  });
+});
+
+describe("competition Teams ordering", () => {
+  it("separates repeated group names by age and gender, with natural team sorting", () => {
+    const sections = competitionTeamSections([
+      {
+        id: "u12-girls-z",
+        name: "Zebras 20",
+        division: "Gold",
+        bracket: "A",
+        age: "U12",
+        gender: "girls",
+        claimed: false,
+        teamId: null,
+      },
+      {
+        id: "u10-boys-20",
+        name: "Storm 20",
+        division: "Gold",
+        bracket: "A",
+        age: "U10",
+        gender: "Boys",
+        claimed: false,
+        teamId: null,
+      },
+      {
+        id: "u8-boys",
+        name: "Comets",
+        division: "Gold",
+        bracket: "A",
+        age: "U8",
+        gender: "boys",
+        claimed: false,
+        teamId: null,
+      },
+      {
+        id: "u10-boys-12",
+        name: "Storm 12",
+        division: "Gold",
+        bracket: "A",
+        age: "U10",
+        gender: "Boys",
+        claimed: false,
+        teamId: null,
+      },
+      {
+        id: "u12-boys",
+        name: "Falcons",
+        division: "Silver",
+        bracket: "B",
+        age: "U12",
+        gender: "Boys",
+        claimed: false,
+        teamId: null,
+      },
+      {
+        id: "missing",
+        name: "Unlisted",
+        division: "Gold",
+        bracket: "A",
+        age: null,
+        gender: null,
+        claimed: false,
+        teamId: null,
+      },
+    ]);
+
+    expect(sections.map((section) => section.title)).toEqual([
+      "U8 · Boys · Gold · A",
+      "U10 · Boys · Gold · A",
+      "U12 · Boys · Silver · B",
+      "U12 · Girls · Gold · A",
+      "Age not listed · Gender not listed · Gold · A",
+    ]);
+    expect(sections[1].teams.map((team) => team.name)).toEqual([
+      "Storm 12",
+      "Storm 20",
+    ]);
   });
 });
 

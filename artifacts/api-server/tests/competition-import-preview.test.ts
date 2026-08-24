@@ -83,6 +83,31 @@ describe("CSV import dry-run preview (Task #766)", () => {
     expect(pub.body.matches).toHaveLength(2);
   });
 
+  it("refreshes a participant's display age and group after a schedule re-import", async () => {
+    const { agent } = await loginAs("coach@kinectem.demo");
+    const comp = await createCompetition(agent);
+    await agent.post(`/api/v1/competitions/${comp.id}/import`).send({ csv: WEEK1 });
+
+    const corrected = `${HEADER}
+1,2026-08-01,09:00,U14,boys,Silver,B,Riverside Park,CA,Field 2,Thunder FC,Lightning SC
+2,2026-08-01,10:30,U14,boys,Silver,B,Riverside Park,CA,Field 2,Strikers,Comets`;
+    const applied = await agent
+      .post(`/api/v1/competitions/${comp.id}/import`)
+      .send({ csv: corrected });
+    expect(applied.status).toBe(200);
+
+    const pub = await request(app).get(`/api/v1/competitions/${comp.slug}`);
+    expect(pub.status).toBe(200);
+    expect(
+      pub.body.participants.find((participant: { name: string }) => participant.name === "Thunder FC"),
+    ).toMatchObject({
+      age: "U14",
+      gender: "boys",
+      division: "Silver",
+      bracket: "B",
+    });
+  });
+
   it("week-over-week preview: added, changed with before→after, unchanged, missing", async () => {
     const { agent } = await loginAs("coach@kinectem.demo");
     const comp = await createCompetition(agent);

@@ -1750,8 +1750,37 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
           .onConflictDoNothing();
       }
 
-      // Re-read participants to map slot → id (covers pre-existing rows too).
-      const partRows = await tx
+      // Re-imports must refresh the display category on existing team slots.
+      // Identity stays name + gender, so claims and hidden-state survive, but
+      // age/group/bracket reflect the current schedule rather than the first
+      // file ever uploaded.
+      let partRows = await tx
+        .select()
+        .from(tournamentParticipants)
+        .where(eq(tournamentParticipants.tournamentId, tournament.id));
+      const participantIdBySlot = new Map(
+        partRows.map((p) => [
+          slotKey(p.division, p.bracket, p.nameKey, p.gender),
+          p.id,
+        ]),
+      );
+      for (const slot of slotValues) {
+        const participantId = participantIdBySlot.get(
+          slotKey(slot.division, slot.bracket, slot.nameKey, slot.gender),
+        );
+        if (!participantId) continue;
+        await tx
+          .update(tournamentParticipants)
+          .set({
+            division: slot.division,
+            bracket: slot.bracket,
+            age: slot.age,
+          })
+          .where(eq(tournamentParticipants.id, participantId));
+      }
+
+      // Re-read participants after refreshing imported display categories.
+      partRows = await tx
         .select()
         .from(tournamentParticipants)
         .where(eq(tournamentParticipants.tournamentId, tournament.id));

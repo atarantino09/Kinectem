@@ -5,6 +5,9 @@ description: How the bracket feature works — seeding, touch-gated composer pic
 
 Brackets are organizer-defined labels for SORTING recaps only — no standings/seeding, and they never render on the published post.
 
+- Published Teams are deliberately grouped from the schedule-derived participant fields in this order: age, gender, then division/bracket group. Do not use `bracketId` as the Teams grouping key: identical group labels may exist for different ages or genders.
+- **Why:** organizer bracket edits should remain available for recap organization without collapsing visibly distinct imported team categories.
+- **How to apply:** preserve bracket assignment and its sort order for recap UI; keep schedule re-imports refreshing each participant slot's display age/group fields so the public Teams page reflects the current CSV.
 - `competition_brackets` dedupes on `(tournament_id, label_key)` where `label_key` is lowercased/whitespace-normalized; `articles.bracket_id` is `ON DELETE SET NULL`.
 - Auto-seed (`seedBracketsFromSchedule`) runs after CSV import AND lazily inside the organizer's GET brackets call (backfills pre-existing schedules). Idempotent via `onConflictDoNothing`; new brackets append after existing max sortOrder so organizer order is never clobbered. Gender only pre-filled when all rows for a label agree.
 - **Why lazy seed in GET:** no separate backfill endpoint needed and the console panel "just works" for old competitions.

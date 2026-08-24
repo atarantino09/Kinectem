@@ -52,7 +52,7 @@ import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 // Legacy `/t/<slug>` links redirect here. Hand-written customFetch — these
 // endpoints have no openapi.yaml entry (file is locked).
 
-type Participant = {
+export type CompetitionParticipant = {
   id: string;
   name: string;
   division: string;
@@ -157,7 +157,7 @@ type CompetitionBracketInfo = {
 
 type CompetitionResponse = {
   competition: CompetitionMeta;
-  participants: Participant[];
+  participants: CompetitionParticipant[];
   matches: Match[];
   featuredRecaps?: FeaturedRecap[];
   brackets?: CompetitionBracketInfo[];
@@ -166,6 +166,128 @@ type CompetitionResponse = {
 function groupLabel(division: string, bracket: string): string {
   const parts = [division, bracket].filter((p) => p && p.trim() !== "");
   return parts.length ? parts.join(" · ") : "General";
+}
+
+export type CompetitionTeamSection = {
+  key: string;
+  title: string;
+  teams: CompetitionParticipant[];
+};
+
+const teamNameCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function comparableText(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function ageGroupInfo(raw: string | null): {
+  key: string;
+  label: string;
+  rank: number;
+  number: number | null;
+} {
+  const value = comparableText(raw);
+  if (!value) {
+    return { key: "__missing__", label: "Age not listed", rank: 2, number: null };
+  }
+  const match = value.match(/\d+/);
+  if (!match) {
+    return { key: value.toLowerCase(), label: value, rank: 1, number: null };
+  }
+  return {
+    key: value.toLowerCase(),
+    label: value,
+    rank: 0,
+    number: Number.parseInt(match[0], 10),
+  };
+}
+
+function genderInfo(raw: string | null): {
+  key: string;
+  label: string;
+  rank: number;
+} {
+  const value = comparableText(raw);
+  const normalized = value.toLowerCase();
+  if (["boys", "boy", "b", "m", "male", "men", "mens"].includes(normalized)) {
+    return { key: "boys", label: "Boys", rank: 0 };
+  }
+  if (["girls", "girl", "g", "f", "female", "women", "womens"].includes(normalized)) {
+    return { key: "girls", label: "Girls", rank: 1 };
+  }
+  if (["coed", "co-ed", "mixed", "x"].includes(normalized)) {
+    return { key: "coed", label: "Coed", rank: 2 };
+  }
+  if (!value) {
+    return { key: "__missing__", label: "Gender not listed", rank: 4 };
+  }
+  return { key: normalized, label: value, rank: 3 };
+}
+
+/**
+ * Keep the imported Teams list scannable even when multiple schedule rows
+ * reuse a group name. The hierarchy is age → gender → group, with missing
+ * fields last and teams naturally alphabetized inside their exact section.
+ *
+ * This intentionally uses the schedule fields on participant slots rather
+ * than organizer-managed bracket ids. Brackets remain recap-sorting labels;
+ * their editing/reordering must not merge distinct age/gender schedule groups.
+ */
+export function competitionTeamSections(
+  participants: CompetitionParticipant[],
+): CompetitionTeamSection[] {
+  type Section = CompetitionTeamSection & {
+    age: ReturnType<typeof ageGroupInfo>;
+    gender: ReturnType<typeof genderInfo>;
+    groupKey: string;
+  };
+
+  const byKey = new Map<string, Section>();
+  for (const participant of participants) {
+    const age = ageGroupInfo(participant.age);
+    const gender = genderInfo(participant.gender);
+    const group = comparableText(groupLabel(participant.division, participant.bracket));
+    const groupKey = group.toLowerCase();
+    const key = `${age.key}\u0000${gender.key}\u0000${groupKey}`;
+    const current = byKey.get(key);
+    if (current) {
+      current.teams.push(participant);
+      continue;
+    }
+    byKey.set(key, {
+      key,
+      title: `${age.label} · ${gender.label} · ${group}`,
+      teams: [participant],
+      age,
+      gender,
+      groupKey,
+    });
+  }
+
+  return Array.from(byKey.values())
+    .sort((a, b) => {
+      if (a.age.rank !== b.age.rank) return a.age.rank - b.age.rank;
+      if (a.age.number !== b.age.number) {
+        if (a.age.number === null) return 1;
+        if (b.age.number === null) return -1;
+        return a.age.number - b.age.number;
+      }
+      const ageText = teamNameCollator.compare(a.age.label, b.age.label);
+      if (ageText !== 0) return ageText;
+      if (a.gender.rank !== b.gender.rank) return a.gender.rank - b.gender.rank;
+      const genderText = teamNameCollator.compare(a.gender.label, b.gender.label);
+      if (genderText !== 0) return genderText;
+      return teamNameCollator.compare(a.groupKey, b.groupKey);
+    })
+    .map(({ age: _age, gender: _gender, groupKey: _groupKey, ...section }) => ({
+      ...section,
+      teams: [...section.teams].sort(
+        (a, b) => teamNameCollator.compare(a.name, b.name) || a.id.localeCompare(b.id),
+      ),
+    }));
 }
 
 function weekForItem(
@@ -313,7 +435,7 @@ export default function CompetitionPage() {
   const qcTop = useQueryClient();
   const { toast } = useToast();
   // Hide / unhide a team slot from the public Teams list (operators only).
-  const [pendingHide, setPendingHide] = useState<Participant | null>(null);
+  const [pendingHide, setPendingHide] = useState<CompetitionParticipant | null>(null);
   // Task #866 — bulk hide: operators tick checkboxes next to visible teams,
   // then "Hide All (N)" hides the whole selection in one request.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -444,47 +566,7 @@ export default function CompetitionPage() {
   }
 
   const { competition: c, participants } = q.data;
-  // Task #865 — Teams grouped under the organizer's brackets, mirroring the
-  // recap grouped view: saved bracket order, alphabetical inside a group
-  // (the API already sorts by name), unmatched teams last under "Other".
-  const bracketList = q.data.brackets ?? [];
-  const teamsByBracket = new Map<string, Participant[]>();
-  const ungroupedTeams: Participant[] = [];
-  for (const p of participants) {
-    if (p.bracketId && bracketList.some((b) => b.id === p.bracketId)) {
-      teamsByBracket.set(p.bracketId, [
-        ...(teamsByBracket.get(p.bracketId) ?? []),
-        p,
-      ]);
-    } else {
-      ungroupedTeams.push(p);
-    }
-  }
-  const teamSections: { key: string; title: string; teams: Participant[] }[] =
-    bracketList
-      .filter((b) => (teamsByBracket.get(b.id) ?? []).length > 0)
-      .map((b) => ({
-        key: b.id,
-        title: [
-          b.label,
-          // Append gender/age only when they aren't already in the label
-          // ("Boys U12 Gold" shouldn't become "Boys U12 Gold · Boys · U12").
-          ...[b.gender, b.ageGroup].filter(
-            (v): v is string =>
-              !!v && !b.label.toLowerCase().includes(v.toLowerCase()),
-          ),
-        ].join(" · "),
-        teams: teamsByBracket.get(b.id)!,
-      }));
-  if (ungroupedTeams.length > 0) {
-    teamSections.push({
-      key: "__other__",
-      // With no brackets at all there's nothing to group by — skip the
-      // "Other" heading and show the plain list.
-      title: teamSections.length > 0 ? "Other" : "",
-      teams: ungroupedTeams,
-    });
-  }
+  const teamSections = competitionTeamSections(participants);
   const brand = c.brandColor ?? DEFAULT_BRAND;
   const shortTournament = isShortTournament(c);
   const heroText = contrastText(brand);
