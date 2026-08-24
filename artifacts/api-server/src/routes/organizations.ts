@@ -2322,6 +2322,81 @@ router.post(
   }),
 );
 
+router.patch(
+  "/teams/:teamId/news/:newsId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser!;
+    const teamId =
+      typeof req.params.teamId === "string"
+        ? req.params.teamId
+        : req.params.teamId?.[0];
+    const newsId =
+      typeof req.params.newsId === "string"
+        ? req.params.newsId
+        : req.params.newsId?.[0];
+    if (!teamId || !newsId) return notFound(res);
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only team managers can edit news articles.");
+    }
+    if (
+      !req.body ||
+      !Object.prototype.hasOwnProperty.call(req.body, "gameDate")
+    ) {
+      return apiError(res, 400, "gameDate is required.");
+    }
+    const gameDate = normalizeNewsGameDate(req.body.gameDate);
+    if (gameDate === "invalid") {
+      return apiError(res, 400, "gameDate must be a valid date (YYYY-MM-DD).");
+    }
+    const [existing] = await db
+      .select({ news: teamNewsLinks, author: users })
+      .from(teamNewsLinks)
+      .leftJoin(users, eq(teamNewsLinks.addedByUserId, users.id))
+      .where(
+        and(
+          eq(teamNewsLinks.id, newsId),
+          eq(teamNewsLinks.teamId, team.id),
+        ),
+      )
+      .limit(1);
+    if (!existing) return notFound(res);
+    const [updated] = await db
+      .update(teamNewsLinks)
+      .set({ gameDate })
+      .where(
+        and(
+          eq(teamNewsLinks.id, newsId),
+          eq(teamNewsLinks.teamId, team.id),
+        ),
+      )
+      .returning();
+    if (!updated) return notFound(res);
+    const [org] = team.organizationId
+      ? await db
+          .select()
+          .from(organizations)
+          .where(eq(organizations.id, team.organizationId))
+          .limit(1)
+      : [null];
+    return res.json(
+      newsLinkToPost(updated, {
+        team,
+        org: org ?? null,
+        author: existing.author,
+        canEdit: true,
+        canDelete: true,
+      }),
+    );
+  }),
+);
+
 router.delete(
   "/teams/:teamId/news/:newsId",
   requireAuth,

@@ -22,7 +22,11 @@ async function getOrgAndTeam(name = "Varsity Football") {
 let n = 0;
 const createdNews: string[] = [];
 
-async function seedNewsLink(teamId: string, addedByUserId: string | null) {
+async function seedNewsLink(
+  teamId: string,
+  addedByUserId: string | null,
+  gameDate: string | null = null,
+) {
   n += 1;
   const [row] = await db
     .insert(teamNewsLinks)
@@ -33,6 +37,7 @@ async function seedNewsLink(teamId: string, addedByUserId: string | null) {
       title: `Local team wins big ${n}`,
       sourceName: "The Example Gazette",
       description: "A thrilling game recap from the local paper.",
+      gameDate,
     })
     .returning();
   createdNews.push(row.id);
@@ -49,6 +54,66 @@ afterEach(async () => {
 });
 
 describe("news post interactions (task #867)", () => {
+  it("lets a team manager set a news game date and exposes it to the matching Combined Recap window", async () => {
+    const { team } = await getOrgAndTeam();
+    const coach = await loginAs("coach@kinectem.demo");
+    const news = await seedNewsLink(team.id, coach.user.id);
+
+    const update = await coach.agent
+      .patch(`/api/v1/teams/${team.id}/news/${news.id}`)
+      .send({ gameDate: "2025-09-05" });
+    expect(update.status).toBe(200);
+    expect(update.body.gameDate).toBe("2025-09-05T00:00:00.000Z");
+
+    const sources = await coach.agent.get(
+      `/api/v1/teams/${team.id}/season-recap/recaps?start=2025-09-01&end=2025-09-30`,
+    );
+    expect(sources.status).toBe(200);
+    expect(sources.body.news).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: news.id,
+          gameDate: "2025-09-05T00:00:00.000Z",
+        }),
+      ]),
+    );
+    expect(sources.body.newsAvailability).toMatchObject({
+      datedCount: expect.any(Number),
+      undatedCount: expect.any(Number),
+    });
+  });
+
+  it("requires a team manager and a real date to update news game dates", async () => {
+    const { team } = await getOrgAndTeam();
+    const coach = await loginAs("coach@kinectem.demo");
+    const athlete = await loginAs((user) => user.role === "athlete");
+    const news = await seedNewsLink(team.id, coach.user.id);
+    const path = `/api/v1/teams/${team.id}/news/${news.id}`;
+
+    expect((await request(app).patch(path).send({ gameDate: "2025-09-05" })).status).toBe(401);
+    expect((await athlete.agent.patch(path).send({ gameDate: "2025-09-05" })).status).toBe(403);
+    expect((await coach.agent.patch(path).send({ gameDate: "09/05/2025" })).status).toBe(400);
+    expect((await coach.agent.patch(path).send({})).status).toBe(400);
+    expect(
+      (
+        await coach.agent
+          .patch(
+            `/api/v1/teams/00000000-0000-0000-0000-000000000000/news/${news.id}`,
+          )
+          .send({ gameDate: "2025-09-05" })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await coach.agent
+          .patch(
+            `/api/v1/teams/${team.id}/news/00000000-0000-0000-0000-000000000000`,
+          )
+          .send({ gameDate: "2025-09-05" })
+      ).status,
+    ).toBe(404);
+  });
+
   it("GET /posts/news-:id returns the news post with stats and newsLink", async () => {
     const { team } = await getOrgAndTeam();
     const coach = await loginAs("coach@kinectem.demo");

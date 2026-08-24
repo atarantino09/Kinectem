@@ -131,4 +131,64 @@ describe("SeasonRecapDialog news coverage", () => {
     expect(body.recapIds).toEqual(["recap-1"]);
     expect(body.newsIds).toEqual([]);
   });
+
+  it("explains when team news needs a saved game date", async () => {
+    const user = userEvent.setup();
+    customFetchMock.mockResolvedValueOnce({
+      data: [],
+      news: [],
+      newsAvailability: {
+        datedCount: 0,
+        undatedCount: 1,
+        earliestGameDate: null,
+        latestGameDate: null,
+      },
+    });
+
+    renderWithProviders(
+      <SeasonRecapDialog
+        teamId="team-1"
+        teamName="Westfield Wolves"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByTestId("button-season-recap-find-recaps"));
+    expect(
+      await screen.findByTestId("text-season-news-empty-state"),
+    ).toHaveTextContent(
+      "1 team news article has no saved game date. Use Edit game date on the news card",
+    );
+  });
+
+  it("explains when dated team news falls outside the selected period", async () => {
+    const user = userEvent.setup();
+    customFetchMock.mockResolvedValueOnce({
+      data: [],
+      news: [],
+      newsAvailability: {
+        datedCount: 2,
+        undatedCount: 0,
+        earliestGameDate: "2025-09-05T00:00:00.000Z",
+        latestGameDate: "2025-09-20T00:00:00.000Z",
+      },
+    });
+
+    renderWithProviders(
+      <SeasonRecapDialog
+        teamId="team-1"
+        teamName="Westfield Wolves"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByTestId("button-season-recap-find-recaps"));
+    expect(
+      await screen.findByTestId("text-season-news-empty-state"),
+    ).toHaveTextContent(
+      "Dated team news is available from Sep 5, 2025 to Sep 20, 2025",
+    );
+  });
 });

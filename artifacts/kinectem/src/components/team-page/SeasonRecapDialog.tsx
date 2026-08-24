@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, Loader2, Trophy, FileText, Newspaper } from "lucide-react";
+import { formatDateUTC } from "@/lib/format";
 
 interface SeasonRecap {
   id: string;
@@ -40,6 +41,13 @@ interface SeasonNewsReference {
   description: string | null;
 }
 
+interface SeasonNewsAvailability {
+  datedCount: number;
+  undatedCount: number;
+  earliestGameDate: string | null;
+  latestGameDate: string | null;
+}
+
 // Default the window to the trailing ~4 months so a typical season is
 // covered out of the box; coaches narrow it for a single tournament.
 function defaultRange(): { start: string; end: string } {
@@ -51,14 +59,7 @@ function defaultRange(): { start: string; end: string } {
 }
 
 function formatGameDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDateUTC(iso);
 }
 
 // Lets a coach/author weave a team's published game recaps over a date
@@ -87,6 +88,8 @@ export function SeasonRecapDialog({
   const [recaps, setRecaps] = useState<SeasonRecap[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [news, setNews] = useState<SeasonNewsReference[]>([]);
+  const [newsAvailability, setNewsAvailability] =
+    useState<SeasonNewsAvailability | null>(null);
   const [selectedNews, setSelectedNews] = useState<Set<string>>(new Set());
   const [searched, setSearched] = useState(false);
   const [loadingRecaps, setLoadingRecaps] = useState(false);
@@ -101,6 +104,7 @@ export function SeasonRecapDialog({
     setRecaps([]);
     setSelected(new Set());
     setNews([]);
+    setNewsAvailability(null);
     setSelectedNews(new Set());
     setSearched(false);
     setLoadingRecaps(false);
@@ -123,6 +127,7 @@ export function SeasonRecapDialog({
       const res = await customFetch<{
         data: SeasonRecap[];
         news?: SeasonNewsReference[];
+        newsAvailability?: SeasonNewsAvailability;
       }>(
         `/api/v1/teams/${teamId}/season-recap/recaps?${params.toString()}`,
       );
@@ -132,6 +137,7 @@ export function SeasonRecapDialog({
       const newsReferences = res.news ?? [];
       setNews(newsReferences);
       setSelectedNews(new Set(newsReferences.map((n) => n.id)));
+      setNewsAvailability(res.newsAvailability ?? null);
       setSearched(true);
     } catch (err) {
       toast({
@@ -427,8 +433,24 @@ export function SeasonRecapDialog({
                   )}
                 </div>
                 {news.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No dated news coverage matches this period.
+                  <p
+                    className="text-sm text-muted-foreground"
+                    data-testid="text-season-news-empty-state"
+                  >
+                    {newsAvailability?.undatedCount &&
+                    newsAvailability.datedCount === 0
+                      ? `${newsAvailability.undatedCount} team news ${
+                          newsAvailability.undatedCount === 1
+                            ? "article has"
+                            : "articles have"
+                        } no saved game date. Use Edit game date on the news card, then find sources again.`
+                      : newsAvailability?.datedCount
+                        ? `No dated news coverage matches this period. Dated team news is available from ${formatGameDate(
+                            newsAvailability.earliestGameDate,
+                          )} to ${formatGameDate(
+                            newsAvailability.latestGameDate,
+                          )}; adjust the date range if needed.`
+                        : "No dated news coverage has been added for this team yet."}
                   </p>
                 ) : (
                   <>

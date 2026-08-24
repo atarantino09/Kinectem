@@ -52,6 +52,7 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
 import { TaggedPlayers } from "@/components/TaggedPlayers";
 import { useToast } from "@/hooks/use-toast";
+import { NewsGameDateDialog } from "@/components/NewsGameDateDialog";
 
 function getContextHref(context: {
   type: "team" | "organization" | "user";
@@ -155,6 +156,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   ).newsLink;
   const isNews = post.id.startsWith("news-") && !!newsLink;
   const [confirmNewsDelete, setConfirmNewsDelete] = useState(false);
+  const [editNewsGameDateOpen, setEditNewsGameDateOpen] = useState(false);
   const [deletingNews, setDeletingNews] = useState(false);
   const deleteNewsLink = async () => {
     setDeletingNews(true);
@@ -560,10 +562,12 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                   <span>
                     Posted on Kinectem: {formatDate(post.createdAt)}
                   </span>
-                  {post.gameDate && (
+                  {post.gameDate ? (
                     <span>
                       Game played: {formatDateUTC(post.gameDate)}
                     </span>
+                  ) : (
+                    <span>Game date not set</span>
                   )}
                 </div>
               )}
@@ -598,6 +602,17 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {isNews && post.canEdit === true && (
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setEditNewsGameDateOpen(true);
+                    }}
+                    data-testid={`menuitem-edit-news-game-date-${post.id}`}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" /> Edit game date
+                  </DropdownMenuItem>
+                )}
                 {isNews && (post.canDelete ?? false) && (
                   <DropdownMenuItem
                     onSelect={(e) => {
@@ -1004,36 +1019,46 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           )}
         </div>
         {isNews && (
-          <AlertDialog
-            open={confirmNewsDelete}
-            onOpenChange={setConfirmNewsDelete}
-          >
-            <AlertDialogContent data-testid={`dialog-remove-news-${post.id}`}>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Remove this news article?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  The card will disappear from the team page and followers'
-                  feeds. The newspaper's article itself isn't affected, and
-                  you can add the link again later.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={deletingNews}>
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={deletingNews}
-                  data-testid={`btn-confirm-remove-news-${post.id}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void deleteNewsLink();
-                  }}
-                >
-                  {deletingNews ? "Removing…" : "Remove"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <>
+            <NewsGameDateDialog
+              teamId={post.context.id}
+              newsId={post.id.slice("news-".length)}
+              title={post.title}
+              gameDate={post.gameDate}
+              open={editNewsGameDateOpen}
+              onOpenChange={setEditNewsGameDateOpen}
+            />
+            <AlertDialog
+              open={confirmNewsDelete}
+              onOpenChange={setConfirmNewsDelete}
+            >
+              <AlertDialogContent data-testid={`dialog-remove-news-${post.id}`}>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove this news article?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The card will disappear from the team page and followers'
+                    feeds. The newspaper's article itself isn't affected, and
+                    you can add the link again later.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deletingNews}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={deletingNews}
+                    data-testid={`btn-confirm-remove-news-${post.id}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void deleteNewsLink();
+                    }}
+                  >
+                    {deletingNews ? "Removing…" : "Remove"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
         )}
       </CardContent>
       {canShareAsImage && shareImageOpen && (

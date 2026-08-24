@@ -1859,6 +1859,29 @@ async function loadTeamSeasonNews(
   return rows.map((row) => ({ ...row, gameDate: row.gameDate! }));
 }
 
+async function loadTeamSeasonNewsAvailability(teamId: string): Promise<{
+  datedCount: number;
+  undatedCount: number;
+  earliestGameDate: string | null;
+  latestGameDate: string | null;
+}> {
+  const [row] = await db
+    .select({
+      datedCount: sql<number>`count(*) filter (where ${teamNewsLinks.gameDate} is not null)::int`,
+      undatedCount: sql<number>`count(*) filter (where ${teamNewsLinks.gameDate} is null)::int`,
+      earliestGameDate: sql<string | null>`min(${teamNewsLinks.gameDate})`,
+      latestGameDate: sql<string | null>`max(${teamNewsLinks.gameDate})`,
+    })
+    .from(teamNewsLinks)
+    .where(eq(teamNewsLinks.teamId, teamId));
+  return {
+    datedCount: row?.datedCount ?? 0,
+    undatedCount: row?.undatedCount ?? 0,
+    earliestGameDate: row?.earliestGameDate ?? null,
+    latestGameDate: row?.latestGameDate ?? null,
+  };
+}
+
 const teamSeasonRecapLimiter = rateLimit({
   name: "team-season-recap",
   windowMs: 60_000,
@@ -1897,7 +1920,7 @@ router.get(
     const endMs = parseSeasonDateParam(endQuery, true);
     const startNewsDate = normalizeNewsGameDate(startQuery);
     const endNewsDate = normalizeNewsGameDate(endQuery);
-    const [recaps, news] = await Promise.all([
+    const [recaps, news, newsAvailability] = await Promise.all([
       loadTeamSeasonRecaps(teamId, startMs, endMs, null),
       loadTeamSeasonNews(
         teamId,
@@ -1905,6 +1928,7 @@ router.get(
         typeof endNewsDate === "string" ? endNewsDate : null,
         null,
       ),
+      loadTeamSeasonNewsAvailability(teamId),
     ]);
     res.json({
       data: recaps.map((r) => ({
@@ -1922,6 +1946,7 @@ router.get(
         gameDate: `${n.gameDate}T00:00:00.000Z`,
         description: n.description,
       })),
+      newsAvailability,
     });
   }),
 );
