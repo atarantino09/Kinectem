@@ -11,14 +11,18 @@ import {
   notifications,
   adminActivityLog,
   articles,
+  teamNewsLinks,
 } from "@workspace/db";
 import {
   and,
   asc,
   desc,
   eq,
+  gte,
   inArray,
   isNull,
+  isNotNull,
+  lte,
   sql,
 } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -87,6 +91,7 @@ import {
 } from "../lib/team-follow";
 import { notifyTeamArchived, notifyTeamUnarchived } from "../lib/notifications";
 import { normalizeWebsite } from "../lib/normalize-website";
+import { normalizeNewsGameDate } from "../lib/news-game-date";
 
 const router: IRouter = Router();
 
@@ -1743,6 +1748,8 @@ router.post(
 // team. openapi.yaml is locked, so the web client talks to these via
 // customFetch + narrow casts (Newsletter/AI precedent).
 const TEAM_SEASON_RECAP_MAX = 25;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Parse a `YYYY-MM-DD` (or any Date-parseable) string into epoch ms, or
 // null. `endOfDay` pushes a bare date to 23:59:59.999 so the window is
@@ -1804,6 +1811,54 @@ async function loadTeamSeasonRecaps(
     .limit(200);
 }
 
+// Resolve dated "In the News" links for the same team-scoped period as the
+// game recaps. Undated news cards are intentionally excluded: they describe
+// the team but cannot be safely associated with a game-period recap.
+async function loadTeamSeasonNews(
+  teamId: string,
+  startDate: string | null,
+  endDate: string | null,
+  newsIds: string[] | null,
+): Promise<
+  Array<{
+    id: string;
+    title: string;
+    sourceName: string | null;
+    gameDate: string;
+    description: string | null;
+  }>
+> {
+  const conds = [
+    eq(teamNewsLinks.teamId, teamId),
+    isNotNull(teamNewsLinks.gameDate),
+  ];
+  if (startDate) conds.push(gte(teamNewsLinks.gameDate, startDate));
+  if (endDate) conds.push(lte(teamNewsLinks.gameDate, endDate));
+  if (newsIds != null) {
+    if (newsIds.length === 0) return [];
+    conds.push(inArray(teamNewsLinks.id, newsIds));
+  }
+  const rows = await db
+    .select({
+      id: teamNewsLinks.id,
+      title: teamNewsLinks.title,
+      sourceName: teamNewsLinks.sourceName,
+      gameDate: teamNewsLinks.gameDate,
+      description: teamNewsLinks.description,
+    })
+    .from(teamNewsLinks)
+    .where(and(...conds))
+    .orderBy(
+      asc(teamNewsLinks.gameDate),
+      asc(teamNewsLinks.createdAt),
+      asc(teamNewsLinks.id),
+    )
+    .limit(TEAM_SEASON_RECAP_MAX);
+  // Drizzle cannot infer the `IS NOT NULL` condition above into the select
+  // type, although the database guarantees it for every returned row.
+  return rows.map((row) => ({ ...row, gameDate: row.gameDate! }));
+}
+
 const teamSeasonRecapLimiter = rateLimit({
   name: "team-season-recap",
   windowMs: 60_000,
@@ -1818,7 +1873,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const teamId = req.params.teamId;
+    const teamId =
+      typeof req.params.teamId === "string" ? req.params.teamId : req.params.teamId?.[0];
+    if (!teamId) return notFound(res);
     const [team] = await db
       .select()
       .from(teams)
@@ -1832,9 +1889,23 @@ router.get(
         "You don't have permission to author recaps for this team.",
       );
     }
-    const startMs = parseSeasonDateParam(req.query.start);
-    const endMs = parseSeasonDateParam(req.query.end, true);
-    const recaps = await loadTeamSeasonRecaps(teamId, startMs, endMs, null);
+    const startQuery =
+      typeof req.query.start === "string" ? req.query.start : undefined;
+    const endQuery =
+      typeof req.query.end === "string" ? req.query.end : undefined;
+    const startMs = parseSeasonDateParam(startQuery);
+    const endMs = parseSeasonDateParam(endQuery, true);
+    const startNewsDate = normalizeNewsGameDate(startQuery);
+    const endNewsDate = normalizeNewsGameDate(endQuery);
+    const [recaps, news] = await Promise.all([
+      loadTeamSeasonRecaps(teamId, startMs, endMs, null),
+      loadTeamSeasonNews(
+        teamId,
+        typeof startNewsDate === "string" ? startNewsDate : null,
+        typeof endNewsDate === "string" ? endNewsDate : null,
+        null,
+      ),
+    ]);
     res.json({
       data: recaps.map((r) => ({
         id: r.id,
@@ -1843,6 +1914,13 @@ router.get(
         opponentName: r.opponentName,
         teamScore: r.teamScore,
         opponentScore: r.opponentScore,
+      })),
+      news: news.map((n) => ({
+        id: n.id,
+        title: n.title,
+        sourceName: n.sourceName,
+        gameDate: `${n.gameDate}T00:00:00.000Z`,
+        description: n.description,
       })),
     });
   }),
@@ -1854,7 +1932,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const teamId = req.params.teamId;
+    const teamId =
+      typeof req.params.teamId === "string" ? req.params.teamId : req.params.teamId?.[0];
+    if (!teamId) return notFound(res);
     const [team] = await db
       .select()
       .from(teams)
@@ -1881,6 +1961,16 @@ router.post(
     const body = req.body ?? {};
     const startMs = parseSeasonDateParam(body.startDate);
     const endMs = parseSeasonDateParam(body.endDate, true);
+    const startNewsDate = normalizeNewsGameDate(body.startDate);
+    const endNewsDate = normalizeNewsGameDate(body.endDate);
+    if (startNewsDate === "invalid" || endNewsDate === "invalid") {
+      return apiError(
+        res,
+        400,
+        "startDate and endDate must be valid dates (YYYY-MM-DD).",
+        { code: "VALIDATION_FAILED" },
+      );
+    }
     if (startMs != null && endMs != null && startMs > endMs) {
       return apiError(res, 400, "Start date must be before end date.", {
         code: "VALIDATION_FAILED",
@@ -1900,19 +1990,62 @@ router.post(
           ),
         ),
       );
-      if (recapIds.length === 0) {
-        return apiError(res, 400, "Select at least one recap to include.", {
+    }
+
+    let newsIds: string[] | null = null;
+    if (body.newsIds != null) {
+      if (!Array.isArray(body.newsIds)) {
+        return apiError(res, 400, "newsIds must be a list.", {
           code: "VALIDATION_FAILED",
         });
+      }
+      if (
+        body.newsIds.some(
+          (id: unknown) =>
+            typeof id !== "string" ||
+            !UUID_PATTERN.test(id.trim()),
+        )
+      ) {
+        return apiError(
+          res,
+          400,
+          "newsIds must contain valid news story IDs.",
+          { code: "VALIDATION_FAILED" },
+        );
+      }
+      newsIds = Array.from(
+        new Set(body.newsIds.map((id: string) => id.trim())),
+      );
+      if (newsIds.length > TEAM_SEASON_RECAP_MAX) {
+        return apiError(
+          res,
+          400,
+          `Too many news stories selected (${newsIds.length}). Please narrow it down to ${TEAM_SEASON_RECAP_MAX} or fewer.`,
+          { code: "SEASON_RECAP_NEWS_TOO_MANY" },
+        );
       }
     }
 
     const recaps = await loadTeamSeasonRecaps(teamId, startMs, endMs, recapIds);
-    if (recaps.length === 0) {
+    const news = await loadTeamSeasonNews(
+      teamId,
+      startNewsDate,
+      endNewsDate,
+      newsIds,
+    );
+    if (newsIds != null && news.length !== newsIds.length) {
       return apiError(
         res,
         400,
-        "No published recaps match your selection. Pick a wider date range or different recaps.",
+        "One or more selected news stories is not part of this team's date range.",
+        { code: "SEASON_RECAP_NEWS_INVALID" },
+      );
+    }
+    if (recaps.length === 0 && news.length === 0) {
+      return apiError(
+        res,
+        400,
+        "No published recaps or dated news stories match your selection. Pick a wider date range or different sources.",
         { code: "SEASON_RECAP_EMPTY" },
       );
     }
@@ -1935,6 +2068,12 @@ router.post(
       opponentScore: r.opponentScore,
       summary: r.summary,
     }));
+    const newsInputs = news.map((n) => ({
+      title: n.title,
+      sourceName: n.sourceName,
+      gameDate: n.gameDate,
+      description: n.description,
+    }));
 
     try {
       const text = await generateSeasonRecapText({
@@ -1948,6 +2087,7 @@ router.post(
             ? body.endDate.trim()
             : null,
         recaps: recapInputs,
+        news: newsInputs,
       });
       if (!text) {
         return apiError(
@@ -1957,7 +2097,11 @@ router.post(
           { code: "AI_EMPTY" },
         );
       }
-      res.json({ text, recapCount: recaps.length });
+      res.json({
+        text,
+        recapCount: recaps.length,
+        newsCount: news.length,
+      });
     } catch (err) {
       if (err instanceof AiNotConfiguredError) {
         return apiError(res, 503, err.message, { code: "AI_NOT_CONFIGURED" });

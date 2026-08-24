@@ -24,4 +24,4 @@ refresh before judging errors.
 ## Game-date chronology
 - A news story can keep a nullable, date-only game date separate from its Kinectem-created timestamp. The feed remains ordered by the Kinectem timestamp; dated cards explicitly show both the posting date and the game-played date.
 **Why:** local newspapers are often added after the game, so substituting or sorting by the game date makes new activity appear to have happened earlier and obscures when it reached Kinectem.
-**How to apply:** validate a strict real `YYYY-MM-DD` value at the server boundary, preserve it as a date-only DB value, serialize it as UTC midnight for date-safe display, and only show the game-played label when present for legacy/non-game links.
+**How to apply:** validate a strict real `YYYY-MM-DD` value at the server boundary, preserve it as a date-only DB value, serialize it as UTC midnight for date-safe display, and only show the game-played label when present for legacy/non-game links. When filtering a database `date` column, compare the normalized calendar string directly—never round-trip it through local time or UTC timestamps, which can shift a range boundary by a day.

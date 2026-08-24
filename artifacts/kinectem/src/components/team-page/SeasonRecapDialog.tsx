@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Loader2, Trophy, FileText } from "lucide-react";
+import { Sparkles, Loader2, Trophy, FileText, Newspaper } from "lucide-react";
 
 interface SeasonRecap {
   id: string;
@@ -30,6 +30,14 @@ interface SeasonRecap {
   opponentName: string | null;
   teamScore: number | null;
   opponentScore: number | null;
+}
+
+interface SeasonNewsReference {
+  id: string;
+  title: string;
+  gameDate: string | null;
+  sourceName: string | null;
+  description: string | null;
 }
 
 // Default the window to the trailing ~4 months so a typical season is
@@ -78,6 +86,8 @@ export function SeasonRecapDialog({
   const [end, setEnd] = useState(initial.end);
   const [recaps, setRecaps] = useState<SeasonRecap[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [news, setNews] = useState<SeasonNewsReference[]>([]);
+  const [selectedNews, setSelectedNews] = useState<Set<string>>(new Set());
   const [searched, setSearched] = useState(false);
   const [loadingRecaps, setLoadingRecaps] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -90,6 +100,8 @@ export function SeasonRecapDialog({
     setEnd(r.end);
     setRecaps([]);
     setSelected(new Set());
+    setNews([]);
+    setSelectedNews(new Set());
     setSearched(false);
     setLoadingRecaps(false);
     setGenerating(false);
@@ -108,12 +120,18 @@ export function SeasonRecapDialog({
       const params = new URLSearchParams();
       if (start) params.set("start", start);
       if (end) params.set("end", end);
-      const res = await customFetch<{ data: SeasonRecap[] }>(
+      const res = await customFetch<{
+        data: SeasonRecap[];
+        news?: SeasonNewsReference[];
+      }>(
         `/api/v1/teams/${teamId}/season-recap/recaps?${params.toString()}`,
       );
       setRecaps(res.data);
       // Default to "keep all" — coach can deselect a subset.
       setSelected(new Set(res.data.map((r) => r.id)));
+      const newsReferences = res.news ?? [];
+      setNews(newsReferences);
+      setSelectedNews(new Set(newsReferences.map((n) => n.id)));
       setSearched(true);
     } catch (err) {
       toast({
@@ -141,17 +159,37 @@ export function SeasonRecapDialog({
     else setSelected(new Set(recaps.map((r) => r.id)));
   };
 
+  const toggleNews = (id: string) => {
+    setSelectedNews((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allNewsSelected =
+    news.length > 0 && selectedNews.size === news.length;
+  const toggleAllNews = () => {
+    if (allNewsSelected) setSelectedNews(new Set());
+    else setSelectedNews(new Set(news.map((n) => n.id)));
+  };
+
   const generate = async () => {
-    if (selected.size === 0) {
+    if (selected.size === 0 && selectedNews.size === 0) {
       toast({
-        title: "Select at least one recap",
-        description: "Pick the game recaps you want woven into the recap.",
+        title: "Select at least one source",
+        description: "Pick a game recap or news story to include.",
       });
       return;
     }
     setGenerating(true);
     try {
-      const res = await customFetch<{ text: string; recapCount: number }>(
+      const res = await customFetch<{
+        text: string;
+        recapCount: number;
+        newsCount?: number;
+      }>(
         `/api/v1/teams/${teamId}/season-recap/generate`,
         {
           method: "POST",
@@ -159,6 +197,7 @@ export function SeasonRecapDialog({
             startDate: start || undefined,
             endDate: end || undefined,
             recapIds: Array.from(selected),
+            newsIds: Array.from(selectedNews),
           }),
         },
       );
@@ -236,9 +275,9 @@ export function SeasonRecapDialog({
             recap
           </DialogTitle>
           <DialogDescription>
-            Generate one AI draft from {teamName}'s published game recaps over a
-            date range — perfect for a tournament run or a whole season — then
-            post it as a team recap.
+            Generate one AI draft from {teamName}'s published game recaps and
+            related news coverage over a date range — perfect for a tournament
+            run or a whole season — then post it as a team recap.
           </DialogDescription>
         </DialogHeader>
 
@@ -293,21 +332,17 @@ export function SeasonRecapDialog({
             ) : (
               <FileText className="w-4 h-4 mr-1.5" />
             )}
-            Find recaps
+            Find sources
           </Button>
 
           {searched && (
-            <div className="space-y-2">
-              {recaps.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No published recaps in this date range. Try a wider range.
-                </p>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                      {selected.size} of {recaps.length} selected
-                    </span>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Game recaps
+                  </span>
+                  {recaps.length > 0 && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -318,63 +353,146 @@ export function SeasonRecapDialog({
                     >
                       {allSelected ? "Clear all" : "Select all"}
                     </Button>
-                  </div>
-                  <div className="max-h-52 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-                    {recaps.map((r) => {
-                      const score =
-                        r.teamScore != null && r.opponentScore != null
-                          ? `${r.teamScore}-${r.opponentScore}`
-                          : null;
-                      const meta = [
-                        formatGameDate(r.gameDate),
-                        r.opponentName ? `vs ${r.opponentName}` : null,
-                        score,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ");
-                      return (
-                        <label
-                          key={r.id}
-                          className="flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50"
-                          data-testid={`row-season-recap-${r.id}`}
-                        >
-                          <Checkbox
-                            checked={selected.has(r.id)}
-                            onCheckedChange={() => toggle(r.id)}
-                            className="mt-0.5"
-                            data-testid={`checkbox-season-recap-${r.id}`}
-                          />
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold leading-tight truncate">
-                              {r.title}
-                            </p>
-                            {meta && (
-                              <p className="text-xs text-muted-foreground truncate">
-                                {meta}
+                  )}
+                </div>
+                {recaps.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No published game recaps in this date range.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {selected.size} of {recaps.length} selected
+                    </p>
+                    <div className="max-h-52 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                      {recaps.map((r) => {
+                        const score =
+                          r.teamScore != null && r.opponentScore != null
+                            ? `${r.teamScore}-${r.opponentScore}`
+                            : null;
+                        const meta = [
+                          formatGameDate(r.gameDate),
+                          r.opponentName ? `vs ${r.opponentName}` : null,
+                          score,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+                        return (
+                          <label
+                            key={r.id}
+                            className="flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50"
+                            data-testid={`row-season-recap-${r.id}`}
+                          >
+                            <Checkbox
+                              checked={selected.has(r.id)}
+                              onCheckedChange={() => toggle(r.id)}
+                              className="mt-0.5"
+                              data-testid={`checkbox-season-recap-${r.id}`}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold leading-tight truncate">
+                                {r.title}
                               </p>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="brand"
-                    onClick={generate}
-                    disabled={generating || selected.size === 0}
-                    className="w-full font-bold"
-                    data-testid="button-season-recap-generate"
-                  >
-                    {generating ? (
-                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4 mr-1.5" />
-                    )}
-                    {draft ? "Regenerate draft" : "Generate recap"}
-                  </Button>
-                </>
-              )}
+                              {meta && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {meta}
+                                </p>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    <Newspaper className="h-3.5 w-3.5" />
+                    Related news coverage
+                  </span>
+                  {news.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={toggleAllNews}
+                      className="h-7 text-xs font-bold"
+                      data-testid="button-season-recap-toggle-all-news"
+                    >
+                      {allNewsSelected ? "Clear all" : "Select all"}
+                    </Button>
+                  )}
+                </div>
+                {news.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No dated news coverage matches this period.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedNews.size} of {news.length} selected
+                    </p>
+                    <div className="max-h-52 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                      {news.map((n) => {
+                        const meta = [formatGameDate(n.gameDate), n.sourceName]
+                          .filter(Boolean)
+                          .join(" · ");
+                        return (
+                          <label
+                            key={n.id}
+                            className="flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50"
+                            data-testid={`row-season-news-${n.id}`}
+                          >
+                            <Checkbox
+                              checked={selectedNews.has(n.id)}
+                              onCheckedChange={() => toggleNews(n.id)}
+                              className="mt-0.5"
+                              data-testid={`checkbox-season-news-${n.id}`}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold leading-tight truncate">
+                                {n.title}
+                              </p>
+                              {meta && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {meta}
+                                </p>
+                              )}
+                              {n.description && (
+                                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                  {n.description}
+                                </p>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <Button
+                type="button"
+                variant="brand"
+                onClick={generate}
+                disabled={
+                  generating ||
+                  (selected.size === 0 && selectedNews.size === 0)
+                }
+                className="w-full font-bold"
+                data-testid="button-season-recap-generate"
+              >
+                {generating ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-1.5" />
+                )}
+                {draft ? "Regenerate draft" : "Generate recap"}
+              </Button>
             </div>
           )}
 
