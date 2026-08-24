@@ -92,6 +92,7 @@ import {
 import { notifyTeamArchived, notifyTeamUnarchived } from "../lib/notifications";
 import { normalizeWebsite } from "../lib/normalize-website";
 import { normalizeNewsGameDate } from "../lib/news-game-date";
+import { fetchNewsArticleContext } from "../lib/news-article-content";
 
 const router: IRouter = Router();
 
@@ -1748,6 +1749,7 @@ router.post(
 // team. openapi.yaml is locked, so the web client talks to these via
 // customFetch + narrow casts (Newsletter/AI precedent).
 const TEAM_SEASON_RECAP_MAX = 25;
+const TEAM_SEASON_RECAP_NEWS_CONTEXT_MAX = 5;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -1826,6 +1828,7 @@ async function loadTeamSeasonNews(
     sourceName: string | null;
     gameDate: string;
     description: string | null;
+      url: string;
   }>
 > {
   const conds = [
@@ -1845,6 +1848,7 @@ async function loadTeamSeasonNews(
       sourceName: teamNewsLinks.sourceName,
       gameDate: teamNewsLinks.gameDate,
       description: teamNewsLinks.description,
+      url: teamNewsLinks.url,
     })
     .from(teamNewsLinks)
     .where(and(...conds))
@@ -2066,6 +2070,14 @@ router.post(
         { code: "SEASON_RECAP_NEWS_INVALID" },
       );
     }
+    if (news.length > TEAM_SEASON_RECAP_NEWS_CONTEXT_MAX) {
+      return apiError(
+        res,
+        400,
+        `Select ${TEAM_SEASON_RECAP_NEWS_CONTEXT_MAX} or fewer news stories so their article context can be analyzed.`,
+        { code: "SEASON_RECAP_NEWS_CONTEXT_TOO_MANY" },
+      );
+    }
     if (recaps.length === 0 && news.length === 0) {
       return apiError(
         res,
@@ -2093,12 +2105,22 @@ router.post(
       opponentScore: r.opponentScore,
       summary: r.summary,
     }));
-    const newsInputs = news.map((n) => ({
-      title: n.title,
-      sourceName: n.sourceName,
-      gameDate: n.gameDate,
-      description: n.description,
-    }));
+    const newsInputs = await Promise.all(
+      news.map(async (n) => {
+        const articleContext = await fetchNewsArticleContext(n.url);
+        return {
+          id: n.id,
+          title: n.title,
+          sourceName: n.sourceName,
+          url: n.url,
+          gameDate: n.gameDate,
+          description: n.description,
+          articleText:
+            articleContext.status === "analyzed" ? articleContext.text : null,
+          articleContextStatus: articleContext.status,
+        };
+      }),
+    );
 
     try {
       const text = await generateSeasonRecapText({
@@ -2126,6 +2148,11 @@ router.post(
         text,
         recapCount: recaps.length,
         newsCount: news.length,
+        newsContext: newsInputs.map((n) => ({
+          id: n.id,
+          title: n.title,
+          status: n.articleContextStatus,
+        })),
       });
     } catch (err) {
       if (err instanceof AiNotConfiguredError) {

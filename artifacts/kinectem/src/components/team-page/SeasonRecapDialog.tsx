@@ -48,6 +48,14 @@ interface SeasonNewsAvailability {
   latestGameDate: string | null;
 }
 
+interface NewsContextResult {
+  id: string;
+  title: string;
+  status: "analyzed" | "metadata_fallback";
+}
+
+const MAX_NEWS_CONTEXT_SOURCES = 5;
+
 // Default the window to the trailing ~4 months so a typical season is
 // covered out of the box; coaches narrow it for a single tournament.
 function defaultRange(): { start: string; end: string } {
@@ -91,6 +99,7 @@ export function SeasonRecapDialog({
   const [newsAvailability, setNewsAvailability] =
     useState<SeasonNewsAvailability | null>(null);
   const [selectedNews, setSelectedNews] = useState<Set<string>>(new Set());
+  const [newsContext, setNewsContext] = useState<NewsContextResult[]>([]);
   const [searched, setSearched] = useState(false);
   const [loadingRecaps, setLoadingRecaps] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -106,6 +115,7 @@ export function SeasonRecapDialog({
     setNews([]);
     setNewsAvailability(null);
     setSelectedNews(new Set());
+    setNewsContext([]);
     setSearched(false);
     setLoadingRecaps(false);
     setGenerating(false);
@@ -189,12 +199,21 @@ export function SeasonRecapDialog({
       });
       return;
     }
+    if (selectedNews.size > MAX_NEWS_CONTEXT_SOURCES) {
+      toast({
+        title: `Choose ${MAX_NEWS_CONTEXT_SOURCES} or fewer news stories`,
+        description:
+          "Kinectem reads selected article context only when generating your recap.",
+      });
+      return;
+    }
     setGenerating(true);
     try {
       const res = await customFetch<{
         text: string;
         recapCount: number;
         newsCount?: number;
+        newsContext?: NewsContextResult[];
       }>(
         `/api/v1/teams/${teamId}/season-recap/generate`,
         {
@@ -208,6 +227,7 @@ export function SeasonRecapDialog({
         },
       );
       setDraft(res.text);
+      setNewsContext(res.newsContext ?? []);
       if (!title.trim()) {
         setTitle(`${teamName} Season Recap`);
       }
@@ -457,6 +477,11 @@ export function SeasonRecapDialog({
                     <p className="text-xs text-muted-foreground">
                       {selectedNews.size} of {news.length} selected
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      Up to {MAX_NEWS_CONTEXT_SOURCES} selected articles are
+                      read when you generate. If a site blocks access,
+                      Kinectem uses its saved headline and description instead.
+                    </p>
                     <div className="max-h-52 overflow-y-auto rounded-lg border border-border divide-y divide-border">
                       {news.map((n) => {
                         const meta = [formatGameDate(n.gameDate), n.sourceName]
@@ -520,6 +545,35 @@ export function SeasonRecapDialog({
 
           {draft && (
             <div className="space-y-4 pt-2 border-t border-border">
+              {newsContext.length > 0 && (
+                <p
+                  className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground"
+                  data-testid="text-season-recap-news-context-status"
+                >
+                  {(() => {
+                    const analyzed = newsContext.filter(
+                      (item) => item.status === "analyzed",
+                    ).length;
+                    const fallback = newsContext.length - analyzed;
+                    const parts: string[] = [];
+                    if (analyzed) {
+                      parts.push(
+                        `${analyzed} ${
+                          analyzed === 1 ? "article" : "articles"
+                        } analyzed`,
+                      );
+                    }
+                    if (fallback) {
+                      parts.push(
+                        `${fallback} ${
+                          fallback === 1 ? "article used" : "articles used"
+                        } saved metadata`,
+                      );
+                    }
+                    return `News context: ${parts.join("; ")}.`;
+                  })()}
+                </p>
+              )}
               <div>
                 <Label
                   htmlFor="seasonRecapTitle"

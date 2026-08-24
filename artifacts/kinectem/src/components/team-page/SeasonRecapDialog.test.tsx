@@ -48,6 +48,7 @@ describe("SeasonRecapDialog news coverage", () => {
         text: "The Wolves closed their run with confidence.",
         recapCount: 0,
         newsCount: 1,
+        newsContext: [{ id: "news-1", title: "Wolves advance", status: "analyzed" }],
       });
 
     renderWithProviders(
@@ -82,6 +83,40 @@ describe("SeasonRecapDialog news coverage", () => {
     expect(screen.getByTestId("textarea-season-recap-body")).toHaveValue(
       "The Wolves closed their run with confidence.",
     );
+    expect(
+      screen.getByTestId("text-season-recap-news-context-status"),
+    ).toHaveTextContent("1 article analyzed");
+  });
+
+  it("prevents more than five news articles being sent for full-text analysis", async () => {
+    const user = userEvent.setup();
+    customFetchMock.mockResolvedValueOnce({
+      data: [],
+      news: Array.from({ length: 6 }, (_, index) => ({
+        id: `news-${index + 1}`,
+        title: `Wolves coverage ${index + 1}`,
+        sourceName: "Local Paper",
+        gameDate: "2026-08-16T00:00:00.000Z",
+        description: null,
+      })),
+    });
+
+    renderWithProviders(
+      <SeasonRecapDialog
+        teamId="team-1"
+        teamName="Westfield Wolves"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByTestId("button-season-recap-find-recaps"));
+    await user.click(screen.getByTestId("button-season-recap-generate"));
+
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Choose 5 or fewer news stories" }),
+    );
+    expect(customFetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("allows related news coverage to be excluded before generation", async () => {

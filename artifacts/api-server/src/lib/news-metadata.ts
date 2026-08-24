@@ -7,7 +7,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
 const FETCH_TIMEOUT_MS = 10_000;
-const MAX_HTML_BYTES = 1_000_000; // headlines/meta live in <head>; 1MB is plenty
+export const MAX_HTML_BYTES = 1_000_000; // head + bounded article content
 
 export class NewsFetchError extends Error {
   constructor(
@@ -117,7 +117,16 @@ export interface NewsMetadata {
 
 const MAX_REDIRECTS = 5;
 
-export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
+function discardResponseBody(response: Response): void {
+  // When a publisher returns a paywall/error page or a non-HTML resource,
+  // release the connection before turning it into a safe metadata fallback.
+  void response.body?.cancel().catch(() => undefined);
+}
+
+export async function fetchPublicNewsHtml(rawUrl: string): Promise<{
+  html: string;
+  finalUrl: string;
+}> {
   // Follow redirects MANUALLY so every hop's hostname is re-validated —
   // an allowed public URL must not be able to bounce the server-side
   // fetch into a private/loopback/metadata address.
@@ -147,7 +156,7 @@ export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
     }
     if (r.status >= 300 && r.status < 400) {
       const loc = r.headers.get("location");
-      void r.body?.cancel().catch(() => undefined);
+      discardResponseBody(r);
       if (!loc || hop === MAX_REDIRECTS) {
         throw new NewsFetchError("We couldn't reach that website.", "fetch_failed");
       }
@@ -162,6 +171,7 @@ export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
     throw new NewsFetchError("We couldn't reach that website.", "fetch_failed");
   }
   if (!resp.ok) {
+    discardResponseBody(resp);
     throw new NewsFetchError(
       "That page couldn't be loaded (it may be behind a paywall or removed).",
       "fetch_failed",
@@ -169,6 +179,7 @@ export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
   }
   const ctype = resp.headers.get("content-type") ?? "";
   if (!/text\/html|application\/xhtml/i.test(ctype)) {
+    discardResponseBody(resp);
     throw new NewsFetchError("That link isn't a web article.", "not_html");
   }
   // Stream-read with a byte cap so a huge page can't balloon memory.
@@ -177,14 +188,21 @@ export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
   if (reader) {
     const decoder = new TextDecoder("utf-8", { fatal: false });
     let bytes = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      html += decoder.decode(value, { stream: true });
-      if (bytes >= MAX_HTML_BYTES) {
+    let completed = false;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          completed = true;
+          break;
+        }
+        bytes += value.byteLength;
+        html += decoder.decode(value, { stream: true });
+        if (bytes >= MAX_HTML_BYTES) break;
+      }
+    } finally {
+      if (!completed) {
         void reader.cancel().catch(() => undefined);
-        break;
       }
     }
   } else {
@@ -192,6 +210,11 @@ export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
   }
 
   const finalUrl = resp.url || current.toString();
+  return { html, finalUrl };
+}
+
+export async function fetchNewsMetadata(rawUrl: string): Promise<NewsMetadata> {
+  const { html, finalUrl } = await fetchPublicNewsHtml(rawUrl);
   const titleTag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
   const title =
     metaContent(html, "og:title") ??

@@ -114,6 +114,28 @@ describe("news post interactions (task #867)", () => {
     ).toBe(404);
   });
 
+  it("caps Combined Recap full-text news analysis at five selected articles", async () => {
+    const { team } = await getOrgAndTeam();
+    const coach = await loginAs("coach@kinectem.demo");
+    const stories = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        seedNewsLink(team.id, coach.user.id, "2025-09-05"),
+      ),
+    );
+
+    const res = await coach.agent
+      .post(`/api/v1/teams/${team.id}/season-recap/generate`)
+      .send({
+        startDate: "2025-09-01",
+        endDate: "2025-09-30",
+        recapIds: [],
+        newsIds: stories.map((story) => story.id),
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("SEASON_RECAP_NEWS_CONTEXT_TOO_MANY");
+  });
+
   it("GET /posts/news-:id returns the news post with stats and newsLink", async () => {
     const { team } = await getOrgAndTeam();
     const coach = await loginAs("coach@kinectem.demo");
