@@ -93,6 +93,7 @@ export function NewsGameDateDialog({
               value={value}
               onChange={(event) => setValue(event.target.value)}
               disabled={saving}
+              className={value ? "text-foreground" : "text-muted-foreground"}
               data-testid={`input-news-game-date-${newsId}`}
             />
             <p className="text-xs text-muted-foreground">

@@ -105,6 +105,9 @@ describe("TeamPostsSection action hierarchy", () => {
 
     await user.click(screen.getByTestId("btn-open-post-options"));
     await user.click(screen.getByTestId("btn-add-news"));
+    expect(screen.getByTestId("input-news-game-date")).toHaveClass(
+      "text-muted-foreground",
+    );
     await user.type(
       screen.getByTestId("input-news-url"),
       "https://localpaper.example/sports/wolves-win",
@@ -112,6 +115,9 @@ describe("TeamPostsSection action hierarchy", () => {
     fireEvent.change(screen.getByTestId("input-news-game-date"), {
       target: { value: "2026-08-16" },
     });
+    expect(screen.getByTestId("input-news-game-date")).toHaveClass(
+      "text-foreground",
+    );
 
     await user.click(screen.getByTestId("btn-submit-news"));
 

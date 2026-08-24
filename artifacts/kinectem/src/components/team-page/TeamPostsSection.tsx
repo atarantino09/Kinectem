@@ -367,6 +367,11 @@ export function TeamPostsSection({
                   value={newsGameDate}
                   onChange={(e) => setNewsGameDate(e.target.value)}
                   disabled={addingNews}
+                  className={
+                    newsGameDate
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
                   data-testid="input-news-game-date"
                 />
                 <p className="text-xs text-muted-foreground">

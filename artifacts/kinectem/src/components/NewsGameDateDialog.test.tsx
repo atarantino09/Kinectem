@@ -43,7 +43,9 @@ describe("NewsGameDateDialog", () => {
     );
 
     const input = screen.getByTestId("input-news-game-date-news-1");
+    expect(input).toHaveClass("text-muted-foreground");
     fireEvent.change(input, { target: { value: "2025-09-05" } });
+    expect(input).toHaveClass("text-foreground");
     await user.click(screen.getByTestId("button-save-news-game-date-news-1"));
 
     await waitFor(() =>
