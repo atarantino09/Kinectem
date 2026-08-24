@@ -35,7 +35,8 @@ import {
   isUnsupportedHeicImage,
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
-import { Upload } from "lucide-react";
+import { Link } from "wouter";
+import { Palette, Upload } from "lucide-react";
 
 // Admin screen listing every ownerless competition with its secret claim
 // link (same concept as the org claim-links tab). The operator copies each
@@ -693,15 +694,26 @@ export default function AdminCompetitionClaimLinks() {
                   </button>
                 </TableCell>
                 <TableCell className="font-medium">
-                  <button
-                    type="button"
-                    onClick={() => openBranding(r)}
-                    className="text-left hover:underline underline-offset-2"
-                    title="Set branding colors"
-                    data-testid={`btn-competition-branding-${r.id}`}
-                  >
-                    {r.name}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/competitions/c/${encodeURIComponent(r.slug)}`}
+                      className="text-left hover:underline underline-offset-2"
+                      title={`Open ${r.name}`}
+                      data-testid={`link-competition-page-${r.id}`}
+                    >
+                      {r.name}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => openBranding(r)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="Set branding colors"
+                      aria-label={`Set branding colors for ${r.name}`}
+                      data-testid={`btn-competition-branding-${r.id}`}
+                    >
+                      <Palette className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <span className="ml-2 text-xs text-muted-foreground capitalize">
                     {r.type}
                   </span>
