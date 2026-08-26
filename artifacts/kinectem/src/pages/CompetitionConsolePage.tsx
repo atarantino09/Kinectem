@@ -646,7 +646,6 @@ function BrandingPanel({
   );
   const [tertiaryColor, setTertiaryColor] = useState(detail.tertiaryColor ?? "");
   const [logoUrl, setLogoUrl] = useState(detail.logoUrl ?? "");
-  const [bannerUrl, setBannerUrl] = useState(detail.bannerUrl ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(detail.websiteUrl ?? "");
 
   useEffect(() => {
@@ -654,14 +653,12 @@ function BrandingPanel({
     setSecondaryColor(detail.secondaryColor ?? "");
     setTertiaryColor(detail.tertiaryColor ?? "");
     setLogoUrl(detail.logoUrl ?? "");
-    setBannerUrl(detail.bannerUrl ?? "");
     setWebsiteUrl(detail.websiteUrl ?? "");
   }, [
     detail.brandColor,
     detail.secondaryColor,
     detail.tertiaryColor,
     detail.logoUrl,
-    detail.bannerUrl,
     detail.websiteUrl,
   ]);
 
@@ -675,7 +672,6 @@ function BrandingPanel({
           secondaryColor: secondaryColor.trim() || null,
           tertiaryColor: tertiaryColor.trim() || null,
           logoUrl: logoUrl.trim() || null,
-          bannerUrl: bannerUrl.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
         }),
       }),
@@ -737,13 +733,6 @@ function BrandingPanel({
             onChange={setLogoUrl}
             kind="logo"
             idPrefix="brand-logo"
-          />
-          <BrandImageField
-            label="Banner"
-            value={bannerUrl}
-            onChange={setBannerUrl}
-            kind="banner"
-            idPrefix="brand-banner"
           />
           <div className="space-y-1.5">
             <Label htmlFor="b-site" className="text-xs font-bold">

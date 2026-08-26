@@ -80,7 +80,6 @@ function CreateCompetitionCard({
   const [secondaryColor, setSecondaryColor] = useState("");
   const [tertiaryColor, setTertiaryColor] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
-  const [bannerUrl, setBannerUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   // Step 3 — schedule
   const [csv, setCsv] = useState("");
@@ -123,7 +122,6 @@ function CreateCompetitionCard({
         setSecondaryColor(hub.secondaryColor ?? "");
         setTertiaryColor(hub.tertiaryColor ?? "");
         setLogoUrl(hub.logoUrl ?? "");
-        setBannerUrl(hub.bannerUrl ?? "");
         setWebsiteUrl(hub.websiteUrl ?? "");
       }
       setStep(2);
@@ -147,7 +145,6 @@ function CreateCompetitionCard({
     secondaryColor.trim() ||
     tertiaryColor.trim() ||
     logoUrl.trim() ||
-    bannerUrl.trim() ||
     websiteUrl.trim()
   );
 
@@ -161,7 +158,6 @@ function CreateCompetitionCard({
           secondaryColor: secondaryColor.trim() || null,
           tertiaryColor: tertiaryColor.trim() || null,
           logoUrl: logoUrl.trim() || null,
-          bannerUrl: bannerUrl.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
         }),
       }),
@@ -477,13 +473,6 @@ function CreateCompetitionCard({
                 onChange={setTertiaryColor}
                 logoUrl={logoUrl}
                 idPrefix="wizard-brand-tertiary"
-              />
-              <BrandImageField
-                label="Banner"
-                value={bannerUrl}
-                onChange={setBannerUrl}
-                kind="banner"
-                idPrefix="wizard-banner"
               />
               <div className="space-y-1.5">
                 <Label htmlFor="w-site" className="text-xs font-bold">
