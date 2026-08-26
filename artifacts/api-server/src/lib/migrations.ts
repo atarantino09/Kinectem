@@ -2411,6 +2411,29 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS game_date date;
     `,
   },
+  {
+    // Task #929 — named lists platform operators create to group the
+    // ownerless orgs they set up (e.g. one list per league/tournament) on
+    // the Org Links admin screen. adminListId is set-null on delete so
+    // removing a list never touches the orgs in it.
+    name: "2026-08-26-task-929-org-admin-lists",
+    sql: `
+      CREATE TABLE IF NOT EXISTS org_admin_lists (
+        id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        name         text NOT NULL,
+        created_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at   timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS org_admin_lists_name_idx
+        ON org_admin_lists (lower(name));
+
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS admin_list_id uuid
+          REFERENCES org_admin_lists(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS organizations_admin_list_id_idx
+        ON organizations (admin_list_id);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

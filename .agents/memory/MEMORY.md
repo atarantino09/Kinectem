@@ -68,3 +68,4 @@
 - [Tour dropdown portal testing](tour-dropdown-portal-testing.md) — SpotlightTour + Radix menu content needs real-browser coverage; JSDOM reliably verifies controlled trigger state, not the portaled item.
 - [JSDOM file reads](jsdom-file-reads.md) — use FileReader for browser file-upload tests; JSDOM's File does not reliably implement File.text().
 - [Kinectem logo treatment](kinectem-logo-treatment.md) — use the supplied transparent lockups; preserve existing scale/layout and never add an opaque logo panel.
+- [lib/db project-reference build trap](lib-db-project-reference-build.md) — new schema exports invisible to api-server typecheck until `tsc --build lib/db` reruns; plus an any-typed req.body narrowing gotcha with drizzle eq().

@@ -23,7 +23,24 @@ import {
 } from "@/lib/shrinkImage";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import { PLANS, type PlanTier } from "@/lib/plans";
-import { X } from "lucide-react";
+import { X, Plus, Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Task #610 — Admin screen listing every ownerless org page with its secret
 // claim link. The operator copies each link to the corresponding org so a
@@ -42,9 +59,17 @@ type ClaimLinkRow = {
   // Non-null when the org was created through either admin setup flow
   // ("orgs I set up"); those rows render in their own section on top.
   quickSetupAt: string | null;
+  // Task #929 — which named list (if any) this org is filed under.
+  listId: string | null;
+  listName: string | null;
 };
 
 type ClaimLinksResponse = { data: ClaimLinkRow[] };
+
+// Task #929 — operator-created named lists grouping ownerless orgs (e.g. one
+// per league/tournament). An org belongs to at most one list.
+type OrgList = { id: string; name: string; orgCount: number; createdAt: string };
+type OrgListsResponse = { data: OrgList[] };
 
 type NameMatch = {
   id: string;
@@ -70,11 +95,11 @@ function claimUrl(token: string): string {
 }
 
 function rowsToCsv(rows: ClaimLinkRow[]): string {
-  const header = ["org_name", "city", "state", "claim_link", "org_id"];
+  const header = ["org_name", "city", "state", "claim_link", "org_id", "list"];
   const lines = [header.join(",")];
   for (const r of rows) {
     lines.push(
-      [r.name, r.city ?? "", r.state ?? "", claimUrl(r.token), r.id]
+      [r.name, r.city ?? "", r.state ?? "", claimUrl(r.token), r.id, r.listName ?? ""]
         .map(csvCell)
         .join(","),
     );
@@ -110,6 +135,84 @@ export default function AdminOrgClaimLinks() {
   } | null>(null);
   const [promoChecking, setPromoChecking] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
+  // Task #929 — which list the new org gets filed under (optional).
+  const [newOrgListId, setNewOrgListId] = useState<string | null>(null);
+
+  // Task #929 — list filter for the table below ("all" | "none" | a list id),
+  // plus lightweight list create/delete state.
+  const [listFilter, setListFilter] = useState<string>("all");
+  const [newListName, setNewListName] = useState("");
+  const [creatingList, setCreatingList] = useState(false);
+  const [listToDelete, setListToDelete] = useState<OrgList | null>(null);
+
+  const { data: listsData } = useQuery<OrgListsResponse>({
+    queryKey: ["admin", "org-lists"],
+    queryFn: () =>
+      customFetch<OrgListsResponse>(`/api/v1/admin/org-lists`, { method: "GET" }),
+  });
+  const lists = useMemo(() => listsData?.data ?? [], [listsData]);
+
+  const createList = async (name: string): Promise<OrgList | null> => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    setCreatingList(true);
+    try {
+      const resp = await customFetch<{ data: OrgList }>(`/api/v1/admin/org-lists`, {
+        method: "POST",
+        body: JSON.stringify({ name: trimmed }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] });
+      return resp.data;
+    } catch (err) {
+      toast({
+        title: "Couldn't create list",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setCreatingList(false);
+    }
+  };
+
+  const deleteList = async (list: OrgList) => {
+    try {
+      await customFetch(`/api/v1/admin/org-lists/${list.id}`, { method: "DELETE" });
+      if (listFilter === list.id) setListFilter("all");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+      ]);
+      toast({ title: `Deleted list "${list.name}"`, description: "Its orgs are unaffected." });
+    } catch (err) {
+      toast({
+        title: "Couldn't delete list",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setListToDelete(null);
+    }
+  };
+
+  const assignOrgList = async (orgId: string, listId: string | null) => {
+    try {
+      await customFetch(`/api/v1/admin/org-claim-links/${orgId}/list`, {
+        method: "PATCH",
+        body: JSON.stringify({ listId }),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
+      ]);
+    } catch (err) {
+      toast({
+        title: "Couldn't update list",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    }
+  };
 
   const applyPromoCode = async () => {
     const code = promoInput.trim();
@@ -214,6 +317,7 @@ export default function AdminOrgClaimLinks() {
             brandSecondaryColor: secondaryColor || undefined,
             tier: tier ?? undefined,
             promoCode: appliedPromo?.code || undefined,
+            listId: newOrgListId ?? undefined,
           }),
         },
       );
@@ -226,7 +330,11 @@ export default function AdminOrgClaimLinks() {
       setPromoInput("");
       setAppliedPromo(null);
       setPromoError(null);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
+      setNewOrgListId(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
+      ]);
       try {
         await navigator.clipboard.writeText(claimUrl(resp.data.token));
         toast({
@@ -248,11 +356,12 @@ export default function AdminOrgClaimLinks() {
   };
 
   const { data, isLoading } = useQuery<ClaimLinksResponse>({
-    queryKey: ["admin", "org-claim-links"],
+    queryKey: ["admin", "org-claim-links", listFilter],
     queryFn: () =>
-      customFetch<ClaimLinksResponse>(`/api/v1/admin/org-claim-links`, {
-        method: "GET",
-      }),
+      customFetch<ClaimLinksResponse>(
+        `/api/v1/admin/org-claim-links${listFilter !== "all" ? `?listId=${encodeURIComponent(listFilter)}` : ""}`,
+        { method: "GET" },
+      ),
   });
 
   const rows = useMemo(() => data?.data ?? [], [data]);
@@ -584,6 +693,30 @@ export default function AdminOrgClaimLinks() {
           </div>
         </div>
 
+        {/* Task #929 — optional list to file this org under right away. */}
+        <div className="mt-3">
+          <Label htmlFor="add-org-list">List (optional)</Label>
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Group this org under a named list (e.g. a league or tournament).
+          </p>
+          <Select
+            value={newOrgListId ?? "__none__"}
+            onValueChange={(v) => setNewOrgListId(v === "__none__" ? null : v)}
+          >
+            <SelectTrigger className="max-w-xs" data-testid="select-add-org-list">
+              <SelectValue placeholder="No list" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No list</SelectItem>
+              {lists.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {debounced.length >= 2 && (
           <div className="mt-3" data-testid="add-org-matches">
             {exactMatch ? (
@@ -632,6 +765,94 @@ export default function AdminOrgClaimLinks() {
         )}
       </div>
 
+      {/* Task #929 — named lists group ownerless orgs (e.g. per league). */}
+      <div className="rounded-lg border bg-card p-4 mb-5">
+        <h2 className="text-sm font-bold mb-1">Lists</h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Group the orgs you set up into named lists. Deleting a list never
+          deletes or affects its orgs.
+        </p>
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <Select value={listFilter} onValueChange={setListFilter}>
+            <SelectTrigger className="w-56" data-testid="select-list-filter">
+              <SelectValue placeholder="All orgs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All orgs</SelectItem>
+              <SelectItem value="none">Unlisted</SelectItem>
+              {lists.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name} ({l.orgCount})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {listFilter !== "all" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setListFilter("all")}
+              data-testid="btn-clear-list-filter"
+            >
+              Clear filter
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <Input
+            placeholder="New list name (e.g. Fall 2026 Soccer League)"
+            value={newListName}
+            onChange={(e) => setNewListName(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter" && newListName.trim() && !creatingList) {
+                const created = await createList(newListName);
+                if (created) setNewListName("");
+              }
+            }}
+            className="max-w-sm"
+            data-testid="input-new-list-name"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!newListName.trim() || creatingList}
+            onClick={async () => {
+              const created = await createList(newListName);
+              if (created) setNewListName("");
+            }}
+            data-testid="btn-create-list"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            {creatingList ? "Creating…" : "New list"}
+          </Button>
+        </div>
+        {lists.length > 0 && (
+          <ul className="flex flex-wrap gap-2" data-testid="lists-manage">
+            {lists.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center gap-1 rounded-full border bg-muted/40 pl-3 pr-1 py-1 text-xs"
+                data-testid={`list-chip-${l.id}`}
+              >
+                <span>
+                  {l.name} <span className="text-muted-foreground">({l.orgCount})</span>
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5"
+                  aria-label={`Delete list ${l.name}`}
+                  onClick={() => setListToDelete(l)}
+                  data-testid={`btn-delete-list-${l.id}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <Input
           placeholder="Search organization, city, state..."
@@ -644,6 +865,31 @@ export default function AdminOrgClaimLinks() {
           {rows.length} ownerless page{rows.length === 1 ? "" : "s"}
         </div>
       </div>
+
+      <AlertDialog
+        open={!!listToDelete}
+        onOpenChange={(open) => !open && setListToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{listToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {listToDelete?.orgCount ?? 0} org
+              {(listToDelete?.orgCount ?? 0) === 1 ? "" : "s"} in this list will
+              become unlisted. The organizations themselves are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => listToDelete && deleteList(listToDelete)}
+              data-testid="button-confirm-delete-list"
+            >
+              Delete list
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {(() => {
         const renderRow = (r: ClaimLinkRow) => {
           const location = [r.city, r.state].filter(Boolean).join(", ");
@@ -683,6 +929,27 @@ export default function AdminOrgClaimLinks() {
               <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
                 {claimUrl(r.token)}
               </TableCell>
+              <TableCell className="w-40">
+                <Select
+                  value={r.listId ?? "__none__"}
+                  onValueChange={(v) => assignOrgList(r.id, v === "__none__" ? null : v)}
+                >
+                  <SelectTrigger
+                    className="h-8 text-xs"
+                    data-testid={`select-row-list-${r.id}`}
+                  >
+                    <SelectValue placeholder="No list" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No list</SelectItem>
+                    {lists.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </TableCell>
               <TableCell className="text-right">
                 <Button
                   size="sm"
@@ -704,6 +971,7 @@ export default function AdminOrgClaimLinks() {
               <TableHead>Organization</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Claim link</TableHead>
+              <TableHead>List</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -734,19 +1002,19 @@ export default function AdminOrgClaimLinks() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                         Loading…
                       </TableCell>
                     </TableRow>
                   ) : filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                         No ownerless pages.
                       </TableCell>
                     </TableRow>
                   ) : otherRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                         No other unclaimed orgs match.
                       </TableCell>
                     </TableRow>

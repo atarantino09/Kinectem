@@ -349,6 +349,19 @@ export const apiKeys = pgTable("api_keys", {
 // `pendingPlan` column can reference it — pgEnum consts are TDZ-bound).
 export const planTierEnum = pgEnum("plan_tier", ["starter", "pro", "elite"]);
 
+// Task #929 — Named lists platform operators create to group the ownerless
+// org pages they set up (e.g. one list per league or tournament). Purely an
+// admin organizing tool for the Org Links screen; has no effect on claimed
+// orgs, public pages, or any other admin surface.
+export const orgAdminLists = pgTable("org_admin_lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  nameIdx: uniqueIndex("org_admin_lists_name_idx").on(sql`lower(${t.name})`),
+}));
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -412,6 +425,13 @@ export const organizations = pgTable("organizations", {
   // bulk-imported orgs the operator doesn't know. Nullable timestamp:
   // NULL = not created via quick setup (incl. all pre-existing rows).
   createdViaQuickSetupAt: timestamp("created_via_quick_setup_at"),
+  // Task #929 — optional operator-created list grouping this (ownerless)
+  // org with others set up for the same league/tournament. Only meaningful
+  // for orgs the operator set up; irrelevant once an org has an owner.
+  // NULL = unlisted; set-to-NULL on list delete (never cascades the org).
+  adminListId: uuid("admin_list_id").references(() => orgAdminLists.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.
@@ -421,6 +441,7 @@ export const organizations = pgTable("organizations", {
   claimTokenIdx: uniqueIndex("organizations_claim_token_idx")
     .on(t.claimToken)
     .where(sql`${t.claimToken} IS NOT NULL`),
+  adminListIdIdx: index("organizations_admin_list_id_idx").on(t.adminListId),
 }));
 
 // Despite the legacy table name, this records every member of an

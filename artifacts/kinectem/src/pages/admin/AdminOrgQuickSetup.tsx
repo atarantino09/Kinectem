@@ -47,6 +47,10 @@ type NameMatch = {
 };
 type NameCheckResponse = { data: NameMatch[] };
 
+// Task #929 — operator-created named lists grouping ownerless orgs.
+type OrgList = { id: string; name: string; orgCount: number; createdAt: string };
+type OrgListsResponse = { data: OrgList[] };
+
 // Task #831 — bulk entry. Each parsed line is a (team name, optional coach
 // email) pair; lines with the same team name merge their coach emails onto
 // one team row. Bad lines are reported by 1-based line number, never
@@ -129,6 +133,14 @@ export default function AdminOrgQuickSetup() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [result, setResult] = useState<QuickSetupResult | null>(null);
+  // Task #929 — optional list to file this org under at creation time.
+  const [listId, setListId] = useState<string | null>(null);
+  const { data: listsData } = useQuery<OrgListsResponse>({
+    queryKey: ["admin", "org-lists"],
+    queryFn: () =>
+      customFetch<OrgListsResponse>(`/api/v1/admin/org-lists`, { method: "GET" }),
+  });
+  const lists = useMemo(() => listsData?.data ?? [], [listsData]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(orgName.trim()), 250);
@@ -260,12 +272,16 @@ export default function AdminOrgQuickSetup() {
             brandSecondaryColor: secondaryColor || undefined,
             tier: tier ?? undefined,
             promoCode: appliedPromo?.code || undefined,
+            listId: listId ?? undefined,
             teams: validTeams,
           }),
         },
       );
       setResult(resp.data);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
+      ]);
       try {
         await navigator.clipboard.writeText(claimUrl(resp.data.token));
         toast({ title: `Created "${resp.data.name}"`, description: "Claim link copied to clipboard" });
@@ -538,6 +554,30 @@ export default function AdminOrgQuickSetup() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Task #929 — optional list to file this org under at creation. */}
+          <div className="mt-4">
+            <Label htmlFor="qs-list">List (optional)</Label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Group this org under a named list (e.g. a league or tournament).
+            </p>
+            <Select
+              value={listId ?? "__none__"}
+              onValueChange={(v) => setListId(v === "__none__" ? null : v)}
+            >
+              <SelectTrigger className="max-w-xs" data-testid="select-qs-list">
+                <SelectValue placeholder="No list" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No list</SelectItem>
+                {lists.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Promo code — staged on the org; auto-applied when the new owner

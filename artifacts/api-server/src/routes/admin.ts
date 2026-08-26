@@ -27,6 +27,7 @@ import {
   announcements,
   guardianLinks,
   stagedCoachInvites,
+  orgAdminLists,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -1676,9 +1677,13 @@ async function decideOrgClaim(
           userId: claim.requestedByUserId,
         })
         .onConflictDoNothing();
+      // Task #929 — lists only apply to ownerless orgs on the admin Org
+      // Links screen; clear adminListId in the same transaction as the
+      // ownership grant so a claimed org can never keep stale list
+      // membership the admin view has no way to show or fix.
       await tx
         .update(organizations)
-        .set({ createdById: claim.requestedByUserId })
+        .set({ createdById: claim.requestedByUserId, adminListId: null })
         .where(eq(organizations.id, claim.organizationId));
       // Auto-decline any other pending claims on the same org.
       await tx
@@ -1789,6 +1794,182 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// Task #929 — Named lists to group ownerless orgs the operator set up
+// ---------------------------------------------------------------------------
+// A list is just an admin-facing folder for the Org Links screen (e.g. one
+// per league/tournament). An org belongs to at most one list (adminListId);
+// deleting a list only clears that link (ON DELETE SET NULL) — it never
+// touches the orgs themselves.
+// Only ownerless orgs count toward a list — a claimed org's `adminListId`
+// is cleared the moment it gets an owner (see the claim-link finalize and
+// org-claim approval transactions), but count defensively off the same
+// ownerExists predicate the Org Links table itself filters on, so the two
+// views can never disagree even if that invariant is ever violated.
+const ORG_LIST_OWNERLESS_JOIN = sql`${organizations.adminListId} = ${orgAdminLists.id}
+      AND NOT EXISTS (
+        SELECT 1 FROM ${organizationAdmins}
+        WHERE ${organizationAdmins.organizationId} = ${organizations.id}
+          AND ${organizationAdmins.role} = 'owner'
+      )`;
+
+router.get(
+  "/org-lists",
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select({
+        id: orgAdminLists.id,
+        name: orgAdminLists.name,
+        createdAt: orgAdminLists.createdAt,
+        orgCount: sql<number>`count(${organizations.id})`.mapWith(Number),
+      })
+      .from(orgAdminLists)
+      .leftJoin(organizations, ORG_LIST_OWNERLESS_JOIN)
+      .groupBy(orgAdminLists.id)
+      .orderBy(asc(orgAdminLists.name));
+    res.json({
+      data: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        orgCount: r.orgCount,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/org-lists",
+  asyncHandler(async (req, res) => {
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) {
+      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+    }
+    if (name.length > 120) {
+      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+    }
+    // Race-safe create-or-reuse: two admin tabs submitting the same name
+    // (e.g. "Fall 2026 Soccer League") concurrently must converge on one
+    // list, not have the second submit crash on the unique(lower(name))
+    // index. INSERT ... ON CONFLICT DO NOTHING against that exact index
+    // makes the losing writer a no-op instead of a unique-violation, and we
+    // then re-select the winner's row.
+    const inserted = await db.execute<{
+      id: string;
+      name: string;
+      created_at: Date;
+    }>(sql`
+      INSERT INTO org_admin_lists (name, created_by_id)
+      VALUES (${name}, ${req.sessionUser!.id})
+      ON CONFLICT ((lower(name))) DO NOTHING
+      RETURNING id, name, created_at
+    `);
+    const insertedRows = (inserted.rows ?? inserted) as Array<{
+      id: string;
+      name: string;
+      created_at: Date;
+    }>;
+    if (insertedRows.length > 0) {
+      const row = insertedRows[0];
+      return res.status(201).json({
+        data: {
+          id: row.id,
+          name: row.name,
+          orgCount: 0,
+          createdAt: new Date(row.created_at).toISOString(),
+        },
+      });
+    }
+    const [existing] = await db
+      .select({ id: orgAdminLists.id, name: orgAdminLists.name })
+      .from(orgAdminLists)
+      .where(sql`lower(${orgAdminLists.name}) = ${name.toLowerCase()}`)
+      .limit(1);
+    if (!existing) {
+      // Should be unreachable (the conflict target guarantees a matching
+      // row exists), but fail loudly rather than silently 200-ing with
+      // nothing if it ever happens.
+      return res.status(500).json({ error: "List creation raced unexpectedly" });
+    }
+    return res.status(200).json({
+      data: { id: existing.id, name: existing.name, orgCount: null },
+    });
+  }),
+);
+
+router.delete(
+  "/org-lists/:id",
+  asyncHandler(async (req, res) => {
+    const id = p(req.params.id);
+    const [row] = await db
+      .delete(orgAdminLists)
+      .where(eq(orgAdminLists.id, id))
+      .returning({ id: orgAdminLists.id });
+    if (!row) return notFound(res, "List not found");
+    res.json({ ok: true });
+  }),
+);
+
+// Assign, move, or clear an ownerless org's list from the Org Links table.
+// Lists are an ownerless-org-only concept — once an org is claimed it drops
+// off the Org Links table and its `adminListId` is cleared by the claim
+// transaction, so this write must never be able to land on an already-owned
+// org (which would otherwise silently resurrect a stale list membership the
+// Org Links view — and its counts — can never show).
+//
+// The owner check and the write are done as ONE conditional UPDATE rather
+// than a separate SELECT-then-UPDATE, because the latter has a real race
+// with the claim transaction: a claim could commit (insert the owner row +
+// null out adminListId) in the gap between this route's owner check and its
+// write, and the write would then silently re-set adminListId on a
+// just-claimed org. A single `UPDATE ... WHERE NOT EXISTS (owner)` closes
+// that gap — Postgres re-evaluates the WHERE clause against the latest
+// committed row if it has to wait on a concurrent UPDATE of the same row
+// (e.g. the claim transaction's own `adminListId = NULL` write), so the two
+// writers always serialize to a consistent outcome instead of interleaving.
+router.patch(
+  "/org-claim-links/:id/list",
+  asyncHandler(async (req, res) => {
+    const id = p(req.params.id);
+    let listId: string | null = null;
+    if (req.body?.listId != null && req.body.listId !== "") {
+      listId = String(req.body.listId);
+      const [list] = await db
+        .select({ id: orgAdminLists.id })
+        .from(orgAdminLists)
+        .where(eq(orgAdminLists.id, listId))
+        .limit(1);
+      if (!list) {
+        return res.status(400).json({ error: "List not found", code: "LIST_NOT_FOUND" });
+      }
+    }
+    const ownerExists = sql`EXISTS (
+      SELECT 1 FROM ${organizationAdmins}
+      WHERE ${organizationAdmins.organizationId} = ${organizations.id}
+        AND ${organizationAdmins.role} = 'owner'
+    )`;
+    const [row] = await db
+      .update(organizations)
+      .set({ adminListId: listId })
+      .where(and(eq(organizations.id, id), sql`NOT ${ownerExists}`))
+      .returning({ id: organizations.id });
+    if (row) return res.json({ ok: true, listId });
+    // Zero rows updated — either the org doesn't exist, or it does but lost
+    // the WHERE NOT ownerExists check (already claimed, possibly by a claim
+    // that raced this very request). Disambiguate with a follow-up read.
+    const [exists] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, id))
+      .limit(1);
+    if (!exists) return notFound(res, "Organization not found");
+    return res.status(400).json({
+      error: "Organization is already claimed and cannot be added to a list",
+      code: "ALREADY_CLAIMED",
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Task #610 — Secret claim-invite links for ownerless org pages
 // ---------------------------------------------------------------------------
 // Lists every ownerless (no `organization_admins` owner row) org alongside
@@ -1811,6 +1992,17 @@ router.get(
       WHERE ${organizationAdmins.organizationId} = ${organizations.id}
         AND ${organizationAdmins.role} = 'owner'
     )`;
+    // Task #929 — optional `?listId=` narrows to one operator-created list;
+    // pass `?listId=none` for unlisted orgs. Omitted = all (unfiltered).
+    const listIdFilter =
+      typeof req.query.listId === "string" ? req.query.listId : undefined;
+    const listWhere =
+      listIdFilter === undefined
+        ? sql`true`
+        : listIdFilter === "none"
+          ? sql`${organizations.adminListId} IS NULL`
+          : sql`${organizations.adminListId} = ${listIdFilter}`;
+
     const rows = await db
       .select({
         id: organizations.id,
@@ -1823,9 +2015,12 @@ router.get(
         outreachFacebookAddedAt: organizations.outreachFacebookAddedAt,
         createdViaQuickSetupAt: organizations.createdViaQuickSetupAt,
         createdAt: organizations.createdAt,
+        adminListId: organizations.adminListId,
+        adminListName: orgAdminLists.name,
       })
       .from(organizations)
-      .where(sql`NOT ${ownerExists}`)
+      .leftJoin(orgAdminLists, eq(organizations.adminListId, orgAdminLists.id))
+      .where(and(sql`NOT ${ownerExists}`, listWhere))
       .orderBy(asc(organizations.name));
 
     // Mint a token for any ownerless org that lacks one (idempotent).
@@ -1839,6 +2034,8 @@ router.get(
       messagedAt: string | null;
       facebookAddedAt: string | null;
       quickSetupAt: string | null;
+      listId: string | null;
+      listName: string | null;
     }> = [];
     for (const r of rows) {
       let token = r.claimToken;
@@ -1862,6 +2059,8 @@ router.get(
         facebookAddedAt: r.outreachFacebookAddedAt
           ? r.outreachFacebookAddedAt.toISOString()
           : null,
+        listId: r.adminListId,
+        listName: r.adminListName,
         // Non-null for operator-created orgs so the Claim Links tab lists
         // them in its recent section. createdAt is a compatibility fallback
         // for inline saves made between that section's launch and this fix.
@@ -2002,6 +2201,20 @@ router.post(
       }
       pendingPromoCodeId = promo.id;
     }
+    // Task #929 — optional list to file this org under at creation time.
+    let adminListId: string | null = null;
+    if (typeof req.body?.listId === "string" && req.body.listId.trim()) {
+      const requestedListId: string = String(req.body.listId).trim();
+      const [list] = await db
+        .select({ id: orgAdminLists.id })
+        .from(orgAdminLists)
+        .where(eq(orgAdminLists.id, requestedListId))
+        .limit(1);
+      if (!list) {
+        return res.status(400).json({ error: "List not found", code: "LIST_NOT_FOUND" });
+      }
+      adminListId = requestedListId;
+    }
     const token = generateToken();
     const [org] = await db
       .insert(organizations)
@@ -2013,6 +2226,7 @@ router.post(
         brandSecondaryColor: brandSecondaryColor ?? undefined,
         pendingPlan: pendingPlan ?? undefined,
         pendingPromoCodeId: pendingPromoCodeId ?? undefined,
+        adminListId: adminListId ?? undefined,
         // Inline "Add an organization" is also an operator setup flow. Mark
         // it so Claim Links puts it in "Orgs I set up" alongside Quick setup.
         createdViaQuickSetupAt: new Date(),
@@ -2026,6 +2240,7 @@ router.post(
         state: org.state,
         logoUrl: org.logoUrl,
         token,
+        listId: org.adminListId,
       },
     });
   }),
@@ -2125,6 +2340,21 @@ router.post(
       pendingPlan = t as PlanTier;
     }
 
+    // Task #929 — optional list to file this org under at creation time.
+    let adminListId: string | null = null;
+    if (typeof body.listId === "string" && body.listId.trim()) {
+      const requestedListId: string = String(body.listId).trim();
+      const [list] = await db
+        .select({ id: orgAdminLists.id })
+        .from(orgAdminLists)
+        .where(eq(orgAdminLists.id, requestedListId))
+        .limit(1);
+      if (!list) {
+        return res.status(400).json({ error: "List not found", code: "LIST_NOT_FOUND" });
+      }
+      adminListId = requestedListId;
+    }
+
     const teamsRaw = Array.isArray(body.teams) ? body.teams : [];
     if (teamsRaw.length > QUICK_SETUP_MAX_TEAMS) {
       return res.status(400).json({ error: `too many teams (max ${QUICK_SETUP_MAX_TEAMS})`, code: "TOO_MANY_TEAMS" });
@@ -2216,6 +2446,7 @@ router.post(
           brandSecondaryColor: brandSecondaryColor ?? undefined,
           pendingPromoCodeId: pendingPromoCodeId ?? undefined,
           pendingPlan: pendingPlan ?? undefined,
+          adminListId: adminListId ?? undefined,
           claimToken: token,
           // Task #860 — mark quick-setup orgs as "orgs I know" so the
           // Claim links tab can surface them in their own section.
@@ -2264,6 +2495,7 @@ router.post(
         state: result.org.state,
         logoUrl: result.org.logoUrl,
         token,
+        listId: result.org.adminListId,
         teams: result.createdTeams,
         stagedCoachCount: result.stagedCount,
       },

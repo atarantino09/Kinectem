@@ -627,9 +627,13 @@ router.post(
           .insert(organizationFollowers)
           .values({ organizationId: org.id, userId: me.id })
           .onConflictDoNothing();
+        // Task #929 — lists only apply to ownerless orgs on the admin Org
+        // Links screen; clear adminListId in the same transaction as the
+        // ownership grant so a claimed org can never keep stale list
+        // membership the admin view has no way to show or fix.
         await tx
           .update(organizations)
-          .set({ createdById: me.id })
+          .set({ createdById: me.id, adminListId: null })
           .where(eq(organizations.id, org.id));
         return { ok: true as const };
       });
