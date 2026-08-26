@@ -646,18 +646,6 @@ export default function CompetitionPage() {
         style={{ background: heroBackground, color: heroText }}
         data-testid="hero-competition"
       >
-        {/* Banner ≈2/3 of the hero, branded strip ≈1/3 — strip content is
-            compacted (smaller logo/title, tighter spacing) so nothing gets
-            cut off. */}
-        {c.bannerUrl ? (
-          <div className="h-64 sm:h-96 w-full overflow-hidden">
-            <img
-              src={c.bannerUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          </div>
-        ) : null}
         <div className="max-w-4xl mx-auto px-6 py-5 space-y-2.5">
           <div className="flex items-start gap-4">
             {c.logoUrl ? (
@@ -712,15 +700,15 @@ export default function CompetitionPage() {
                   }
                 >
                   <span
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-widest cursor-pointer hover:opacity-100"
-                    style={{ borderColor: heroText, opacity: 0.9 }}
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:text-sm font-black uppercase tracking-widest cursor-pointer shadow-sm transition-transform hover:scale-[1.03]"
+                    style={{ backgroundColor: heroText, color: brand }}
                     data-testid="chip-presented-by"
                   >
                     {c.organizer.logoUrl ? (
                       <img
                         src={c.organizer.logoUrl}
                         alt=""
-                        className="h-4 w-4 rounded object-contain bg-white/90"
+                        className="h-5 w-5 sm:h-6 sm:w-6 rounded-full object-contain bg-white"
                       />
                     ) : null}
                     Presented by {c.organizer.name}
