@@ -89,4 +89,5 @@ export const ListSeedUsers200ItemRole = {
   coach: "coach",
   admin: "admin",
   parent: "parent",
+  fan: "fan",
 } as const;

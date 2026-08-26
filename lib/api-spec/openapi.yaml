@@ -5088,7 +5088,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [athlete, parent, coach, admin]
+            enum: [athlete, parent, coach, admin, fan]
         - name: includeDeleted
           in: query
           required: false
@@ -5773,7 +5773,7 @@ paths:
                   minLength: 8
                 role:
                   type: string
-                  enum: [athlete, coach, parent, admin]
+                  enum: [athlete, coach, parent, admin, fan]
                 dateOfBirth:
                   type: string
                   format: date
@@ -6459,7 +6459,7 @@ paths:
                       type: string
                     role:
                       type: string
-                      enum: [athlete, coach, admin, parent]
+                      enum: [athlete, coach, admin, parent, fan]
                     email:
                       type: string
                       nullable: true
@@ -7544,7 +7544,7 @@ components:
               nullable: true
             role:
               type: string
-              enum: [athlete, coach, admin, parent]
+              enum: [athlete, coach, admin, parent, fan]
               description: The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
             isMinor:
               type: boolean
@@ -11665,7 +11665,7 @@ components:
           nullable: true
         role:
           type: string
-          enum: [athlete, parent, coach, admin]
+          enum: [athlete, parent, coach, admin, fan]
       additionalProperties: true
 
     AdminUser:
@@ -11693,7 +11693,7 @@ components:
           nullable: true
         role:
           type: string
-          enum: [athlete, parent, coach, admin]
+          enum: [athlete, parent, coach, admin, fan]
         createdAt:
           type: string
           format: date-time
@@ -11765,7 +11765,7 @@ components:
           minLength: 8
         role:
           type: string
-          enum: [athlete, parent, coach, admin]
+          enum: [athlete, parent, coach, admin, fan]
 
     AdminUpdateUserRequest:
       type: object
@@ -11784,7 +11784,7 @@ components:
           format: email
         role:
           type: string
-          enum: [athlete, parent, coach, admin]
+          enum: [athlete, parent, coach, admin, fan]
         sport:
           type: string
           nullable: true
@@ -12004,6 +12004,8 @@ components:
             coaches:
               type: integer
             admins:
+              type: integer
+            fans:
               type: integer
             deletedUsers:
               type: integer

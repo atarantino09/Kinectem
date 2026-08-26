@@ -89,4 +89,5 @@ export const AdminCreateUserRequestRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;

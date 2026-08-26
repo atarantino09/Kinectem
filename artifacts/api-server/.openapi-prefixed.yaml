@@ -4910,6 +4910,7 @@ paths:
               - parent
               - coach
               - admin
+              - fan
         - name: includeDeleted
           in: query
           required: false
@@ -5645,6 +5646,7 @@ paths:
                     - coach
                     - parent
                     - admin
+                    - fan
                 dateOfBirth:
                   type: string
                   format: date
@@ -6393,6 +6395,7 @@ paths:
                         - coach
                         - admin
                         - parent
+                        - fan
                     email:
                       type: string
                       nullable: true
@@ -7462,6 +7465,7 @@ components:
                 - coach
                 - admin
                 - parent
+                - fan
               description: The caller's account role. Used by the client to gate role-specific UI (e.g. the Family/Guardian page).
             isMinor:
               type: boolean
@@ -11734,6 +11738,7 @@ components:
             - parent
             - coach
             - admin
+            - fan
       additionalProperties: true
     AdminUser:
       type: object
@@ -11769,6 +11774,7 @@ components:
             - parent
             - coach
             - admin
+            - fan
         createdAt:
           type: string
           format: date-time
@@ -11858,6 +11864,7 @@ components:
             - parent
             - coach
             - admin
+            - fan
     AdminUpdateUserRequest:
       type: object
       additionalProperties: false
@@ -11883,6 +11890,7 @@ components:
             - parent
             - coach
             - admin
+            - fan
         sport:
           type: string
           nullable: true
@@ -12150,6 +12158,8 @@ components:
             coaches:
               type: integer
             admins:
+              type: integer
+            fans:
               type: integer
             deletedUsers:
               type: integer

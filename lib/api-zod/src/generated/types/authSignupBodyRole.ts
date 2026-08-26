@@ -89,4 +89,5 @@ export const AuthSignupBodyRole = {
   coach: "coach",
   parent: "parent",
   admin: "admin",
+  fan: "fan",
 } as const;

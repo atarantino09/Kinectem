@@ -1,7 +1,7 @@
 import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
-export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent"]);
+export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent", "fan"]);
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
 export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);

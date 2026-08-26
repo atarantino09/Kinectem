@@ -87,6 +87,7 @@ export type AdminAnalyticsResponseTotals = {
   parents?: number;
   coaches?: number;
   admins?: number;
+  fans?: number;
   deletedUsers?: number;
   organizations?: number;
   teams?: number;

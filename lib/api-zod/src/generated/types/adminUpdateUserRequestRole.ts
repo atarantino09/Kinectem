@@ -89,4 +89,5 @@ export const AdminUpdateUserRequestRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;

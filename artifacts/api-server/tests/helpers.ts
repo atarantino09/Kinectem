@@ -6,7 +6,7 @@ export type SeedUser = {
   id: string;
   firstName: string;
   lastName: string;
-  role: "athlete" | "coach" | "admin" | "parent";
+  role: "athlete" | "coach" | "admin" | "parent" | "fan";
   email: string | null;
   avatarUrl: string | null;
   sport: string | null;

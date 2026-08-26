@@ -350,6 +350,7 @@ router.get(
       parent: 0,
       coach: 0,
       admin: 0,
+      fan: 0,
     };
     for (const r of roleBreakdown) roleCounts[r.role] = r.count;
 
@@ -360,6 +361,7 @@ router.get(
         parents: roleCounts["parent"] ?? 0,
         coaches: roleCounts["coach"] ?? 0,
         admins: roleCounts["admin"] ?? 0,
+        fans: roleCounts["fan"] ?? 0,
         deletedUsers,
         organizations: totalOrgs,
         teams: totalTeams,
@@ -401,7 +403,7 @@ router.get(
 // Users
 // ---------------------------------------------------------------------------
 
-const ROLE_VALUES = ["athlete", "parent", "coach", "admin"] as const;
+const ROLE_VALUES = ["athlete", "parent", "coach", "admin", "fan"] as const;
 
 router.get(
   "/users",

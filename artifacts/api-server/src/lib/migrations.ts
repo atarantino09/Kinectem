@@ -2434,6 +2434,16 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON organizations (admin_list_id);
     `,
   },
+  {
+    // Task #931 — add "fan" as a selectable signup role: a normal,
+    // baseline-permission account for supporters who just want to follow
+    // along. Same enum-extension pattern as every other `user_role` /
+    // `post_kind` addition in this file.
+    name: "2026-08-26-task-931-fan-role",
+    sql: `
+      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'fan';
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

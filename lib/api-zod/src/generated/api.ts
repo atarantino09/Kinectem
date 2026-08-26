@@ -189,7 +189,7 @@ export const GetUserByIdResponse = zod.union([
         email: zod.string().email(),
         dateOfBirth: zod.coerce.date().nullish(),
         role: zod
-          .enum(["athlete", "coach", "admin", "parent"])
+          .enum(["athlete", "coach", "admin", "parent", "fan"])
           .describe(
             "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
           ),
@@ -457,7 +457,7 @@ export const UpdateUserResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -573,7 +573,7 @@ export const SetUserCoverPhotoResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -682,7 +682,7 @@ export const DeleteUserCoverPhotoResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -798,7 +798,7 @@ export const SetUserAvatarResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -907,7 +907,7 @@ export const DeleteUserAvatarResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -1129,7 +1129,7 @@ export const GetLoggedInUserResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -8363,7 +8363,7 @@ export const GetWhoamiResponse = zod.object({
       id: zod.string().uuid(),
       name: zod.string(),
       email: zod.string().nullable(),
-      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+      role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]).optional(),
     })
     .optional(),
   viewingAs: zod
@@ -8371,7 +8371,7 @@ export const GetWhoamiResponse = zod.object({
       id: zod.string().uuid(),
       name: zod.string(),
       email: zod.string().nullable(),
-      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+      role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]).optional(),
     })
     .nullish(),
   canAuthorRecap: zod
@@ -8454,6 +8454,7 @@ export const GetAdminAnalyticsResponse = zod.object({
     parents: zod.number().optional(),
     coaches: zod.number().optional(),
     admins: zod.number().optional(),
+    fans: zod.number().optional(),
     deletedUsers: zod.number().optional(),
     organizations: zod.number().optional(),
     teams: zod.number().optional(),
@@ -8545,7 +8546,7 @@ export const listAdminUsersQueryOffsetMin = 0;
 
 export const ListAdminUsersQueryParams = zod.object({
   q: zod.coerce.string().max(listAdminUsersQueryQMax).optional(),
-  role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+  role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]).optional(),
   includeDeleted: zod
     .enum(["0", "1", "true", "false"])
     .optional()
@@ -8575,7 +8576,7 @@ export const ListAdminUsersResponse = zod.object({
       lastName: zod.string(),
       displayName: zod.string(),
       email: zod.string().nullable(),
-      role: zod.enum(["athlete", "parent", "coach", "admin"]),
+      role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]),
       createdAt: zod.coerce.date(),
       lastSignInAt: zod.coerce.date().nullish(),
       deletedAt: zod.coerce.date().nullish(),
@@ -8619,7 +8620,7 @@ export const CreateAdminUserBody = zod.object({
   lastName: zod.string().min(1).max(createAdminUserBodyLastNameMax),
   email: zod.string().email(),
   password: zod.string().min(createAdminUserBodyPasswordMin),
-  role: zod.enum(["athlete", "parent", "coach", "admin"]),
+  role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]),
 });
 
 /**
@@ -8643,7 +8644,7 @@ export const UpdateAdminUserBody = zod.object({
     .optional(),
   lastName: zod.string().min(1).max(updateAdminUserBodyLastNameMax).optional(),
   email: zod.string().email().optional(),
-  role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+  role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]).optional(),
   sport: zod.string().nullish(),
   position: zod.string().nullish(),
   jerseyNumber: zod.number().nullish(),
@@ -8724,7 +8725,7 @@ export const UpdateAdminUserResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -8832,7 +8833,7 @@ export const SoftDeleteAdminUserResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -8940,7 +8941,7 @@ export const RestoreAdminUserResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -9104,7 +9105,9 @@ export const ListAdminReportsResponse = zod.object({
           id: zod.string().uuid(),
           name: zod.string(),
           email: zod.string().nullable(),
-          role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+          role: zod
+            .enum(["athlete", "parent", "coach", "admin", "fan"])
+            .optional(),
         })
         .nullable(),
       content: zod.object({
@@ -9199,7 +9202,9 @@ export const ListAdminActivityResponse = zod.object({
           id: zod.string().uuid(),
           name: zod.string(),
           email: zod.string().nullable(),
-          role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+          role: zod
+            .enum(["athlete", "parent", "coach", "admin", "fan"])
+            .optional(),
         })
         .nullable(),
     }),
@@ -9227,7 +9232,7 @@ export const ListAdminActivityAdminsResponse = zod.object({
       id: zod.string().uuid(),
       name: zod.string(),
       email: zod.string().nullable(),
-      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+      role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]).optional(),
     }),
   ),
 });
@@ -9309,7 +9314,7 @@ export const StartAdminMasqueradeResponse = zod.object({
       id: zod.string().uuid(),
       name: zod.string(),
       email: zod.string().nullable(),
-      role: zod.enum(["athlete", "parent", "coach", "admin"]).optional(),
+      role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]).optional(),
     })
     .optional(),
 });
@@ -9401,7 +9406,7 @@ export const AuthLoginResponse = zod
       email: zod.string().email(),
       dateOfBirth: zod.coerce.date().nullish(),
       role: zod
-        .enum(["athlete", "coach", "admin", "parent"])
+        .enum(["athlete", "coach", "admin", "parent", "fan"])
         .describe(
           "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
         ),
@@ -9456,7 +9461,7 @@ export const AuthSignupBody = zod.object({
   lastName: zod.string().min(1),
   email: zod.string().email(),
   password: zod.string().min(authSignupBodyPasswordMin),
-  role: zod.enum(["athlete", "coach", "parent", "admin"]),
+  role: zod.enum(["athlete", "coach", "parent", "admin", "fan"]),
   dateOfBirth: zod.coerce.date().nullish(),
   parentId: zod.string().uuid().nullish(),
   guardianEmail: zod.string().email().nullish(),
@@ -9597,7 +9602,7 @@ export const AuthTokenResponse = zod
             email: zod.string().email(),
             dateOfBirth: zod.coerce.date().nullish(),
             role: zod
-              .enum(["athlete", "coach", "admin", "parent"])
+              .enum(["athlete", "coach", "admin", "parent", "fan"])
               .describe(
                 "The caller's account role. Used by the client to gate role-specific UI (e.g. the Family\/Guardian page).",
               ),
@@ -9945,7 +9950,7 @@ export const ListSeedUsersResponseItem = zod.object({
   id: zod.string().uuid(),
   firstName: zod.string(),
   lastName: zod.string(),
-  role: zod.enum(["athlete", "coach", "admin", "parent"]),
+  role: zod.enum(["athlete", "coach", "admin", "parent", "fan"]),
   email: zod.string().nullish(),
   avatarUrl: zod.string().nullish(),
   sport: zod.string().nullish(),

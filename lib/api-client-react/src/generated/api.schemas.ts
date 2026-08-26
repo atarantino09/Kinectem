@@ -202,6 +202,7 @@ export const PrivateUserResponseRole = {
   coach: "coach",
   admin: "admin",
   parent: "parent",
+  fan: "fan",
 } as const;
 
 /**
@@ -3364,6 +3365,7 @@ export const AdminWhoamiUserRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;
 
 export interface AdminWhoamiUser {
@@ -3382,6 +3384,7 @@ export const AdminUserRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;
 
 export interface AdminUser {
@@ -3430,6 +3433,7 @@ export const AdminCreateUserRequestRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;
 
 export interface AdminCreateUserRequest {
@@ -3457,6 +3461,7 @@ export const AdminUpdateUserRequestRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;
 
 export interface AdminUpdateUserRequest {
@@ -3639,6 +3644,7 @@ export type AdminAnalyticsResponseTotals = {
   parents?: number;
   coaches?: number;
   admins?: number;
+  fans?: number;
   deletedUsers?: number;
   organizations?: number;
   teams?: number;
@@ -4423,6 +4429,7 @@ export const ListAdminUsersRole = {
   parent: "parent",
   coach: "coach",
   admin: "admin",
+  fan: "fan",
 } as const;
 
 export type ListAdminUsersIncludeDeleted =
@@ -4586,6 +4593,7 @@ export const AuthSignupBodyRole = {
   coach: "coach",
   parent: "parent",
   admin: "admin",
+  fan: "fan",
 } as const;
 
 export type AuthSignupBody = {
@@ -4771,6 +4779,7 @@ export const ListSeedUsers200ItemRole = {
   coach: "coach",
   admin: "admin",
   parent: "parent",
+  fan: "fan",
 } as const;
 
 export type ListSeedUsers200Item = {

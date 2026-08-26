@@ -24,17 +24,21 @@ import {
 } from "@/lib/dob";
 
 // "org_admin" is a client-only onboarding choice, not a backend account
-// role. The `users.role` enum is locked to athlete/coach/parent/admin by the
-// OpenAPI spec, and admin === platform admin, so an org admin signs up as a
-// regular "coach" on the wire and becomes an actual organization admin by
-// creating an organization (they become its owner) right after signup.
+// role. The `users.role` enum is locked to athlete/coach/parent/admin/fan by
+// the OpenAPI spec, and admin === platform admin, so an org admin signs up
+// as a regular "coach" on the wire and becomes an actual organization admin
+// by creating an organization (they become its owner) right after signup.
 // "competition_organizer" follows the same pattern: tournament/league
 // operators sign up as "coach" on the wire and get their organizer powers
 // by creating a Competition Hub right after signup.
+// Task #931 — "fan" IS a real backend role (unlike the two aliases above):
+// it submits as-is and creates a normal, baseline-permission account for
+// supporters who just want to follow along.
 export type Role =
   | "athlete"
   | "coach"
   | "parent"
+  | "fan"
   | "org_admin"
   | "competition_organizer";
 
@@ -396,6 +400,7 @@ export function SignUpForm({
               <SelectItem value="athlete">Athlete</SelectItem>
               <SelectItem value="coach">Coach</SelectItem>
               <SelectItem value="parent">Parent / Guardian</SelectItem>
+              <SelectItem value="fan">Fan — follow along</SelectItem>
               <SelectItem value="org_admin">Organization Admin</SelectItem>
               <SelectItem value="competition_organizer">
                 Competition Organizer

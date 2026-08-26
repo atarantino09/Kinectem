@@ -111,6 +111,45 @@ describe("auth", () => {
     expect(me.body.id).toBe(res.body.id);
   });
 
+  it("signs up a new fan with ordinary baseline permissions (task #931)", async () => {
+    // Task #931 — "fan" is a real, persisted account role with the exact
+    // same baseline permissions as any other non-admin/coach/parent/athlete
+    // user: it must not fall through any role-equality check into
+    // unintended access, and it must not be blocked from ordinary access.
+    const agent = request.agent(app);
+    const email = `fan-${Date.now()}@kinectem.test`;
+    const res = await agent.post("/api/v1/auth/signup").send({
+      firstName: "Casey",
+      lastName: "Supporter",
+      role: "fan",
+      email,
+      password: "supersecret1",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.role).toBe("fan");
+
+    const [row] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    expect(row.role).toBe("fan");
+
+    const me = await agent.get("/api/v1/users/me");
+    expect(me.status).toBe(200);
+    expect(me.body.role).toBe("fan");
+
+    // Same baseline as any ordinary user: no recap-authoring rights (no
+    // roster / org-admin rows) and no access to the platform-admin console.
+    const whoami = await agent.get("/api/v1/auth/whoami");
+    expect(whoami.status).toBe(200);
+    expect(whoami.body.realUser.role).toBe("fan");
+    expect(whoami.body.canAuthorRecap).toBe(false);
+
+    const adminAttempt = await agent.get("/api/v1/admin/analytics");
+    expect(adminAttempt.status).toBe(403);
+  });
+
   it("rejects a crafted signup that asks for the platform admin role", async () => {
     const email = `rogue-admin-${Date.now()}@kinectem.test`;
     const res = await request(app)

@@ -40,7 +40,7 @@ type AdminUser = {
   lastName: string;
   displayName: string;
   email: string | null;
-  role: "athlete" | "parent" | "coach" | "admin";
+  role: "athlete" | "parent" | "coach" | "admin" | "fan";
   createdAt: string;
   lastSignInAt: string | null;
   deletedAt: string | null;
@@ -69,7 +69,7 @@ type UsersResponse = {
   };
 };
 
-const ROLES = ["athlete", "parent", "coach", "admin"] as const;
+const ROLES = ["athlete", "parent", "coach", "admin", "fan"] as const;
 const PAGE_SIZE = 25;
 
 export default function AdminUsers() {

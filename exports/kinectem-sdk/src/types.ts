@@ -6,7 +6,7 @@
  * src/api-types.ts`).
  */
 
-export type UserRole = "athlete" | "coach" | "admin" | "parent";
+export type UserRole = "athlete" | "coach" | "admin" | "parent" | "fan";
 
 export interface KinectemUser {
   id: string;

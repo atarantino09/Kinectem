@@ -92,4 +92,5 @@ export const PrivateUserResponseRole = {
   coach: "coach",
   admin: "admin",
   parent: "parent",
+  fan: "fan",
 } as const;

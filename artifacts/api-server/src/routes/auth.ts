@@ -77,8 +77,11 @@ const SignupBody = z.object({
   lastName: z.string().min(1).optional().default(""),
   // `admin` is the GLOBAL platform-admin role — it is never a valid
   // public-signup role. Org-level admin is link-derived (claim-token
-  // flow), so signup only offers athlete / coach / parent.
-  role: z.enum(["athlete", "coach", "parent"]),
+  // flow), so signup only offers athlete / coach / parent / fan. Task
+  // #931 — "fan" is a baseline, non-privileged role for supporters who
+  // just want to follow along; it grants no capabilities beyond the
+  // ordinary defaults every other non-admin role already has.
+  role: z.enum(["athlete", "coach", "parent", "fan"]),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   dateOfBirth: z.string().optional().nullable(),
