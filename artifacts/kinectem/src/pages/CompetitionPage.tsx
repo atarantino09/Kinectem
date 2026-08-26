@@ -661,7 +661,7 @@ export default function CompetitionPage() {
                 <img
                   src={c.logoUrl}
                   alt={`${c.name} logo`}
-                  className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl object-contain bg-white/90 p-1.5"
+                  className="h-16 w-16 sm:h-24 sm:w-24 rounded-xl object-contain bg-white/90 p-1.5"
                   data-testid="img-competition-logo"
                 />
               </AvatarLightbox>
