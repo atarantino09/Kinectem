@@ -23,7 +23,7 @@ import {
 } from "@/lib/shrinkImage";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import { PLANS, type PlanTier } from "@/lib/plans";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, Copy, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -94,6 +94,24 @@ function claimUrl(token: string): string {
   return `${window.location.origin}${import.meta.env.BASE_URL}claim/${token}`;
 }
 
+// Task #929 follow-up — sort by assigned list name. Unlisted rows always
+// land at the end regardless of direction; within the same list (or within
+// "unlisted"), fall back to organization name so ordering stays stable.
+function sortByList<T extends { listName: string | null; name: string }>(
+  rows: T[],
+  dir: "asc" | "desc" | null,
+): T[] {
+  if (!dir) return rows;
+  const sign = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    if (a.listName === null && b.listName === null) return a.name.localeCompare(b.name);
+    if (a.listName === null) return 1;
+    if (b.listName === null) return -1;
+    const cmp = a.listName.localeCompare(b.listName) * sign;
+    return cmp !== 0 ? cmp : a.name.localeCompare(b.name);
+  });
+}
+
 function rowsToCsv(rows: ClaimLinkRow[]): string {
   const header = ["org_name", "city", "state", "claim_link", "org_id", "list"];
   const lines = [header.join(",")];
@@ -144,6 +162,10 @@ export default function AdminOrgClaimLinks() {
   const [newListName, setNewListName] = useState("");
   const [creatingList, setCreatingList] = useState(false);
   const [listToDelete, setListToDelete] = useState<OrgList | null>(null);
+  // Sort rows by their assigned list — click the "List" column header to
+  // cycle asc → desc → off. Unlisted orgs always sort to the end so a
+  // partially-sorted list doesn't scatter them through the middle.
+  const [listSort, setListSort] = useState<"asc" | "desc" | null>(null);
 
   const { data: listsData } = useQuery<OrgListsResponse>({
     queryKey: ["admin", "org-lists"],
@@ -381,16 +403,19 @@ export default function AdminOrgClaimLinks() {
   // most recent first) and everything else. Search filters both sections.
   const quickSetupRows = useMemo(
     () =>
-      filtered
-        .filter((r) => r.quickSetupAt)
-        .sort((a, b) =>
-          (b.quickSetupAt as string).localeCompare(a.quickSetupAt as string),
-        ),
-    [filtered],
+      sortByList(
+        filtered
+          .filter((r) => r.quickSetupAt)
+          .sort((a, b) =>
+            (b.quickSetupAt as string).localeCompare(a.quickSetupAt as string),
+          ),
+        listSort,
+      ),
+    [filtered, listSort],
   );
   const otherRows = useMemo(
-    () => filtered.filter((r) => !r.quickSetupAt),
-    [filtered],
+    () => sortByList(filtered.filter((r) => !r.quickSetupAt), listSort),
+    [filtered, listSort],
   );
 
   const toggleMessaged = async (id: string, messaged: boolean) => {
@@ -926,10 +951,24 @@ export default function AdminOrgClaimLinks() {
               <TableCell className="text-sm text-muted-foreground">
                 {location || "—"}
               </TableCell>
-              <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
-                {claimUrl(r.token)}
+              <TableCell className="text-xs font-mono text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <span className="max-w-[140px] truncate" title={claimUrl(r.token)}>
+                    {claimUrl(r.token)}
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => copyLink(r.token)}
+                    aria-label={`Copy claim link for ${r.name}`}
+                    data-testid={`btn-copy-claim-link-${r.id}`}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </TableCell>
-              <TableCell className="w-40">
+              <TableCell className="w-32">
                 <Select
                   value={r.listId ?? "__none__"}
                   onValueChange={(v) => assignOrgList(r.id, v === "__none__" ? null : v)}
@@ -950,19 +989,17 @@ export default function AdminOrgClaimLinks() {
                   </SelectContent>
                 </Select>
               </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => copyLink(r.token)}
-                  data-testid={`btn-copy-claim-link-${r.id}`}
-                >
-                  Copy link
-                </Button>
-              </TableCell>
             </TableRow>
           );
         };
+        const listSortIcon =
+          listSort === "asc" ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : listSort === "desc" ? (
+            <ArrowDown className="h-3 w-3" />
+          ) : (
+            <ArrowUpDown className="h-3 w-3 opacity-50" />
+          );
         const header = (
           <TableHeader>
             <TableRow>
@@ -971,8 +1008,22 @@ export default function AdminOrgClaimLinks() {
               <TableHead>Organization</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Claim link</TableHead>
-              <TableHead>List</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 hover:text-foreground"
+                  onClick={() =>
+                    setListSort((cur) =>
+                      cur === "asc" ? "desc" : cur === "desc" ? null : "asc",
+                    )
+                  }
+                  aria-label="Sort by list"
+                  data-testid="btn-sort-by-list"
+                >
+                  List
+                  {listSortIcon}
+                </button>
+              </TableHead>
             </TableRow>
           </TableHeader>
         );
@@ -1002,19 +1053,19 @@ export default function AdminOrgClaimLinks() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                         Loading…
                       </TableCell>
                     </TableRow>
                   ) : filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                         No ownerless pages.
                       </TableCell>
                     </TableRow>
                   ) : otherRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                         No other unclaimed orgs match.
                       </TableCell>
                     </TableRow>
