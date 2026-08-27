@@ -23,7 +23,16 @@ import {
 } from "@/lib/shrinkImage";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import { PLANS, type PlanTier } from "@/lib/plans";
-import { X, Plus, Trash2, Copy, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import {
+  X,
+  Plus,
+  Trash2,
+  Copy,
+  Download,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -92,6 +101,16 @@ function csvCell(v: string | null): string {
 
 function claimUrl(token: string): string {
   return `${window.location.origin}${import.meta.env.BASE_URL}claim/${token}`;
+}
+
+function exportSlug(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return slug || "selected-list";
 }
 
 // Task #929 follow-up — sort by assigned list name. Unlisted rows always
@@ -460,17 +479,27 @@ export default function AdminOrgClaimLinks() {
   };
 
   const exportCsv = () => {
-    if (rows.length === 0) {
-      toast({ title: "Nothing to export yet" });
+    const exportRows = [...quickSetupRows, ...otherRows];
+    if (exportRows.length === 0) {
+      toast({
+        title: "Nothing to export",
+        description: "No unclaimed organizations match the current filters.",
+      });
       return;
     }
-    const csv = rowsToCsv(rows);
+    const csv = rowsToCsv(exportRows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const stamp = new Date().toISOString().slice(0, 10);
+    const scope =
+      listFilter === "all"
+        ? "all-orgs"
+        : listFilter === "none"
+          ? "unlisted"
+          : exportSlug(lists.find((list) => list.id === listFilter)?.name ?? "selected-list");
     a.href = url;
-    a.download = `kinectem-org-claim-links-${stamp}.csv`;
+    a.download = `kinectem-org-claim-links-${scope}-${stamp}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -491,14 +520,6 @@ export default function AdminOrgClaimLinks() {
           {/* Task #829 — one-page org setup: org info + teams + coaches, one save. */}
           <Button asChild data-testid="btn-org-quick-setup">
             <Link href="/admin/org-quick-setup">Quick setup</Link>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={exportCsv}
-            disabled={rows.length === 0}
-            data-testid="btn-export-claim-links-csv"
-          >
-            Export CSV
           </Button>
         </div>
       </div>
@@ -822,6 +843,17 @@ export default function AdminOrgClaimLinks() {
               Clear filter
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={exportCsv}
+            disabled={isLoading}
+            title="Download the currently filtered unclaimed organizations as a CSV"
+            data-testid="btn-export-claim-links-csv"
+          >
+            <Download className="h-3.5 w-3.5 mr-1" />
+            Export CSV
+          </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <Input
