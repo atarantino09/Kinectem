@@ -2463,6 +2463,11 @@ router.get(
           and(
             eq(articles.status, "published"),
             eq(organizations.id, orgId),
+            // Recap deletion is a soft delete (`hiddenAt`). Every public
+            // surface must exclude it; without this condition, the org page
+            // could keep serving a recap after it disappeared from the feed,
+            // team page, profile, post detail, schedule, and notifications.
+            isNull(articles.hiddenAt),
             ...(pageCursor ? [sql`${articleEffTs} <= ${pageCursor.ts}`] : []),
           ),
         )

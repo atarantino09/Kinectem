@@ -1540,10 +1540,10 @@ describe("posts", () => {
     expect(stillThere).toBeUndefined();
   });
 
-  it("DELETE /posts/:postId hides the recap from the team page (task #283)", async () => {
-    // Task #283 — `/teams/:teamId/posts` previously forgot to filter
-    // out soft-deleted articles, so a deleted recap would still appear
-    // on the team page even though the home/profile feeds dropped it.
+  it("DELETE /posts/:postId hides the recap from the team and org pages", async () => {
+    // Both aggregate page queries must honor the article's soft-delete flag.
+    // Otherwise a recap can disappear from one surface but survive as a
+    // ghost on another.
     const { agent: coachAgent } = await loginAs(
       (u) => u.email === "coach@kinectem.demo",
     );
@@ -1565,6 +1565,15 @@ describe("posts", () => {
     expect(before.status).toBe(200);
     expect(
       (before.body.data ?? []).some((p: { id: string }) => p.id === articleId),
+    ).toBe(true);
+    const beforeOrg = await coachAgent.get(
+      `/api/v1/organizations/${org.id}/posts`,
+    );
+    expect(beforeOrg.status).toBe(200);
+    expect(
+      (beforeOrg.body.data ?? []).some(
+        (p: { id: string }) => p.id === articleId,
+      ),
     ).toBe(true);
 
     const del = await coachAgent.delete(`/api/v1/posts/${articleId}`);
@@ -1588,6 +1597,27 @@ describe("posts", () => {
     expect(afterAnon.status).toBe(200);
     expect(
       (afterAnon.body.data ?? []).some(
+        (p: { id: string }) => p.id === articleId,
+      ),
+    ).toBe(false);
+
+    // Organization pages must follow the same rule for both the author and
+    // an anonymous viewer: deleted means deleted everywhere.
+    const afterOrgAuthor = await coachAgent.get(
+      `/api/v1/organizations/${org.id}/posts`,
+    );
+    expect(afterOrgAuthor.status).toBe(200);
+    expect(
+      (afterOrgAuthor.body.data ?? []).some(
+        (p: { id: string }) => p.id === articleId,
+      ),
+    ).toBe(false);
+    const afterOrgAnon = await request(app).get(
+      `/api/v1/organizations/${org.id}/posts`,
+    );
+    expect(afterOrgAnon.status).toBe(200);
+    expect(
+      (afterOrgAnon.body.data ?? []).some(
         (p: { id: string }) => p.id === articleId,
       ),
     ).toBe(false);
