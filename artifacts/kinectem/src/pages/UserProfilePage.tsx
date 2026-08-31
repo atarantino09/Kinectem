@@ -477,20 +477,6 @@ export default function UserProfilePage() {
             </AvatarLightbox>
             {user.isOwnProfile && "email" in user ? (
               <div className="mt-24 flex items-center gap-2">
-                {canPostProfileHighlight && (
-                  <Link
-                    href={`/posts/new?type=short&profileOnly=1&from=${encodeURIComponent(`/users/${userId}`)}`}
-                  >
-                    <Button
-                      variant="brand"
-                      className="font-bold rounded-full"
-                      data-testid="btn-post-profile-highlight"
-                    >
-                      <Play className="w-4 h-4 mr-1.5" />
-                      Post highlight
-                    </Button>
-                  </Link>
-                )}
                 <Link href="/me/tags">
                   <Button
                     variant="outline"
@@ -672,24 +658,40 @@ export default function UserProfilePage() {
           <h2 className="text-xl font-black tracking-tight">
             {user.isOwnProfile ? "Posts" : "Posts & tagged in"}
           </h2>
-          {teams.length > 0 && (
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger
-                className="w-56 font-bold"
-                data-testid="select-team-filter"
+          <div className="flex w-full sm:w-auto items-center justify-end gap-2 flex-wrap">
+            {canPostProfileHighlight && (
+              <Link
+                href={`/posts/new?type=short&profileOnly=1&from=${encodeURIComponent(`/users/${userId}`)}`}
               >
-                <SelectValue placeholder="All teams" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All teams</SelectItem>
-                {teams.map((t) => (
-                  <SelectItem key={t.teamId} value={t.teamId}>
-                    {t.teamName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+                <Button
+                  variant="brand"
+                  className="font-bold rounded-full shrink-0"
+                  data-testid="btn-post-profile-highlight"
+                >
+                  <Play className="w-4 h-4 mr-1.5" />
+                  Post highlight
+                </Button>
+              </Link>
+            )}
+            {teams.length > 0 && (
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger
+                  className="w-56 max-w-full font-bold"
+                  data-testid="select-team-filter"
+                >
+                  <SelectValue placeholder="All teams" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All teams</SelectItem>
+                  {teams.map((t) => (
+                    <SelectItem key={t.teamId} value={t.teamId}>
+                      {t.teamName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </div>
         <div className="space-y-3">
           {posts.length > 0 ? (

@@ -9,6 +9,7 @@ const VIEWER_ID = "22222222-2222-4222-8222-222222222222";
 
 const useGetUserByIdMock = vi.fn();
 const useGetLoggedInUserMock = vi.fn();
+const useListUserTeamsMock = vi.fn();
 
 vi.mock("wouter", () => ({
   useParams: () => ({ userId: PROFILE_ID }),
@@ -53,7 +54,7 @@ vi.mock("@workspace/api-client-react", () => ({
   listUserPosts: vi.fn(),
   getListUserPostsQueryKey: (id: string) => [`/api/v1/users/${id}/posts`],
   useListUserOrganizations: () => ({ data: { data: [] } }),
-  useListUserTeams: () => ({ data: { data: [] } }),
+  useListUserTeams: (...args: unknown[]) => useListUserTeamsMock(...args),
   useFollowUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUnfollowUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateConversation: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -125,6 +126,7 @@ function profileFixture(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useListUserTeamsMock.mockReturnValue({ data: { data: [] } });
 });
 
 describe("UserProfilePage profile highlight action", () => {
@@ -136,11 +138,20 @@ describe("UserProfilePage profile highlight action", () => {
     useGetLoggedInUserMock.mockReturnValue({
       data: { id: PROFILE_ID, role: "athlete" },
     });
+    useListUserTeamsMock.mockReturnValue({
+      data: { data: [{ teamId: "team-1", teamName: "Team One" }] },
+    });
 
     renderWithProviders(<UserProfilePage />);
 
     const action = screen.getByTestId("btn-post-profile-highlight");
     expect(action).toHaveTextContent("Post highlight");
+    expect(action.closest("section")).toContainElement(
+      screen.getByRole("heading", { name: "Posts" }),
+    );
+    expect(action.closest("section")).toContainElement(
+      screen.getByTestId("select-team-filter"),
+    );
     expect(action.closest("a")).toHaveAttribute(
       "href",
       `/posts/new?type=short&profileOnly=1&from=${encodeURIComponent(`/users/${PROFILE_ID}`)}`,
