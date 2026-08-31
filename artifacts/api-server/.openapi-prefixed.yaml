@@ -3609,12 +3609,13 @@ paths:
   /api/v1/posts/{postId}/album:
     get:
       operationId: listAlbumPhotos
-      summary: List fan-album photos for a post (newest first)
+      summary: List fan-album media for a post (newest first)
       description: |
         Returns every fan-album entry attached to the post. The album is
         separate from the post's hero `assets` gallery — entries are
-        per-uploader, captioned, and shown in the dedicated "Fan Photo
-        Album" section. Requires a signed-in viewer who can view the
+        per-uploader, captioned photos or browser-compatible MP4/MOV videos,
+        and shown in the dedicated media-album section. Each item includes
+        the confirmed asset MIME type. Requires a signed-in viewer who can view the
         post.
       tags:
         - Album
@@ -3622,7 +3623,7 @@ paths:
         - $ref: "#/components/parameters/PostId"
       responses:
         "200":
-          description: Album photos
+          description: Album media
           content:
             application/json:
               schema:
@@ -3633,9 +3634,9 @@ paths:
           $ref: "#/components/responses/NotFound"
     post:
       operationId: createAlbumPhoto
-      summary: Attach an uploaded asset to a post's fan photo album
+      summary: Attach uploaded photo or video media to a post's fan album
       description: |
-        Step 4 of the upload flow for fan-album photos:
+        Step 4 of the upload flow for fan-album media:
 
         1. `POST /assets/upload` to mint a presigned URL.
         2. `PUT <uploadUrl>` with the binary.
@@ -3643,8 +3644,11 @@ paths:
         4. `POST /posts/{postId}/album` with the `assetId` plus the
            uploader's display name and optional caption.
 
-        The asset's minor-asset processing (EXIF strip etc.) is already
-        applied at step 2, so this endpoint just records the album row.
+        Each file is limited to 10 MB. Supported photos are JPEG, PNG, GIF,
+        and WebP; supported videos are browser-compatible MP4 and QuickTime
+        MOV. The server verifies the confirmed MIME type against the file
+        signature before recording the album row. Under-13 accounts remain
+        limited to JPEG and PNG photos.
         Requires a signed-in viewer who can view the post.
       tags:
         - Album
@@ -3658,7 +3662,7 @@ paths:
               $ref: "#/components/schemas/CreateAlbumPhotoRequest"
       responses:
         "201":
-          description: Album photo created
+          description: Album media created
           content:
             application/json:
               schema:
@@ -3671,12 +3675,20 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "413":
+          description: Album file exceeds the 10 MB per-file limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
   /api/v1/posts/{postId}/album/{photoId}:
     delete:
       operationId: deleteAlbumPhoto
-      summary: Remove a fan-album photo
+      summary: Remove a fan-album media item
       description: |
-        The uploader of the photo, the post's author, and platform
+        The uploader of the media, the post's author, and platform
         admins can delete an album entry. Other viewers receive a 403.
       tags:
         - Album
@@ -8672,6 +8684,7 @@ components:
         - id
         - postId
         - assetId
+        - fileType
         - url
         - uploaderName
         - caption
@@ -8686,6 +8699,16 @@ components:
         assetId:
           type: string
           format: uuid
+        fileType:
+          type: string
+          enum:
+            - image/jpeg
+            - image/png
+            - image/gif
+            - image/webp
+            - video/mp4
+            - video/quicktime
+          description: Confirmed MIME type used to choose an image viewer or native video player.
         url:
           type: string
           description: Resolved asset URL (may be a `data:` URL or an http(s) URL).

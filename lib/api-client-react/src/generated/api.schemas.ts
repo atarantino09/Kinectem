@@ -1566,10 +1566,27 @@ export interface CreateAlbumPhotoRequest {
   caption?: string;
 }
 
+/**
+ * Confirmed MIME type used to choose an image viewer or native video player.
+ */
+export type AlbumPhotoResponseFileType =
+  (typeof AlbumPhotoResponseFileType)[keyof typeof AlbumPhotoResponseFileType];
+
+export const AlbumPhotoResponseFileType = {
+  "image/jpeg": "image/jpeg",
+  "image/png": "image/png",
+  "image/gif": "image/gif",
+  "image/webp": "image/webp",
+  "video/mp4": "video/mp4",
+  "video/quicktime": "video/quicktime",
+} as const;
+
 export interface AlbumPhotoResponse {
   id: string;
   postId: string;
   assetId: string;
+  /** Confirmed MIME type used to choose an image viewer or native video player. */
+  fileType: AlbumPhotoResponseFileType;
   /** Resolved asset URL (may be a `data:` URL or an http(s) URL). */
   url: string;
   /** @nullable */

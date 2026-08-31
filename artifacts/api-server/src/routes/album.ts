@@ -1,4 +1,4 @@
-// Task #535 — Fan photo album routes.
+// Task #535 / #943 — Fan photo-and-video album routes.
 //
 // The fan album lives in its own table (`album_photos`) so it doesn't
 // pollute the post's hero `assets` gallery. Rows are polymorphic over
@@ -6,8 +6,8 @@
 // `post_comments` / `post_shares` / `post_reactions` — so the client
 // keeps passing the synthetic prefixed post id (`article-<uuid>`,
 // `highlight-<uuid>`, `orgpost-<uuid>`) and we `parsePostId` at the
-// boundary. The actual image bytes live in the existing `assets` table,
-// so the minor-asset EXIF strip in `assets.ts` already covers uploads
+// boundary. The actual media bytes live in the existing `assets` table,
+// so the minor-asset metadata strip in `assets.ts` already covers uploads
 // done through this flow.
 import { Router, type IRouter } from "express";
 import {
@@ -28,7 +28,6 @@ import {
   apiError,
   notFound,
   parsePostId,
-  safeAvatarUrl,
   type PostKind,
 } from "../lib/spec-helpers";
 import {
@@ -36,6 +35,13 @@ import {
   canManageOrganization,
   canViewTeamSchedule,
 } from "../lib/permissions";
+import {
+  decodeAssetDataUrl,
+  detectMime,
+  isAlbumMimeSupported,
+  normalizeMime,
+} from "../lib/magic-bytes";
+import { ALLOWED_MINOR_UPLOAD_MIMES } from "../lib/exif-strip";
 
 const router: IRouter = Router();
 
@@ -209,13 +215,15 @@ function toAlbumPhotoResponse(
   // The synthetic prefixed post id, recomposed from the row's
   // (postKind, postRefId). Keeps the wire shape stable for clients.
   prefixedPostId: string,
+  assetFileType: string | null,
   assetUrl: string | null,
 ) {
   return {
     id: row.id,
     postId: prefixedPostId,
     assetId: row.assetId,
-    url: safeAvatarUrl(assetUrl) ?? assetUrl ?? "",
+    fileType: normalizeMime(assetFileType ?? "image/jpeg"),
+    url: assetUrl ?? "",
     uploaderUserId: row.uploaderUserId,
     uploaderName: row.uploaderName,
     caption: row.caption,
@@ -248,7 +256,7 @@ router.get(
       return;
     }
     const rows = await db
-      .select({ p: albumPhotos, url: assets.url })
+      .select({ p: albumPhotos, fileType: assets.fileType, url: assets.url })
       .from(albumPhotos)
       .leftJoin(assets, eq(assets.id, albumPhotos.assetId))
       .where(
@@ -264,7 +272,12 @@ router.get(
     const canModerate = isAdmin || (await canModerateAlbum(me.id, post));
     res.json({
       data: rows.map((r) => ({
-        ...toAlbumPhotoResponse(r.p, rawPostId, r.url ?? null),
+        ...toAlbumPhotoResponse(
+          r.p,
+          rawPostId,
+          r.fileType ?? null,
+          r.url ?? null,
+        ),
         canDelete: canModerate || r.p.uploaderUserId === me.id,
       })),
       canUpload,
@@ -319,7 +332,7 @@ router.post(
     // Uploads are restricted to the team community (roster members,
     // parents of active members, org managers). Followers get 403.
     if (!(await canContributeToAlbum(me.id, post))) {
-      apiError(res, 403, "Only team members can add photos to this album", {
+      apiError(res, 403, "Only team members can add media to this album", {
         code: "ALBUM_MEMBERS_ONLY",
       });
       return;
@@ -344,6 +357,45 @@ router.post(
       apiError(res, 422, "Asset has not been confirmed yet");
       return;
     }
+    const fileType = normalizeMime(asset.fileType);
+    if (!isAlbumMimeSupported(fileType)) {
+      apiError(
+        res,
+        400,
+        "That file format is not supported. Choose a JPEG, PNG, GIF, or WebP photo, or an MP4/MOV video.",
+        { code: "ALBUM_UNSUPPORTED_FORMAT" },
+      );
+      return;
+    }
+    if ((asset.fileSize ?? 0) > 10 * 1024 * 1024) {
+      apiError(
+        res,
+        413,
+        "That file is over the 10 MB per-file limit. Choose a shorter video or a smaller photo.",
+        { code: "ALBUM_FILE_TOO_LARGE" },
+      );
+      return;
+    }
+    if (me.isMinor && !ALLOWED_MINOR_UPLOAD_MIMES.has(fileType)) {
+      apiError(
+        res,
+        400,
+        "Under-13 accounts may only upload JPEG or PNG photos.",
+        { code: "MINOR_BLOCKED", extras: { minorBlocked: true } },
+      );
+      return;
+    }
+    const bytes = decodeAssetDataUrl(asset.url);
+    const detected = bytes ? detectMime(bytes) : null;
+    if (!bytes || detected !== fileType) {
+      apiError(
+        res,
+        400,
+        "That file could not be verified as a supported photo or video. Choose the original file and try again.",
+        { code: "ALBUM_ASSET_MISMATCH" },
+      );
+      return;
+    }
 
     const [created] = await db
       .insert(albumPhotos)
@@ -358,7 +410,14 @@ router.post(
       .returning();
     res
       .status(201)
-      .json(toAlbumPhotoResponse(created, rawPostId, asset.url ?? null));
+      .json(
+        toAlbumPhotoResponse(
+          created,
+          rawPostId,
+          asset.fileType,
+          asset.url ?? null,
+        ),
+      );
   }),
 );
 

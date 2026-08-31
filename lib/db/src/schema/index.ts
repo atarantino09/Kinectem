@@ -1105,12 +1105,12 @@ export const messageAssets = pgTable("message_assets", {
   displayOrder: integer("display_order").notNull().default(0),
 }, (t) => ({ pk: primaryKey({ columns: [t.messageId, t.assetId] }) }));
 
-// Task #535 — Fan photo album entries attached to a post. Polymorphic
+// Task #535 / #943 — Fan media album entries attached to a post. Polymorphic
 // over (postKind, postRefId) to match the existing post_comments /
 // post_shares / post_reactions convention so the client can keep
 // passing the prefixed post id (`article-<uuid>`, `highlight-<uuid>`,
 // `orgpost-<uuid>`) and the server `parsePostId`s it at the boundary.
-// Each row points at a confirmed `assets` row (the actual image bytes)
+// Each row points at a confirmed `assets` row (the actual image/video bytes)
 // and records the uploader's display name + optional caption.
 // `uploaderUserId` is nullable so an unauthenticated future flow can
 // still post (today's implementation always populates it from the

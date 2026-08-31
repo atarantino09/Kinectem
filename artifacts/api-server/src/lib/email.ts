@@ -970,15 +970,15 @@ ${args.postUrl}${foot.text}`,
   };
 }
 
-// Task #828 — one-line invitation to contribute photos to a recap's fan
+// Task #828 / #943 — one-line invitation to contribute media to a recap's fan
 // album. Only attached to RECAP emails: parents of active roster athletes
 // (and roster members themselves) have album upload rights on team recap
 // posts (`canContributeToAlbum` in routes/album.ts), and the album lives
 // on the same post page the email already links to.
 const ALBUM_INVITE_TEXT =
-  "\n\nHave photos from the game? You can add them to the recap's photo album on the same page.";
+  "\n\nHave photos or videos from the game? You can add them to the recap's photo-and-video album on the same page.";
 const ALBUM_INVITE_HTML =
-  "\n<p>Have photos from the game? You can add them to the recap's photo album on the same page.</p>";
+  "\n<p>Have photos or videos from the game? You can add them to the recap's photo-and-video album on the same page.</p>";
 
 // Social — the user was tagged in a published recap/highlight.
 export function buildTagEmail(
@@ -1021,7 +1021,7 @@ export function buildTeamContentEmail(
   const teamHtml = escapeHtml(team);
   const titleHtml = escapeHtml(args.title);
   const actorHtml = escapeHtml(args.actorName);
-  // Task #828 — recaps carry a fan photo album; invite the team
+  // Task #828 / #943 — recaps carry a fan media album; invite the team
   // community (incl. parents of active roster athletes) to contribute.
   const albumText = args.contentLabel === "recap" ? ALBUM_INVITE_TEXT : "";
   const albumHtml = args.contentLabel === "recap" ? ALBUM_INVITE_HTML : "";

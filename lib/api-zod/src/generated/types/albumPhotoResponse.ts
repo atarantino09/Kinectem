@@ -80,11 +80,14 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { AlbumPhotoResponseFileType } from "./albumPhotoResponseFileType";
 
 export interface AlbumPhotoResponse {
   id: string;
   postId: string;
   assetId: string;
+  /** Confirmed MIME type used to choose an image viewer or native video player. */
+  fileType: AlbumPhotoResponseFileType;
   /** Resolved asset URL (may be a `data:` URL or an http(s) URL). */
   url: string;
   /** @nullable */

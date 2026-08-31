@@ -123,6 +123,7 @@ export * from "./adminWhoamiUser";
 export * from "./adminWhoamiUserRole";
 export * from "./albumPhotoListResponse";
 export * from "./albumPhotoResponse";
+export * from "./albumPhotoResponseFileType";
 export * from "./apiKey";
 export * from "./apiKeyWithToken";
 export * from "./approveAllChildNotifications200";

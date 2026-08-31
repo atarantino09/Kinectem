@@ -9,7 +9,7 @@ import {
 } from "../src/lib/email";
 import type { DispatchBuildContext } from "../src/lib/notification-email";
 
-const INVITE = /add them to the recap's photo album/i;
+const INVITE = /add them to the recap's photo-and-video album/i;
 
 function ctx(overrides: Partial<DispatchBuildContext> = {}): DispatchBuildContext {
   return {

@@ -5922,11 +5922,12 @@ export const RemoveCommentReactionParams = zod.object({
 /**
  * Returns every fan-album entry attached to the post. The album is
 separate from the post's hero `assets` gallery — entries are
-per-uploader, captioned, and shown in the dedicated "Fan Photo
-Album" section. Requires a signed-in viewer who can view the
+per-uploader, captioned photos or browser-compatible MP4/MOV videos,
+and shown in the dedicated media-album section. Each item includes
+the confirmed asset MIME type. Requires a signed-in viewer who can view the
 post.
 
- * @summary List fan-album photos for a post (newest first)
+ * @summary List fan-album media for a post (newest first)
  */
 export const ListAlbumPhotosParams = zod.object({
   postId: zod.coerce.string().uuid(),
@@ -5938,6 +5939,18 @@ export const ListAlbumPhotosResponse = zod.object({
       id: zod.string().uuid(),
       postId: zod.string().uuid(),
       assetId: zod.string().uuid(),
+      fileType: zod
+        .enum([
+          "image/jpeg",
+          "image/png",
+          "image/gif",
+          "image/webp",
+          "video/mp4",
+          "video/quicktime",
+        ])
+        .describe(
+          "Confirmed MIME type used to choose an image viewer or native video player.",
+        ),
       url: zod
         .string()
         .describe(
@@ -5952,7 +5965,7 @@ export const ListAlbumPhotosResponse = zod.object({
 });
 
 /**
- * Step 4 of the upload flow for fan-album photos:
+ * Step 4 of the upload flow for fan-album media:
 
 1. `POST /assets/upload` to mint a presigned URL.
 2. `PUT <uploadUrl>` with the binary.
@@ -5960,11 +5973,14 @@ export const ListAlbumPhotosResponse = zod.object({
 4. `POST /posts/{postId}/album` with the `assetId` plus the
    uploader's display name and optional caption.
 
-The asset's minor-asset processing (EXIF strip etc.) is already
-applied at step 2, so this endpoint just records the album row.
+Each file is limited to 10 MB. Supported photos are JPEG, PNG, GIF,
+and WebP; supported videos are browser-compatible MP4 and QuickTime
+MOV. The server verifies the confirmed MIME type against the file
+signature before recording the album row. Under-13 accounts remain
+limited to JPEG and PNG photos.
 Requires a signed-in viewer who can view the post.
 
- * @summary Attach an uploaded asset to a post's fan photo album
+ * @summary Attach uploaded photo or video media to a post's fan album
  */
 export const CreateAlbumPhotoParams = zod.object({
   postId: zod.coerce.string().uuid(),
@@ -5981,10 +5997,10 @@ export const CreateAlbumPhotoBody = zod.object({
 });
 
 /**
- * The uploader of the photo, the post's author, and platform
+ * The uploader of the media, the post's author, and platform
 admins can delete an album entry. Other viewers receive a 403.
 
- * @summary Remove a fan-album photo
+ * @summary Remove a fan-album media item
  */
 export const DeleteAlbumPhotoParams = zod.object({
   postId: zod.coerce.string().uuid(),

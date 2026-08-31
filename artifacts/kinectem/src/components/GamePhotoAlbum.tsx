@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, ImagePlus, Trash2, X } from "lucide-react";
+import { Camera, ImagePlus, PlayCircle, Trash2, X } from "lucide-react";
 import {
   useGetLoggedInUser,
   useListAlbumPhotos,
@@ -26,9 +27,60 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { timeAgo } from "@/lib/format";
-import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
+import { shrinkImage } from "@/lib/shrinkImage";
+import { apiErrorMessage } from "@/lib/api-errors";
 
-const MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
+export const ALBUM_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MEDIA_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "video/mp4",
+  "video/quicktime",
+]);
+const FILE_ACCEPT =
+  "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime";
+
+type PreviewItem = {
+  src: string;
+  kind: "image" | "video";
+  name: string;
+  objectUrl: boolean;
+};
+
+function normalizeMediaType(type: string): string {
+  const normalized = type.split(";")[0].trim().toLowerCase();
+  return normalized === "image/jpg" ? "image/jpeg" : normalized;
+}
+
+function errorCode(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const data = (err as { data?: unknown; body?: unknown }).data ??
+    (err as { body?: unknown }).body;
+  if (!data || typeof data !== "object") return null;
+  return typeof (data as { code?: unknown }).code === "string"
+    ? String((data as { code: string }).code)
+    : null;
+}
+
+function friendlyUploadError(err: unknown): string {
+  switch (errorCode(err)) {
+    case "ALBUM_FILE_TOO_LARGE":
+    case "PAYLOAD_TOO_LARGE":
+      return "That file is over 10 MB. Choose a shorter clip or trim it in your phone’s Photos/Gallery app.";
+    case "ALBUM_UNSUPPORTED_FORMAT":
+    case "ALBUM_ASSET_MISMATCH":
+      return "Choose the original JPEG/PNG photo or an MP4/MOV video and try again.";
+    case "MINOR_BLOCKED":
+      return "Under-13 accounts can only upload JPEG or PNG photos.";
+    case "ALBUM_MEMBERS_ONLY":
+    case "FORBIDDEN":
+      return "This account isn’t allowed to add media to this team album.";
+    default:
+      return apiErrorMessage(err) ?? "The upload failed. Check your connection and try again.";
+  }
+}
 
 // Task #535 — one-time migration of any photos still sitting in
 // `kinectem.photoAlbums.v1` from the localStorage prototype. On first
@@ -67,7 +119,7 @@ function dataUrlToBlob(dataUrl: string): Blob | null {
   }
 }
 
-async function uploadFanPhoto(blob: Blob, fileName: string): Promise<string> {
+async function uploadAlbumMedia(blob: Blob, fileName: string): Promise<string> {
   const upload = await requestUpload({
     fileName,
     fileType: blob.type || "image/jpeg",
@@ -80,7 +132,18 @@ async function uploadFanPhoto(blob: Blob, fileName: string): Promise<string> {
     body: blob,
   });
   if (!putResp.ok) {
-    throw new Error(`Upload failed (${putResp.status})`);
+    let body: unknown;
+    try {
+      body = await putResp.json();
+    } catch {
+      body = null;
+    }
+    const message =
+      body && typeof body === "object" &&
+      typeof (body as { error?: unknown }).error === "string"
+        ? String((body as { error: string }).error)
+        : `Upload failed (${putResp.status})`;
+    throw Object.assign(new Error(message), { data: body });
   }
   await confirmUpload(upload.assetId);
   return upload.assetId;
@@ -89,7 +152,7 @@ async function uploadFanPhoto(blob: Blob, fileName: string): Promise<string> {
 // Task #660 — the album list response carries viewer capabilities beyond the
 // generated spec types (openapi.yaml is locked): `canUpload` marks team
 // members (roster, parents of active members, org managers) who may add
-// photos, and each photo's `canDelete` marks the uploader / post author /
+// media, and each item's `canDelete` marks the uploader / post author /
 // team managers / platform admins.
 type AlbumPhotoWithCaps = AlbumPhotoResponse & { canDelete?: boolean };
 type AlbumListWithCaps = { data?: AlbumPhotoWithCaps[]; canUpload?: boolean };
@@ -100,12 +163,12 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   const queryClient = useQueryClient();
   const { data, refetch } = useListAlbumPhotos(postId);
   const album = data as AlbumListWithCaps | undefined;
-  const photos: AlbumPhotoWithCaps[] = album?.data ?? [];
+  const media: AlbumPhotoWithCaps[] = album?.data ?? [];
   const canUpload = album?.canUpload === true;
 
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  const [previews, setPreviews] = useState<PreviewItem[]>([]);
   const [uploaderName, setUploaderName] = useState("");
   const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
@@ -113,7 +176,15 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
-  // The feed card's "Photos" button links here with `?album=1` — scroll
+  useEffect(() => {
+    return () => {
+      for (const preview of previews) {
+        if (preview.objectUrl) URL.revokeObjectURL(preview.src);
+      }
+    };
+  }, [previews]);
+
+  // The feed card's media button links here with `?album=1` — scroll
   // the album into view and, if the viewer can upload, open the Add
   // Photos dialog right away. Runs once per mount after the list loads
   // (we need `canUpload` from the response before deciding to open).
@@ -175,7 +246,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
           continue;
         }
         try {
-          const assetId = await uploadFanPhoto(blob, `${p.id}.jpg`);
+          const assetId = await uploadAlbumMedia(blob, `${p.id}.jpg`);
           await createAlbumPhoto(postId, {
             assetId,
             uploaderName: p.uploaderName || "Anonymous fan",
@@ -220,11 +291,22 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     if (!fileList) return;
     const picked: File[] = [];
     for (const f of Array.from(fileList)) {
-      if (!f.type.startsWith("image/")) continue;
-      if (f.size > MAX_BYTES) {
+      const fileType = normalizeMediaType(f.type);
+      if (!ALLOWED_MEDIA_TYPES.has(fileType)) {
         toast({
-          title: "Photo too large",
-          description: `${f.name} is over 5 MB.`,
+          title: "That file format isn’t supported",
+          description: `${f.name}: choose a JPEG/PNG photo or an MP4/MOV video.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      if (f.size > ALBUM_UPLOAD_MAX_BYTES) {
+        const isVideo = fileType.startsWith("video/");
+        toast({
+          title: `${isVideo ? "Video" : "Photo"} too large`,
+          description: isVideo
+            ? `${f.name} is over 10 MB. Choose a shorter clip or trim it in your phone’s Photos/Gallery app.`
+            : `${f.name} is over 10 MB. Choose a smaller photo.`,
           variant: "destructive",
         });
         continue;
@@ -232,23 +314,52 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       picked.push(f);
     }
     if (picked.length === 0) return;
+    const createdObjectUrls: string[] = [];
     try {
-      const shrunk = await Promise.all(picked.map((f) => shrinkImage(f)));
-      setFiles(shrunk);
-      const previewUrls = await Promise.all(
-        shrunk.map(
-          (f) =>
-            new Promise<string>((resolve, reject) => {
-              const r = new FileReader();
-              r.onload = () => resolve(String(r.result));
-              r.onerror = () => reject(r.error ?? new Error("Read failed"));
-              r.readAsDataURL(f);
-            }),
+      const prepared = await Promise.all(
+        picked.map((f) =>
+          normalizeMediaType(f.type).startsWith("image/")
+            ? shrinkImage(f)
+            : Promise.resolve(f),
         ),
       );
-      setPreviews(previewUrls);
+      const previewItems = await Promise.all(
+        prepared.map(
+          (f): Promise<PreviewItem> => {
+            if (normalizeMediaType(f.type).startsWith("video/")) {
+              const src = URL.createObjectURL(f);
+              createdObjectUrls.push(src);
+              return Promise.resolve({
+                src,
+                kind: "video",
+                name: f.name,
+                objectUrl: true,
+              });
+            }
+            return new Promise<PreviewItem>((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () =>
+                resolve({
+                  src: String(r.result),
+                  kind: "image",
+                  name: f.name,
+                  objectUrl: false,
+                });
+              r.onerror = () => reject(r.error ?? new Error("Read failed"));
+              r.readAsDataURL(f);
+            });
+          },
+        ),
+      );
+      setFiles(prepared);
+      setPreviews(previewItems);
     } catch {
-      toast({ title: "Couldn't read those photos", variant: "destructive" });
+      createdObjectUrls.forEach((src) => URL.revokeObjectURL(src));
+      toast({
+        title: "Couldn’t read those files",
+        description: "Choose the original photo or video and try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -262,7 +373,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   const onSubmit = async () => {
     if (files.length === 0) {
       toast({
-        title: "Pick at least one photo",
+        title: "Pick at least one photo or video",
         variant: "destructive",
       });
       return;
@@ -271,7 +382,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     setSaving(true);
     try {
       for (const f of files) {
-        const assetId = await uploadFanPhoto(f, f.name || "fan-photo.jpg");
+        const assetId = await uploadAlbumMedia(f, f.name || "game-media");
         await createAlbumPhoto(postId, {
           assetId,
           uploaderName: name,
@@ -279,7 +390,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
         });
       }
       toast({
-        title: `Added ${files.length} photo${files.length === 1 ? "" : "s"}`,
+        title: `Added ${files.length} media item${files.length === 1 ? "" : "s"}`,
         description: "Thanks for sharing.",
       });
       reset();
@@ -287,8 +398,8 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       await refetch();
     } catch (err) {
       toast({
-        title: "Couldn't add those photos",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: "Couldn’t add that media",
+        description: friendlyUploadError(err),
         variant: "destructive",
       });
     } finally {
@@ -303,7 +414,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       await refetch();
     } catch (err) {
       toast({
-        title: "Couldn't remove that photo",
+        title: "Couldn’t remove that media",
         description: err instanceof Error ? err.message : "Please try again.",
         variant: "destructive",
       });
@@ -316,12 +427,12 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Camera className="w-5 h-5 text-primary" />
-            Photo Album
+            Photo &amp; Video Album
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             {canUpload
-              ? "Team members can add photos from the game."
-              : "Photos from the team community."}
+              ? "Team members can add photos and short videos from the game."
+              : "Photos and videos from the team community."}
           </p>
         </div>
 
@@ -334,13 +445,13 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
               data-testid="button-open-upload"
             >
               <ImagePlus className="w-4 h-4" />
-              Add Photos
+              Add Media
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle className="font-black tracking-tight">
-                Add Photos to the Album
+                Add Photos or Videos
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -359,29 +470,65 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="album-files" className="text-xs font-bold">
-                  Photos
+                  Photos and videos
                 </Label>
+                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                  <p>
+                    <strong className="text-foreground">iPhone:</strong> tap Add
+                    Video, choose Photos, then select your clip (.MOV is okay).
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Android:</strong> choose
+                    Gallery/Google Photos, then select an MP4 clip.
+                  </p>
+                  <p>
+                    10 MB per photo or video. If a clip is too large, choose a
+                    shorter clip or trim it in your phone’s Photos/Gallery app.
+                  </p>
+                  {me && "isMinor" in me && me.isMinor && (
+                    <p className="font-medium text-foreground">
+                      Under-13 accounts can only upload JPEG or PNG photos.
+                    </p>
+                  )}
+                </div>
                 <Input
                   id="album-files"
                   ref={inputRef}
                   type="file"
-                  accept="image/*"
+                  accept={FILE_ACCEPT}
                   multiple
                   onChange={(e) => onFilesPicked(e.target.files)}
                   data-testid="input-album-files"
                 />
                 {previews.length > 0 && (
                   <div className="grid grid-cols-3 gap-2 pt-2">
-                    {previews.map((src, i) => (
+                    {previews.map((preview, i) => (
                       <div
-                        key={i}
-                        className="aspect-square rounded-lg overflow-hidden bg-muted"
+                        key={`${preview.name}-${i}`}
+                        className="relative aspect-square rounded-lg overflow-hidden bg-black"
                       >
-                        <img
-                          src={src}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
+                        {preview.kind === "video" ? (
+                          <>
+                            <video
+                              src={preview.src}
+                              className="w-full h-full object-cover"
+                              muted
+                              playsInline
+                              preload="metadata"
+                              aria-label={`Video preview: ${preview.name}`}
+                            />
+                            <PlayCircle className="absolute inset-0 m-auto h-8 w-8 text-white drop-shadow" />
+                            <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                              VIDEO
+                            </span>
+                          </>
+                        ) : (
+                          <img
+                            src={preview.src}
+                            alt={`Photo preview: ${preview.name}`}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -413,9 +560,11 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
                 variant="brand"
                 onClick={onSubmit}
                 disabled={saving || files.length === 0}
-                data-testid="button-submit-photos"
+                data-testid="button-submit-media"
               >
-                {saving ? "Adding…" : `Add ${files.length || ""} photo${files.length === 1 ? "" : "s"}`.trim()}
+                {saving
+                  ? "Adding…"
+                  : `Add ${files.length || ""} item${files.length === 1 ? "" : "s"}`.trim()}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -423,49 +572,76 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
         )}
       </div>
 
-      {photos.length === 0 ? (
+      {media.length === 0 ? (
         <Card className="rounded-xl border border-border border-dashed">
           <CardContent className="p-10 text-center space-y-2">
             <Camera className="w-8 h-8 text-muted-foreground mx-auto" />
-            <p className="text-sm font-bold">No photos yet</p>
+            <p className="text-sm font-bold">No photos or videos yet</p>
             <p className="text-xs text-muted-foreground">
               {canUpload
-                ? "Be the first to share a shot from the game."
-                : "Team members haven't added any photos yet."}
+                ? "Be the first to share a moment from the game."
+                : "Team members haven’t added any media yet."}
             </p>
           </CardContent>
         </Card>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {photos.map((p) => (
+            {media.map((p) => {
+              const isVideo = p.fileType.startsWith("video/");
+              return (
               <button
                 key={p.id}
                 onClick={() => setLightbox(p)}
                 className="group relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer"
                 data-testid={`album-photo-${p.id}`}
+                aria-label={`Open ${isVideo ? "video" : "photo"} from ${p.uploaderName}`}
               >
-                <img
-                  src={p.url}
-                  alt={p.caption || "fan photo"}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {isVideo ? (
+                  <>
+                    <video
+                      src={p.url}
+                      className="w-full h-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                    <PlayCircle className="absolute inset-0 m-auto h-10 w-10 text-white drop-shadow-lg" />
+                    <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-[10px] font-black text-white">
+                      VIDEO
+                    </span>
+                  </>
+                ) : (
+                  <img
+                    src={p.url}
+                    alt={p.caption || "fan photo"}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <p className="text-[10px] font-bold text-white truncate">
                     {p.uploaderName}
                   </p>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
           <p className="text-xs text-muted-foreground">
-            {photos.length} photo{photos.length === 1 ? "" : "s"} from the team
+            {media.length} media item{media.length === 1 ? "" : "s"} from the team
           </p>
         </>
       )}
 
       <Dialog open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
-        <DialogContent className="sm:max-w-3xl p-0 overflow-hidden">
+        <DialogContent
+          className="sm:max-w-3xl p-0 overflow-hidden"
+        >
+          <DialogTitle className="sr-only">Album media details</DialogTitle>
+          <DialogDescription className="sr-only">
+            View the selected album photo or video, its caption and uploader,
+            and remove it when permitted.
+          </DialogDescription>
           {lightbox && (
             <>
               <button
@@ -475,11 +651,25 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
               >
                 <X className="w-4 h-4" />
               </button>
-              <img
-                src={lightbox.url}
-                alt=""
-                className="w-full max-h-[70vh] object-contain bg-black"
-              />
+              {lightbox.fileType.startsWith("video/") ? (
+                <video
+                  className="w-full max-h-[70vh] bg-black"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  data-testid={`album-video-player-${lightbox.id}`}
+                >
+                  <source src={lightbox.url} type={lightbox.fileType} />
+                  Your browser can’t play this video. Download it or try another
+                  browser.
+                </video>
+              ) : (
+                <img
+                  src={lightbox.url}
+                  alt={lightbox.caption || "Album photo"}
+                  className="w-full max-h-[70vh] object-contain bg-black"
+                />
+              )}
               <div className="p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-bold text-sm">{lightbox.uploaderName}</p>

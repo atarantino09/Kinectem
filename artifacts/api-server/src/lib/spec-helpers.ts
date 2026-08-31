@@ -891,7 +891,7 @@ interface PostExtras {
   hasReacted?: boolean;
   commentCount?: number;
   recentReactorName?: string | null;
-  // Number of photos in the post's team photo album (extra field beyond
+  // Number of media items in the post's team album (extra field beyond
   // the locked spec — same precedent as `recapKind`). Drives the count
   // badge on the feed card's "Photos" button.
   albumPhotoCount?: number;

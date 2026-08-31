@@ -191,7 +191,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
       "published" &&
     !(post as { hidden?: boolean }).hidden;
   // Extra server field beyond the locked spec (same precedent as
-  // `recapKind`): number of photos in the post's team photo album.
+  // `recapKind`): number of photo/video items in the post's team album.
   const albumPhotoCount =
     (post as PostResponse & { albumPhotoCount?: number }).albumPhotoCount ?? 0;
   const Icon = isNews ? Newspaper : isShort ? Play : FileText;
@@ -970,7 +970,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               {post.shareCount ?? 0}
             </Button>
           )}
-          {/* Task #867 — news posts have no photo albums; Photos stays hidden. */}
+          {/* Task #867 — news posts have no media albums; the action stays hidden. */}
           {!isShort && !isNews && (
             <Link href={`/posts/${post.id}?album=1`}>
               <Button
@@ -978,10 +978,10 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 size="sm"
                 className="font-bold gap-1.5 h-8"
                 data-testid={`button-album-${post.id}`}
-                aria-label="Open photo album"
+                aria-label="Open photo and video album"
               >
                 <Camera className="w-3.5 h-3.5" />
-                Photos
+                Media
                 {albumPhotoCount > 0 && (
                   <span
                     className="text-[9px] font-bold leading-none rounded-full bg-primary text-primary-foreground min-w-3.5 h-3.5 px-1 flex items-center justify-center"

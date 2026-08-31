@@ -7,8 +7,9 @@ export interface PostStats {
   hasReacted: boolean;
   commentCount: number;
   recentReactorName: string | null;
-  // Number of photos in the post's fan/team photo album, shown as a
-  // badge on the feed card's "Photos" button.
+  // Number of media items in the post's fan/team album, shown as a
+  // badge on the feed card's media button. The legacy field name stays
+  // stable for existing post clients.
   albumPhotoCount: number;
 }
 
@@ -135,7 +136,7 @@ export async function loadPostStats(
       })(),
     );
   }
-  // Album photo counts — `album_photos` is polymorphic over
+  // Album media counts — `album_photos` is polymorphic over
   // (postKind, postRefId), so one grouped query covers all kinds.
   // (News posts never have albums; they simply match zero rows.)
   const allIds = Array.from(idsByKind.values()).flat();
