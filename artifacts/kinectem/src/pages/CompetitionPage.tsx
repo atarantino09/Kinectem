@@ -634,6 +634,11 @@ export default function CompetitionPage() {
   const signupHref = me
     ? `/c/${encodeURIComponent(slug)}/signup`
     : `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup`)}`;
+  const kinectemHref = me
+    ? `/competitions/c/${encodeURIComponent(slug)}`
+    : `/login?signup=1&returnTo=${encodeURIComponent(
+        `/competitions/c/${slug}`,
+      )}`;
 
   return (
     <div className="min-h-screen">
@@ -736,6 +741,16 @@ export default function CompetitionPage() {
                 data-testid="btn-signup-team"
               >
                 Sign up your team
+              </Button>
+            </Link>
+            <Link href={kinectemHref}>
+              <Button
+                variant="outline"
+                className="font-bold border-white/70 bg-transparent hover:bg-white/10"
+                style={{ color: heroText }}
+                data-testid="btn-open-in-kinectem"
+              >
+                Open in Kinectem
               </Button>
             </Link>
             {me ? (
