@@ -743,16 +743,18 @@ export default function CompetitionPage() {
                 Sign up your team
               </Button>
             </Link>
-            <Link href={kinectemHref}>
-              <Button
-                variant="outline"
-                className="font-bold border-white/70 bg-transparent hover:bg-white/10"
-                style={{ color: heroText }}
-                data-testid="btn-open-in-kinectem"
-              >
-                Open in Kinectem
-              </Button>
-            </Link>
+            {!appParams ? (
+              <Link href={kinectemHref}>
+                <Button
+                  variant="outline"
+                  className="font-bold border-white/70 bg-transparent hover:bg-white/10"
+                  style={{ color: heroText }}
+                  data-testid="btn-open-in-kinectem"
+                >
+                  Open in Kinectem
+                </Button>
+              </Link>
+            ) : null}
             {me ? (
               <Button
                 variant="outline"
