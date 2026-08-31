@@ -54,6 +54,53 @@ describe("competition schedule file reading", () => {
     },
   );
 
+  it("keeps time-only Excel cells as times instead of 1899 dates", async () => {
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Match #", "Date", "Start Time", "Division", "Home Team", "Away Team"],
+      [
+        "1",
+        new Date(Date.UTC(2026, 8, 12)),
+        new Date(Date.UTC(1899, 11, 31, 9, 30)),
+        "U12",
+        "North FC",
+        "South FC",
+      ],
+    ]);
+    sheet.B2.z = "m/d/yy";
+    sheet.C2.z = "h:mm";
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Schedule");
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+
+    const csv = await readCompetitionScheduleFile(
+      new File([buffer], "time-only.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    );
+    expect(csv).toContain("1,2026-09-12,09:30,U12,North FC,South FC");
+    expect(csv).not.toContain("1899");
+  });
+
+  it("leaves zero-valued Excel date and time cells blank", async () => {
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Match #", "Date", "Start Time", "Division", "Home Team", "Away Team"],
+      ["1", 0, 0, "U12", "North FC", "South FC"],
+    ]);
+    sheet.B2.z = "m/d/yy";
+    sheet.C2.z = "h:mm";
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Schedule");
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+
+    const csv = await readCompetitionScheduleFile(
+      new File([buffer], "zero-date.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    );
+    expect(csv).toContain("1,,,U12,North FC,South FC");
+    expect(csv).not.toContain("1899");
+  });
+
   it("rejects an empty workbook without invoking the importer", async () => {
     await expect(
       readCompetitionScheduleFile(xlsxFile([[]])),

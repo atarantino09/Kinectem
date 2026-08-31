@@ -47,9 +47,40 @@ function readAsText(file: File): Promise<string> {
 function isoDate(value: unknown): string | null {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
   const year = value.getUTCFullYear();
+  // Excel's zero-date/time-only epoch is represented around 1899-12-31.
+  // It is never a meaningful competition schedule date.
+  if (year < 1901) return null;
   const month = String(value.getUTCMonth() + 1).padStart(2, "0");
   const day = String(value.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function isoTime(value: unknown): string | null {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+  const hours = value.getUTCHours();
+  const minutes = value.getUTCMinutes();
+  const seconds = value.getUTCSeconds();
+  // A zero-valued spreadsheet cell is not a useful scheduled start time.
+  if (hours === 0 && minutes === 0 && seconds === 0) return null;
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return seconds === 0 ? `${hh}:${mm}` : `${hh}:${mm}:${ss}`;
+}
+
+function isTimeOnlyNumberFormat(format: unknown): boolean {
+  if (typeof format !== "string") return false;
+  const normalized = format
+    .toLowerCase()
+    .replace(/"[^"]*"/g, "")
+    .replace(/\\./g, "");
+  const hasTimeToken =
+    normalized.includes("h") ||
+    normalized.includes("s") ||
+    normalized.includes("am/pm");
+  const hasCalendarToken =
+    normalized.includes("d") || normalized.includes("y");
+  return hasTimeToken && !hasCalendarToken;
 }
 
 function canonicalizeExcelDates(sheet: WorkSheet) {
@@ -57,8 +88,11 @@ function canonicalizeExcelDates(sheet: WorkSheet) {
     if (address.startsWith("!")) continue;
     const cell = sheet[address];
     if (cell?.t !== "d") continue;
-    const formatted = isoDate(cell.v);
-    if (formatted) cell.w = formatted;
+    if (isTimeOnlyNumberFormat(cell.z)) {
+      cell.w = isoTime(cell.v) ?? "";
+      continue;
+    }
+    cell.w = isoDate(cell.v) ?? "";
   }
 }
 

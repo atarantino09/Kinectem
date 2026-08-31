@@ -5,8 +5,8 @@
 // match-number warning, permission guard, and that status/statusReason
 // survive a re-import (imports never touch them).
 import { afterEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db, tournaments } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { db, tournamentMatches, tournaments } from "@workspace/db";
 import { loginAs, request, app } from "./helpers";
 import type { Agent } from "supertest";
 
@@ -218,6 +218,49 @@ describe("CSV import dry-run preview (Task #766)", () => {
     );
     expect(after.status).toBe("postponed");
     expect(after.statusReason).toBe("Rainout");
+  });
+
+  it("rejects Excel epoch artifacts as schedule dates and start times", async () => {
+    const { agent } = await loginAs("coach@kinectem.demo");
+    const comp = await createCompetition(agent);
+    const epochValues = `${HEADER}
+1,1899-12-31,1899-12-31,U12,boys,Gold,A,Riverside Park,CA,Field 2,Thunder FC,Lightning SC
+2,0,0,U12,boys,Gold,A,Riverside Park,CA,Field 3,Strikers,Comets`;
+
+    const res = await agent
+      .post(`/api/v1/competitions/${comp.id}/import`)
+      .send({ csv: epochValues });
+    expect(res.status).toBe(200);
+
+    const pub = await request(app).get(`/api/v1/competitions/${comp.slug}`);
+    expect(pub.status).toBe(200);
+    expect(pub.body.matches).toHaveLength(2);
+    for (const match of pub.body.matches) {
+      expect(match.matchDate).toBeNull();
+      expect(match.startTime).toBeNull();
+    }
+  });
+
+  it("does not expose an already-stored 1899 value as a kickoff time", async () => {
+    const { agent } = await loginAs("coach@kinectem.demo");
+    const comp = await createCompetition(agent);
+    await agent.post(`/api/v1/competitions/${comp.id}/import`).send({ csv: WEEK1 });
+    await db
+      .update(tournamentMatches)
+      .set({ startTime: "1899-12-31" })
+      .where(
+        and(
+          eq(tournamentMatches.tournamentId, comp.id),
+          eq(tournamentMatches.matchNumber, "1"),
+        ),
+      );
+
+    const pub = await request(app).get(`/api/v1/competitions/${comp.slug}`);
+    expect(pub.status).toBe(200);
+    const game = pub.body.matches.find(
+      (match: { matchNumber: string }) => match.matchNumber === "1",
+    );
+    expect(game.startTime).toBeNull();
   });
 
   it("blocks non-operators from previewing", async () => {

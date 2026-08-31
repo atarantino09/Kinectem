@@ -308,9 +308,24 @@ function inBatches<T>(values: T[], size = IMPORT_DB_BATCH_SIZE): T[][] {
 function parseDateCell(v: string): string | null {
   const t = v.trim();
   if (t === "") return null;
+  // Bare spreadsheet serials (especially 0) are not dates in the CSV
+  // contract. XLSX conversion resolves genuine calendar cells first.
+  if (/^\d+(?:\.\d+)?$/.test(t)) return null;
   const d = new Date(t);
   if (Number.isNaN(d.getTime())) return null;
+  // Excel's zero-date epoch is represented around 1899-12-31.
+  if (d.getUTCFullYear() < 1901) return null;
   return d.toISOString().slice(0, 10);
+}
+
+function parseStartTimeCell(v: string | null | undefined): string | null {
+  const t = (v ?? "").trim();
+  if (t === "") return null;
+  if (/^0(?:\.0+)?$/.test(t)) return null;
+  // The previous XLSX conversion could turn a time-only cell into an Excel
+  // epoch date. Never persist or return that artifact as a kickoff time.
+  if (/^(?:1899|1900)-\d{2}-\d{2}(?:[T ][^\s]+)?$/.test(t)) return null;
+  return t;
 }
 
 // Slot key for a participant: identity is (name, gender) per competition.
@@ -1223,7 +1238,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
             id: m.id,
             matchNumber: m.matchNumber,
             matchDate: m.matchDate,
-            startTime: m.startTime,
+            startTime: parseStartTimeCell(m.startTime),
             age: m.age,
             gender: m.gender,
             division: m.division,
@@ -1585,7 +1600,7 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       matchRecs.push({
         matchNumber,
         matchDate: parseDateCell(col(r, "date")),
-        startTime: col(r, "start time") || null,
+        startTime: parseStartTimeCell(col(r, "start time")),
         age,
         gender,
         division,
@@ -2239,7 +2254,7 @@ router.post(
           tournamentId: tournament.id,
           matchNumber: b.matchNumber,
           matchDate,
-          startTime: b.startTime || null,
+          startTime: parseStartTimeCell(b.startTime),
           age: b.age || null,
           gender: b.gender || null,
           division,
@@ -2340,7 +2355,7 @@ router.patch(
         .set({
           matchNumber: b.matchNumber,
           matchDate,
-          startTime: b.startTime || null,
+          startTime: parseStartTimeCell(b.startTime),
           age: b.age || null,
           gender: b.gender || null,
           division,
@@ -2372,7 +2387,7 @@ router.patch(
     // (labels, spelling, division/bracket) stay silent.
     const changes = materialChanges(match, {
       matchDate,
-      startTime: b.startTime || null,
+      startTime: parseStartTimeCell(b.startTime),
       venue: b.venue || null,
       field: b.field || null,
     });
@@ -4030,7 +4045,7 @@ router.get(
         id: m.id,
         matchNumber: m.matchNumber,
         matchDate: m.matchDate,
-        startTime: m.startTime,
+        startTime: parseStartTimeCell(m.startTime),
         division: m.division,
         bracket: m.bracket,
         venue: m.venue,
