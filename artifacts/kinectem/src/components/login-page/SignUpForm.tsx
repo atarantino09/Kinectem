@@ -301,7 +301,7 @@ export function SignUpForm({
                 Athlete, coach, parent, or fan?
               </div>
               <p className="text-xs text-slate-500">
-                You'll be invited by your org admin or coach
+                Create a free account and follow the teams you care about
               </p>
             </div>
             <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
