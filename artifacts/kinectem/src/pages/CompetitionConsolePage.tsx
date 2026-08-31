@@ -83,8 +83,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // Competitions §9b — operator console for one competition: branding panel,
-// claim-approval queue, and schedule CSV upload. Owner-or-platform-admin only
-// (server enforces). customFetch — routes are outside the locked openapi.yaml.
+// claim-approval queue, and schedule CSV upload. Owners, competition/hub
+// admins, and platform admins can operate it (server enforces). customFetch —
+// these routes are outside the locked openapi.yaml.
 
 interface CompetitionRow {
   id: string;
@@ -3824,9 +3825,9 @@ function ConsoleWithTour({
   preview?: boolean;
 }) {
   const { token: previewClaimToken } = useClaimTokenParams();
-  // Open the walkthrough once per browser, the first time the organizer lands
-  // on any competition console (only organizers can reach this page — the
-  // /my/competitions lookup above already filtered to competitions they run).
+  // Open the walkthrough once per browser, the first time an authorized
+  // operator lands on any competition console. Platform admins may arrive
+  // through the all-competition finder without a /my/competitions row.
   useEffect(() => {
     if (typeof window === "undefined" || !detail || preview) return;
     let alreadySeen = false;
@@ -3938,8 +3939,9 @@ function ConsoleWithTour({
       {!preview ? (
         <>
           <HubPanel competitionId={row.id} organizerId={row.organizerId} />
-          {/* Task #745 — per-competition admin management (any admin can add;
-              only the owner can remove). */}
+          {/* Per-competition admin management. Platform admins receive
+              viewerIsOwner=true from the API so they can also remove admins;
+              the competition owner remains protected. */}
           <CompetitionAdminsPanel
             kind="competition"
             targetId={row.id}

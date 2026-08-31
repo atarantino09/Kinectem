@@ -72,6 +72,138 @@ async function setup() {
 }
 
 describe("competition & hub admins (Task #745)", () => {
+  it("lets platform admins find and fully operate competitions they do not own", async () => {
+    const { owner, admin, outsider } = await setup();
+    const platformAdmin = await loginAs("sam@kinectem.demo");
+    const competitionName = uniq("Support access");
+    const comp = await createCompetition(owner.agent, competitionName);
+    createdComps.push(comp.id);
+
+    const deniedSearch = await outsider.agent.get(
+      `/api/v1/admin/competitions?q=${encodeURIComponent(competitionName)}`,
+    );
+    expect(deniedSearch.status).toBe(403);
+
+    const search = await platformAdmin.agent.get(
+      `/api/v1/admin/competitions?q=${encodeURIComponent(competitionName)}`,
+    );
+    expect(search.status).toBe(200);
+    expect(search.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: comp.id,
+          name: competitionName,
+          accessRole: "admin",
+        }),
+      ]),
+    );
+    const myCompetitions = await platformAdmin.agent.get(
+      "/api/v1/my/competitions",
+    );
+    expect(myCompetitions.status).toBe(200);
+    expect(
+      myCompetitions.body.data.some(
+        (row: { id: string }) => row.id === comp.id,
+      ),
+    ).toBe(false);
+
+    const literalWildcards = await platformAdmin.agent.get(
+      "/api/v1/admin/competitions?q=%25%25",
+    );
+    expect(literalWildcards.status).toBe(200);
+    expect(
+      literalWildcards.body.data.some(
+        (row: { id: string }) => row.id === comp.id,
+      ),
+    ).toBe(false);
+
+    const uuidSearch = await platformAdmin.agent.get(
+      `/api/v1/admin/competitions?q=${comp.id}`,
+    );
+    expect(uuidSearch.status).toBe(200);
+    expect(
+      uuidSearch.body.data.some((row: { id: string }) => row.id === comp.id),
+    ).toBe(true);
+
+    const detail = await platformAdmin.agent.get(`/api/v1/competitions/${comp.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.competition.canManage).toBe(true);
+
+    const outsiderEdit = await outsider.agent
+      .patch(`/api/v1/competitions/${comp.id}`)
+      .send({ location: "Should not save" });
+    expect(outsiderEdit.status).toBe(403);
+
+    const edit = await platformAdmin.agent
+      .patch(`/api/v1/competitions/${comp.id}`)
+      .send({ location: "Updated by support" });
+    expect(edit.status).toBe(200);
+    expect(edit.body.location).toBe("Updated by support");
+
+    const game = await platformAdmin.agent
+      .post(`/api/v1/competitions/${comp.id}/matches`)
+      .send({
+        matchNumber: "936",
+        matchDate: "2026-08-01",
+        division: "Open",
+        homeName: "North",
+        awayName: "South",
+      });
+    expect(game.status).toBe(201);
+
+    const bracket = await platformAdmin.agent
+      .post(`/api/v1/competitions/${comp.id}/brackets`)
+      .send({ label: "Support bracket" });
+    expect(bracket.status).toBe(201);
+
+    const addAdmin = await owner.agent
+      .post(`/api/v1/competitions/${comp.id}/admins`)
+      .send({ userId: admin.user.id });
+    expect(addAdmin.status).toBe(201);
+    const adminList = await platformAdmin.agent.get(
+      `/api/v1/competitions/${comp.id}/admins`,
+    );
+    expect(adminList.status).toBe(200);
+    expect(adminList.body.viewerIsOwner).toBe(true);
+    const removeOwner = await platformAdmin.agent.delete(
+      `/api/v1/competitions/${comp.id}/admins/${owner.user.id}`,
+    );
+    expect(removeOwner.status).toBe(409);
+    expect(removeOwner.body.code).toBe("OWNER_NOT_REMOVABLE");
+    const removeAdmin = await platformAdmin.agent.delete(
+      `/api/v1/competitions/${comp.id}/admins/${admin.user.id}`,
+    );
+    expect(removeAdmin.status).toBe(200);
+
+    const startMasquerade = await platformAdmin.agent.post(
+      `/api/v1/admin/masquerade/${outsider.user.id}/start`,
+    );
+    expect(startMasquerade.status).toBe(200);
+    const hiddenWhileMasquerading = await platformAdmin.agent.get(
+      `/api/v1/admin/competitions?q=${encodeURIComponent(competitionName)}`,
+    );
+    expect(hiddenWhileMasquerading.status).toBe(403);
+    const blockedEditWhileMasquerading = await platformAdmin.agent
+      .patch(`/api/v1/competitions/${comp.id}`)
+      .send({ location: "Masquerade must not save" });
+    expect(blockedEditWhileMasquerading.status).toBe(403);
+    const stopMasquerade = await platformAdmin.agent.post(
+      "/api/v1/admin/masquerade/stop",
+    );
+    expect(stopMasquerade.status).toBe(200);
+
+    const wrongConfirmation = await platformAdmin.agent
+      .delete(`/api/v1/competitions/${comp.id}`)
+      .send({ confirm: "wrong name" });
+    expect(wrongConfirmation.status).toBe(400);
+
+    const deletion = await platformAdmin.agent
+      .delete(`/api/v1/competitions/${comp.id}`)
+      .send({ confirm: competitionName });
+    expect(deletion.status).toBe(200);
+    createdComps.splice(createdComps.indexOf(comp.id), 1);
+  });
+
   it("lists the owner first and flags viewerIsOwner", async () => {
     const { owner } = await setup();
     const hub = await createHub(owner.agent, uniq("Hub"));

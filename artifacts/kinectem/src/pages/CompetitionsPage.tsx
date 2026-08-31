@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Trophy, Upload } from "lucide-react";
+import { useWhoami } from "@/hooks/useWhoami";
+import { Building2, Search, ShieldCheck, Trophy, Upload } from "lucide-react";
 
 // Competitions §4 — self-serve competition creation. Any signed-in user can
 // create a tournament or league they operate; the per-competition console
@@ -46,6 +47,96 @@ interface OrganizerRow {
   bannerUrl: string | null;
   websiteUrl: string | null;
   competitionCount: number;
+}
+
+function PlatformAdminCompetitionFinder() {
+  const [query, setQuery] = useState("");
+  const trimmedQuery = query.trim();
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(trimmedQuery), 250);
+    return () => window.clearTimeout(timer);
+  }, [trimmedQuery]);
+  const resultsQ = useQuery<{ data: CompetitionRow[] }>({
+    queryKey: ["admin", "competitions", debouncedQuery],
+    queryFn: () =>
+      customFetch<{ data: CompetitionRow[] }>(
+        `/api/v1/admin/competitions?q=${encodeURIComponent(debouncedQuery)}`,
+        { method: "GET" },
+      ),
+    enabled: debouncedQuery.length >= 2,
+  });
+
+  return (
+    <Card className="border-primary/30" data-testid="card-admin-competition-finder">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          Platform admin access
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Find any competition and open its full management console to help its
+          organizer.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search competitions by name or ID…"
+            className="pl-9"
+            data-testid="input-admin-competition-search"
+          />
+        </div>
+        {trimmedQuery.length < 2 ? (
+          <p className="text-xs text-muted-foreground">
+            Enter at least 2 characters.
+          </p>
+        ) : debouncedQuery !== trimmedQuery || resultsQ.isLoading ? (
+          <p className="text-sm text-muted-foreground">Searching…</p>
+        ) : resultsQ.isError ? (
+          <p className="text-sm text-destructive">
+            Competitions couldn't be loaded. Try again.
+          </p>
+        ) : (resultsQ.data?.data ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No competitions match that search.
+          </p>
+        ) : (
+          <div className="divide-y divide-border rounded-lg border">
+            {(resultsQ.data?.data ?? []).map((competition) => (
+              <div
+                key={competition.id}
+                className="flex items-center gap-3 p-3"
+                data-testid={`row-admin-competition-${competition.id}`}
+              >
+                <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">
+                    {competition.name}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    <span className="capitalize">{competition.type}</span>
+                    {competition.location ? ` · ${competition.location}` : ""}
+                  </p>
+                </div>
+                <Link
+                  href={`/competitions/${competition.id}`}
+                  data-testid={`link-admin-competition-${competition.id}`}
+                >
+                  <Button size="sm" variant="outline" className="font-bold">
+                    Open console
+                  </Button>
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 // Competitions §9c — 3-step self-serve create wizard:
@@ -596,6 +687,11 @@ function CreateCompetitionCard({
 }
 
 export default function CompetitionsPage() {
+  const { data: whoami } = useWhoami();
+  const effectiveRole = whoami?.isMasquerading
+    ? whoami.viewingAs?.role
+    : whoami?.realUser?.role;
+  const isPlatformAdmin = effectiveRole === "admin";
   const organizersQ = useQuery<{ data: OrganizerRow[] }>({
     queryKey: ["my", "organizers"],
     queryFn: () =>
@@ -622,6 +718,8 @@ export default function CompetitionsPage() {
             competitions live in the sidebar.
           </p>
         </div>
+
+        {isPlatformAdmin ? <PlatformAdminCompetitionFinder /> : null}
 
         <CreateCompetitionCard
           organizers={organizers}

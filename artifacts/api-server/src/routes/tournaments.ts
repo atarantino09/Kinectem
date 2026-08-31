@@ -35,6 +35,7 @@ import {
   desc,
   sql,
   inArray,
+  ilike,
   or,
   TransactionRollbackError,
 } from "drizzle-orm";
@@ -579,54 +580,60 @@ router.post(
 // console listing). Same shape as the admin listing.
 // ---------------------------------------------------------------------------
 
-async function competitionListRow(t: typeof tournaments.$inferSelect) {
-  const [{ matchCount }] = await db
-    .select({ matchCount: sql<number>`count(*)::int` })
-    .from(tournamentMatches)
-    .where(eq(tournamentMatches.tournamentId, t.id));
-  const [{ participantCount }] = await db
-    .select({ participantCount: sql<number>`count(*)::int` })
-    .from(tournamentParticipants)
-    .where(eq(tournamentParticipants.tournamentId, t.id));
-  const [{ claimedCount }] = await db
-    .select({ claimedCount: sql<number>`count(*)::int` })
-    .from(tournamentParticipants)
-    .where(
-      and(
-        eq(tournamentParticipants.tournamentId, t.id),
-        sql`${tournamentParticipants.teamId} IS NOT NULL`,
-      ),
-    );
-  const [{ pendingClaimCount }] = await db
-    .select({ pendingClaimCount: sql<number>`count(*)::int` })
-    .from(tournamentParticipants)
-    .where(
-      and(
-        eq(tournamentParticipants.tournamentId, t.id),
-        sql`${tournamentParticipants.pendingTeamId} IS NOT NULL`,
-        isNull(tournamentParticipants.teamId),
-      ),
-    );
-  return {
-    id: t.id,
-    slug: t.slug,
-    name: t.name,
-    type: t.type,
-    startDate: t.startDate,
-    endDate: t.endDate,
-    location: t.location,
-    organizerId: t.organizerId ?? null,
-    autoApproveClaims: t.autoApproveClaims,
-    logoUrl: t.logoUrl,
-    brandColor: t.brandColor,
-    secondaryColor: t.secondaryColor,
-    tertiaryColor: t.tertiaryColor,
-    matchCount,
-    participantCount,
-    claimedCount,
-    pendingClaimCount,
-    createdAt: t.createdAt.toISOString(),
-  };
+async function competitionListRows(rows: (typeof tournaments.$inferSelect)[]) {
+  const ids = rows.map((row) => row.id);
+  const [matchCounts, participantCounts] = ids.length
+    ? await Promise.all([
+        db
+          .select({
+            id: tournamentMatches.tournamentId,
+            matchCount: sql<number>`count(*)::int`,
+          })
+          .from(tournamentMatches)
+          .where(inArray(tournamentMatches.tournamentId, ids))
+          .groupBy(tournamentMatches.tournamentId),
+        db
+          .select({
+            id: tournamentParticipants.tournamentId,
+            participantCount: sql<number>`count(*)::int`,
+            claimedCount: sql<number>`(count(*) FILTER (WHERE ${tournamentParticipants.teamId} IS NOT NULL))::int`,
+            pendingClaimCount: sql<number>`(count(*) FILTER (WHERE ${tournamentParticipants.pendingTeamId} IS NOT NULL AND ${tournamentParticipants.teamId} IS NULL))::int`,
+          })
+          .from(tournamentParticipants)
+          .where(inArray(tournamentParticipants.tournamentId, ids))
+          .groupBy(tournamentParticipants.tournamentId),
+      ])
+    : [[], []];
+  const matchCountById = new Map(
+    matchCounts.map((row) => [row.id, Number(row.matchCount)]),
+  );
+  const participantCountById = new Map(
+    participantCounts.map((row) => [row.id, row]),
+  );
+
+  return rows.map((t) => {
+    const participants = participantCountById.get(t.id);
+    return {
+      id: t.id,
+      slug: t.slug,
+      name: t.name,
+      type: t.type,
+      startDate: t.startDate,
+      endDate: t.endDate,
+      location: t.location,
+      organizerId: t.organizerId ?? null,
+      autoApproveClaims: t.autoApproveClaims,
+      logoUrl: t.logoUrl,
+      brandColor: t.brandColor,
+      secondaryColor: t.secondaryColor,
+      tertiaryColor: t.tertiaryColor,
+      matchCount: matchCountById.get(t.id) ?? 0,
+      participantCount: Number(participants?.participantCount ?? 0),
+      claimedCount: Number(participants?.claimedCount ?? 0),
+      pendingClaimCount: Number(participants?.pendingClaimCount ?? 0),
+      createdAt: t.createdAt.toISOString(),
+    };
+  });
 }
 
 // GET /my/manageable-teams — every team the caller can claim a competition
@@ -720,13 +727,53 @@ router.get(
         ),
       )
       .orderBy(desc(tournaments.createdAt));
-    const data = await Promise.all(
-      rows.map(async (row) => ({
-        ...(await competitionListRow(row)),
+    const listRows = await competitionListRows(rows);
+    const data = listRows.map((listRow, index) => ({
+        ...listRow,
         accessRole:
-          (row.ownerUserId ?? row.createdById) === me.id ? "owner" : "admin",
-      })),
-    );
+          (rows[index].ownerUserId ?? rows[index].createdById) === me.id
+            ? "owner"
+            : "admin",
+      }));
+    res.json({ data });
+  }),
+);
+
+// Platform-admin support desk: search every competition without changing the
+// membership-scoped "My competitions" sidebar. The result IDs link directly
+// to the existing console UUID fallback, whose detail + mutations all use the
+// shared canOperateCompetition admin bypass.
+router.get(
+  "/admin/competitions",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const query = String(req.query.q ?? "").trim();
+    if (query.length < 2) {
+      return apiError(res, 400, "Enter at least 2 characters to search.");
+    }
+    if (query.length > 200) {
+      return apiError(res, 400, "Search is too long.");
+    }
+    // LIKE's %, _, and backslash are metacharacters. Escape them so an admin
+    // searching for literal punctuation cannot accidentally request a broad
+    // scan (the value remains parameterized through Drizzle).
+    const search = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+    const rows = await db
+      .select()
+      .from(tournaments)
+      .where(
+        or(
+          ilike(tournaments.name, search),
+          ilike(tournaments.slug, search),
+          ...(UUID_RE.test(query) ? [eq(tournaments.id, query)] : []),
+        ),
+      )
+      .orderBy(desc(tournaments.createdAt))
+      .limit(50);
+    const data = (await competitionListRows(rows)).map((row) => ({
+        ...row,
+        accessRole: "admin" as const,
+      }));
     res.json({ data });
   }),
 );
