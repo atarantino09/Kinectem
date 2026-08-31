@@ -74,7 +74,7 @@ describe("deleted recap cleanup (task 761)", () => {
     await db.delete(scheduleEvents).where(eq(scheduleEvents.id, event.id));
   });
 
-  it("annotates hidden posts with hidden:true on the profile feed for platform admins only", async () => {
+  it("keeps deleted recaps out of every profile feed", async () => {
     const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
     const { org } = await getOrgAndTeam();
     const postId = await createRecap(
@@ -95,7 +95,8 @@ describe("deleted recap cleanup (task 761)", () => {
       own.body.data.find((p: { id: string }) => p.id === postId),
     ).toBeUndefined();
 
-    // Platform admin sees it, flagged hidden.
+    // Platform admins use dedicated moderation/detail surfaces; a deleted
+    // recap must not reappear on the profile page.
     const [adminRow] = await db
       .select({ email: users.email })
       .from(users)
@@ -109,8 +110,7 @@ describe("deleted recap cleanup (task 761)", () => {
     const found = adminView.body.data.find(
       (p: { id: string }) => p.id === postId,
     );
-    expect(found).toBeDefined();
-    expect(found.hidden).toBe(true);
+    expect(found).toBeUndefined();
   });
 
   it("rejects re-linking a deleted recap to a schedule game", async () => {

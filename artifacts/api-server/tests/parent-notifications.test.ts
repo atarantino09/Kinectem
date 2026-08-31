@@ -2507,7 +2507,7 @@ describe("parent inbox: per-child unified notifications", () => {
       expect(restored?.status).toBe("approved");
     });
 
-    it("after Remove the child's authored article + highlight disappear from non-admin profile feeds but stay visible to admins", async () => {
+    it("after Remove the child's authored recap disappears from profile feeds", async () => {
       const samiraId = await findUserId("samira@kinectem.demo");
       const teamId = await getAnyTeamId();
       const [article] = await db
@@ -2571,16 +2571,16 @@ describe("parent inbox: per-child unified notifications", () => {
       expect(coachAfterIds).not.toContain(articlePostId);
       expect(coachAfterIds).not.toContain(highlightPostId);
 
-      // A real admin still sees both rows on the child's profile feed
-      // so moderation review remains possible. The DB rows themselves
-      // carry `hiddenAt` + `hiddenByUserId`, which we assert directly.
+      // Deleted recaps stay out of the profile feed for admins too. Hidden
+      // highlights retain the existing admin moderation view. The DB rows
+      // themselves carry `hiddenAt` + `hiddenByUserId`.
       const { agent: admin } = await loginAs((u) => u.role === "admin");
       const adminAfter = await admin.get(`/api/v1/users/${samiraId}/posts`);
       expect(adminAfter.status).toBe(200);
       const adminAfterIds = (
         adminAfter.body.data as Array<{ id: string }>
       ).map((p) => p.id);
-      expect(adminAfterIds).toContain(articlePostId);
+      expect(adminAfterIds).not.toContain(articlePostId);
       expect(adminAfterIds).toContain(highlightPostId);
       const [hiddenArticle] = await db
         .select()

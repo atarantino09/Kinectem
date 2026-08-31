@@ -803,8 +803,14 @@ router.get(
       res.setHeader("X-Robots-Tag", "noindex, nofollow, noimageindex");
     }
 
-    const articleConds = [eq(articles.status, "published")];
-    if (!isAdmin) articleConds.push(isNull(articles.hiddenAt));
+    // A profile is a user-facing archive, not a moderation surface:
+    // soft-deleted recaps must stay out of it for every viewer, including
+    // platform admins. Admin moderation can use the dedicated post/detail
+    // surfaces instead of resurfacing a deleted card on someone's profile.
+    const articleConds = [
+      eq(articles.status, "published"),
+      isNull(articles.hiddenAt),
+    ];
 
     // 1) Articles the user authored.
     const authored = await db
@@ -1301,16 +1307,13 @@ router.get(
       articleRows.map((row) => row.a.competitionId),
     );
     const posts = limited.map((row) => {
-      // Platform admins see soft-deleted (hidden) posts on profiles for
-      // moderation. Annotate them (extra field beyond the locked spec) so
-      // the client can render a clear "Deleted" badge instead of the post
-      // silently looking alive.
       // News rows have no hidden/moderation state — keep the hiddenAt
-      // dereference to article/highlight rows only.
+      // dereference to highlight rows only. Deleted articles are filtered
+      // from the profile query above for every viewer.
       const hiddenExtra =
         isAdmin &&
-        row.kind !== "news" &&
-        (row.kind === "article" ? row.a.hiddenAt : row.h.hiddenAt)
+        row.kind === "highlight" &&
+        row.h.hiddenAt
           ? { hidden: true as const }
           : {};
       const sharedBy = row.sharedAt
