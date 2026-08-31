@@ -237,13 +237,13 @@ export default function TournamentSignupPage() {
   if (q.isError || !q.data) {
     const message =
       (q.error as Error | null)?.message ??
-      "This tournament link is invalid or no longer available.";
+      "This competition link is invalid or no longer available.";
     return (
       <div className="min-h-screen max-w-xl mx-auto p-6">
         <Card className="rounded-xl border-border">
           <CardContent className="p-6 text-center space-y-2">
             <h1 className="text-xl font-black tracking-tight">
-              Tournament unavailable
+              Competition unavailable
             </h1>
             <p className="text-sm text-muted-foreground">{message}</p>
             <Link href="/">
@@ -327,7 +327,7 @@ export default function TournamentSignupPage() {
             </p>
             {unclaimed.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Every team name in this tournament has already been claimed.
+                Every team name in this competition has already been claimed.
               </p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -518,7 +518,7 @@ export default function TournamentSignupPage() {
                 </p>
                 <p>
                   This is a <span className="font-bold">temporary team</span> with
-                  no organization. You can write recaps while the tournament is
+                  no organization. You can write recaps while the competition is
                   active. After it ends, create or join a real organization to
                   keep full access.
                 </p>
