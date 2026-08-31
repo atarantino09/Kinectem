@@ -2,7 +2,7 @@ import type { WorkBook, WorkSheet } from "@e965/xlsx";
 
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const MAX_XLSX_BYTES = 5 * 1024 * 1024;
+const MAX_SCHEDULE_FILE_BYTES = 10 * 1024 * 1024;
 
 function isXlsxFile(file: File): boolean {
   return file.name.toLowerCase().endsWith(".xlsx") || file.type === XLSX_MIME;
@@ -104,12 +104,15 @@ async function workbookToCsv(buffer: ArrayBuffer): Promise<string> {
 
 export async function readCompetitionScheduleFile(file: File): Promise<string> {
   if (isXlsxFile(file)) {
-    if (file.size > MAX_XLSX_BYTES) {
-      throw new Error("That Excel workbook is too large. Choose one under 5 MB.");
+    if (file.size > MAX_SCHEDULE_FILE_BYTES) {
+      throw new Error("That Excel workbook is too large. Choose one under 10 MB.");
     }
     return workbookToCsv(await readAsArrayBuffer(file));
   }
   if (file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv") {
+    if (file.size > MAX_SCHEDULE_FILE_BYTES) {
+      throw new Error("That CSV file is too large. Choose one under 10 MB.");
+    }
     return readAsText(file);
   }
   throw new Error("Choose a CSV or Excel (.xlsx) schedule file.");

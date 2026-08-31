@@ -97,6 +97,13 @@ app.patch("/api/v1/admin/competition-claim-links/:id/logo", imageUploadJson);
 const postImageUploadJson = express.json({ limit: "25mb" });
 app.post("/api/v1/posts", postImageUploadJson);
 app.patch("/api/v1/posts/:postId", postImageUploadJson);
+// Task #938 — league competition schedules can contain up to 25,000 games.
+// Their CSV JSON body is capped at 10 MB in tournaments.ts; allow modest JSON
+// encoding overhead on ONLY the two schedule-import aliases. Keep this before
+// the global 1 MB parser so every unrelated API route retains the tight cap.
+const competitionScheduleJson = express.json({ limit: "12mb" });
+app.post("/api/v1/tournaments/:id/import", competitionScheduleJson);
+app.post("/api/v1/competitions/:id/import", competitionScheduleJson);
 // S7 — global JSON limit kept tight. Binary asset uploads use a dedicated
 // express.raw() parser (10 MB) on PUT /assets/:assetId/data, so this does not
 // affect uploads; all JSON request bodies are text-only.

@@ -287,7 +287,21 @@ function buildColumnSummary(
   return { matched, missingOptional, ignoredHeaders };
 }
 
-const MAX_IMPORT_ROWS = 1000;
+// Task #938 — league exports routinely exceed the old 1,000-row ceiling.
+// Keep the row and text limits aligned with the route-specific 12 MB parser
+// in app.ts and the client's 10 MB file cap.
+const MAX_IMPORT_ROWS = 25_000;
+const MAX_IMPORT_CSV_CHARS = 10_000_000;
+const IMPORT_DB_BATCH_SIZE = 1_000;
+const PREVIEW_SAMPLE_LIMIT = 200;
+
+function inBatches<T>(values: T[], size = IMPORT_DB_BATCH_SIZE): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    batches.push(values.slice(i, i + size));
+  }
+  return batches;
+}
 
 // Normalize a CSV date cell to a YYYY-MM-DD string for the `date` column, or
 // null when it isn't a parseable date.
@@ -1380,7 +1394,13 @@ router.get(
 // ---------------------------------------------------------------------------
 
 const ImportBody = z.object({
-  csv: z.string().min(1).max(2_000_000),
+  csv: z
+    .string()
+    .min(1)
+    .max(
+      MAX_IMPORT_CSV_CHARS,
+      "Schedule file is too large; maximum CSV size is 10 MB.",
+    ),
   // Task #766 — dry-run preview: parse + diff against existing games without
   // writing anything. The apply path (dryRun absent/false) is unchanged.
   dryRun: z.boolean().optional(),
@@ -1751,13 +1771,18 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         ok: true,
         preview: true,
         tournamentId: tournament.id,
-        added,
-        changed,
+        addedCount: added.length,
+        changedCount: changed.length,
+        renumberWarningCount: renumberWarnings.length,
+        missingFromFileCount: missingFromFile.length,
+        rowWarningCount: rowWarnings.length,
+        added: added.slice(0, PREVIEW_SAMPLE_LIMIT),
+        changed: changed.slice(0, PREVIEW_SAMPLE_LIMIT),
         unchangedCount,
-        renumberWarnings,
-        missingFromFile,
+        renumberWarnings: renumberWarnings.slice(0, PREVIEW_SAMPLE_LIMIT),
+        missingFromFile: missingFromFile.slice(0, PREVIEW_SAMPLE_LIMIT),
         columns: buildColumnSummary(grid[0], headerIndex),
-        rowWarnings,
+        rowWarnings: rowWarnings.slice(0, PREVIEW_SAMPLE_LIMIT),
       });
     }
 
@@ -1769,6 +1794,11 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
       .from(tournamentMatches)
       .where(eq(tournamentMatches.tournamentId, tournament.id));
     const beforeByNumber = new Map(beforeMatches.map((m) => [m.matchNumber, m]));
+    // PostgreSQL cannot upsert duplicate conflict keys in one INSERT. Preserve
+    // the established "last row wins" behavior while allowing batched writes.
+    const finalMatchByNumber = new Map<string, MatchRec>();
+    for (const m of matchRecs) finalMatchByNumber.set(m.matchNumber, m);
+    const finalMatchRecs = Array.from(finalMatchByNumber.values());
 
     const summary = await db.transaction(async (tx) => {
       // Task #780 — serialize imports against the bulk clear-games /
@@ -1780,11 +1810,11 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
 
       // Upsert participant slots (idempotent on the unique-slot index).
       const slotValues = Array.from(slots.values());
-      if (slotValues.length > 0) {
+      for (const batch of inBatches(slotValues)) {
         await tx
           .insert(tournamentParticipants)
           .values(
-            slotValues.map((s) => ({
+            batch.map((s) => ({
               tournamentId: tournament.id,
               name: s.name,
               nameKey: s.nameKey,
@@ -1811,19 +1841,37 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
           p.id,
         ]),
       );
+      const participantRefreshes: Array<
+        typeof tournamentParticipants.$inferInsert
+      > = [];
       for (const slot of slotValues) {
         const participantId = participantIdBySlot.get(
           slotKey(slot.division, slot.bracket, slot.nameKey, slot.gender),
         );
         if (!participantId) continue;
+        participantRefreshes.push({
+          id: participantId,
+          tournamentId: tournament.id,
+          name: slot.name,
+          nameKey: slot.nameKey,
+          division: slot.division,
+          bracket: slot.bracket,
+          age: slot.age,
+          gender: slot.gender,
+        });
+      }
+      for (const batch of inBatches(participantRefreshes)) {
         await tx
-          .update(tournamentParticipants)
-          .set({
-            division: slot.division,
-            bracket: slot.bracket,
-            age: slot.age,
+          .insert(tournamentParticipants)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: tournamentParticipants.id,
+            set: {
+              division: sql`excluded.division`,
+              bracket: sql`excluded.bracket`,
+              age: sql`excluded.age`,
+            },
           })
-          .where(eq(tournamentParticipants.id, participantId));
       }
 
       // Re-read participants after refreshing imported display categories.
@@ -1836,65 +1884,80 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         partBySlot.set(slotKey(p.division, p.bracket, p.nameKey, p.gender), p.id);
       }
 
-      // Upsert matches (idempotent on the unique (tournament, matchNumber)).
-      let matchesUpserted = 0;
-      for (const m of matchRecs) {
-        const homeParticipantId = m.homeName
-          ? partBySlot.get(slotKey(m.division, m.bracket, m.homeKey, m.gender)) ?? null
-          : null;
-        const awayParticipantId = m.awayName
-          ? partBySlot.get(slotKey(m.division, m.bracket, m.awayKey, m.gender)) ?? null
-          : null;
+      const matchValue = (m: MatchRec) => ({
+        tournamentId: tournament.id,
+        matchNumber: m.matchNumber,
+        matchDate: m.matchDate,
+        startTime: m.startTime,
+        age: m.age,
+        gender: m.gender,
+        division: m.division,
+        bracket: m.bracket,
+        venue: m.venue,
+        venueState: m.venueState,
+        field: m.field,
+        homeParticipantId: m.homeName
+          ? partBySlot.get(
+              slotKey(m.division, m.bracket, m.homeKey, m.gender),
+            ) ?? null
+          : null,
+        awayParticipantId: m.awayName
+          ? partBySlot.get(
+              slotKey(m.division, m.bracket, m.awayKey, m.gender),
+            ) ?? null
+          : null,
+      });
+      const commonConflictSet = {
+        matchDate: sql`excluded.match_date`,
+        startTime: sql`excluded.start_time`,
+        age: sql`excluded.age`,
+        gender: sql`excluded.gender`,
+        division: sql`excluded.division`,
+        bracket: sql`excluded.bracket`,
+        venue: sql`excluded.venue`,
+        venueState: sql`excluded.venue_state`,
+        field: sql`excluded.field`,
+        homeParticipantId: sql`excluded.home_participant_id`,
+        awayParticipantId: sql`excluded.away_participant_id`,
+        updatedAt: new Date(),
+      };
+
+      // Upsert matches in bounded batches. Status-bearing and status-blank
+      // rows are separate so a blank status still leaves an existing inline
+      // status untouched.
+      const withoutStatus = finalMatchRecs.filter((m) => m.status === null);
+      for (const batch of inBatches(withoutStatus)) {
         await tx
           .insert(tournamentMatches)
-          .values({
-            tournamentId: tournament.id,
-            matchNumber: m.matchNumber,
-            matchDate: m.matchDate,
-            startTime: m.startTime,
-            age: m.age,
-            gender: m.gender,
-            division: m.division,
-            bracket: m.bracket,
-            venue: m.venue,
-            venueState: m.venueState,
-            field: m.field,
-            homeParticipantId,
-            awayParticipantId,
-            ...(m.status !== null ? { status: m.status } : {}),
-          })
+          .values(batch.map(matchValue))
+          .onConflictDoUpdate({
+            target: [tournamentMatches.tournamentId, tournamentMatches.matchNumber],
+            set: commonConflictSet,
+          });
+      }
+      const withStatus = finalMatchRecs.filter((m) => m.status !== null);
+      for (const batch of inBatches(withStatus)) {
+        await tx
+          .insert(tournamentMatches)
+          .values(
+            batch.map((m) => ({
+              ...matchValue(m),
+              status: m.status!,
+            })),
+          )
           .onConflictDoUpdate({
             target: [tournamentMatches.tournamentId, tournamentMatches.matchNumber],
             set: {
-              matchDate: m.matchDate,
-              startTime: m.startTime,
-              age: m.age,
-              gender: m.gender,
-              division: m.division,
-              bracket: m.bracket,
-              venue: m.venue,
-              venueState: m.venueState,
-              field: m.field,
-              homeParticipantId,
-              awayParticipantId,
-              // Task #767 — a provided status overwrites; a blank/absent
-              // cell leaves the inline-set status alone. Restoring to
-              // scheduled clears any stale postpone/cancel reason.
-              ...(m.status !== null
-                ? {
-                    status: m.status,
-                    ...(m.status === "scheduled" ? { statusReason: null } : {}),
-                  }
-                : {}),
-              updatedAt: new Date(),
+              ...commonConflictSet,
+              status: sql`excluded.status`,
+              statusReason: sql`CASE WHEN excluded.status = 'scheduled' THEN NULL ELSE ${tournamentMatches.statusReason} END`,
             },
           });
-        matchesUpserted += 1;
       }
 
       return {
         participantCount: partRows.length,
-        matchesUpserted,
+        matchesUpserted: finalMatchRecs.length,
         partRows,
       };
     });
@@ -1922,11 +1985,8 @@ const importScheduleHandler = asyncHandler(async (req, res) => {
         summary.partRows.map((p) => [slotKey(p.division, p.bracket, p.nameKey, p.gender), p]),
       );
       // Later rows win on upsert, so diff only each match number's LAST row.
-      const finalByNumber = new Map<string, MatchRec>();
-      for (const m of matchRecs) finalByNumber.set(m.matchNumber, m);
-
       const changedGames: { teamIds: string[]; statusChanged: boolean }[] = [];
-      for (const m of finalByNumber.values()) {
+      for (const m of finalMatchByNumber.values()) {
         const ex = beforeByNumber.get(m.matchNumber);
         if (!ex) continue; // brand-new game: no one to re-plan around it yet
         const changes = materialChanges(ex, m);

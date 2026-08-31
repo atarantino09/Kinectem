@@ -62,12 +62,23 @@ describe("competition schedule file reading", () => {
 
   it("rejects oversized workbooks before parsing", async () => {
     const file = new File(
-      [new Uint8Array(5 * 1024 * 1024 + 1)],
+      [new Uint8Array(10 * 1024 * 1024 + 1)],
       "oversized.xlsx",
       { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
     );
     await expect(readCompetitionScheduleFile(file)).rejects.toThrow(
-      "under 5 MB",
+      "under 10 MB",
+    );
+  });
+
+  it("rejects oversized CSV files before reading", async () => {
+    const file = new File(
+      [new Uint8Array(10 * 1024 * 1024 + 1)],
+      "oversized.csv",
+      { type: "text/csv" },
+    );
+    await expect(readCompetitionScheduleFile(file)).rejects.toThrow(
+      "under 10 MB",
     );
   });
 
