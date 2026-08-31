@@ -125,6 +125,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const qc = useQueryClient();
 
+  useEffect(() => {
+    // Keep the submitted term visible while the search results are open, but
+    // don't carry it into the next page in the shared header.
+    const pathname = location.split("?")[0];
+    if (pathname !== "/search") setQuery("");
+  }, [location]);
+
   const handleLogout = async () => {
     try {
       await customFetch("/api/v1/auth/logout", { method: "POST" });
