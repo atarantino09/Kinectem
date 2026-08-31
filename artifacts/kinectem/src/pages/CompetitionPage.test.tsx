@@ -1,12 +1,70 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { customFetch } from "@workspace/api-client-react";
+import { renderWithProviders } from "@/test/renderWithProviders";
 import { featuredRecapPreviewText } from "../lib/featuredRecapPreview";
 import {
   competitionTeamSections,
+  defaultOpenScheduleWeekKeys,
   isPublicFeaturedCompetitionRecap,
   isShortTournament,
   recapGroups,
+  rollingScheduleSpotlight,
+  scheduleDateKeyForViewer,
+  scheduleWeekStateKey,
+  type ScheduleSpotlightMatch,
   weekGroups,
 } from "./CompetitionPage";
+import CompetitionPage from "./CompetitionPage";
+
+vi.mock("@workspace/api-client-react", () => ({
+  customFetch: vi.fn(),
+  useGetLoggedInUser: () => ({ data: null }),
+}));
+
+vi.mock("@/components/ClaimTokenBanner", () => ({
+  CompetitionClaimBanner: () => null,
+  useClaimTokenParams: () => ({ token: null }),
+  useCompetitionClaimResolve: () => ({ data: null }),
+}));
+
+vi.mock("@/components/CompetitionHowItWorks", () => ({
+  CompetitionHowItWorks: () => null,
+}));
+
+vi.mock("@/components/share-image/ShareRecapImageDialog", () => ({
+  ShareRecapImageDialog: () => null,
+}));
+
+const mockedFetch = vi.mocked(customFetch);
+
+function makeMatch(
+  id: string,
+  matchDate: string | null,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id,
+    matchNumber: id,
+    matchDate,
+    startTime: "10:00 AM",
+    age: "U12",
+    gender: "Girls",
+    division: "Gold",
+    bracket: "A",
+    venue: "Riverside Complex",
+    venueState: "CA",
+    field: "Field 2",
+    homeName: `${id} Home`,
+    awayName: `${id} Away`,
+    homeParticipantId: null,
+    awayParticipantId: null,
+    status: "scheduled",
+    statusReason: null,
+    ...overrides,
+  } as ScheduleSpotlightMatch;
+}
 
 function makePost(overrides: Record<string, unknown> = {}) {
   return {
@@ -17,6 +75,213 @@ function makePost(overrides: Record<string, unknown> = {}) {
     ...overrides,
   } as never;
 }
+
+describe("rolling schedule model", () => {
+  it("prioritizes today and upcoming games while excluding invalid dates", () => {
+    const matches = [
+      makeMatch("past", "2026-08-29"),
+      makeMatch("future", "2026-09-02"),
+      makeMatch("today-late", "2026-08-31", { startTime: "7:00 PM" }),
+      makeMatch("today-early", "2026-08-31", { startTime: "9:00 AM" }),
+      makeMatch("invalid", "2026-02-30"),
+      makeMatch("undated", null),
+    ];
+
+    expect(
+      rollingScheduleSpotlight(matches, "2026-08-31").map(
+        (match) => match.id,
+      ),
+    ).toEqual(["today-early", "today-late", "future"]);
+  });
+
+  it("falls back to recent games, then undated games when no valid dates exist", () => {
+    expect(
+      rollingScheduleSpotlight(
+        [
+          makeMatch("older", "2026-08-20"),
+          makeMatch("recent", "2026-08-30"),
+          makeMatch("undated", null),
+        ],
+        "2026-08-31",
+      ).map((match) => match.id),
+    ).toEqual(["recent", "older"]);
+
+    expect(
+      rollingScheduleSpotlight(
+        [makeMatch("invalid", "not-a-date"), makeMatch("undated", null)],
+        "2026-08-31",
+      ).map((match) => match.id),
+    ).toEqual(["invalid", "undated"]);
+  });
+
+  it("opens the current week, or the next available week, with group-safe keys", () => {
+    const groups: [string, ReturnType<typeof makeMatch>[]][] = [
+      [
+        "Gold · A",
+        [
+          makeMatch("old", "2026-08-10"),
+          makeMatch("current", "2026-08-31"),
+        ],
+      ],
+      ["Silver · B", [makeMatch("next", "2026-09-07")]],
+    ];
+
+    expect(
+      defaultOpenScheduleWeekKeys(groups, "2026-08-31"),
+    ).toEqual([scheduleWeekStateKey("Gold · A", "2026-08-31")]);
+    expect(
+      defaultOpenScheduleWeekKeys(groups, "2026-09-07"),
+    ).toEqual([scheduleWeekStateKey("Silver · B", "2026-09-07")]);
+  });
+
+  it("uses the viewer calendar date without a UTC date shift", () => {
+    expect(scheduleDateKeyForViewer(new Date(2026, 7, 31, 23, 59))).toBe(
+      "2026-08-31",
+    );
+    expect(scheduleDateKeyForViewer(new Date(2026, 8, 1, 0, 1))).toBe(
+      "2026-09-01",
+    );
+  });
+
+  it("sorts supported legacy time formats chronologically", () => {
+    const matches = [
+      makeMatch("ten", "2026-08-31", { startTime: "10:00 AM" }),
+      makeMatch("nine", "2026-08-31", { startTime: "9 AM" }),
+      makeMatch("seconds-late", "2026-08-31", { startTime: "09:00:45" }),
+      makeMatch("seconds-early", "2026-08-31", { startTime: "9:00:15 AM" }),
+      makeMatch("evening", "2026-08-31", { startTime: "7.30 P.M." }),
+      makeMatch("unknown", "2026-08-31", { startTime: "After warmups" }),
+    ];
+
+    expect(
+      rollingScheduleSpotlight(matches, "2026-08-31").map((match) => match.id),
+    ).toEqual([
+      "nine",
+      "seconds-early",
+      "seconds-late",
+      "ten",
+      "evening",
+      "unknown",
+    ]);
+  });
+
+  it("keeps malformed dates reachable in the Undated week", () => {
+    const groups = weekGroups([
+      makeMatch("valid", "2026-08-31"),
+      makeMatch("invalid", "2026-02-30"),
+      makeMatch("missing", null),
+    ]);
+
+    expect(groups.map((group) => group.key)).toEqual([
+      "2026-08-31",
+      "__undated__",
+    ]);
+    expect(groups[1].items.map((match) => match.id)).toEqual([
+      "invalid",
+      "missing",
+    ]);
+  });
+});
+
+describe("rolling schedule interactions", () => {
+  beforeEach(() => {
+    window.history.pushState({}, "", "/c/rolling-cup");
+    mockedFetch.mockReset();
+    mockedFetch.mockResolvedValue({
+      competition: {
+        id: "competition-1",
+        slug: "rolling-cup",
+        name: "Rolling Cup",
+        type: "tournament",
+        startDate: "2099-01-01",
+        endDate: "2099-01-20",
+        location: "Riverside",
+        description: null,
+        isActive: false,
+        isEnded: false,
+        autoApproveClaims: true,
+        logoUrl: null,
+        brandColor: "#2457a7",
+        secondaryColor: null,
+        tertiaryColor: null,
+        bannerUrl: null,
+        websiteUrl: null,
+        claimedCount: 0,
+        participantCount: 0,
+        isFollowing: false,
+      },
+      participants: [],
+      matches: [
+        makeMatch("first", "2099-01-05"),
+        makeMatch("second", "2099-01-12", {
+          status: "postponed",
+          statusReason: "Weather",
+        }),
+        makeMatch("invalid", "2099-02-30"),
+      ],
+      featuredRecaps: [],
+      brackets: [],
+    } as never);
+  });
+
+  it("supports manual navigation and explicit pause without hiding the spotlight", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionPage />);
+
+    expect(await screen.findByTestId("schedule-spotlight")).toBeInTheDocument();
+    expect(screen.getByTestId("spotlight-match-first")).toBeInTheDocument();
+    expect(screen.queryByTestId("row-match-first")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-spotlight-next"));
+    expect(screen.getByTestId("spotlight-match-second")).toBeInTheDocument();
+    expect(screen.getByTestId("spotlight-status-second")).toHaveTextContent(
+      "Postponed",
+    );
+    expect(screen.getByTestId("btn-spotlight-pause")).toHaveAccessibleName(
+      "Resume spotlight rotation",
+    );
+  });
+
+  it("toggles week sections independently and keeps malformed dates under Undated", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionPage />);
+
+    await screen.findByTestId("schedule-spotlight");
+    await user.click(screen.getByTestId("btn-toggle-schedule"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("row-match-first")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("row-match-second")).not.toBeInTheDocument();
+
+    const secondKey = scheduleWeekStateKey("Gold · A", "2099-01-12");
+    await user.click(
+      screen.getByTestId(
+        `btn-toggle-match-week-${encodeURIComponent(secondKey)}`,
+      ),
+    );
+    expect(screen.getByTestId("row-match-second")).toBeInTheDocument();
+
+    const firstKey = scheduleWeekStateKey("Gold · A", "2099-01-05");
+    await user.click(
+      screen.getByTestId(
+        `btn-toggle-match-week-${encodeURIComponent(firstKey)}`,
+      ),
+    );
+    expect(screen.queryByTestId("row-match-first")).not.toBeInTheDocument();
+    expect(screen.getByTestId("row-match-second")).toBeInTheDocument();
+
+    const undatedKey = scheduleWeekStateKey("Gold · A", "__undated__");
+    await user.click(
+      screen.getByTestId(
+        `btn-toggle-match-week-${encodeURIComponent(undatedKey)}`,
+      ),
+    );
+    expect(screen.getByTestId("row-match-invalid")).toHaveTextContent(
+      "Date not listed",
+    );
+  });
+});
 
 describe("featured recap week sections", () => {
   it("groups unbracketed recap-like items by week and keeps undated items visible", () => {

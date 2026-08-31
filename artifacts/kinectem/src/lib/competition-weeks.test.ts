@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { competitionWeekForDate, formatCompetitionWeek } from "./competition-weeks";
+import {
+  competitionWeekForDate,
+  formatCompetitionDate,
+  formatCompetitionWeek,
+  isCompetitionDate,
+} from "./competition-weeks";
 
 describe("competition week date-only helpers", () => {
   it("keeps Monday and Sunday together without viewer-timezone shifts", () => {
@@ -18,5 +23,8 @@ describe("competition week date-only helpers", () => {
   it("returns null for unavailable or invalid dates", () => {
     expect(competitionWeekForDate(undefined)).toBeNull();
     expect(competitionWeekForDate("not-a-date")).toBeNull();
+    expect(competitionWeekForDate("2026-02-30")).toBeNull();
+    expect(isCompetitionDate("2026-02-30")).toBe(false);
+    expect(formatCompetitionDate("2026-02-30")).toBe("Date not listed");
   });
 });

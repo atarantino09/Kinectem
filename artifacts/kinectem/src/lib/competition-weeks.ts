@@ -10,23 +10,31 @@ export type CompetitionWeek = {
 
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+export function isCompetitionDate(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const match = DATE_ONLY_RE.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 export function competitionWeekForDate(
   value: string | null | undefined,
 ): CompetitionWeek | null {
-  if (!value) return null;
+  if (!value || !isCompetitionDate(value)) return null;
   const match = DATE_ONLY_RE.exec(value);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
   const daysFromMonday = (date.getUTCDay() + 6) % 7;
   date.setUTCDate(date.getUTCDate() - daysFromMonday);
   const start = date.toISOString().slice(0, 10);
@@ -43,6 +51,11 @@ function displayDate(value: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+export function formatCompetitionDate(value: string | null | undefined): string {
+  if (!isCompetitionDate(value)) return "Date not listed";
+  return displayDate(value!);
 }
 
 export function formatCompetitionWeek(week: CompetitionWeek): string {

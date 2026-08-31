@@ -5,7 +5,7 @@ import {
   useGetLoggedInUser,
   type PostResponse,
 } from "@workspace/api-client-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
@@ -20,7 +20,21 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, EyeOff, ImageDown, Loader2, Pencil, Star } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  EyeOff,
+  ImageDown,
+  Loader2,
+  MapPin,
+  Pause,
+  Pencil,
+  Play,
+  Star,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +53,7 @@ import {
 } from "@/components/ClaimTokenBanner";
 import {
   competitionWeekForDate,
+  formatCompetitionDate,
   formatCompetitionDateRange,
   formatCompetitionWeek,
   inclusiveDateSpan,
@@ -294,6 +309,9 @@ function weekForItem(
   date: string | null | undefined,
   week: CompetitionWeek | null | undefined,
 ): CompetitionWeek | null {
+  // A stale or malformed date must never inherit a week and disappear from
+  // the visible Undated section.
+  if (!date || !competitionWeekForDate(date)) return null;
   return week ?? competitionWeekForDate(date);
 }
 
@@ -316,6 +334,122 @@ export function weekGroups<T extends {
     if (!b.week) return -1;
     return a.week.key.localeCompare(b.week.key);
   });
+}
+
+export type ScheduleSpotlightMatch = Match;
+
+const MAX_SPOTLIGHT_MATCHES = 6;
+
+function startTimeSortKey(value: string | null): string {
+  if (!value) return "3:";
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/([AP])\.?M\.?$/, "$1M");
+  const twelveHour =
+    /^(\d{1,2})(?:[:.]([0-5]\d))?(?::([0-5]\d))?\s*([AP]M)$/.exec(
+      normalized,
+    );
+  if (twelveHour) {
+    const rawHour = Number(twelveHour[1]);
+    if (rawHour < 1 || rawHour > 12) return `2:${normalized}`;
+    let hour = rawHour % 12;
+    if (twelveHour[4] === "PM") hour += 12;
+    return `0:${String(hour).padStart(2, "0")}:${twelveHour[2] ?? "00"}:${
+      twelveHour[3] ?? "00"
+    }`;
+  }
+  const twentyFourHour =
+    /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(normalized);
+  return twentyFourHour
+    ? `0:${twentyFourHour[1].padStart(2, "0")}:${twentyFourHour[2]}:${
+        twentyFourHour[3] ?? "00"
+      }`
+    : `2:${normalized}`;
+}
+
+function matchSort(a: Match, b: Match): number {
+  const dateCompare = (a.matchDate ?? "").localeCompare(b.matchDate ?? "");
+  if (dateCompare !== 0) return dateCompare;
+  const timeCompare = startTimeSortKey(a.startTime).localeCompare(
+    startTimeSortKey(b.startTime),
+  );
+  if (timeCompare !== 0) return timeCompare;
+  return a.matchNumber.localeCompare(b.matchNumber, undefined, { numeric: true });
+}
+
+export function scheduleDateKeyForViewer(now: Date): string {
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * Keep the spotlight useful without making it a second full schedule. Future
+ * games are shown in chronological order, then the most recent games, with an
+ * undated fallback when the competition has no date information.
+ */
+export function rollingScheduleSpotlight(
+  matches: ScheduleSpotlightMatch[],
+  currentDate: Date | string = new Date(),
+): ScheduleSpotlightMatch[] {
+  const today =
+    typeof currentDate === "string"
+      ? currentDate
+      : scheduleDateKeyForViewer(currentDate);
+  const dated = matches.filter((match) => competitionWeekForDate(match.matchDate));
+  const future = dated
+    .filter((match) => (match.matchDate ?? "") >= today)
+    .sort(matchSort);
+  if (future.length) return future.slice(0, MAX_SPOTLIGHT_MATCHES);
+
+  const recent = dated
+    .filter((match) => (match.matchDate ?? "") < today)
+    .sort((a, b) => matchSort(b, a));
+  if (recent.length) return recent.slice(0, MAX_SPOTLIGHT_MATCHES);
+
+  return matches.slice(0, MAX_SPOTLIGHT_MATCHES);
+}
+
+export function scheduleWeekStateKey(groupLabelText: string, weekKey: string): string {
+  return `${groupLabelText}\u0000${weekKey}`;
+}
+
+export function defaultOpenScheduleWeekKeys(
+  matchGroups: [string, Match[]][],
+  currentDate: Date | string = new Date(),
+): string[] {
+  const today =
+    typeof currentDate === "string"
+      ? currentDate
+      : scheduleDateKeyForViewer(currentDate);
+  const weeks = matchGroups.flatMap(([label, matches]) =>
+    weekGroups(matches).map((group) => ({
+      key: scheduleWeekStateKey(label, group.key),
+      start: group.week?.start ?? null,
+      end: group.week?.end ?? null,
+    })),
+  );
+  const dated = weeks.filter((week) => week.start && week.end);
+  const current = dated.filter(
+    (week) => today >= week.start! && today <= week.end!,
+  );
+  if (current.length) return current.map((week) => week.key);
+
+  const nextStart = dated
+    .map((week) => week.start!)
+    .filter((start) => start > today)
+    .sort()[0];
+  if (nextStart) {
+    return dated
+      .filter((week) => week.start === nextStart)
+      .map((week) => week.key);
+  }
+
+  const undated = weeks.find((week) => week.start === null);
+  return dated.length === 0 && undated ? [undated.key] : [];
 }
 
 const SHORT_TOURNAMENT_GROUP_KEY = "__competition_dates__";
@@ -395,6 +529,20 @@ export default function CompetitionPage() {
   const { data: me } = useGetLoggedInUser();
   const [teamsOpen, setTeamsOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [spotlightIndex, setSpotlightIndex] = useState(0);
+  const [spotlightPaused, setSpotlightPaused] = useState(false);
+  const [spotlightHovered, setSpotlightHovered] = useState(false);
+  const [spotlightFocused, setSpotlightFocused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [scheduleToday, setScheduleToday] = useState(() =>
+    scheduleDateKeyForViewer(new Date()),
+  );
+  const [openScheduleWeeks, setOpenScheduleWeeks] = useState<Set<string>>(
+    new Set(),
+  );
+  const scheduleWeeksInitializedFor = useRef<string | null>(null);
+  const scheduleWeeksInitializedDay = useRef<string | null>(null);
+  const scheduleWeeksTouched = useRef(false);
   // Task #852 — active bracket filter for the featured-recaps rail
   // ("" = All; unbracketed recaps only ever show under All).
   const [bracketFilter, setBracketFilter] = useState("");
@@ -429,6 +577,8 @@ export default function CompetitionPage() {
       ),
     enabled: !!slug,
     retry: false,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   // Follow / unfollow — quick-access only (does NOT change the home feed).
@@ -532,6 +682,103 @@ export default function CompetitionPage() {
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [q.data]);
+
+  const spotlightMatches = useMemo(
+    () => rollingScheduleSpotlight(q.data?.matches ?? [], scheduleToday),
+    [q.data?.matches, scheduleToday],
+  );
+
+  useEffect(() => {
+    let timer = 0;
+    const scheduleNextDay = () => {
+      const now = new Date();
+      const nextDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+      );
+      timer = window.setTimeout(() => {
+        setScheduleToday(scheduleDateKeyForViewer(new Date()));
+        scheduleNextDay();
+      }, Math.max(1_000, nextDay.getTime() - now.getTime() + 100));
+    };
+    scheduleNextDay();
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => {
+    setSpotlightIndex((current) =>
+      spotlightMatches.length ? current % spotlightMatches.length : 0,
+    );
+  }, [spotlightMatches.length]);
+
+  useEffect(() => {
+    if (!spotlightMatches.length || spotlightPaused || spotlightHovered || spotlightFocused || reducedMotion) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setSpotlightIndex((current) => (current + 1) % spotlightMatches.length);
+    }, 7_000);
+    return () => window.clearInterval(timer);
+  }, [
+    reducedMotion,
+    spotlightFocused,
+    spotlightHovered,
+    spotlightMatches.length,
+    spotlightPaused,
+  ]);
+
+  useEffect(() => {
+    if (
+      !q.data ||
+      !matchGroups.length ||
+      (scheduleWeeksInitializedFor.current === slug &&
+        (scheduleWeeksInitializedDay.current === scheduleToday ||
+          scheduleWeeksTouched.current))
+    ) {
+      return;
+    }
+    const initialKeys = defaultOpenScheduleWeekKeys(matchGroups, scheduleToday);
+    setOpenScheduleWeeks(new Set(initialKeys));
+    if (scheduleWeeksInitializedFor.current !== slug) {
+      scheduleWeeksTouched.current = false;
+    }
+    scheduleWeeksInitializedFor.current = slug;
+    scheduleWeeksInitializedDay.current = scheduleToday;
+  }, [matchGroups, q.data, scheduleToday, slug]);
+
+  const toggleScheduleWeek = (key: string, open: boolean) => {
+    scheduleWeeksTouched.current = true;
+    setOpenScheduleWeeks((current) => {
+      const next = new Set(current);
+      if (open) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const jumpToSchedule = (match: Match) => {
+    scheduleWeeksTouched.current = true;
+    const group = groupLabel(match.division, match.bracket);
+    const weekKey = weekForItem(match.matchDate, match.week)?.key ?? "__undated__";
+    const targetKey = scheduleWeekStateKey(group, weekKey);
+    setOpenScheduleWeeks((current) => new Set(current).add(targetKey));
+    setScheduleOpen(true);
+    window.setTimeout(() => {
+      document
+        .getElementById(`schedule-week-${encodeURIComponent(targetKey)}`)
+        ?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+    }, 0);
+  };
 
   if (q.isLoading) {
     return (
@@ -1351,6 +1598,175 @@ export default function CompetitionPage() {
           data-testid="card-schedule"
         >
           <CardContent className="p-0">
+            {spotlightMatches.length > 0 ? (
+              <section
+                className="relative overflow-hidden rounded-t-xl border-b border-border/50 p-5 sm:p-6"
+                style={{
+                  background: `linear-gradient(135deg, ${brand}12 0%, transparent 65%)`,
+                }}
+                data-testid="schedule-spotlight"
+                onMouseEnter={() => setSpotlightHovered(true)}
+                onMouseLeave={() => setSpotlightHovered(false)}
+                onFocus={() => setSpotlightFocused(true)}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setSpotlightFocused(false);
+                  }
+                }}
+                aria-label="Schedule spotlight"
+              >
+                {(() => {
+                  const spotlightMatch = spotlightMatches[spotlightIndex]!;
+                  const spotlightDate = formatCompetitionDate(spotlightMatch.matchDate);
+                  const venue = [spotlightMatch.venue, spotlightMatch.venueState]
+                    .filter(Boolean)
+                    .join(", ");
+                  const statusText =
+                    spotlightMatch.status === "postponed"
+                      ? "Postponed"
+                      : spotlightMatch.status === "canceled"
+                        ? "Canceled"
+                        : null;
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p
+                            className="text-[11px] font-black uppercase tracking-[0.2em]"
+                            style={{ color: brand }}
+                          >
+                            Live schedule
+                          </p>
+                          <h3 className="mt-1 text-xl font-black tracking-tight">
+                            {spotlightMatch.homeName ?? "TBD"}{" "}
+                            <span className="text-muted-foreground">vs</span>{" "}
+                            {spotlightMatch.awayName ?? "TBD"}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-1" aria-label="Spotlight controls">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-9 w-9"
+                            onClick={() => {
+                              setSpotlightPaused(true);
+                              setSpotlightIndex(
+                                (current) =>
+                                  (current - 1 + spotlightMatches.length) %
+                                  spotlightMatches.length,
+                              );
+                            }}
+                            aria-label="Previous spotlight game"
+                            data-testid="btn-spotlight-previous"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-9 w-9"
+                            onClick={() => setSpotlightPaused((current) => !current)}
+                            aria-label={
+                              spotlightPaused ? "Resume spotlight rotation" : "Pause spotlight rotation"
+                            }
+                            data-testid="btn-spotlight-pause"
+                          >
+                            {spotlightPaused ? (
+                              <Play className="h-4 w-4" />
+                            ) : (
+                              <Pause className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-9 w-9"
+                            onClick={() => {
+                              setSpotlightPaused(true);
+                              setSpotlightIndex(
+                                (current) => (current + 1) % spotlightMatches.length,
+                              );
+                            }}
+                            aria-label="Next spotlight game"
+                            data-testid="btn-spotlight-next"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div
+                        className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4"
+                        aria-live="polite"
+                        data-testid={`spotlight-match-${spotlightMatch.id}`}
+                      >
+                        <div className="flex min-w-0 items-start gap-2">
+                          <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand }} />
+                          <span className="font-semibold">{spotlightDate}</span>
+                        </div>
+                        <div className="flex min-w-0 items-start gap-2">
+                          <Clock3 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand }} />
+                          <span className="font-semibold">
+                            {spotlightMatch.startTime ?? "Time not listed"}
+                          </span>
+                        </div>
+                        <div className="flex min-w-0 items-start gap-2">
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand }} />
+                          <span className="min-w-0 truncate font-semibold">
+                            {venue || spotlightMatch.field || "Venue not listed"}
+                          </span>
+                        </div>
+                        <div className="flex min-w-0 items-start gap-2">
+                          <span className="font-semibold text-muted-foreground">
+                            Field: {spotlightMatch.field ?? "Not listed"}
+                          </span>
+                        </div>
+                      </div>
+                      {statusText ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                              spotlightMatch.status === "postponed"
+                                ? "border-amber-300/50 bg-amber-50/70 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/50 dark:text-amber-400"
+                                : "border-red-300/50 bg-red-50/70 text-red-700 dark:border-red-700/50 dark:bg-red-950/50 dark:text-red-400"
+                            }`}
+                            data-testid={`spotlight-status-${spotlightMatch.id}`}
+                          >
+                            {statusText}
+                          </span>
+                          {spotlightMatch.statusReason ? (
+                            <span className="text-xs italic text-muted-foreground">
+                              {spotlightMatch.statusReason}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          Game #{spotlightMatch.matchNumber}
+                          {spotlightMatches.length > 1
+                            ? ` · ${spotlightIndex + 1} of ${spotlightMatches.length}`
+                            : ""}
+                          {reducedMotion ? " · Rotation paused for reduced motion" : ""}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="font-bold"
+                          onClick={() => jumpToSchedule(spotlightMatch)}
+                          data-testid="btn-spotlight-details"
+                        >
+                          View full schedule
+                        </Button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </section>
+            ) : null}
             <Collapsible
               open={scheduleOpen}
               onOpenChange={setScheduleOpen}
@@ -1379,91 +1795,139 @@ export default function CompetitionPage() {
                   }`}
                 />
               </CollapsibleTrigger>
-              <CollapsibleContent className="px-5 pb-5 space-y-6 border-t border-border/50 pt-5">
-            {matchGroups.length === 0 ? (
-              <p className="text-sm text-muted-foreground pt-2">
-                No games have been scheduled yet.
-              </p>
-            ) : (
-               matchGroups.map(([label, matches]) => (
-                <div key={label} className="space-y-3">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground pb-1 border-b border-border/40">
-                    {label}
-                  </h3>
-                   <div className="space-y-4">
-                     {weekGroups(matches).map((weekGroup) => (
-                       <div
-                         key={weekGroup.key}
-                         className="space-y-2"
-                         data-testid={`section-match-week-${weekGroup.key}`}
-                       >
-                         <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/80">
-                           {weekGroup.week
-                             ? formatCompetitionWeek(weekGroup.week)
-                             : "Undated"}
-                         </h4>
-                         <div className="flex flex-col gap-2">
-                           {weekGroup.items.map((m) => (
-                             <div
-                               key={m.id}
-                               className={`flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm transition-shadow hover:shadow-md ${
-                                 m.status === "postponed" || m.status === "canceled"
-                                   ? "bg-muted/30 opacity-75 shadow-none hover:shadow-none"
-                                   : ""
-                               }`}
-                               data-testid={`row-match-${m.id}`}
-                             >
-                               <div className="min-w-0 flex-1">
-                                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
-                                   <span>#{m.matchNumber}</span>
-                                   {m.matchDate ? <span className="opacity-70">·</span> : null}
-                                   {m.matchDate ? <span>{m.matchDate}</span> : null}
-                                   {m.startTime ? <span className="opacity-70">·</span> : null}
-                                   {m.startTime ? <span>{m.startTime}</span> : null}
-                                   {m.field ? <span className="opacity-70">·</span> : null}
-                                   {m.field ? <span className="truncate">{m.field}</span> : null}
-                                 </div>
-                                 <div
-                                   className={`truncate font-bold tracking-tight ${
-                                     m.status === "canceled"
-                                       ? "line-through text-muted-foreground"
-                                       : ""
-                                   }`}
-                                 >
-                                   {m.homeName ?? "TBD"}{" "}
-                                   <span className="text-muted-foreground font-medium text-xs mx-1">vs</span>{" "}
-                                   {m.awayName ?? "TBD"}
-                                 </div>
-                                 {(m.status === "postponed" ||
-                                   m.status === "canceled") &&
-                                 m.statusReason ? (
-                                   <p className="text-[11px] text-muted-foreground italic mt-1 truncate">
-                                     {m.statusReason}
-                                   </p>
-                                 ) : null}
-                               </div>
-                               {m.status === "postponed" ||
-                               m.status === "canceled" ? (
-                                 <span
-                                   className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                                     m.status === "postponed"
-                                       ? "border-amber-300/50 bg-amber-50/50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/50 dark:text-amber-400"
-                                       : "border-red-300/50 bg-red-50/50 text-red-700 dark:border-red-700/50 dark:bg-red-950/50 dark:text-red-400"
-                                   }`}
-                                   data-testid={`badge-match-status-${m.id}`}
-                                 >
-                                   {m.status === "postponed" ? "Postponed" : "Canceled"}
-                                 </span>
-                               ) : null}
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                </div>
-              ))
-            )}
+              <CollapsibleContent className="space-y-6 border-t border-border/50 px-5 pb-5 pt-5">
+                {matchGroups.length === 0 ? (
+                  <p className="pt-2 text-sm text-muted-foreground">
+                    No games have been scheduled yet.
+                  </p>
+                ) : (
+                  matchGroups.map(([label, matches]) => (
+                    <div key={label} className="space-y-3">
+                      <h3 className="border-b border-border/40 pb-1 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                        {label}
+                      </h3>
+                      <div className="space-y-3">
+                        {weekGroups(matches).map((weekGroup) => {
+                          const stateKey = scheduleWeekStateKey(label, weekGroup.key);
+                          const weekId = `schedule-week-${encodeURIComponent(stateKey)}`;
+                          const isWeekOpen = openScheduleWeeks.has(stateKey);
+                          return (
+                            <Collapsible
+                              key={stateKey}
+                              open={isWeekOpen}
+                              onOpenChange={(open) => toggleScheduleWeek(stateKey, open)}
+                              className="rounded-lg border border-border/60"
+                            >
+                              <div id={weekId} data-testid={`section-match-week-${weekGroup.key}`}>
+                                <CollapsibleTrigger
+                                  className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted/40"
+                                  data-testid={`btn-toggle-match-week-${encodeURIComponent(stateKey)}`}
+                                >
+                                  <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground/90">
+                                    {weekGroup.week
+                                      ? formatCompetitionWeek(weekGroup.week)
+                                      : "Undated · Date not listed"}
+                                  </span>
+                                  <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-muted-foreground">
+                                    {weekGroup.items.length}{" "}
+                                    {weekGroup.items.length === 1 ? "game" : "games"}
+                                    <ChevronDown
+                                      className={`h-4 w-4 transition-transform ${
+                                        isWeekOpen ? "rotate-180" : ""
+                                      }`}
+                                      aria-hidden="true"
+                                    />
+                                  </span>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="px-3 pb-3">
+                                  <div className="flex flex-col gap-2">
+                                    {weekGroup.items.map((m) => {
+                                      const validDate = !!competitionWeekForDate(m.matchDate);
+                                      const venue = [m.venue, m.venueState]
+                                        .filter(Boolean)
+                                        .join(", ");
+                                      return (
+                                        <div
+                                          key={m.id}
+                                          className={`flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm transition-shadow hover:shadow-md ${
+                                            m.status === "postponed" || m.status === "canceled"
+                                              ? "bg-muted/30 opacity-75 shadow-none hover:shadow-none"
+                                              : ""
+                                          }`}
+                                          data-testid={`row-match-${m.id}`}
+                                        >
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
+                                              <span>#{m.matchNumber}</span>
+                                              <span className="opacity-70">·</span>
+                                              <span>
+                                                {validDate
+                                                  ? formatCompetitionDate(m.matchDate)
+                                                  : "Date not listed"}
+                                              </span>
+                                              {m.startTime ? (
+                                                <>
+                                                  <span className="opacity-70">·</span>
+                                                  <span>{m.startTime}</span>
+                                                </>
+                                              ) : null}
+                                              {m.field ? (
+                                                <>
+                                                  <span className="opacity-70">·</span>
+                                                  <span className="truncate">{m.field}</span>
+                                                </>
+                                              ) : null}
+                                            </div>
+                                            <div
+                                              className={`truncate font-bold tracking-tight ${
+                                                m.status === "canceled"
+                                                  ? "line-through text-muted-foreground"
+                                                  : ""
+                                              }`}
+                                            >
+                                              {m.homeName ?? "TBD"}{" "}
+                                              <span className="mx-1 text-xs font-medium text-muted-foreground">
+                                                vs
+                                              </span>{" "}
+                                              {m.awayName ?? "TBD"}
+                                            </div>
+                                            {venue ? (
+                                              <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                                                {venue}
+                                              </p>
+                                            ) : null}
+                                            {(m.status === "postponed" || m.status === "canceled") &&
+                                            m.statusReason ? (
+                                              <p className="mt-1 truncate text-[11px] italic text-muted-foreground">
+                                                {m.statusReason}
+                                              </p>
+                                            ) : null}
+                                          </div>
+                                          {m.status === "postponed" || m.status === "canceled" ? (
+                                            <span
+                                              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                                m.status === "postponed"
+                                                  ? "border-amber-300/50 bg-amber-50/50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/50 dark:text-amber-400"
+                                                  : "border-red-300/50 bg-red-50/50 text-red-700 dark:border-red-700/50 dark:bg-red-950/50 dark:text-red-400"
+                                              }`}
+                                              data-testid={`badge-match-status-${m.id}`}
+                                            >
+                                              {m.status === "postponed" ? "Postponed" : "Canceled"}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </CollapsibleContent>
+                              </div>
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
               </CollapsibleContent>
             </Collapsible>
           </CardContent>
