@@ -28,6 +28,9 @@ export default function NewPostPage() {
   const params = new URLSearchParams(search);
   const initialType = params.get("type") === "short" ? "short" : "long";
   const initialDraftId = params.get("draftId");
+  // Profile page CTA — start a short post with the profile-only destination
+  // explicitly selected, even if the author also belongs to teams.
+  const initialProfileOnly = params.get("profileOnly") === "1";
   // editId is the same shape as draftId (a post id that already
   // exists), but it points at an already-PUBLISHED post and the
   // composer must not re-call /publish on submit. This is the
@@ -49,6 +52,7 @@ export default function NewPostPage() {
   const form = useNewPostForm({
     initialType,
     initialDraftId,
+    initialProfileOnly,
     initialEditId,
     initialTeamId,
     initialFrom,

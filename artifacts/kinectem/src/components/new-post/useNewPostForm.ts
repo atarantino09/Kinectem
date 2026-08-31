@@ -118,6 +118,7 @@ function todayLocalIso(): string {
 interface UseNewPostFormParams {
   initialType: "short" | "long";
   initialDraftId: string | null;
+  initialProfileOnly?: boolean;
   initialEditId: string | null;
   initialTeamId: string | null;
   initialFrom?: string | null;
@@ -137,6 +138,7 @@ interface UseNewPostFormParams {
 export function useNewPostForm({
   initialType,
   initialDraftId,
+  initialProfileOnly = false,
   initialEditId,
   initialTeamId,
   initialFrom = null,
@@ -260,7 +262,9 @@ export function useNewPostForm({
   const [postType, setPostType] = useState<"short" | "long">(initialType);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [teamId, setTeamId] = useState<string>("");
+  const [teamId, setTeamId] = useState<string>(
+    initialProfileOnly && initialType === "short" ? "__profile__" : "",
+  );
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   // YYYY-MM-DD value bound to the date input. Pre-filled with today
@@ -1217,9 +1221,9 @@ export function useNewPostForm({
         // the team page; the dismiss action runs the saved
         // navigation. Highlights and admin-authored recaps publish
         // immediately and keep the existing toast + redirect.
-        const navTo = initialTeamId
-          ? `/teams/${initialTeamId}`
-          : `/posts/${result.id}`;
+        const navTo =
+          safeInternalPath(initialFrom) ??
+          (initialTeamId ? `/teams/${initialTeamId}` : `/posts/${result.id}`);
         const requiresApproval =
           (result as { requiresApproval?: boolean }).requiresApproval === true;
         if (requiresApproval) {

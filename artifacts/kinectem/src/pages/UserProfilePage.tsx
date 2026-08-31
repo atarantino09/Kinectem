@@ -46,6 +46,7 @@ import {
   FileText,
   MapPin,
   MessageSquare,
+  Play,
   Shield,
   Tag,
   Trophy,
@@ -189,6 +190,11 @@ export default function UserProfilePage() {
   }
 
   const displayName = `${user.firstName} ${user.lastName}`;
+  // `isOwnProfile` is server-derived from the authenticated session. Keep
+  // the id check here as an extra guard so a linked guardian viewing a
+  // child's profile never receives the child's authoring action.
+  const canPostProfileHighlight =
+    user.isOwnProfile === true && me?.id === userId;
   const orgs = orgsResp?.data ?? [];
   const teams = teamsResp?.data ?? [];
   // Pinned teams (the viewer's own personalization) float to the top, in
@@ -471,6 +477,20 @@ export default function UserProfilePage() {
             </AvatarLightbox>
             {user.isOwnProfile && "email" in user ? (
               <div className="mt-24 flex items-center gap-2">
+                {canPostProfileHighlight && (
+                  <Link
+                    href={`/posts/new?type=short&profileOnly=1&from=${encodeURIComponent(`/users/${userId}`)}`}
+                  >
+                    <Button
+                      variant="brand"
+                      className="font-bold rounded-full"
+                      data-testid="btn-post-profile-highlight"
+                    >
+                      <Play className="w-4 h-4 mr-1.5" />
+                      Post highlight
+                    </Button>
+                  </Link>
+                )}
                 <Link href="/me/tags">
                   <Button
                     variant="outline"

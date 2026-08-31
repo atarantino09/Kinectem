@@ -2013,6 +2013,66 @@ describe("posts", () => {
     expect(create.body.error).toMatch(/team members/i);
   });
 
+  it("a child can post a profile-only highlight without a team or organization", async () => {
+    const childLogin = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const { team } = await getOrgAndTeam();
+
+    await db
+      .update(users)
+      .set({ isMinor: true })
+      .where(eq(users.id, childLogin.user.id));
+
+    try {
+      const create = await childLogin.agent.post("/api/v1/posts").send({
+        postType: "short",
+        title: "My profile highlight",
+        description: "A clip I posted directly to my own profile.",
+        videoUrl: "https://example.com/profile-clip.mp4",
+      });
+
+      expect(create.status).toBe(201);
+      expect(create.body.id.startsWith("highlight-")).toBe(true);
+      expect(create.body.author?.id).toBe(childLogin.user.id);
+      expect(create.body.context).toEqual(
+        expect.objectContaining({
+          type: "user",
+          id: childLogin.user.id,
+          name: expect.any(String),
+          avatarUrl: null,
+          orgId: null,
+          orgName: null,
+          orgSlug: null,
+          orgAvatarUrl: null,
+        }),
+      );
+
+      const profilePosts = await childLogin.agent.get(
+        `/api/v1/users/${childLogin.user.id}/posts`,
+      );
+      expect(profilePosts.status).toBe(200);
+      expect(
+        profilePosts.body.data.find(
+          (p: { id: string }) => p.id === create.body.id,
+        ),
+      ).toBeDefined();
+
+      const teamPosts = await childLogin.agent.get(
+        `/api/v1/teams/${team.id}/posts`,
+      );
+      expect(teamPosts.status).toBe(200);
+      expect(
+        teamPosts.body.data.find(
+          (p: { id: string }) => p.id === create.body.id,
+        ),
+      ).toBeUndefined();
+    } finally {
+      await db
+        .update(users)
+        .set({ isMinor: false })
+        .where(eq(users.id, childLogin.user.id));
+    }
+  });
+
   it("a declined roster entry does NOT count as membership (403 like an outsider)", async () => {
     const { team } = await getOrgAndTeam();
 
