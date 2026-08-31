@@ -1363,13 +1363,11 @@ export default function CompetitionPage() {
           </Card>
         ) : null}
 
-        {/* Teams and Schedule stay in the main reading column while the
-            rolling spotlight uses the desktop side column. On narrow screens
-            the spotlight returns to the normal single-column flow. */}
-        <div className="grid w-full min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        {/* Teams / claim list and Schedule as full-width reading sections */}
+        <div className="flex w-full min-w-0 flex-col gap-6">
           {/* Teams */}
           <Card
-            className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col lg:col-start-1 lg:row-start-1"
+            className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
             style={{ borderTopColor: brand }}
             data-testid="card-participants"
           >
@@ -1595,16 +1593,16 @@ export default function CompetitionPage() {
 
         {/* Schedule */}
         <Card
-          className="contents"
+          className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
+          style={{ borderTopColor: brand }}
           data-testid="card-schedule"
         >
-          <CardContent className="contents">
+          <CardContent className="p-0">
             {spotlightMatches.length > 0 ? (
               <section
-                className="relative order-2 overflow-hidden rounded-xl border-t-[3px] border-border bg-card p-5 shadow-sm sm:p-6 lg:col-start-2 lg:row-start-1 lg:order-none lg:sticky lg:top-6"
+                className="relative overflow-hidden rounded-t-xl border-b border-border/50 p-5 sm:p-6"
                 style={{
-                  borderTopColor: brand,
-                  background: `linear-gradient(135deg, ${brand}12 0%, var(--card) 65%)`,
+                  background: `linear-gradient(135deg, ${brand}12 0%, transparent 65%)`,
                 }}
                 data-testid="schedule-spotlight"
                 onMouseEnter={() => setSpotlightHovered(true)}
@@ -1772,8 +1770,7 @@ export default function CompetitionPage() {
             <Collapsible
               open={scheduleOpen}
               onOpenChange={setScheduleOpen}
-              className="order-3 flex flex-col rounded-xl border-t-[3px] border-border bg-card shadow-sm lg:col-start-1 lg:row-start-2 lg:order-none"
-              style={{ borderTopColor: brand }}
+              className="flex flex-col"
             >
               <CollapsibleTrigger
                 className="flex w-full items-center justify-between gap-2 p-5 text-left hover:bg-muted/40 transition-colors"
@@ -1806,7 +1803,7 @@ export default function CompetitionPage() {
                 ) : (
                   matchGroups.map(([label, matches]) => (
                     <div key={label} className="space-y-3">
-                      <h3 className="border-b border-border/40 pb-1 text-sm font-black uppercase tracking-[0.14em] text-foreground/80">
+                      <h3 className="border-b border-border/40 pb-1 text-sm font-black uppercase tracking-[0.14em] text-foreground">
                         {label}
                       </h3>
                       <div className="space-y-3">
