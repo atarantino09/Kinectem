@@ -6,6 +6,7 @@ import { BrandColorField } from "@/components/BrandColorField";
 import { BrandImageField } from "@/components/BrandImageField";
 import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
+import { readCompetitionScheduleFile } from "@/lib/competition-schedule-file";
 import {
   CompetitionClaimBanner,
   useClaimTokenParams,
@@ -2062,6 +2063,70 @@ function CurationPanel({
   );
 }
 
+export function ScheduleFilePicker({
+  disabled,
+  label = "Upload schedule file",
+  onStart,
+  onCsv,
+  onError,
+}: {
+  disabled?: boolean;
+  label?: string;
+  onStart?: () => void;
+  onCsv: (csv: string) => void;
+  onError: (error: unknown) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [reading, setReading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    onStart?.();
+    setReading(true);
+    try {
+      onCsv(await readCompetitionScheduleFile(file));
+    } catch (error) {
+      onError(error);
+    } finally {
+      setReading(false);
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="hidden"
+        disabled={disabled || reading}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleFile(file);
+          // Reset so selecting the same file again after an error works.
+          event.target.value = "";
+        }}
+        data-testid="input-csv-file"
+      />
+      <Button
+        type="button"
+        variant="brand"
+        size="lg"
+        className="w-full font-bold"
+        disabled={disabled || reading}
+        onClick={() => fileRef.current?.click()}
+        data-testid="btn-csv-choose-file"
+      >
+        <Upload className="mr-2 h-4 w-4" />
+        {reading ? "Reading your schedule…" : label}
+      </Button>
+      <p className="text-center text-xs text-muted-foreground">
+        Pick a CSV or Excel workbook — we'll read it and set up the games
+        automatically.
+      </p>
+    </>
+  );
+}
+
 function SchedulePanel({
   competitionId,
   matchCount,
@@ -2120,8 +2185,6 @@ function SchedulePanel({
   // sends that same text so what you saw is what gets applied.
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [pendingCsv, setPendingCsv] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-
   const previewMut = useMutation({
     mutationFn: (csvText: string) =>
       customFetch<ImportPreview>(
@@ -2241,8 +2304,8 @@ function SchedulePanel({
       {open && (
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Upload the CSV your scheduling tool exports — as-is, no cleanup
-          needed.
+          Upload the CSV or Excel workbook your scheduling tool exports — as-is,
+          no cleanup needed.
         </p>
         <div
           className="rounded-lg border border-border bg-muted/40 p-3 space-y-2"
@@ -2323,42 +2386,34 @@ function SchedulePanel({
             Download sample CSV
           </Button>
         </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f)
-              void f.text().then((text) => {
-                setCsv(text);
-                previewMut.mutate(text);
-              });
-            e.target.value = "";
-          }}
-          data-testid="input-csv-file"
-        />
-        <Button
-          type="button"
-          variant="brand"
-          size="lg"
-          className="w-full font-bold"
+        <ScheduleFilePicker
           disabled={importMut.isPending || previewMut.isPending}
-          onClick={() => fileRef.current?.click()}
-          data-testid="btn-csv-choose-file"
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          {previewMut.isPending
-            ? "Reading your schedule…"
-            : importMut.isPending
-              ? "Uploading your schedule…"
-              : "Upload schedule file"}
-        </Button>
-        <p className="text-center text-xs text-muted-foreground">
-          Pick the CSV your scheduling tool exported — we'll read it and set up
-          the games automatically.
-        </p>
+          label={
+            previewMut.isPending
+              ? "Reading your schedule…"
+              : importMut.isPending
+                ? "Uploading your schedule…"
+                : "Upload schedule file"
+          }
+          onStart={() => {
+            setPreview(null);
+            setPendingCsv("");
+          }}
+          onCsv={(text) => {
+            setCsv(text);
+            previewMut.mutate(text);
+          }}
+          onError={(error) =>
+            toast({
+              title: "Couldn't read that file",
+              description:
+                error instanceof Error
+                  ? error.message
+                  : "Choose a CSV or Excel (.xlsx) schedule file.",
+              variant: "destructive",
+            })
+          }
+        />
         {!pasteOpen ? (
           <div className="flex items-center justify-center gap-3">
             <button
