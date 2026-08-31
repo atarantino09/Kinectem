@@ -14,7 +14,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  ArrowRight,
+  Loader2,
+  Eye,
+  EyeOff,
+  Building2,
+  Users,
+  ChevronRight,
+} from "lucide-react";
 import {
   DOB_MONTHS,
   DOB_DAYS,
@@ -55,6 +65,12 @@ interface SignUpFormProps {
   onSwitchSignin: () => void;
   onError: (msg: string | null) => void;
   onPending: (guardianEmail: string) => void;
+  /** Skip the path-picker step (e.g. when the role is pre-determined from a
+   *  URL param, like the parent/guardian deep-link flow). */
+  skipPathStep?: boolean;
+  /** Fired when the visitor picks a path on the path-picker step, or clears
+   *  their selection (null = returned to path picker). */
+  onPathChange?: (path: "org_admin" | "general" | null) => void;
 }
 
 export function SignUpForm({
@@ -63,6 +79,8 @@ export function SignUpForm({
   onSwitchSignin,
   onError,
   onPending,
+  skipPathStep = false,
+  onPathChange,
 }: SignUpFormProps) {
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
@@ -70,7 +88,18 @@ export function SignUpForm({
   // birth field, with no role-related copy that would tip them off to
   // lie. Once they submit, the server tells us whether they are
   // under-13 and we render the appropriate branch.
-  const [step, setStep] = useState<"age" | "form">("age");
+  //
+  // Step "path" precedes the age gate: visitors pick whether they're
+  // setting up an organization or joining as an athlete/coach/parent/fan.
+  // skipPathStep bypasses it for flows where the role is already known
+  // (e.g. the ?signup=parent guardian deep-link).
+  const [step, setStep] = useState<"path" | "age" | "form">(
+    skipPathStep ? "age" : "path",
+  );
+  // True when the visitor explicitly chose the org-admin card on the
+  // path-picker step. Used to lock the role selector and show step
+  // indicators throughout the form.
+  const [orgAdminViaPath, setOrgAdminViaPath] = useState(false);
   const [serverIsUnder13, setServerIsUnder13] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -195,10 +224,141 @@ export function SignUpForm({
     }
   };
 
+  // ── PATH PICKER ──────────────────────────────────────────────────────────
+  if (step === "path") {
+    return (
+      <div className="space-y-3" data-testid="view-signup-path">
+        {/* Org admin hero card — primary, visually dominant */}
+        <button
+          type="button"
+          data-testid="btn-path-org-admin"
+          onClick={() => {
+            setRole("org_admin");
+            setOrgAdminViaPath(true);
+            onPathChange?.("org_admin");
+            setStep("age");
+          }}
+          className="w-full text-left rounded-xl border-2 border-primary bg-primary/5 p-5 hover:bg-primary/10 transition-colors group"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <Building2 className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">
+                Organization Admin
+              </div>
+              <div className="font-black text-[15px] text-slate-900 leading-snug">
+                Setting up your organization?
+              </div>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                You're in the right place. Get your org on Kinectem in two quick steps:
+              </p>
+              <div className="mt-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs text-slate-700">
+                  <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center shrink-0">
+                    1
+                  </span>
+                  <span className="font-medium">Create your account</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-400 text-[10px] font-black flex items-center justify-center shrink-0">
+                    2
+                  </span>
+                  <span>Name and launch your organization</span>
+                </div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-primary mt-1 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
+
+        {/* Divider */}
+        <div className="relative flex items-center gap-3 py-1">
+          <div className="flex-1 border-t border-slate-200" />
+          <span className="text-[11px] text-slate-400 font-medium shrink-0">or</span>
+          <div className="flex-1 border-t border-slate-200" />
+        </div>
+
+        {/* Everyone else — secondary, intentionally subdued */}
+        <button
+          type="button"
+          data-testid="btn-path-general"
+          onClick={() => {
+            setRole(initialRole);
+            setOrgAdminViaPath(false);
+            onPathChange?.("general");
+            setStep("age");
+          }}
+          className="w-full text-left rounded-xl border border-slate-200 bg-white px-4 py-3.5 hover:border-slate-300 hover:bg-slate-50 transition-colors group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+              <Users className="w-4 h-4 text-slate-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-sm text-slate-800">
+                Athlete, coach, parent, or fan?
+              </div>
+              <p className="text-xs text-slate-500">
+                You'll be invited by your org admin or coach
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
+
+        <p className="text-center text-sm text-slate-500 pt-1">
+          Already have an account?{" "}
+          <button
+            type="button"
+            onClick={onSwitchSignin}
+            className="font-bold text-violet-600 hover:underline"
+            data-testid="btn-switch-signin"
+          >
+            Sign in
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  // ── AGE GATE ─────────────────────────────────────────────────────────────
   if (step === "age") {
     const showInvalidHint = dobComplete && !dobValid;
     return (
       <form className="space-y-4" onSubmit={handleAgeSubmit} data-testid="form-age-gate">
+        {orgAdminViaPath && (
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                setOrgAdminViaPath(false);
+                setRole(initialRole);
+                setDobMonth("");
+                setDobDay("");
+                setDobYear("");
+                setServerIsUnder13(false);
+                onPathChange?.(null);
+                setStep("path");
+              }}
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+              data-testid="btn-back-to-path"
+            >
+              ← Back
+            </button>
+            <div
+              className="flex items-center gap-1.5 text-xs"
+              data-testid="text-step-indicator"
+            >
+              <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-black flex items-center justify-center">
+                1
+              </span>
+              <span className="font-semibold text-primary">Step 1 of 2</span>
+              <span className="text-slate-400">· Create your account</span>
+            </div>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label
             id="age-dob-label"
@@ -328,6 +488,28 @@ export function SignUpForm({
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
+      {orgAdminViaPath && (
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setStep("age")}
+            className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+            data-testid="btn-back-to-age"
+          >
+            ← Back
+          </button>
+          <div
+            className="flex items-center gap-1.5 text-xs"
+            data-testid="text-step-indicator"
+          >
+            <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-black flex items-center justify-center">
+              1
+            </span>
+            <span className="font-semibold text-primary">Step 1 of 2</span>
+            <span className="text-slate-400">· Create your account</span>
+          </div>
+        </div>
+      )}
       {effectiveRole === "parent" && (
         <div
           className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3"
@@ -382,48 +564,69 @@ export function SignUpForm({
 
       {!isUnder13 && (
         <div className="space-y-1.5">
-          <Label
-            htmlFor="role"
-            className="text-xs font-semibold uppercase tracking-wide text-slate-600"
-          >
-            I am a...
-          </Label>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger
-              id="role"
-              className="rounded-xl h-11"
-              data-testid="select-signup-role"
+          {orgAdminViaPath ? (
+            // Role was chosen via the path-picker card — lock it and make
+            // the org-admin context explicit so nothing feels hidden.
+            <div
+              className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+              data-testid="badge-org-admin-locked"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="athlete">Athlete</SelectItem>
-              <SelectItem value="coach">Coach</SelectItem>
-              <SelectItem value="parent">Parent / Guardian</SelectItem>
-              <SelectItem value="fan">Fan — follow along</SelectItem>
-              <SelectItem value="org_admin">Organization Admin</SelectItem>
-              <SelectItem value="competition_organizer">
-                Competition Organizer
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          {role === "org_admin" && (
-            <p
-              className="text-xs text-slate-500"
-              data-testid="note-org-admin"
-            >
-              You'll set up your organization right after creating your
-              account.
-            </p>
-          )}
-          {role === "competition_organizer" && (
-            <p
-              className="text-xs text-slate-500"
-              data-testid="note-competition-organizer"
-            >
-              For tournament and league operators. You'll set up your
-              competition hub right after creating your account.
-            </p>
+              <Building2 className="w-4 h-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-primary">
+                  Organization Admin
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Your org setup is next — just one more step after this.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Label
+                htmlFor="role"
+                className="text-xs font-semibold uppercase tracking-wide text-slate-600"
+              >
+                I am a...
+              </Label>
+              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                <SelectTrigger
+                  id="role"
+                  className="rounded-xl h-11"
+                  data-testid="select-signup-role"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="athlete">Athlete</SelectItem>
+                  <SelectItem value="coach">Coach</SelectItem>
+                  <SelectItem value="parent">Parent / Guardian</SelectItem>
+                  <SelectItem value="fan">Fan — follow along</SelectItem>
+                  <SelectItem value="org_admin">Organization Admin</SelectItem>
+                  <SelectItem value="competition_organizer">
+                    Competition Organizer
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {role === "org_admin" && (
+                <p
+                  className="text-xs text-slate-500"
+                  data-testid="note-org-admin"
+                >
+                  You'll set up your organization right after creating your
+                  account.
+                </p>
+              )}
+              {role === "competition_organizer" && (
+                <p
+                  className="text-xs text-slate-500"
+                  data-testid="note-competition-organizer"
+                >
+                  For tournament and league operators. You'll set up your
+                  competition hub right after creating your account.
+                </p>
+              )}
+            </>
           )}
         </div>
       )}

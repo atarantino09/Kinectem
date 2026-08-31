@@ -67,22 +67,50 @@ export default function LoginPage() {
   const [guardianInfo, setGuardianInfo] = useState<GuardianPendingInfo | null>(
     null,
   );
+  // Tracks which path the visitor chose on the signup path-picker step,
+  // so we can show context-appropriate headings throughout the form.
+  const [signupPath, setSignupPath] = useState<
+    "org_admin" | "general" | null
+  >(null);
 
   const switchMode = (next: Mode) => {
     setError(null);
     setMode(next);
+    if (next !== "signup") setSignupPath(null);
   };
 
   const initialRole: Role =
     initialSignup === "parent" ? "parent" : "athlete";
-  const heading =
-    mode === "signup" && initialSignup === "parent"
-      ? {
-          title: "Create your guardian account",
-          subtitle:
-            "Set up your own account first — you'll add your athlete's profile next.",
-        }
-      : HEADINGS[mode];
+
+  const heading = (() => {
+    if (mode === "signup" && initialSignup === "parent") {
+      return {
+        title: "Create your guardian account",
+        subtitle:
+          "Set up your own account first — you'll add your athlete's profile next.",
+      };
+    }
+    if (mode === "signup") {
+      if (signupPath === "org_admin") {
+        return {
+          title: "Set up your organization",
+          subtitle: "Step 1 of 2 — Create your account, then name your org.",
+        };
+      }
+      if (signupPath === "general") {
+        return {
+          title: "Create your account",
+          subtitle: "Join Kinectem in less than a minute.",
+        };
+      }
+      // Path picker is showing — neutral prompt
+      return {
+        title: "Get started",
+        subtitle: "Choose the account type that fits you.",
+      };
+    }
+    return HEADINGS[mode];
+  })();
 
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 text-slate-900">
@@ -144,6 +172,8 @@ export default function LoginPage() {
                 setSignupGuardianEmail(email);
                 setMode("signupPending");
               }}
+              skipPathStep={initialSignup === "parent"}
+              onPathChange={(path) => setSignupPath(path)}
             />
           )}
 
