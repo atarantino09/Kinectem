@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { InviteRosterDialog } from "./InviteRosterDialog";
 
@@ -106,5 +106,70 @@ describe("InviteRosterDialog role-specific copy", () => {
     expect(screen.getByTestId("csv-invite-message-note")).toHaveTextContent(
       "CSV imports send each person an invite based on the role in their own row.",
     );
+  });
+
+  it("copies manually selected invite text as plain text", async () => {
+    renderWithProviders(
+      <InviteRosterDialog
+        teamId="team-1"
+        seasonId="season-1"
+        teamName="Falcons"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    const message = await screen.findByTestId("text-invite-message");
+    expect(message.textContent).toContain("/invites/team-join-token");
+    const selection = window.getSelection();
+    const range = document.createRange();
+    const textNode = message.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected invite message to render as one plain text node");
+    }
+    const partialMessage = (message.textContent ?? "").slice(0, 42);
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, partialMessage.length);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const clipboardData = {
+      clearData: vi.fn(),
+      setData: vi.fn(),
+    } as unknown as DataTransfer;
+    const copyDefaultAction = fireEvent.copy(message, { clipboardData });
+
+    expect(copyDefaultAction).toBe(false);
+    expect(clipboardData.clearData).toHaveBeenCalledOnce();
+    expect(clipboardData.setData).toHaveBeenCalledWith(
+      "text/plain",
+      partialMessage,
+    );
+    expect(clipboardData.setData).not.toHaveBeenCalledWith(
+      "text/html",
+      expect.anything(),
+    );
+  });
+
+  it("keeps the Copy button on the same full plain-text message", async () => {
+    const user = userEvent.setup();
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+    renderWithProviders(
+      <InviteRosterDialog
+        teamId="team-1"
+        seasonId="season-1"
+        teamName="Falcons"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    const message = await screen.findByTestId("text-invite-message");
+    await user.click(screen.getByTestId("button-copy-invite-message"));
+
+    expect(writeText).toHaveBeenCalledWith(message.textContent);
+    expect(mocks.toast).toHaveBeenCalledWith({ title: "Message copied" });
   });
 });

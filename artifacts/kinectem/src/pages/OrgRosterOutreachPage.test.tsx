@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test";
 import { wouterMock } from "@/test/mocks/wouter";
@@ -24,7 +24,6 @@ import OrgRosterOutreachPage from "./OrgRosterOutreachPage";
 
 describe("OrgRosterOutreachPage", () => {
   let sent = false;
-  let writeText: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     sent = false;
@@ -32,11 +31,6 @@ describe("OrgRosterOutreachPage", () => {
     useGetOrganizationByIdMock.mockReturnValue({
       data: { id: ORG_ID, name: "Westfield Athletic Club" },
       isLoading: false,
-    });
-    writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(window.navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
     });
     Object.defineProperty(document, "execCommand", {
       value: vi.fn().mockReturnValue(true),
@@ -111,6 +105,9 @@ describe("OrgRosterOutreachPage", () => {
 
   it("prepares one selected team's message on demand and persists its shared checkbox", async () => {
     const user = userEvent.setup();
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
     renderWithProviders(<OrgRosterOutreachPage />);
 
     expect(await screen.findByText("1 of 2 teams contacted")).toBeInTheDocument();
@@ -149,6 +146,28 @@ describe("OrgRosterOutreachPage", () => {
       "font-sans",
       "whitespace-pre-wrap",
     );
+    const preparedMessage = screen.getByTestId("text-prepared-message");
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(preparedMessage);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const clipboardData = {
+      clearData: vi.fn(),
+      setData: vi.fn(),
+    } as unknown as DataTransfer;
+    const copyDefaultAction = fireEvent.copy(preparedMessage, {
+      clipboardData,
+    });
+    expect(copyDefaultAction).toBe(false);
+    expect(clipboardData.setData).toHaveBeenCalledWith(
+      "text/plain",
+      preparedMessage.textContent,
+    );
+    expect(clipboardData.setData).not.toHaveBeenCalledWith(
+      "text/html",
+      expect.anything(),
+    );
     expect(screen.getByTestId("dialog-message-footer")).toHaveClass(
       "shrink-0",
     );
@@ -159,6 +178,9 @@ describe("OrgRosterOutreachPage", () => {
     await user.click(screen.getByTestId("btn-copy-message"));
     await waitFor(() =>
       expect(screen.getByText("Copied!")).toBeInTheDocument(),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      "Hi there,\n\nSet up your player's account → https://kinectem.test/app/invites/join-blue",
     );
     expect(
       screen.getByText(/Open the roster message for this team in TeamSnap/),

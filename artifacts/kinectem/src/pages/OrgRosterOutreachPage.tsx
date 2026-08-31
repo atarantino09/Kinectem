@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { copySelectionAsPlainText } from "@/lib/plain-text-copy";
 
 async function copyToClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
@@ -448,6 +449,9 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
               ) : preparedData ? (
                 <div
                   className="whitespace-pre-wrap break-words font-sans [overflow-wrap:anywhere]"
+                  onCopy={copySelectionAsPlainText}
+                  tabIndex={0}
+                  aria-label="Prepared invite message. Select text to copy."
                   data-testid="text-prepared-message"
                 >
                   {preparedData.message}
@@ -466,6 +470,7 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
             <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-sm text-muted-foreground">
               <li>Open the roster message for this team in TeamSnap, LeagueApps, PlayMetrics, or your usual team tool.</li>
               <li>Paste the full message above to the parents and players you intend to invite.</li>
+              <li>If the tool changes spacing, use “Paste as plain text” or the Copy message button above.</li>
               <li>Send it there, then return here and mark this team as sent.</li>
             </ol>
           </section>

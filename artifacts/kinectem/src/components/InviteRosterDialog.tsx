@@ -58,6 +58,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
 import { parseRosterCsv, type RosterCsvRow } from "@/lib/roster-csv";
+import { copySelectionAsPlainText } from "@/lib/plain-text-copy";
 
 const POSITIONS = [
   { value: "player", label: "Player" },
@@ -784,6 +785,8 @@ export function InviteRosterDialog({
                       Sharing the link somewhere else (a group text, GroupMe,
                       TeamSnap)? Paste this message too — it already has your name
                       and the join link.
+                      {" "}If the destination changes spacing, use “Paste as plain
+                      text” or the Copy button above.
                     </p>
                     <div
                       className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/5 p-2.5 text-xs text-foreground"
@@ -815,6 +818,9 @@ export function InviteRosterDialog({
                               "whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
                               (showFullMessage ? "" : " max-h-40 overflow-hidden")
                             }
+                            onCopy={copySelectionAsPlainText}
+                            tabIndex={0}
+                            aria-label="Invite message. Select text to copy."
                             data-testid="text-invite-message"
                           >
                             {inviteMessage}
