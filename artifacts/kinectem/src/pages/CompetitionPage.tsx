@@ -338,8 +338,6 @@ export function weekGroups<T extends {
 
 export type ScheduleSpotlightMatch = Match;
 
-const MAX_SPOTLIGHT_MATCHES = 6;
-
 function startTimeSortKey(value: string | null): string {
   if (!value) return "3:";
   const normalized = value
@@ -378,6 +376,18 @@ function matchSort(a: Match, b: Match): number {
   return a.matchNumber.localeCompare(b.matchNumber, undefined, { numeric: true });
 }
 
+function scheduleOrder(a: Match, b: Match): number {
+  const aHasDate = !!competitionWeekForDate(a.matchDate);
+  const bHasDate = !!competitionWeekForDate(b.matchDate);
+  if (aHasDate !== bHasDate) return aHasDate ? -1 : 1;
+  if (aHasDate && bHasDate) return matchSort(a, b);
+
+  const aHasInvalidDate = !!a.matchDate;
+  const bHasInvalidDate = !!b.matchDate;
+  if (aHasInvalidDate !== bHasInvalidDate) return aHasInvalidDate ? -1 : 1;
+  return matchSort(a, b);
+}
+
 export function scheduleDateKeyForViewer(now: Date): string {
   return [
     now.getFullYear(),
@@ -387,30 +397,15 @@ export function scheduleDateKeyForViewer(now: Date): string {
 }
 
 /**
- * Keep the spotlight useful without making it a second full schedule. Future
- * games are shown in chronological order, then the most recent games, with an
- * undated fallback when the competition has no date information.
+ * The spotlight is a rolling view of the complete schedule. Sort every game
+ * by calendar date and start time, with malformed dates before genuinely
+ * undated games so no game is silently omitted.
  */
 export function rollingScheduleSpotlight(
   matches: ScheduleSpotlightMatch[],
-  currentDate: Date | string = new Date(),
+  _currentDate: Date | string = new Date(),
 ): ScheduleSpotlightMatch[] {
-  const today =
-    typeof currentDate === "string"
-      ? currentDate
-      : scheduleDateKeyForViewer(currentDate);
-  const dated = matches.filter((match) => competitionWeekForDate(match.matchDate));
-  const future = dated
-    .filter((match) => (match.matchDate ?? "") >= today)
-    .sort(matchSort);
-  if (future.length) return future.slice(0, MAX_SPOTLIGHT_MATCHES);
-
-  const recent = dated
-    .filter((match) => (match.matchDate ?? "") < today)
-    .sort((a, b) => matchSort(b, a));
-  if (recent.length) return recent.slice(0, MAX_SPOTLIGHT_MATCHES);
-
-  return matches.slice(0, MAX_SPOTLIGHT_MATCHES);
+  return [...matches].sort(scheduleOrder);
 }
 
 export function scheduleWeekStateKey(groupLabelText: string, weekKey: string): string {
@@ -680,12 +675,17 @@ export default function CompetitionPage() {
       arr.push(m);
       map.set(key, arr);
     }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(map.entries())
+      .map(([label, matches]) => [label, [...matches].sort(scheduleOrder)] as [string, Match[]])
+      .sort((a, b) => {
+        const firstCompare = scheduleOrder(a[1][0]!, b[1][0]!);
+        return firstCompare || a[0].localeCompare(b[0]);
+      });
   }, [q.data]);
 
   const spotlightMatches = useMemo(
-    () => rollingScheduleSpotlight(q.data?.matches ?? [], scheduleToday),
-    [q.data?.matches, scheduleToday],
+    () => rollingScheduleSpotlight(q.data?.matches ?? []),
+    [q.data?.matches],
   );
 
   useEffect(() => {
@@ -1363,11 +1363,13 @@ export default function CompetitionPage() {
           </Card>
         ) : null}
 
-        {/* Teams / claim list and Schedule as full-width reading sections */}
-        <div className="flex w-full min-w-0 flex-col gap-6">
+        {/* Teams and Schedule stay in the main reading column while the
+            rolling spotlight uses the desktop side column. On narrow screens
+            the spotlight returns to the normal single-column flow. */}
+        <div className="grid w-full min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
           {/* Teams */}
           <Card
-            className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
+            className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col lg:col-start-1 lg:row-start-1"
             style={{ borderTopColor: brand }}
             data-testid="card-participants"
           >
@@ -1593,16 +1595,16 @@ export default function CompetitionPage() {
 
         {/* Schedule */}
         <Card
-          className="w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
-          style={{ borderTopColor: brand }}
+          className="contents"
           data-testid="card-schedule"
         >
-          <CardContent className="p-0">
+          <CardContent className="contents">
             {spotlightMatches.length > 0 ? (
               <section
-                className="relative overflow-hidden rounded-t-xl border-b border-border/50 p-5 sm:p-6"
+                className="relative order-2 overflow-hidden rounded-xl border-t-[3px] border-border bg-card p-5 shadow-sm sm:p-6 lg:col-start-2 lg:row-start-1 lg:order-none lg:sticky lg:top-6"
                 style={{
-                  background: `linear-gradient(135deg, ${brand}12 0%, transparent 65%)`,
+                  borderTopColor: brand,
+                  background: `linear-gradient(135deg, ${brand}12 0%, var(--card) 65%)`,
                 }}
                 data-testid="schedule-spotlight"
                 onMouseEnter={() => setSpotlightHovered(true)}
@@ -1770,7 +1772,8 @@ export default function CompetitionPage() {
             <Collapsible
               open={scheduleOpen}
               onOpenChange={setScheduleOpen}
-              className="flex flex-col"
+              className="order-3 flex flex-col rounded-xl border-t-[3px] border-border bg-card shadow-sm lg:col-start-1 lg:row-start-2 lg:order-none"
+              style={{ borderTopColor: brand }}
             >
               <CollapsibleTrigger
                 className="flex w-full items-center justify-between gap-2 p-5 text-left hover:bg-muted/40 transition-colors"
@@ -1803,7 +1806,7 @@ export default function CompetitionPage() {
                 ) : (
                   matchGroups.map(([label, matches]) => (
                     <div key={label} className="space-y-3">
-                      <h3 className="border-b border-border/40 pb-1 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                      <h3 className="border-b border-border/40 pb-1 text-sm font-black uppercase tracking-[0.14em] text-foreground/80">
                         {label}
                       </h3>
                       <div className="space-y-3">

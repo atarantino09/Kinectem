@@ -77,7 +77,7 @@ function makePost(overrides: Record<string, unknown> = {}) {
 }
 
 describe("rolling schedule model", () => {
-  it("prioritizes today and upcoming games while excluding invalid dates", () => {
+  it("includes every game in chronological order, with undated games last", () => {
     const matches = [
       makeMatch("past", "2026-08-29"),
       makeMatch("future", "2026-09-02"),
@@ -91,10 +91,17 @@ describe("rolling schedule model", () => {
       rollingScheduleSpotlight(matches, "2026-08-31").map(
         (match) => match.id,
       ),
-    ).toEqual(["today-early", "today-late", "future"]);
+    ).toEqual([
+      "past",
+      "today-early",
+      "today-late",
+      "future",
+      "invalid",
+      "undated",
+    ]);
   });
 
-  it("falls back to recent games, then undated games when no valid dates exist", () => {
+  it("keeps malformed dates ahead of genuinely undated games", () => {
     expect(
       rollingScheduleSpotlight(
         [
@@ -104,7 +111,7 @@ describe("rolling schedule model", () => {
         ],
         "2026-08-31",
       ).map((match) => match.id),
-    ).toEqual(["recent", "older"]);
+    ).toEqual(["older", "recent", "undated"]);
 
     expect(
       rollingScheduleSpotlight(
@@ -112,6 +119,16 @@ describe("rolling schedule model", () => {
         "2026-08-31",
       ).map((match) => match.id),
     ).toEqual(["invalid", "undated"]);
+  });
+
+  it("does not cap the rolling list when a competition has many games", () => {
+    const matches = Array.from({ length: 8 }, (_, index) =>
+      makeMatch(`game-${index + 1}`, `2026-09-${String(index + 1).padStart(2, "0")}`),
+    );
+
+    expect(rollingScheduleSpotlight(matches).map((match) => match.id)).toEqual(
+      matches.map((match) => match.id),
+    );
   });
 
   it("opens the current week, or the next available week, with group-safe keys", () => {
