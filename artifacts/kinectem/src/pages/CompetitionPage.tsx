@@ -949,10 +949,54 @@ export default function CompetitionPage() {
       </div>
       {/* Branded hero (§9a/§10) — brand_color band, logo-forward */}
       <div
+        className="relative overflow-hidden"
         style={{ background: heroBackground, color: heroText }}
         data-testid="hero-competition"
       >
-        <div className="max-w-4xl mx-auto px-6 py-5 space-y-2.5">
+        {/* Blurred banner photo — shows through the brand gradient */}
+        {c.bannerUrl ? (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: `url(${c.bannerUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: "blur(12px) brightness(0.55) saturate(1.4)",
+              transform: "scale(1.05)",
+            }}
+          />
+        ) : null}
+        {/* Semi-transparent brand gradient overlay keeps brand color dominant over the photo */}
+        {c.bannerUrl ? (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: heroBackground, opacity: 0.72 }}
+          />
+        ) : null}
+        {/* Dot-grid texture overlay — subtle depth without obscuring text */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none opacity-[0.08]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='1' fill='white'/%3E%3C/svg%3E")`,
+            backgroundRepeat: "repeat",
+          }}
+        />
+        {/* Radial corner glow — top-left (behind logo) */}
+        <div
+          aria-hidden="true"
+          className="absolute -top-20 -left-20 w-72 h-72 rounded-full pointer-events-none blur-3xl opacity-30"
+          style={{ background: c.secondaryColor ?? brand }}
+        />
+        {/* Radial corner glow — bottom-right (opposite anchor) */}
+        <div
+          aria-hidden="true"
+          className="absolute -bottom-20 -right-20 w-60 h-60 rounded-full pointer-events-none blur-3xl opacity-25"
+          style={{ background: c.secondaryColor ?? brand }}
+        />
+        <div className="max-w-4xl mx-auto px-6 py-5 space-y-2.5 relative">
           <div className="flex items-start gap-4">
             {c.logoUrl ? (
               <AvatarLightbox
@@ -968,6 +1012,9 @@ export default function CompetitionPage() {
                   src={c.logoUrl}
                   alt={`${c.name} logo`}
                   className="h-24 w-24 sm:h-36 sm:w-36 rounded-xl object-contain bg-white/90 p-2"
+                  style={{
+                    boxShadow: `0 0 0 3px white, 0 0 20px 8px ${(c.secondaryColor ?? brand)}66`,
+                  }}
                   data-testid="img-competition-logo"
                 />
               </AvatarLightbox>
@@ -1006,7 +1053,7 @@ export default function CompetitionPage() {
                   }
                 >
                   <span
-                    className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:text-sm font-black uppercase tracking-widest cursor-pointer shadow-sm transition-transform hover:scale-[1.03]"
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:text-sm font-black uppercase tracking-widest cursor-pointer shadow-sm transition-transform hover:scale-[1.03] competition-pill-shimmer"
                     style={{ backgroundColor: heroText, color: brand }}
                     data-testid="chip-presented-by"
                   >
@@ -1023,6 +1070,7 @@ export default function CompetitionPage() {
               ) : null}
               <h1
                 className="text-2xl sm:text-3xl font-black tracking-tight"
+                style={{ textShadow: "0 2px 12px rgba(0,0,0,0.35)" }}
                 data-testid="text-competition-name"
               >
                 {c.name}
@@ -1107,6 +1155,12 @@ export default function CompetitionPage() {
           </div>
           <p className="text-[11px] opacity-70 pt-2">Powered by Kinectem</p>
         </div>
+        {/* Bottom vignette — cinematic fade into the page body */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-16 pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, transparent, rgba(0,0,0,0.18))" }}
+        />
       </div>
 
       <div className="w-full min-w-0 max-w-4xl mx-auto p-6 pb-12 space-y-10">
