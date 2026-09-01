@@ -22,18 +22,23 @@ import {
 } from "@/components/ui/collapsible";
 import {
   CalendarDays,
+  CalendarPlus,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
   EyeOff,
+  ExternalLink,
   ImageDown,
   Loader2,
   MapPin,
   Pause,
   Pencil,
   Play,
+  Search,
+  Share2,
   Star,
+  X,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -181,6 +186,16 @@ type CompetitionResponse = {
 function groupLabel(division: string, bracket: string): string {
   const parts = [division, bracket].filter((p) => p && p.trim() !== "");
   return parts.length ? parts.join(" · ") : "General";
+}
+
+function participantDisplayGroup(
+  participant: CompetitionParticipant,
+  brackets: CompetitionBracketInfo[],
+): string {
+  return (
+    brackets.find((bracket) => bracket.id === participant.bracketId)?.label ??
+    groupLabel(participant.division, participant.bracket)
+  );
 }
 
 export type CompetitionTeamSection = {
@@ -469,6 +484,140 @@ export function scheduleDateKeyForViewer(now: Date): string {
   ].join("-");
 }
 
+function parseStartTimeMinutes(value: string | null | undefined): number | null {
+  const normalized = (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/([AP])\.?M\.?$/, "$1M");
+  const twelveHour =
+    /^(\d{1,2})(?:[:.]([0-5]\d))?(?::([0-5]\d))?\s*([AP]M)$/.exec(
+      normalized,
+    );
+  if (twelveHour) {
+    const rawHour = Number(twelveHour[1]);
+    if (rawHour < 1 || rawHour > 12) return null;
+    let hour = rawHour % 12;
+    if (twelveHour[4] === "PM") hour += 12;
+    return hour * 60 + Number(twelveHour[2] ?? 0);
+  }
+  const twentyFourHour = /^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(
+    normalized,
+  );
+  return twentyFourHour
+    ? Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2])
+    : null;
+}
+
+export function isMatchInProgress(
+  match: Pick<Match, "matchDate" | "startTime" | "status">,
+  now: Date = new Date(),
+): boolean {
+  if (match.status === "postponed" || match.status === "canceled") return false;
+  if (!match.matchDate || match.matchDate !== scheduleDateKeyForViewer(now)) {
+    return false;
+  }
+  const startMinutes = parseStartTimeMinutes(match.startTime);
+  if (startMinutes === null) return false;
+  const start = new Date(now);
+  start.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+  return now.getTime() >= start.getTime() &&
+    now.getTime() <= start.getTime() + 2 * 60 * 60 * 1000;
+}
+
+export function scheduleSpotlightLabel(
+  competition: Pick<CompetitionMeta, "isActive" | "isEnded">,
+  match: Pick<Match, "matchDate" | "startTime" | "status">,
+  now: Date = new Date(),
+): { label: string; isLive: boolean } {
+  if (isMatchInProgress(match, now)) return { label: "Live now", isLive: true };
+  if (competition.isEnded) return { label: "Final schedule", isLive: false };
+  if (competition.isActive) return { label: "Event schedule", isLive: false };
+  return { label: "Upcoming schedule", isLive: false };
+}
+
+export function mapUrlForLocation(
+  value: string | null | undefined,
+): string | null {
+  const location = (value ?? "").trim();
+  if (
+    !location ||
+    location.length > 240 ||
+    /[\u0000-\u001f\u007f]/.test(location)
+  ) {
+    return null;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    location,
+  )}`;
+}
+
+function calendarDate(value: string): string {
+  return value.replace(/-/g, "");
+}
+
+function calendarEscape(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\r\n|\r|\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+function addCalendarDays(value: string, days: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("");
+}
+
+export function matchCalendarText(
+  match: Pick<
+    Match,
+    "matchDate" | "startTime" | "homeName" | "awayName" | "venue" | "venueState" | "field"
+  >,
+  competitionName: string,
+): string | null {
+  if (!match.matchDate || !competitionWeekForDate(match.matchDate)) return null;
+  const summary = `${match.homeName ?? "TBD"} vs ${match.awayName ?? "TBD"}`;
+  const location = [match.venue, match.venueState, match.field]
+    .filter(Boolean)
+    .join(", ");
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Kinectem//Competition Schedule//EN",
+    "BEGIN:VEVENT",
+    `UID:${calendarEscape(`${match.matchDate}-${summary}-${competitionName}`)}@kinectem`,
+    `SUMMARY:${calendarEscape(`${summary} · ${competitionName}`)}`,
+  ];
+  const startMinutes = parseStartTimeMinutes(match.startTime);
+  if (startMinutes === null) {
+    lines.push(`DTSTART;VALUE=DATE:${calendarDate(match.matchDate)}`);
+  } else {
+    const hours = Math.floor(startMinutes / 60);
+    const minutes = startMinutes % 60;
+    const endMinutes = startMinutes + 120;
+    const endHours = Math.floor(endMinutes / 60) % 24;
+    const endMins = endMinutes % 60;
+    const endDate =
+      endMinutes >= 24 * 60
+        ? addCalendarDays(match.matchDate, 1)
+        : calendarDate(match.matchDate);
+    const stamp = (h: number, m: number) =>
+      `${String(h).padStart(2, "0")}${String(m).padStart(2, "0")}00`;
+    lines.push(
+      `DTSTART:${calendarDate(match.matchDate)}T${stamp(hours, minutes)}`,
+      `DTEND:${endDate}T${stamp(endHours, endMins)}`,
+    );
+  }
+  if (location) lines.push(`LOCATION:${calendarEscape(location)}`);
+  lines.push("END:VEVENT", "END:VCALENDAR");
+  return `${lines.join("\r\n")}\r\n`;
+}
+
 /**
  * The spotlight is a rolling view of the complete schedule. Sort every game
  * by calendar date and start time, with malformed dates before genuinely
@@ -614,6 +763,13 @@ export default function CompetitionPage() {
   // Task #852 — active bracket filter for the featured-recaps rail
   // ("" = All; unbracketed recaps only ever show under All).
   const [bracketFilter, setBracketFilter] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
+  const [teamGenderFilter, setTeamGenderFilter] = useState("all");
+  const [teamAgeFilter, setTeamAgeFilter] = useState("all");
+  const [teamGroupFilter, setTeamGroupFilter] = useState("all");
+  const [recapSearch, setRecapSearch] = useState("");
+  const [recapTeamFilter, setRecapTeamFilter] = useState("all");
+  const [recapDateFilter, setRecapDateFilter] = useState("all");
   // Competition rail cards contain summary data only. Load the canonical
   // public post detail on demand before opening the reusable image exporter.
   const [shareImagePost, setShareImagePost] = useState<PostResponse | null>(null);
@@ -734,10 +890,22 @@ export default function CompetitionPage() {
         `/api/v1/competitions/${encodeURIComponent(slug)}/follow`,
         { method: follow ? "POST" : "DELETE" },
       ),
-    onSuccess: () => {
+    onSuccess: (_result, follow) => {
       qcTop.invalidateQueries({ queryKey: ["competition", slug] });
       qcTop.invalidateQueries({ queryKey: ["my-followed-competitions"] });
+      toast({
+        title: follow ? "Competition followed" : "Competition unfollowed",
+        description: follow
+          ? "You’ll find this competition in your followed list."
+          : "You can follow it again anytime.",
+      });
     },
+    onError: (err) =>
+      toast({
+        title: "Couldn't update your follow",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      }),
   });
 
   const matchGroups = useMemo(() => {
@@ -853,6 +1021,95 @@ export default function CompetitionPage() {
     }, 0);
   };
 
+  const teamFilterData = useMemo(() => {
+    const participants = q.data?.participants ?? [];
+    const brackets = q.data?.brackets ?? [];
+    const genderOptions = new Map<string, string>();
+    const ageOptions = new Map<string, string>();
+    const groupOptions = new Map<string, string>();
+
+    for (const participant of participants) {
+      const gender = genderInfo(participant.gender);
+      const age = ageGroupInfo(participant.age);
+      const group = participantDisplayGroup(participant, brackets);
+      genderOptions.set(gender.key, gender.label);
+      ageOptions.set(age.key, age.label);
+      groupOptions.set(group.toLowerCase(), group);
+    }
+
+    const search = teamSearch.trim().toLowerCase();
+    const filtered = participants.filter((participant) => {
+      const gender = genderInfo(participant.gender);
+      const age = ageGroupInfo(participant.age);
+      const group = participantDisplayGroup(participant, brackets);
+      const matchesSearch =
+        !search ||
+        [participant.name, gender.label, age.label, group]
+          .join(" ")
+          .toLowerCase()
+          .includes(search);
+      return (
+        matchesSearch &&
+        (teamGenderFilter === "all" || gender.key === teamGenderFilter) &&
+        (teamAgeFilter === "all" || age.key === teamAgeFilter) &&
+        (teamGroupFilter === "all" ||
+          group.toLowerCase() === teamGroupFilter)
+      );
+    });
+
+    return {
+      filtered,
+      genderOptions: Array.from(genderOptions, ([value, label]) => ({
+        value,
+        label,
+      })).sort((a, b) =>
+        genderInfo(a.label).rank - genderInfo(b.label).rank ||
+        teamNameCollator.compare(a.label, b.label),
+      ),
+      ageOptions: Array.from(ageOptions, ([value, label]) => ({
+        value,
+        label,
+      })).sort((a, b) => {
+        const left = ageGroupInfo(a.label);
+        const right = ageGroupInfo(b.label);
+        return (
+          left.rank - right.rank ||
+          (left.number ?? Number.MAX_SAFE_INTEGER) -
+            (right.number ?? Number.MAX_SAFE_INTEGER) ||
+          teamNameCollator.compare(left.label, right.label)
+        );
+      }),
+      groupOptions: Array.from(groupOptions, ([value, label]) => ({
+        value,
+        label,
+      })).sort((a, b) => teamNameCollator.compare(a.label, b.label)),
+    };
+  }, [
+    q.data?.brackets,
+    q.data?.participants,
+    teamAgeFilter,
+    teamGenderFilter,
+    teamGroupFilter,
+    teamSearch,
+  ]);
+
+  const teamFiltersActive =
+    teamSearch.trim() !== "" ||
+    teamGenderFilter !== "all" ||
+    teamAgeFilter !== "all" ||
+    teamGroupFilter !== "all";
+
+  const clearTeamFilters = () => {
+    setTeamSearch("");
+    setTeamGenderFilter("all");
+    setTeamAgeFilter("all");
+    setTeamGroupFilter("all");
+  };
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [teamAgeFilter, teamGenderFilter, teamGroupFilter, teamSearch]);
+
   if (q.isLoading) {
     return (
       <div className="min-h-screen max-w-4xl mx-auto p-6 space-y-4">
@@ -886,7 +1143,10 @@ export default function CompetitionPage() {
   }
 
   const { competition: c, participants } = q.data;
-  const teamSections = competitionTeamSections(participants, q.data.brackets ?? []);
+  const teamSections = competitionTeamSections(
+    teamFilterData.filtered,
+    q.data.brackets ?? [],
+  );
   const brand = c.brandColor ?? DEFAULT_BRAND;
   const shortTournament = isShortTournament(c);
   const heroText = contrastText(brand);
@@ -896,8 +1156,7 @@ export default function CompetitionPage() {
     ? `linear-gradient(135deg, ${brand} 0%, ${brand} 55%, ${c.secondaryColor} 100%)`
     : brand;
   const accent = c.tertiaryColor ?? null;
-  const dateRange =
-    c.startDate === c.endDate ? c.startDate : `${c.startDate} – ${c.endDate}`;
+  const dateRange = formatCompetitionDateRange(c.startDate, c.endDate);
   const typeLabel = c.type === "league" ? "League" : "Tournament";
   const statusLabel =
     c.type === "league"
@@ -909,6 +1168,80 @@ export default function CompetitionPage() {
         : c.isEnded
           ? "Ended"
           : "Upcoming";
+
+  const shareMatch = async (match: Match) => {
+    const title = `${match.homeName ?? "TBD"} vs ${match.awayName ?? "TBD"}`;
+    const details = [
+      formatCompetitionDate(match.matchDate),
+      match.startTime,
+      [match.venue, match.venueState, match.field].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${title} · ${c.name}`,
+          text: `${title}${details ? ` — ${details}` : ""}`,
+          url: window.location.href,
+        });
+        toast({ title: "Game details shared" });
+        return;
+      }
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Sharing is not available on this device.");
+      }
+      await navigator.clipboard.writeText(
+        `${title}${details ? ` — ${details}` : ""}\n${window.location.href}`,
+      );
+      toast({
+        title: "Game details copied",
+        description: "Paste them into a message to share this matchup.",
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      toast({
+        title: "Couldn't share this game",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const downloadMatchCalendar = (match: Match) => {
+    const calendar = matchCalendarText(match, c.name);
+    if (!calendar) {
+      toast({
+        title: "Calendar file unavailable",
+        description: "This game needs a valid date before it can be added.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const blob = new Blob([calendar], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${c.slug}-game-${match.matchNumber || "schedule"}.ics`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      toast({
+        title: "Calendar file downloaded",
+        description: "Open it to add this game to your calendar.",
+      });
+    } catch (error) {
+      toast({
+        title: "Couldn't create the calendar file",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const openRecapImageExporter = async (
     event: React.MouseEvent<HTMLButtonElement>,
@@ -959,6 +1292,7 @@ export default function CompetitionPage() {
     : `/login?signup=1&returnTo=${encodeURIComponent(
         `/competitions/c/${slug}`,
       )}`;
+  const followHref = `/login?returnTo=${encodeURIComponent(`/c/${slug}`)}`;
 
   return (
     <div className="min-h-screen">
@@ -1137,7 +1471,19 @@ export default function CompetitionPage() {
                 />
                 {c.isFollowing ? "Following" : "Follow"}
               </Button>
-            ) : null}
+            ) : (
+              <Link href={followHref}>
+                <Button
+                  variant="outline"
+                  className="font-bold border-white/70 bg-transparent hover:bg-white/10"
+                  style={{ color: heroText }}
+                  data-testid="btn-follow-competition-login"
+                >
+                  <Star className="w-4 h-4 mr-1.5" />
+                  Follow competition
+                </Button>
+              </Link>
+            )}
             {c.canManage || isClaimVisitor ? (
               <Link
                 href={`/competitions/${c.id}${
@@ -1206,9 +1552,58 @@ export default function CompetitionPage() {
           const usedBrackets = brackets.filter((b) =>
             allRecaps.some((r) => r.bracketId === b.id),
           );
-          const shownRecaps = bracketFilter
-            ? allRecaps.filter((r) => r.bracketId === bracketFilter)
-            : allRecaps;
+          const recapDateKey = (recap: FeaturedRecap) =>
+            recap.effectiveGameDate ??
+            recap.gameDate ??
+            recap.publishedAt?.slice(0, 10) ??
+            "";
+          const recapSearchText = recapSearch.trim().toLowerCase();
+          const shownRecaps = allRecaps.filter((recap) => {
+            const matchesBracket =
+              !bracketFilter || recap.bracketId === bracketFilter;
+            const matchesTeam =
+              recapTeamFilter === "all" || recap.teamId === recapTeamFilter;
+            const matchesDate =
+              recapDateFilter === "all" ||
+              recapDateKey(recap) === recapDateFilter;
+            const matchesSearch =
+              !recapSearchText ||
+              [
+                recap.title,
+                recap.teamName,
+                recap.opponentName,
+                recap.summary,
+                recap.groupDivision,
+                recap.groupBracket,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+                .includes(recapSearchText);
+            return matchesBracket && matchesTeam && matchesDate && matchesSearch;
+          });
+          const recapTeamOptions = Array.from(
+            new Map(
+              allRecaps.map((recap) => [
+                recap.teamId,
+                { value: recap.teamId, label: recap.teamName },
+              ]),
+            ).values(),
+          ).sort((a, b) => teamNameCollator.compare(a.label, b.label));
+          const recapDateOptions = Array.from(
+            new Set(allRecaps.map(recapDateKey).filter(Boolean)),
+          ).sort();
+          const recapFiltersActive =
+            bracketFilter !== "" ||
+            recapSearch.trim() !== "" ||
+            recapTeamFilter !== "all" ||
+            recapDateFilter !== "all";
+          const clearRecapFilters = () => {
+            setBracketFilter("");
+            setRecapSearch("");
+            setRecapTeamFilter("all");
+            setRecapDateFilter("all");
+          };
           // Brackets stay in the organizer's saved order, then unbracketed
           // recaps trail under "Other"; each section is always split by week.
           const bracketIds = new Set(brackets.map((b) => b.id));
@@ -1369,6 +1764,88 @@ export default function CompetitionPage() {
                 ) : null}
               </div>
             </div>
+            <div
+              className="rounded-xl border border-border/70 bg-card p-3 shadow-sm space-y-3"
+              data-testid="recap-filters"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="relative min-w-0 flex-1">
+                  <span className="sr-only">Search featured recaps</span>
+                  <Search
+                    aria-hidden="true"
+                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <input
+                    type="search"
+                    value={recapSearch}
+                    onChange={(event) => setRecapSearch(event.target.value)}
+                    placeholder="Search teams, opponents, or recap titles"
+                    className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-10 text-sm font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring"
+                    data-testid="input-search-recaps"
+                  />
+                  {recapSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => setRecapSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Clear recap search"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </label>
+                {recapFiltersActive ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 shrink-0 font-bold"
+                    onClick={clearRecapFilters}
+                    data-testid="btn-clear-recap-filters"
+                  >
+                    Clear filters
+                  </Button>
+                ) : null}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Team
+                  </span>
+                  <select
+                    value={recapTeamFilter}
+                    onChange={(event) => setRecapTeamFilter(event.target.value)}
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    data-testid="select-recap-team"
+                  >
+                    <option value="all">All teams</option>
+                    {recapTeamOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Game date
+                  </span>
+                  <select
+                    value={recapDateFilter}
+                    onChange={(event) => setRecapDateFilter(event.target.value)}
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    data-testid="select-recap-date"
+                  >
+                    <option value="all">All dates</option>
+                    {recapDateOptions.map((date) => (
+                      <option key={date} value={date}>
+                        {formatCompetitionDate(date)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
             {/* Bracket filter chips retain the organizer's saved ordering.
                 Week headings stay visible for every filter, including All. */}
             {usedBrackets.length > 0 && (
@@ -1399,6 +1876,28 @@ export default function CompetitionPage() {
                 ))}
               </div>
             )}
+            {shownRecaps.length === 0 ? (
+              <div
+                className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center"
+                data-testid="empty-recap-filters"
+              >
+                <Search className="mx-auto h-8 w-8 text-muted-foreground/60" />
+                <h3 className="mt-3 font-black">No recaps match those filters</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Try another team, date, or search term.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 font-bold"
+                  onClick={clearRecapFilters}
+                  data-testid="btn-empty-clear-recap-filters"
+                >
+                  Show all recaps
+                </Button>
+              </div>
+            ) : (
             <div className="space-y-8 pt-2" data-testid="rail-grouped-sections">
               {groupedSections.map((s) => (
                 <div
@@ -1445,6 +1944,7 @@ export default function CompetitionPage() {
                 </div>
               ))}
             </div>
+            )}
           </section>
           );
         })()}
@@ -1457,9 +1957,7 @@ export default function CompetitionPage() {
           />
         ) : null}
 
-        {/* Organizer-only empty state — a clear path to the curation panel
-            even before anything has been featured. Hidden from the public. */}
-        {(q.data.featuredRecaps?.length ?? 0) === 0 && c.canManage ? (
+        {(q.data.featuredRecaps?.length ?? 0) === 0 ? (
           <Card
             className="rounded-xl border-l-4 border-dashed border-border bg-muted/20 shadow-none"
             style={{ borderLeftColor: brand }}
@@ -1471,21 +1969,23 @@ export default function CompetitionPage() {
                   Featured game recaps
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1 leading-relaxed max-w-xl">
-                  Nothing featured yet — review recaps from claimed teams and
-                  feature the best ones here on your public page. Only you can
-                  see this.
+                  {c.canManage
+                    ? "Nothing featured yet — review recaps from claimed teams and feature the best ones here on your public page. Only you can see this."
+                    : "No game recaps have been featured yet. Check back after the action for event-day stories and highlights."}
                 </p>
               </div>
-              <Link href={`/competitions/${c.id}#recaps`}>
-                <Button
-                  variant="outline"
-                  className="font-bold shrink-0 bg-background shadow-sm"
-                  data-testid="btn-feature-recaps"
-                >
-                  <Star className="w-4 h-4 mr-1.5 text-muted-foreground" />
-                  View &amp; feature recaps
-                </Button>
-              </Link>
+              {c.canManage ? (
+                <Link href={`/competitions/${c.id}#recaps`}>
+                  <Button
+                    variant="outline"
+                    className="font-bold shrink-0 bg-background shadow-sm"
+                    data-testid="btn-feature-recaps"
+                  >
+                    <Star className="w-4 h-4 mr-1.5 text-muted-foreground" />
+                    View &amp; feature recaps
+                  </Button>
+                </Link>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
@@ -1515,8 +2015,14 @@ export default function CompetitionPage() {
                       style={{ backgroundColor: brand }}
                     />
                     Teams
-                    <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs">
-                      {participants.length}
+                    <Badge
+                      variant="secondary"
+                      className="rounded-full px-2 py-0.5 text-xs"
+                      data-testid="badge-team-count"
+                    >
+                      {teamFiltersActive
+                        ? `${teamFilterData.filtered.length} of ${participants.length}`
+                        : participants.length}
                     </Badge>
                   </h2>
                   <ChevronDown
@@ -1568,6 +2074,114 @@ export default function CompetitionPage() {
                       )}
                     </p>
                   </div>
+                  {participants.length > 0 ? (
+                    <div
+                      className="rounded-xl border border-border/70 bg-background p-3 shadow-sm space-y-3"
+                      data-testid="team-filters"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <label className="relative min-w-0 flex-1">
+                          <span className="sr-only">Search teams</span>
+                          <Search
+                            aria-hidden="true"
+                            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                          />
+                          <input
+                            type="search"
+                            value={teamSearch}
+                            onChange={(event) => setTeamSearch(event.target.value)}
+                            placeholder="Search teams, ages, or groups"
+                            className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-10 text-sm font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring"
+                            data-testid="input-search-teams"
+                          />
+                          {teamSearch ? (
+                            <button
+                              type="button"
+                              onClick={() => setTeamSearch("")}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              aria-label="Clear team search"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          ) : null}
+                        </label>
+                        {teamFiltersActive ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-10 shrink-0 font-bold"
+                            onClick={clearTeamFilters}
+                            data-testid="btn-clear-team-filters"
+                          >
+                            Clear filters
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <label className="space-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                            Gender
+                          </span>
+                          <select
+                            value={teamGenderFilter}
+                            onChange={(event) =>
+                              setTeamGenderFilter(event.target.value)
+                            }
+                            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            data-testid="select-team-gender"
+                          >
+                            <option value="all">All genders</option>
+                            {teamFilterData.genderOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                            Age
+                          </span>
+                          <select
+                            value={teamAgeFilter}
+                            onChange={(event) =>
+                              setTeamAgeFilter(event.target.value)
+                            }
+                            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            data-testid="select-team-age"
+                          >
+                            <option value="all">All ages</option>
+                            {teamFilterData.ageOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                            Group
+                          </span>
+                          <select
+                            value={teamGroupFilter}
+                            onChange={(event) =>
+                              setTeamGroupFilter(event.target.value)
+                            }
+                            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            data-testid="select-team-group"
+                          >
+                            <option value="all">All groups</option>
+                            {teamFilterData.groupOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
                   {c.canManage && selectedIds.size > 0 ? (
                     <div
                       className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80"
@@ -1624,7 +2238,20 @@ export default function CompetitionPage() {
                       data-testid={`row-participant-${p.id}`}
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-bold tracking-tight break-words">{p.name}</p>
+                        {p.teamId ? (
+                          <Link
+                            href={`/teams/${p.teamId}`}
+                            className="inline-flex min-w-0 items-center gap-1 text-sm font-bold tracking-tight hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                            data-testid={`link-participant-team-${p.id}`}
+                          >
+                            <span className="break-words">{p.name}</span>
+                            <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          </Link>
+                        ) : (
+                          <p className="text-sm font-bold tracking-tight break-words">
+                            {p.name}
+                          </p>
+                        )}
                         <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground break-words mt-0.5">
                           {groupLabel(p.division, p.bracket)}
                         </p>
@@ -1708,10 +2335,33 @@ export default function CompetitionPage() {
                     </div>
                   ))}
                   {participants.length === 0 ? (
-                    <p className="text-sm text-muted-foreground pt-2">
-                      No teams have been added to this {typeLabel.toLowerCase()}{" "}
-                      yet.
-                    </p>
+                    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center">
+                      <p className="font-bold">No teams have been added yet</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Teams will appear here when the {typeLabel.toLowerCase()}{" "}
+                        schedule is available.
+                      </p>
+                    </div>
+                  ) : teamSections.length === 0 ? (
+                    <div
+                      className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center"
+                      data-testid="empty-team-filters"
+                    >
+                      <Search className="mx-auto h-7 w-7 text-muted-foreground/60" />
+                      <p className="mt-2 font-bold">No teams match those filters</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Try another search or clear the filters to see every team.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 font-bold"
+                        onClick={clearTeamFilters}
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               </CollapsibleContent>
@@ -1750,6 +2400,8 @@ export default function CompetitionPage() {
                   const venue = [spotlightMatch.venue, spotlightMatch.venueState]
                     .filter(Boolean)
                     .join(", ");
+                   const directionsHref = mapUrlForLocation(venue);
+                   const spotlightState = scheduleSpotlightLabel(c, spotlightMatch);
                   const statusText =
                     spotlightMatch.status === "postponed"
                       ? "Postponed"
@@ -1758,13 +2410,15 @@ export default function CompetitionPage() {
                         : null;
                   return (
                     <>
-                      {/* ── Label row: "LIVE SCHEDULE" + pulse dot ── */}
+                      {/* State-aware label: only an actual in-progress game pulses. */}
                       <div className="flex items-center gap-2">
                         <span className="relative flex h-2 w-2 shrink-0">
-                          <span
-                            className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-                            style={{ backgroundColor: brand }}
-                          />
+                          {spotlightState.isLive && !reducedMotion ? (
+                            <span
+                              className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                              style={{ backgroundColor: brand }}
+                            />
+                          ) : null}
                           <span
                             className="relative inline-flex h-2 w-2 rounded-full"
                             style={{ backgroundColor: brand }}
@@ -1774,15 +2428,33 @@ export default function CompetitionPage() {
                           className="text-[11px] font-black uppercase tracking-[0.2em]"
                           style={{ color: brand }}
                         >
-                          Live schedule
+                          {spotlightState.label}
                         </p>
                       </div>
 
                       {/* ── Game title — always its own full-width row ── */}
                       <h3 className="mt-2 text-2xl font-black tracking-tight leading-tight">
-                        {spotlightMatch.homeName ?? "TBD"}{" "}
+                        {spotlightMatch.homeTeamId ? (
+                          <Link
+                            href={`/teams/${spotlightMatch.homeTeamId}`}
+                            className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {spotlightMatch.homeName ?? "TBD"}
+                          </Link>
+                        ) : (
+                          spotlightMatch.homeName ?? "TBD"
+                        )}{" "}
                         <span className="text-muted-foreground font-semibold text-xl">vs</span>{" "}
-                        {spotlightMatch.awayName ?? "TBD"}
+                        {spotlightMatch.awayTeamId ? (
+                          <Link
+                            href={`/teams/${spotlightMatch.awayTeamId}`}
+                            className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {spotlightMatch.awayName ?? "TBD"}
+                          </Link>
+                        ) : (
+                          spotlightMatch.awayName ?? "TBD"
+                        )}
                       </h3>
 
                       {/* ── Nav controls — always below title, never beside it ── */}
@@ -1874,15 +2546,30 @@ export default function CompetitionPage() {
                           <span>{spotlightMatch.startTime ?? "Time not listed"}</span>
                         </div>
                         {(venue || spotlightMatch.field) ? (
-                          <div
-                            className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold"
-                            style={{ backgroundColor: `${brand}14` }}
-                          >
-                            <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: brand }} />
-                            <span className="min-w-0 truncate">
-                              {venue || spotlightMatch.field}
-                            </span>
-                          </div>
+                          directionsHref ? (
+                            <a
+                              href={directionsHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              style={{ backgroundColor: `${brand}14` }}
+                              data-testid={`link-spotlight-directions-${spotlightMatch.id}`}
+                            >
+                              <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: brand }} />
+                              <span className="min-w-0 truncate">{venue}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <div
+                              className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold"
+                              style={{ backgroundColor: `${brand}14` }}
+                            >
+                              <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: brand }} />
+                              <span className="min-w-0 truncate">
+                                {venue || spotlightMatch.field}
+                              </span>
+                            </div>
+                          )
                         ) : null}
                         {spotlightMatch.field ? (
                           <div
@@ -1924,16 +2611,42 @@ export default function CompetitionPage() {
                             : ""}
                           {reducedMotion ? " · Rotation paused for reduced motion" : ""}
                         </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="font-bold"
-                          onClick={() => jumpToSchedule(spotlightMatch)}
-                          data-testid="btn-spotlight-details"
-                        >
-                          View full schedule
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="font-bold"
+                            onClick={() => downloadMatchCalendar(spotlightMatch)}
+                            aria-label={`Add ${spotlightMatch.homeName ?? "TBD"} vs ${spotlightMatch.awayName ?? "TBD"} to calendar`}
+                            data-testid="btn-spotlight-calendar"
+                          >
+                            <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
+                            Calendar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="font-bold"
+                            onClick={() => void shareMatch(spotlightMatch)}
+                            aria-label={`Share ${spotlightMatch.homeName ?? "TBD"} vs ${spotlightMatch.awayName ?? "TBD"}`}
+                            data-testid="btn-spotlight-share"
+                          >
+                            <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                            Share
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="font-bold"
+                            onClick={() => jumpToSchedule(spotlightMatch)}
+                            data-testid="btn-spotlight-details"
+                          >
+                            View full schedule
+                          </Button>
+                        </div>
                       </div>
                     </>
                   );
@@ -2019,6 +2732,7 @@ export default function CompetitionPage() {
                                       const venue = [m.venue, m.venueState]
                                         .filter(Boolean)
                                         .join(", ");
+                                       const directionsHref = mapUrlForLocation(venue);
                                       return (
                                         <div
                                           key={m.id}
@@ -2052,22 +2766,56 @@ export default function CompetitionPage() {
                                               ) : null}
                                             </div>
                                             <div
-                                              className={`truncate font-bold tracking-tight ${
+                                              className={`font-bold tracking-tight ${
                                                 m.status === "canceled"
                                                   ? "line-through text-muted-foreground"
                                                   : ""
                                               }`}
                                             >
-                                              {m.homeName ?? "TBD"}{" "}
+                                              {m.homeTeamId ? (
+                                                <Link
+                                                  href={`/teams/${m.homeTeamId}`}
+                                                  className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                  data-testid={`link-match-home-team-${m.id}`}
+                                                >
+                                                  {m.homeName ?? "TBD"}
+                                                </Link>
+                                              ) : (
+                                                m.homeName ?? "TBD"
+                                              )}{" "}
                                               <span className="mx-1 text-xs font-medium text-muted-foreground">
                                                 vs
                                               </span>{" "}
-                                              {m.awayName ?? "TBD"}
+                                              {m.awayTeamId ? (
+                                                <Link
+                                                  href={`/teams/${m.awayTeamId}`}
+                                                  className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                  data-testid={`link-match-away-team-${m.id}`}
+                                                >
+                                                  {m.awayName ?? "TBD"}
+                                                </Link>
+                                              ) : (
+                                                m.awayName ?? "TBD"
+                                              )}
                                             </div>
                                             {venue ? (
-                                              <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                                                {venue}
-                                              </p>
+                                              directionsHref ? (
+                                                <a
+                                                  href={directionsHref}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="mt-1 inline-flex max-w-full items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                                                  data-testid={`link-match-directions-${m.id}`}
+                                                >
+                                                  <MapPin className="h-3 w-3 shrink-0" />
+                                                  <span className="truncate">{venue}</span>
+                                                  <ExternalLink className="h-3 w-3 shrink-0" />
+                                                </a>
+                                              ) : (
+                                                <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                                                  {venue}
+                                                </p>
+                                              )
                                             ) : null}
                                             {(m.status === "postponed" || m.status === "canceled") &&
                                             m.statusReason ? (
@@ -2076,18 +2824,44 @@ export default function CompetitionPage() {
                                               </p>
                                             ) : null}
                                           </div>
-                                          {m.status === "postponed" || m.status === "canceled" ? (
-                                            <span
-                                              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                                                m.status === "postponed"
-                                                  ? "border-amber-300/50 bg-amber-50/50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/50 dark:text-amber-400"
-                                                  : "border-red-300/50 bg-red-50/50 text-red-700 dark:border-red-700/50 dark:bg-red-950/50 dark:text-red-400"
-                                              }`}
-                                              data-testid={`badge-match-status-${m.id}`}
-                                            >
-                                              {m.status === "postponed" ? "Postponed" : "Canceled"}
-                                            </span>
-                                          ) : null}
+                                          <div className="flex shrink-0 flex-col items-end gap-2">
+                                            {m.status === "postponed" || m.status === "canceled" ? (
+                                              <span
+                                                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                                  m.status === "postponed"
+                                                    ? "border-amber-300/50 bg-amber-50/50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/50 dark:text-amber-400"
+                                                    : "border-red-300/50 bg-red-50/50 text-red-700 dark:border-red-700/50 dark:bg-red-950/50 dark:text-red-400"
+                                                }`}
+                                                data-testid={`badge-match-status-${m.id}`}
+                                              >
+                                                {m.status === "postponed" ? "Postponed" : "Canceled"}
+                                              </span>
+                                            ) : null}
+                                            <div className="flex items-center gap-1">
+                                              <Button
+                                                type="button"
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8"
+                                                onClick={() => downloadMatchCalendar(m)}
+                                                aria-label={`Add ${m.homeName ?? "TBD"} vs ${m.awayName ?? "TBD"} to calendar`}
+                                                data-testid={`btn-match-calendar-${m.id}`}
+                                              >
+                                                <CalendarPlus className="h-4 w-4" />
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8"
+                                                onClick={() => void shareMatch(m)}
+                                                aria-label={`Share ${m.homeName ?? "TBD"} vs ${m.awayName ?? "TBD"}`}
+                                                data-testid={`btn-match-share-${m.id}`}
+                                              >
+                                                <Share2 className="h-4 w-4" />
+                                              </Button>
+                                            </div>
+                                          </div>
                                         </div>
                                       );
                                     })}

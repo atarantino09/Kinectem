@@ -8,10 +8,14 @@ import {
   competitionTeamSections,
   defaultOpenScheduleWeekKeys,
   isPublicFeaturedCompetitionRecap,
+  isMatchInProgress,
   isShortTournament,
+  mapUrlForLocation,
+  matchCalendarText,
   recapGroups,
   rollingScheduleSpotlight,
   scheduleDateKeyForViewer,
+  scheduleSpotlightLabel,
   scheduleWeekStateKey,
   type ScheduleSpotlightMatch,
   weekGroups,
@@ -197,6 +201,79 @@ describe("rolling schedule model", () => {
       "invalid",
       "missing",
     ]);
+  });
+});
+
+describe("event-day schedule helpers", () => {
+  it("only marks a scheduled game live during its two-hour window", () => {
+    const match = makeMatch("live", "2026-08-31", { startTime: "10:00 AM" });
+    expect(isMatchInProgress(match, new Date(2026, 7, 31, 10, 45))).toBe(true);
+    expect(isMatchInProgress(match, new Date(2026, 7, 31, 9, 59))).toBe(false);
+    expect(
+      isMatchInProgress(
+        { ...match, status: "postponed" },
+        new Date(2026, 7, 31, 10, 45),
+      ),
+    ).toBe(false);
+    expect(
+      isMatchInProgress(
+        { ...match, startTime: "10:00 PM ET" },
+        new Date(2026, 7, 31, 10, 45),
+      ),
+    ).toBe(false);
+  });
+
+  it("uses live emphasis only for an in-progress game", () => {
+    const match = makeMatch("game", "2026-08-31", { startTime: "10:00 AM" });
+    expect(
+      scheduleSpotlightLabel(
+        { isActive: true, isEnded: false },
+        match,
+        new Date(2026, 7, 31, 10, 30),
+      ),
+    ).toEqual({ label: "Live now", isLive: true });
+    expect(
+      scheduleSpotlightLabel(
+        { isActive: false, isEnded: true },
+        match,
+        new Date(2026, 7, 31, 15, 0),
+      ),
+    ).toEqual({ label: "Final schedule", isLive: false });
+  });
+
+  it("builds encoded directions only for safe non-empty locations", () => {
+    expect(mapUrlForLocation("Riverside Complex, CA")).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Riverside%20Complex%2C%20CA",
+    );
+    expect(mapUrlForLocation("  ")).toBeNull();
+    expect(mapUrlForLocation("Unsafe\nLocation")).toBeNull();
+  });
+
+  it("builds a downloadable calendar event for a dated game", () => {
+    const text = matchCalendarText(
+      makeMatch("calendar", "2026-08-31", {
+        homeName: "Falcons",
+        awayName: "Storm",
+        startTime: "7:30 PM",
+      }),
+      "Summer Cup",
+    );
+    expect(text).toContain("SUMMARY:Falcons vs Storm · Summer Cup");
+    expect(text).toContain("DTSTART:20260831T193000");
+    expect(text).toContain("LOCATION:Riverside Complex\\, CA\\, Field 2");
+  });
+
+  it("rolls late games into the next calendar day and blocks line injection", () => {
+    const text = matchCalendarText(
+      makeMatch("late", "2026-08-31", {
+        startTime: "11:00 PM",
+        homeName: "Falcons\r\nX-INJECTED:yes",
+      }),
+      "Summer Cup",
+    );
+    expect(text).toContain("DTEND:20260901T010000");
+    expect(text).not.toContain("\r\nX-INJECTED:yes");
+    expect(text).toContain("Falcons\\nX-INJECTED:yes");
   });
 });
 
