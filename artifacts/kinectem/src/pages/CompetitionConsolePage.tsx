@@ -4085,7 +4085,8 @@ function ConsoleWithTour({
           </p>
         </>
       ) : null}
-      <div className="space-y-2">
+      <div className="app-page-header p-5 space-y-2">
+        <p className="app-kicker">Competition command center</p>
         {!preview ? (
           <Link href="/competitions">
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline cursor-pointer">
@@ -4098,7 +4099,7 @@ function ConsoleWithTour({
             <div className="flex items-center gap-2">
               <Link href={`/competitions/c/${row.slug}`}>
                 <h1
-                  className="text-2xl font-semibold tracking-tight truncate cursor-pointer hover:underline"
+                   className="text-2xl font-black tracking-tight truncate cursor-pointer hover:underline"
                   data-testid="link-console-competition-name"
                 >
                   {row.name}

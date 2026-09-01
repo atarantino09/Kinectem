@@ -461,8 +461,8 @@ function CompetitionGroup({
             key={c.id}
             href={inApp ? `/competitions/c/${c.slug}` : `/c/${c.slug}`}
           >
-            <Card
-              className="rounded-xl border-border cursor-pointer transition-shadow hover:shadow-md h-full"
+          <Card
+              className="app-surface app-surface-interactive cursor-pointer h-full"
               style={{ borderTopColor: c.brandColor ?? brand, borderTopWidth: 3 }}
               data-testid={`card-organizer-competition-${c.id}`}
             >
@@ -614,9 +614,16 @@ export default function OrganizerPage() {
     <div className="min-h-screen">
       {/* Branded hero — same visual language as the competition page */}
       <div
+        className="relative overflow-hidden"
         style={{ background: heroBackground, color: heroText }}
         data-testid="hero-organizer"
       >
+        {!o.bannerUrl ? (
+          <div
+            aria-hidden="true"
+            className="brand-banner-pattern pointer-events-none absolute inset-0 opacity-70"
+          />
+        ) : null}
         {o.bannerUrl ? (
           // Banner gets the majority of the hero; the branded strip below is
           // deliberately compact so the artwork isn't crowded out.
@@ -757,7 +764,7 @@ export default function OrganizerPage() {
               {featuredRecaps.map((r) => (
                 <Link key={r.id} href={`/posts/${r.id}`}>
                   <Card
-                    className="rounded-xl border-border overflow-hidden cursor-pointer transition-shadow hover:shadow-md h-full"
+                    className="app-surface app-surface-interactive overflow-hidden cursor-pointer h-full"
                     style={
                       r.competition
                         ? undefined
@@ -804,9 +811,12 @@ export default function OrganizerPage() {
         )}
 
         {competitions.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              No competitions here yet.
+          <Card className="app-surface border-dashed">
+            <CardContent className="p-8 text-center">
+              <p className="font-black tracking-tight">No competitions here yet.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                New events will appear here as soon as they are created.
+              </p>
             </CardContent>
           </Card>
         ) : (

@@ -129,7 +129,7 @@ export function SuggestionsPanel({
       );
     }
     return (
-      <Card className="rounded-xl border border-border">
+      <Card className="app-surface app-surface-interactive">
         <CardContent className="p-8 space-y-3">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-12 w-full" />
@@ -170,7 +170,7 @@ export function SuggestionsPanel({
   if (empty) {
     if (hideWhenEmpty) return null;
     return (
-      <Card className="rounded-xl border border-border">
+      <Card className="app-surface">
         <CardContent className="p-8 text-center text-sm text-muted-foreground">
           Your feed is quiet. Follow organizations or athletes to see updates here.
         </CardContent>
@@ -409,7 +409,7 @@ function SuggestionSection({
 }) {
   return (
     <div>
-      <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+       <h4 className="app-section-heading mb-2 text-muted-foreground">
         {icon}
         {title}
       </h4>

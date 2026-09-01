@@ -57,6 +57,7 @@ import { EditProfileDialog } from "@/components/EditProfileDialog";
 import { FollowListDialog } from "@/components/FollowListDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function UserProfilePage() {
   const params = useParams<{ userId: string }>();
@@ -443,7 +444,7 @@ export default function UserProfilePage() {
       {(user as { isMinor?: boolean }).isMinor ? <NoIndex /> : null}
       <div className="space-y-6 min-w-0">
       {/* Hero */}
-      <div className="rounded-xl border border-border shadow-sm overflow-hidden bg-card">
+      <div className="app-surface overflow-hidden bg-card">
         <div className="h-24 brand-gradient-cover relative">
           {user.coverPhotoUrl ? (
             <img
@@ -655,7 +656,7 @@ export default function UserProfilePage() {
       {/* Posts (authored + tagged) */}
       <section>
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-xl font-black tracking-tight">
+          <h2 className="text-2xl font-black tracking-tight">
             {user.isOwnProfile ? "Posts" : "Posts & tagged in"}
           </h2>
           <div className="flex w-full sm:w-auto items-center justify-end gap-2 flex-wrap">
@@ -697,10 +698,13 @@ export default function UserProfilePage() {
           {posts.length > 0 ? (
             posts.map((p) => <PostCard key={p.id} post={p} />)
           ) : hasMorePosts ? null : (
-            <Card className="rounded-xl border border-border">
-              <CardContent className="p-8 text-center">
-                <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No posts yet.</p>
+            <Card className="app-surface">
+              <CardContent className="p-0">
+                <EmptyState
+                  icon={<Building2 className="h-5 w-5" />}
+                  title="No posts yet."
+                  description="Highlights, recaps, and tagged moments will appear here."
+                />
               </CardContent>
             </Card>
           )}

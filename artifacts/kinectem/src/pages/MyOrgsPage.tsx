@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Building2, ChevronRight, Plus } from "lucide-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
+import { BrandPageHeader } from "@/components/BrandPageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 function OrgLogoTile({
   name,
@@ -61,16 +63,12 @@ export default function MyOrgsPage() {
   return (
     <div className="space-y-6">
       <CreateOrgDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
-            <span className="brand-gradient-text">My Organizations</span>
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1 font-medium">
-            Organizations you belong to.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0 mt-2">
+      <BrandPageHeader
+        eyebrow="Your organizations"
+        title={<span className="brand-gradient-text">My Organizations</span>}
+        description="Organizations you belong to."
+        actions={
+          <>
           <Link
             href="/organizations"
             className="text-xs font-bold uppercase tracking-wider text-primary hover:underline"
@@ -87,8 +85,9 @@ export default function MyOrgsPage() {
           >
             <Plus className="w-4 h-4 mr-1" /> New organization
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {isLoading || !meId ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -97,28 +96,31 @@ export default function MyOrgsPage() {
           ))}
         </div>
       ) : orgs.length === 0 ? (
-        <Card className="rounded-xl border border-border" data-testid="my-orgs-empty">
-          <CardContent className="p-8 text-center">
-            <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              You're not a member of any organizations yet.
-            </p>
-            <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Button
-                variant="brand"
-                className="font-bold rounded-full"
-                onClick={() => setCreateOpen(true)}
-                data-testid="btn-empty-new-org"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Create an organization
-              </Button>
-              <Link
-                href="/organizations"
-                className="text-xs font-bold uppercase tracking-wider text-primary hover:underline"
-              >
-                Discover organizations
-              </Link>
-            </div>
+        <Card className="app-surface" data-testid="my-orgs-empty">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<Building2 className="h-5 w-5" />}
+              title="You're not a member of any organizations yet."
+              description="Create a home base for your teams, or discover an organization to join."
+              action={
+                <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <Button
+                    variant="brand"
+                    className="font-bold rounded-full"
+                    onClick={() => setCreateOpen(true)}
+                    data-testid="btn-empty-new-org"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Create an organization
+                  </Button>
+                  <Link
+                    href="/organizations"
+                    className="text-xs font-bold uppercase tracking-wider text-primary hover:underline"
+                  >
+                    Discover organizations
+                  </Link>
+                </div>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -126,7 +128,7 @@ export default function MyOrgsPage() {
           {orgs.map((org) => (
             <Link key={org.id} href={`/organizations/${org.id}`}>
               <Card
-                className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group"
+                className="app-surface app-surface-interactive cursor-pointer group"
                 data-testid={`card-my-org-${org.id}`}
               >
                 <CardContent className="p-4 sm:p-5">

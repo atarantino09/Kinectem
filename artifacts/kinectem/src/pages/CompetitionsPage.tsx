@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWhoami } from "@/hooks/useWhoami";
 import { Building2, Search, ShieldCheck, Trophy, Upload } from "lucide-react";
+import { BrandPageHeader } from "@/components/BrandPageHeader";
 
 // Competitions §4 — self-serve competition creation. Any signed-in user can
 // create a tournament or league they operate; the per-competition console
@@ -708,16 +709,11 @@ export default function CompetitionsPage() {
   return (
     <OrganizerSidebar>
       <div className="max-w-3xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Competitions
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Run a tournament or league on Kinectem: upload the schedule, brand
-            your public page, and let every team tell its story. Your hubs and
-            competitions live in the sidebar.
-          </p>
-        </div>
+        <BrandPageHeader
+          eyebrow="Organizer command center"
+          title={<span className="brand-gradient-text">Competitions</span>}
+          description="Run a tournament or league on Kinectem: upload the schedule, brand your public page, and let every team tell its story. Your hubs and competitions live in the sidebar."
+        />
 
         {isPlatformAdmin ? <PlatformAdminCompetitionFinder /> : null}
 

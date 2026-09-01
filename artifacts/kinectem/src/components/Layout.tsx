@@ -244,7 +244,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     };
     return (
       <div className="min-h-screen text-foreground">
-        <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+        <header className="app-shell-header sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
           <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-3">
             <a
               href={signupUrl()}
@@ -401,7 +401,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           onOpenNav={() => setMobileNavOpen(true)}
         />
       ) : (
-      <header className="hidden md:block sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+      <header className="app-shell-header hidden md:block sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center gap-4 md:gap-6">
           <Link href="/" className="flex items-center shrink-0 cursor-pointer">
             <img
@@ -418,7 +418,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               placeholder="Search athletes, teams, organizations..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="pl-9 bg-muted border-transparent focus-visible:bg-card"
+               className="pl-9 bg-muted/80 border-transparent focus-visible:bg-card focus-visible:border-primary/30"
               data-testid="input-header-search"
             />
           </form>
@@ -437,7 +437,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Button
                     variant={navVariant(active)}
                     size="sm"
-                    className="font-semibold"
+                     className={cn("font-semibold", active && "shadow-sm")}
                     data-active={active ? "true" : undefined}
                     data-testid={item.testId}
                   >

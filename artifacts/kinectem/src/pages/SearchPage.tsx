@@ -6,8 +6,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Medal, Trophy, User as UserIcon } from "lucide-react";
+import {
+  Building2,
+  Medal,
+  Search,
+  Trophy,
+  User as UserIcon,
+} from "lucide-react";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
+import { BrandPageHeader } from "@/components/BrandPageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function SearchPage() {
   const search = useSearch();
@@ -23,12 +31,11 @@ export default function SearchPage() {
   if (!enabled) {
     return (
       <div className="max-w-3xl mx-auto py-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight mb-2">Search</h1>
-          <p className="text-sm text-muted-foreground">
-            Type at least 3 characters to search athletes, teams, and organizations.
-          </p>
-        </div>
+        <BrandPageHeader
+          eyebrow="Discover your community"
+          title={<span className="brand-gradient-text">Search</span>}
+          description="Type at least 3 characters to search athletes, teams, and organizations."
+        />
         <SuggestionsPanel
           heading="Suggested for you"
           subheading="Discover organizations, teams, and athletes to follow."
@@ -65,9 +72,15 @@ export default function SearchPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 py-4">
-      <h1 className="text-2xl font-black tracking-tight">
-        Results for <span className="text-primary">"{q}"</span>
-      </h1>
+      <BrandPageHeader
+        eyebrow="Search results"
+        title={
+          <>
+            Results for <span className="brand-gradient-text">"{q}"</span>
+          </>
+        }
+        description="Find the people, teams, organizations, and competitions that power your feed."
+      />
 
       {isLoading ? (
         <>
@@ -85,7 +98,7 @@ export default function SearchPage() {
           >
             {users.map((u) => (
               <Link key={u.id} href={`/users/${u.id}`}>
-                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
+                  <div className="app-surface-interactive flex items-center gap-3 rounded-lg p-3 hover:bg-muted/60 cursor-pointer">
                   <UserAvatar
                     avatarUrl={u.avatarUrl}
                     displayName={u.displayName}
@@ -113,7 +126,7 @@ export default function SearchPage() {
           >
             {orgs.map((o) => (
               <Link key={o.id} href={`/organizations/${o.id}`}>
-                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
+                  <div className="app-surface-interactive flex items-center gap-3 rounded-lg p-3 hover:bg-muted/60 cursor-pointer">
                   <OrgLogo
                     logoUrl={o.avatarUrl}
                     name={o.name}
@@ -139,7 +152,7 @@ export default function SearchPage() {
           >
             {teams.map((t) => (
               <Link key={t.id} href={`/teams/${t.id}`}>
-                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer">
+                  <div className="app-surface-interactive flex items-center gap-3 rounded-lg p-3 hover:bg-muted/60 cursor-pointer">
                   <TeamAvatar
                     avatarUrl={t.avatarUrl}
                     displayName={t.name}
@@ -166,7 +179,7 @@ export default function SearchPage() {
             {competitions.map((c) => (
               <Link key={c.id} href={`/competitions/c/${encodeURIComponent(c.slug)}`}>
                 <div
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer"
+                  className="app-surface-interactive flex items-center gap-3 rounded-lg p-3 hover:bg-muted/60 cursor-pointer"
                   data-testid={`link-search-competition-${c.id}`}
                 >
                   {c.logoUrl ? (
@@ -217,17 +230,21 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="rounded-xl border border-border">
+    <Card className="app-surface">
       <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="mb-2 flex items-center gap-2">
           {icon}
-          <h3 className="font-black tracking-tight text-base">{title}</h3>
-          <Badge variant="secondary" className="text-[10px] font-bold">
+          <h3 className="app-section-heading text-base">{title}</h3>
+          <Badge variant="secondary" className="brand-pill px-2 py-1">
             {count}
           </Badge>
         </div>
         {count === 0 ? (
-          <p className="text-sm text-muted-foreground p-3">{empty}</p>
+          <EmptyState
+            icon={<Search className="h-5 w-5" />}
+            title={empty}
+            className="min-h-28 py-5"
+          />
         ) : (
           <div className="-mx-1">{children}</div>
         )}

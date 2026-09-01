@@ -182,7 +182,7 @@ export function TeamHeaderCard({
   const orgBrand = hasOrg ? readOrgBrandColors(org) : null;
 
   return (
-    <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+    <Card className="app-surface overflow-hidden">
       {orgBrand && (
         <div
           className="h-2"

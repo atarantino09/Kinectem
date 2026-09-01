@@ -674,7 +674,7 @@ export default function OrganizationPage() {
           {/* Task #850 — red claim CTA when a valid ?claimToken= is present. */}
           <OrgClaimBanner orgId={orgId} />
           {/* Hero */}
-          <div className="relative rounded-xl border border-border shadow-sm overflow-hidden bg-card">
+          <div className="app-surface relative overflow-hidden bg-card">
             <PersonaPill
               persona="organization"
               size="sm"

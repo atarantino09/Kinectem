@@ -78,7 +78,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
       <nav
         aria-label="Primary"
         data-testid="mobile-bottom-nav"
-        className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background md:hidden"
+         className="app-shell-header fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-stretch h-16 max-w-6xl mx-auto px-2">
@@ -106,7 +106,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
                     type="button"
                     aria-label="Create"
                     data-testid="mobile-tab-create"
-                    className="-mt-6 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 transition-transform"
+                     className="-mt-6 w-14 h-14 rounded-full brand-gradient text-primary-foreground shadow-lg flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 transition-transform"
                   >
                     <Plus className="w-6 h-6" />
                   </button>
@@ -124,7 +124,7 @@ export function MobileBottomNav({ meId, canAuthorRecap }: Props) {
                 aria-label="Create"
                 data-testid="mobile-tab-create"
                 onClick={() => setLocation("/login")}
-                className="-mt-6 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
+                 className="-mt-6 w-14 h-14 rounded-full brand-gradient text-primary-foreground shadow-lg flex items-center justify-center"
               >
                 <Plus className="w-6 h-6" />
               </button>

@@ -17,7 +17,7 @@ export function CompetitionBrandStrip({
 }) {
   return (
     <div
-      className="flex items-center gap-1.5 px-3 py-1"
+      className="flex min-h-8 items-center gap-1.5 px-3 py-1"
       style={{
         background: brandColor
           ? secondaryColor

@@ -19,6 +19,7 @@ import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
+import { BrandPageHeader } from "@/components/BrandPageHeader";
 import { usePinnedOrgs } from "@/hooks/usePinnedOrgs";
 import { usePinnedTeams } from "@/hooks/usePinnedTeams";
 
@@ -260,7 +261,7 @@ export default function FeedPage() {
       {/* Left sidebar */}
       <aside className="hidden lg:block lg:sticky lg:top-16 lg:self-start lg:max-h-[calc(100vh-4rem-1.5rem)] lg:overflow-y-auto space-y-4">
         {me && (
-          <Card className="rounded-xl border border-border shadow-sm overflow-hidden">
+          <Card className="app-surface overflow-hidden">
             <div className="h-16 brand-gradient-cover relative">
               <div
                 aria-hidden="true"
@@ -299,7 +300,7 @@ export default function FeedPage() {
         )}
 
         {hasSidebarItems && (
-          <Card className="rounded-xl border border-border shadow-sm">
+          <Card className="app-surface">
             <CardContent className="p-4">
               <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
                 Your Orgs and Teams
@@ -373,7 +374,7 @@ export default function FeedPage() {
         )}
 
         {followedComps.length > 0 && (
-          <Card className="rounded-xl border border-border shadow-sm">
+          <Card className="app-surface">
             <CardContent className="p-4">
               <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
                 Competitions You Follow
@@ -414,7 +415,7 @@ export default function FeedPage() {
         )}
 
         {followedHubs.length > 0 && (
-          <Card className="rounded-xl border border-border shadow-sm">
+          <Card className="app-surface">
             <CardContent className="p-4">
               <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
                 Hubs You Follow
@@ -457,9 +458,15 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4 min-w-0">
-        <h2 className="text-3xl font-black tracking-tight">
-          Latest <span className="brand-gradient-text">Activity</span>
-        </h2>
+        <BrandPageHeader
+          eyebrow="Your community pulse"
+          title={
+            <>
+              Latest <span className="brand-gradient-text">Activity</span>
+            </>
+          }
+          description="The latest highlights, recaps, and updates from the people and teams you follow."
+        />
         {feedLoading ? (
           <>
             <Skeleton className="h-48 rounded-xl" />

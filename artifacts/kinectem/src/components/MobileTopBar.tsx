@@ -19,7 +19,7 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
   return (
     <header
       data-testid="mobile-top-bar"
-      className="sticky top-0 z-30 border-b border-border bg-background md:hidden"
+      className="app-shell-header sticky top-0 z-30 border-b border-border bg-background md:hidden"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       <div className="flex items-center justify-between px-3 h-14 gap-2">
@@ -58,7 +58,9 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
               data-testid="mobile-top-family"
               data-active={familyActive ? "true" : undefined}
               onClick={() => setLocation("/family")}
-              className={cn(familyActive && "bg-secondary text-secondary-foreground")}
+              className={cn(
+                familyActive && "bg-secondary text-secondary-foreground shadow-sm",
+              )}
             >
               <Users className="w-5 h-5" />
             </Button>

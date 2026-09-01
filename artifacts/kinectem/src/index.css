@@ -486,6 +486,130 @@
     pointer-events: none;
   }
 
+  /* Shared page-surface primitives. These keep the competition page's
+     confident hierarchy available to feed, discovery, identity, and
+     organizer routes without forcing a global token migration. */
+  .app-shell-header {
+    background:
+      linear-gradient(90deg, hsl(var(--card) / 0.97), hsl(252 90% 99% / 0.92), hsl(var(--card) / 0.97));
+    box-shadow: 0 1px 0 hsl(var(--brand-purple) / 0.12), 0 8px 24px hsl(240 40% 40% / 0.05);
+  }
+  .app-page-header {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(var(--brand-purple) / 0.16);
+    border-radius: 1rem;
+    background:
+      radial-gradient(circle at 90% 10%, hsl(var(--brand-blue) / 0.12), transparent 34%),
+      linear-gradient(135deg, hsl(var(--brand-purple) / 0.09), hsl(var(--brand-blue) / 0.05) 60%, hsl(var(--card)));
+    box-shadow: 0 10px 30px hsl(240 40% 40% / 0.07);
+  }
+  .app-page-header::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: radial-gradient(hsl(var(--brand-purple) / 0.18) 1px, transparent 1px);
+    background-size: 16px 16px;
+    mask-image: linear-gradient(115deg, black, transparent 72%);
+  }
+  .app-page-header-content {
+    position: relative;
+    z-index: 1;
+    padding: 1.25rem;
+  }
+  .app-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+    color: hsl(var(--brand-purple));
+    font-size: 0.6875rem;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .app-kicker::before {
+    content: "";
+    width: 1.5rem;
+    height: 0.2rem;
+    border-radius: 9999px;
+    background: var(--k-glyph-gradient-small);
+  }
+  .app-surface {
+    border: 1px solid hsl(var(--border));
+    border-radius: 1rem;
+    background: hsl(var(--card));
+    box-shadow: 0 5px 18px hsl(240 40% 40% / 0.045);
+  }
+  .app-surface-interactive {
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  }
+  .app-surface-interactive:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--brand-purple) / 0.34);
+    box-shadow: 0 12px 26px hsl(240 40% 40% / 0.1);
+  }
+  .app-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: hsl(var(--foreground));
+    font-size: 0.75rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1.25;
+    text-transform: uppercase;
+  }
+  .app-section-heading::before {
+    content: "";
+    width: 0.25rem;
+    height: 1.1rem;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--k-glyph-gradient-small);
+  }
+  .app-empty-state {
+    display: flex;
+    min-height: 10rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+  .app-empty-state-icon {
+    display: flex;
+    width: 2.75rem;
+    height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.25rem;
+    border: 1px solid hsl(var(--brand-purple) / 0.18);
+    border-radius: 0.875rem;
+    background: linear-gradient(135deg, hsl(var(--brand-purple) / 0.12), hsl(var(--brand-blue) / 0.12));
+    color: hsl(var(--brand-purple));
+  }
+  @media (max-width: 639px) {
+    .app-page-header-content {
+      padding: 1rem;
+    }
+    .app-page-header .text-3xl {
+      font-size: 1.75rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-surface-interactive {
+      transition: none;
+    }
+    .app-surface-interactive:hover {
+      transform: none;
+    }
+  }
+
   /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;

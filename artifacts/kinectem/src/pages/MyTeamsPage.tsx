@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { UsersRound } from "lucide-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
+import { BrandPageHeader } from "@/components/BrandPageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function MyTeamsPage() {
   const { data: me } = useGetLoggedInUser();
@@ -21,14 +23,11 @@ export default function MyTeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
-          <span className="brand-gradient-text">My Teams</span>
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 font-medium">
-          Teams you're on. Tap a card to open it.
-        </p>
-      </div>
+      <BrandPageHeader
+        eyebrow="Your season"
+        title={<span className="brand-gradient-text">My Teams</span>}
+        description="Teams you're on. Tap a card to open it."
+      />
 
       {isLoading || !meId ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -37,12 +36,13 @@ export default function MyTeamsPage() {
           ))}
         </div>
       ) : teams.length === 0 ? (
-        <Card className="rounded-xl border border-border" data-testid="my-teams-empty">
-          <CardContent className="p-8 text-center">
-            <UsersRound className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              You're not on any teams yet.
-            </p>
+        <Card className="app-surface" data-testid="my-teams-empty">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<UsersRound className="h-5 w-5" />}
+              title="You're not on any teams yet."
+              description="When a coach or organization adds you, your teams will show up here."
+            />
           </CardContent>
         </Card>
       ) : (
@@ -52,7 +52,7 @@ export default function MyTeamsPage() {
             return (
               <Link key={t.id} href={`/teams/${t.teamId}`}>
                 <Card
-                  className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+                  className="app-surface app-surface-interactive cursor-pointer"
                   data-testid={`card-my-team-${t.teamId}`}
                 >
                   <CardContent className="p-4 flex items-center gap-3">

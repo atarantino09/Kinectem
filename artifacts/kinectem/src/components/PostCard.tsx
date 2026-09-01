@@ -413,7 +413,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   return (
     <Card
       className={cn(
-        "rounded-xl border border-border shadow-sm overflow-hidden",
+        "app-surface app-surface-interactive overflow-hidden",
         isCombinedRecap &&
           "bg-gradient-to-br from-purple-50 to-violet-100/60 dark:from-purple-950/30 dark:to-violet-900/20",
         // News cards get a light brand-blue tint (matches --brand-blue /
