@@ -1814,6 +1814,475 @@ const ORG_LIST_OWNERLESS_JOIN = sql`${organizations.adminListId} = ${orgAdminLis
           AND ${organizationAdmins.role} = 'owner'
       )`;
 
+// Task #968 — Partner onboarding import. The browser parses the uploaded
+// spreadsheet for a fast preview, but the server validates the normalized
+// payload again before either the preview response or the write. This keeps
+// the actual create operation independent from a client-controlled parser.
+const ORG_BULK_MAX_ORGS = 200;
+const ORG_BULK_MAX_TEAMS_PER_ORG = 100;
+const ORG_BULK_MAX_TOTAL_TEAMS = 5000;
+const ORG_BULK_MAX_NAME_LENGTH = 200;
+const ORG_BULK_MAX_LIST_NAME_LENGTH = 120;
+
+type BulkImportOrganization = {
+  name: string;
+  teams: string[];
+};
+
+type BulkImportIssue = {
+  scope: "file" | "organization" | "team";
+  organizationIndex?: number;
+  teamIndex?: number;
+  message: string;
+};
+
+function parseBulkImportOrganizations(body: unknown): {
+  organizations: BulkImportOrganization[];
+  issues: BulkImportIssue[];
+} {
+  const raw = body as { organizations?: unknown } | null;
+  const issues: BulkImportIssue[] = [];
+  const organizations: BulkImportOrganization[] = [];
+  if (!Array.isArray(raw?.organizations)) {
+    return {
+      organizations,
+      issues: [
+        {
+          scope: "file",
+          message: "Upload at least one organization.",
+        },
+      ],
+    };
+  }
+  if (raw.organizations.length === 0) {
+    issues.push({ scope: "file", message: "Upload at least one organization." });
+  }
+  if (raw.organizations.length > ORG_BULK_MAX_ORGS) {
+    issues.push({
+      scope: "file",
+      message: `This import has too many organizations (maximum ${ORG_BULK_MAX_ORGS}).`,
+    });
+  }
+
+  const seenOrganizations = new Map<string, number>();
+  let totalTeams = 0;
+  for (let organizationIndex = 0; organizationIndex < raw.organizations.length; organizationIndex++) {
+    const item = raw.organizations[organizationIndex] as {
+      name?: unknown;
+      teams?: unknown;
+    } | null;
+    const name = typeof item?.name === "string" ? item.name.trim() : "";
+    const teamsRaw = Array.isArray(item?.teams) ? item.teams : [];
+    const teams = teamsRaw.map((team) =>
+      typeof team === "string" ? team.trim() : "",
+    );
+    organizations.push({ name, teams });
+
+    if (!name) {
+      issues.push({
+        scope: "organization",
+        organizationIndex,
+        message: `Organization ${organizationIndex + 1}: name required.`,
+      });
+    } else if (name.length > ORG_BULK_MAX_NAME_LENGTH) {
+      issues.push({
+        scope: "organization",
+        organizationIndex,
+        message: `Organization ${organizationIndex + 1}: name is too long.`,
+      });
+    }
+    const nameKey = name.toLowerCase();
+    if (nameKey) {
+      const previous = seenOrganizations.get(nameKey);
+      if (previous !== undefined) {
+        issues.push({
+          scope: "organization",
+          organizationIndex,
+          message: `Organization ${organizationIndex + 1}: duplicate name; it also appears as organization ${previous + 1}.`,
+        });
+      } else {
+        seenOrganizations.set(nameKey, organizationIndex);
+      }
+    }
+
+    if (teams.length > ORG_BULK_MAX_TEAMS_PER_ORG) {
+      issues.push({
+        scope: "organization",
+        organizationIndex,
+        message: `Organization ${organizationIndex + 1}: too many teams (maximum ${ORG_BULK_MAX_TEAMS_PER_ORG}).`,
+      });
+    }
+    const seenTeams = new Map<string, number>();
+    for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
+      const team = teams[teamIndex];
+      if (!team) {
+        issues.push({
+          scope: "team",
+          organizationIndex,
+          teamIndex,
+          message: `Organization ${organizationIndex + 1}, team ${teamIndex + 1}: name required.`,
+        });
+        continue;
+      }
+      if (team.length > ORG_BULK_MAX_NAME_LENGTH) {
+        issues.push({
+          scope: "team",
+          organizationIndex,
+          teamIndex,
+          message: `Organization ${organizationIndex + 1}, team ${teamIndex + 1}: name is too long.`,
+        });
+      }
+      const teamKey = team.toLowerCase();
+      const previous = seenTeams.get(teamKey);
+      if (previous !== undefined) {
+        issues.push({
+          scope: "team",
+          organizationIndex,
+          teamIndex,
+          message: `Organization ${organizationIndex + 1}, team ${teamIndex + 1}: duplicate team name; it also appears at team ${previous + 1}.`,
+        });
+      } else {
+        seenTeams.set(teamKey, teamIndex);
+      }
+    }
+    totalTeams += teams.length;
+  }
+  if (totalTeams > ORG_BULK_MAX_TOTAL_TEAMS) {
+    issues.push({
+      scope: "file",
+      message: `This import has too many teams (maximum ${ORG_BULK_MAX_TOTAL_TEAMS}).`,
+    });
+  }
+  return { organizations, issues };
+}
+
+async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
+  const raw = body as {
+    listName?: unknown;
+    promoCode?: unknown;
+  } | null;
+  const listName = typeof raw?.listName === "string" ? raw.listName.trim() : "";
+  const issues: BulkImportIssue[] = [];
+  if (!listName) {
+    issues.push({ scope: "file", message: "List name required." });
+  } else if (listName.length > ORG_BULK_MAX_LIST_NAME_LENGTH) {
+    issues.push({ scope: "file", message: "List name is too long." });
+  }
+
+  const parsed = parseBulkImportOrganizations(body);
+  issues.push(...parsed.issues);
+
+  const promoCode =
+    typeof raw?.promoCode === "string" ? raw.promoCode.trim() : "";
+  const promo = promoCode ? await findRedeemablePromo(promoCode) : null;
+  if (!promo) {
+    issues.push({
+      scope: "file",
+      message:
+        "Choose an active promo code that has not expired or reached its redemption limit.",
+    });
+  } else if (promo.maxRedemptions != null) {
+    const [pending] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(organizations)
+      .where(eq(organizations.pendingPromoCodeId, promo.id));
+    const committedAssignments =
+      promo.redemptionCount + Number(pending?.count ?? 0);
+    if (committedAssignments + parsed.organizations.length > promo.maxRedemptions) {
+      issues.push({
+        scope: "file",
+        message: `Promo code "${promo.code}" does not have enough remaining redemptions for this batch. Reduce the batch or choose another code.`,
+      });
+    }
+  }
+
+  const existingByName = new Map<string, { id: string; name: string }>();
+  if (checkExistingNames && parsed.organizations.length > 0) {
+    const names = parsed.organizations
+      .map((organization) => organization.name)
+      .filter(Boolean);
+    const nameWhere =
+      names.length > 0
+        ? or(
+            ...names.map(
+              (name) =>
+                sql`lower(${organizations.name}) = ${name.toLowerCase()}`,
+            ),
+          )
+        : undefined;
+    if (nameWhere) {
+      const rows = await db
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(nameWhere);
+      for (const row of rows) existingByName.set(row.name.toLowerCase(), row);
+      for (let i = 0; i < parsed.organizations.length; i++) {
+        const existing = existingByName.get(parsed.organizations[i].name.toLowerCase());
+        if (existing) {
+          issues.push({
+            scope: "organization",
+            organizationIndex: i,
+            message: `Organization "${existing.name}" already exists. Imports never merge into an existing organization.`,
+          });
+        }
+      }
+    }
+  }
+
+  let existingList: { id: string; name: string } | null = null;
+  if (listName) {
+    const [row] = await db
+      .select({ id: orgAdminLists.id, name: orgAdminLists.name })
+      .from(orgAdminLists)
+      .where(sql`lower(${orgAdminLists.name}) = ${listName.toLowerCase()}`)
+      .limit(1);
+    existingList = row ?? null;
+  }
+  return {
+    listName,
+    promo,
+    existingList,
+    organizations: parsed.organizations,
+    issues,
+  };
+}
+
+function bulkImportIssuesResponse(issues: BulkImportIssue[]) {
+  return issues.map((issue) => ({
+    scope: issue.scope,
+    organizationIndex: issue.organizationIndex ?? null,
+    teamIndex: issue.teamIndex ?? null,
+    message: issue.message,
+  }));
+}
+
+router.post(
+  "/org-bulk-import/validate",
+  asyncHandler(async (req, res) => {
+    const result = await bulkImportPreflight(req.body, true);
+    res.json({
+      data: {
+        valid: result.issues.length === 0,
+        list: result.existingList,
+        promo: result.promo
+          ? {
+              code: result.promo.code,
+              description: result.promo.description,
+              discountType: result.promo.discountType,
+              discountValue: result.promo.discountValue,
+            }
+          : null,
+        organizations: result.organizations,
+        issues: bulkImportIssuesResponse(result.issues),
+      },
+    });
+  }),
+);
+
+router.post(
+  "/org-bulk-import",
+  asyncHandler(async (req, res) => {
+    const preflight = await bulkImportPreflight(req.body, false);
+    if (preflight.issues.length > 0 || !preflight.promo) {
+      return res.status(400).json({
+        error: preflight.issues[0]?.message ?? "Invalid organization import.",
+        code: "BULK_IMPORT_INVALID",
+        issues: bulkImportIssuesResponse(preflight.issues),
+      });
+    }
+    const selectedPromo = preflight.promo;
+
+    const namesInOrder = preflight.organizations
+      .map((organization) => organization.name)
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const result = await db.transaction(async (tx) => {
+      // Serialize concurrent imports that contain the same organization name
+      // so a retry cannot pass a stale preview and create a duplicate.
+      for (const name of namesInOrder) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${"org-name:" + name.toLowerCase()}))`,
+        );
+      }
+      type LockedPromo = {
+        id: string;
+        active: boolean;
+        expires_at: Date | null;
+        max_redemptions: number | null;
+        redemption_count: number;
+      };
+      const promoResult = await tx.execute<LockedPromo>(
+        sql`SELECT id, active, expires_at, max_redemptions, redemption_count
+            FROM promo_codes
+            WHERE id = ${selectedPromo.id}
+            FOR UPDATE`,
+      );
+      const lockedPromo = (promoResult.rows ?? promoResult)[0] as
+        | LockedPromo
+        | undefined;
+      const promoUnavailable =
+        !lockedPromo ||
+        !lockedPromo.active ||
+        (lockedPromo.expires_at &&
+          new Date(lockedPromo.expires_at).getTime() <= Date.now());
+      if (promoUnavailable) {
+        return {
+          promoConflict:
+            "That promo code was deactivated or expired while this import was being prepared.",
+        } as const;
+      }
+      if (lockedPromo.max_redemptions != null) {
+        const [pending] = await tx
+          .select({ count: sql<number>`count(*)` })
+          .from(organizations)
+          .where(eq(organizations.pendingPromoCodeId, lockedPromo.id));
+        const committedAssignments =
+          lockedPromo.redemption_count + Number(pending?.count ?? 0);
+        if (
+          committedAssignments + preflight.organizations.length >
+          lockedPromo.max_redemptions
+        ) {
+          return {
+            promoConflict:
+              "That promo code no longer has enough remaining redemptions for this batch.",
+          } as const;
+        }
+      }
+      const duplicateRows = await tx
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(
+          or(
+            ...preflight.organizations.map(
+              (organization) =>
+                sql`lower(${organizations.name}) = ${organization.name.toLowerCase()}`,
+            ),
+          ),
+        );
+      if (duplicateRows.length > 0) {
+        return { conflict: duplicateRows } as const;
+      }
+
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${"org-list:" + preflight.listName.toLowerCase()}))`,
+      );
+      let [list] = await tx
+        .select({ id: orgAdminLists.id, name: orgAdminLists.name })
+        .from(orgAdminLists)
+        .where(sql`lower(${orgAdminLists.name}) = ${preflight.listName.toLowerCase()}`)
+        .limit(1);
+      if (!list) {
+        const inserted = await tx.execute<{
+          id: string;
+          name: string;
+        }>(sql`
+          INSERT INTO org_admin_lists (name, created_by_id)
+          VALUES (${preflight.listName}, ${req.sessionUser!.id})
+          ON CONFLICT ((lower(name))) DO NOTHING
+          RETURNING id, name
+        `);
+        const insertedRows = (inserted.rows ?? inserted) as Array<{
+          id: string;
+          name: string;
+        }>;
+        if (insertedRows.length > 0) {
+          list = insertedRows[0];
+        } else {
+          [list] = await tx
+            .select({ id: orgAdminLists.id, name: orgAdminLists.name })
+            .from(orgAdminLists)
+            .where(sql`lower(${orgAdminLists.name}) = ${preflight.listName.toLowerCase()}`)
+            .limit(1);
+        }
+      }
+      if (!list) throw new Error("Organization list could not be created.");
+
+      const created: Array<{
+        id: string;
+        name: string;
+        token: string;
+        teams: Array<{ id: string; name: string }>;
+      }> = [];
+      for (const organization of preflight.organizations) {
+        const token = generateToken();
+        const [org] = await tx
+          .insert(organizations)
+          .values({
+            name: organization.name,
+            claimToken: token,
+            pendingPromoCodeId: selectedPromo.id,
+            adminListId: list.id,
+          })
+          .returning({ id: organizations.id, name: organizations.name });
+        const createdTeams: Array<{ id: string; name: string }> = [];
+        for (const teamName of organization.teams) {
+          const [team] = await tx
+            .insert(teams)
+            .values({ organizationId: org.id, name: teamName })
+            .returning({ id: teams.id, name: teams.name });
+          createdTeams.push(team);
+        }
+        created.push({
+          id: org.id,
+          name: org.name,
+          token,
+          teams: createdTeams,
+        });
+      }
+      return { list, created } as const;
+    });
+
+    const conflicts = "conflict" in result ? result.conflict : null;
+    const promoConflict =
+      "promoConflict" in result ? result.promoConflict : null;
+    if (promoConflict) {
+      return res.status(409).json({
+        error: promoConflict,
+        code: "PROMO_UNAVAILABLE",
+        issues: [
+          {
+            scope: "file",
+            organizationIndex: null,
+            teamIndex: null,
+            message: promoConflict,
+          },
+        ],
+      });
+    }
+    if (conflicts) {
+      return res.status(409).json({
+        error: "One or more organizations already exist.",
+        code: "ORG_NAME_TAKEN",
+        issues: conflicts.map((row) => ({
+          scope: "organization",
+          organizationIndex: preflight.organizations.findIndex(
+            (organization) =>
+              organization.name.toLowerCase() === row.name.toLowerCase(),
+          ),
+          teamIndex: null,
+          message: `Organization "${row.name}" already exists. Imports never merge into an existing organization.`,
+        })),
+      });
+    }
+    if (!("created" in result) || !result.created || !result.list) {
+      throw new Error("Organization import did not return a result.");
+    }
+    const createdOrganizations = result.created;
+
+    return res.status(201).json({
+      data: {
+        list: result.list,
+        promoCode: selectedPromo.code,
+        organizations: createdOrganizations,
+        organizationCount: createdOrganizations.length,
+        teamCount: createdOrganizations.reduce(
+          (sum, organization) => sum + organization.teams.length,
+          0,
+        ),
+      },
+    });
+  }),
+);
+
 router.get(
   "/org-lists",
   asyncHandler(async (_req, res) => {

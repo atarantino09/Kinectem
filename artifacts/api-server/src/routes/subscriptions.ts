@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, promoCodes, orgSubscriptions, organizations } from "@workspace/db";
-import { desc, eq, sql, isNotNull } from "drizzle-orm";
+import { desc, eq, sql, isNotNull, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   PLAN_TEAM_LIMITS,
   DEFAULT_PLAN,
@@ -345,9 +346,32 @@ router.put(
     }
     const { plan, promoCode } = parsed.data;
 
+    const [orgPromoState] = await db
+      .select({ pendingPromoCodeId: organizations.pendingPromoCodeId })
+      .from(organizations)
+      .where(eq(organizations.id, orgId as string))
+      .limit(1);
     let promoRow: Awaited<ReturnType<typeof findRedeemablePromo>> = null;
     if (promoCode) {
       promoRow = await findRedeemablePromo(promoCode);
+      // A capped promo may appear fully redeemed because this organization
+      // already owns one of its staged reservations. Let the transaction
+      // validate and consume that reservation instead of rejecting it here.
+      if (!promoRow && orgPromoState?.pendingPromoCodeId) {
+        const [reservedPromo] = await db
+          .select()
+          .from(promoCodes)
+          .where(eq(promoCodes.code, promoCode.trim().toLowerCase()))
+          .limit(1);
+        if (
+          reservedPromo?.id === orgPromoState.pendingPromoCodeId &&
+          reservedPromo.active &&
+          (!reservedPromo.expiresAt ||
+            reservedPromo.expiresAt.getTime() > Date.now())
+        ) {
+          promoRow = reservedPromo;
+        }
+      }
       if (!promoRow) {
         apiError(res, 400, "That promo code isn't valid.", {
           code: "PROMO_INVALID",
@@ -396,13 +420,75 @@ router.put(
     // a single transaction: when the applied promo changes we decrement the
     // old code and increment the new one so `maxRedemptions` is actually
     // enforced over time.
-    const sub = await db.transaction(async (tx) => {
+    const subscriptionResult = await db.transaction(async (tx) => {
+      const orgResult = await tx.execute<{
+        pending_promo_code_id: string | null;
+      }>(sql`
+        SELECT pending_promo_code_id
+        FROM organizations
+        WHERE id = ${orgId as string}
+        FOR UPDATE
+      `);
+      const lockedOrg = (orgResult.rows ?? orgResult)[0] as
+        | { pending_promo_code_id: string | null }
+        | undefined;
       const [existing] = await tx
         .select({ promoCodeId: orgSubscriptions.promoCodeId })
         .from(orgSubscriptions)
         .where(eq(orgSubscriptions.organizationId, orgId))
         .limit(1);
       const oldPromoId = existing?.promoCodeId ?? null;
+
+      if (newPromoId) {
+        type LockedPromo = {
+          id: string;
+          active: boolean;
+          expires_at: Date | null;
+          max_redemptions: number | null;
+          redemption_count: number;
+        };
+        const promoResult = await tx.execute<LockedPromo>(sql`
+          SELECT id, active, expires_at, max_redemptions, redemption_count
+          FROM promo_codes
+          WHERE id = ${newPromoId}
+          FOR UPDATE
+        `);
+        const lockedPromo = (promoResult.rows ?? promoResult)[0] as
+          | LockedPromo
+          | undefined;
+        if (
+          !lockedPromo ||
+          !lockedPromo.active ||
+          (lockedPromo.expires_at &&
+            new Date(lockedPromo.expires_at).getTime() <= Date.now())
+        ) {
+          return {
+            error: "That promo code is no longer active.",
+          } as const;
+        }
+        if (lockedPromo.max_redemptions != null) {
+          const [pending] = await tx
+            .select({ count: sql<number>`count(*)` })
+            .from(organizations)
+            .where(eq(organizations.pendingPromoCodeId, newPromoId));
+          const hasThisReservation =
+            lockedOrg?.pending_promo_code_id === newPromoId;
+          const isAlreadyRedeemed = oldPromoId === newPromoId;
+          const committed =
+            lockedPromo.redemption_count + Number(pending?.count ?? 0);
+          const additionalCapacity =
+            hasThisReservation || isAlreadyRedeemed ? 0 : 1;
+          if (
+            committed + additionalCapacity >
+            lockedPromo.max_redemptions
+          ) {
+            return {
+              error:
+                "That promo code has reached its redemption limit.",
+            } as const;
+          }
+        }
+      }
 
       const [row] = await tx
         .insert(orgSubscriptions)
@@ -443,8 +529,27 @@ router.put(
             .where(eq(promoCodes.id, newPromoId));
         }
       }
+      // A staged promo is a one-time handoff hint. Once the organization
+      // chooses its subscription (including choosing no promo), clear it in
+      // the same transaction so admin reporting never shows a redeemed code as
+      // both staged and applied.
+      await tx
+        .update(organizations)
+        .set({ pendingPromoCodeId: null })
+        .where(eq(organizations.id, orgId as string));
       return row;
     });
+    if (
+      subscriptionResult &&
+      typeof subscriptionResult === "object" &&
+      "error" in subscriptionResult
+    ) {
+      apiError(res, 409, subscriptionResult.error, {
+        code: "PROMO_INVALID",
+      });
+      return;
+    }
+    const sub = subscriptionResult;
 
     const promo = promoRow
       ? {
@@ -761,11 +866,14 @@ router.get(
 // Admin organizations + subscriptions overview.
 //
 // Lists every organization left-joined to its (optional) subscription and the
-// applied promo code, so admins can see each org's plan, status, and whether a
-// discount is in play — all in one place. `?promoOnly=true` narrows the list to
-// only orgs that have a promo code applied. Sorted most-recently-subscribed
+// applied or staged promo code, so admins can see each org's plan, status, and
+// whether a discount is in play — all in one place. `?promoOnly=true` narrows
+// the list to orgs that have a promo code applied or waiting for redemption.
+// Sorted most-recently-subscribed
 // first, with un-subscribed orgs last.
 // ---------------------------------------------------------------------------
+const pendingPromoCodes = alias(promoCodes, "pending_promo_codes");
+
 type AdminOrgRow = {
   orgId: string;
   orgName: string;
@@ -775,9 +883,15 @@ type AdminOrgRow = {
   subscriptionUpdatedAt: Date | null;
   subscriptionCreatedAt: Date | null;
   promoCode: string | null;
+  pendingPromoCode: string | null;
   promoDiscountType: (typeof promoCodes.$inferSelect)["discountType"] | null;
   promoDiscountValue: number | null;
   promoExpiresAt: Date | null;
+  pendingPromoDiscountType:
+    | (typeof promoCodes.$inferSelect)["discountType"]
+    | null;
+  pendingPromoDiscountValue: number | null;
+  pendingPromoExpiresAt: Date | null;
 };
 
 function adminOrgRow(r: AdminOrgRow) {
@@ -791,9 +905,13 @@ function adminOrgRow(r: AdminOrgRow) {
       (r.subscriptionUpdatedAt ?? r.subscriptionCreatedAt)?.toISOString() ??
       null,
     promoCode: r.promoCode,
-    promoDiscountType: r.promoDiscountType,
-    promoDiscountValue: r.promoDiscountValue,
-    promoExpiresAt: r.promoExpiresAt?.toISOString() ?? null,
+    pendingPromoCode: r.pendingPromoCode,
+    promoDiscountType:
+      r.promoDiscountType ?? r.pendingPromoDiscountType,
+    promoDiscountValue:
+      r.promoDiscountValue ?? r.pendingPromoDiscountValue,
+    promoExpiresAt:
+      (r.promoExpiresAt ?? r.pendingPromoExpiresAt)?.toISOString() ?? null,
   };
 }
 
@@ -813,9 +931,13 @@ router.get(
         subscriptionUpdatedAt: orgSubscriptions.updatedAt,
         subscriptionCreatedAt: orgSubscriptions.createdAt,
         promoCode: promoCodes.code,
+        pendingPromoCode: pendingPromoCodes.code,
         promoDiscountType: promoCodes.discountType,
         promoDiscountValue: promoCodes.discountValue,
         promoExpiresAt: promoCodes.expiresAt,
+        pendingPromoDiscountType: pendingPromoCodes.discountType,
+        pendingPromoDiscountValue: pendingPromoCodes.discountValue,
+        pendingPromoExpiresAt: pendingPromoCodes.expiresAt,
       })
       .from(organizations)
       .leftJoin(
@@ -823,7 +945,18 @@ router.get(
         eq(orgSubscriptions.organizationId, organizations.id),
       )
       .leftJoin(promoCodes, eq(promoCodes.id, orgSubscriptions.promoCodeId))
-      .where(promoOnly ? isNotNull(orgSubscriptions.promoCodeId) : undefined)
+      .leftJoin(
+        pendingPromoCodes,
+        eq(pendingPromoCodes.id, organizations.pendingPromoCodeId),
+      )
+      .where(
+        promoOnly
+          ? or(
+              isNotNull(orgSubscriptions.promoCodeId),
+              isNotNull(organizations.pendingPromoCodeId),
+            )
+          : undefined,
+      )
       .orderBy(sql`${orgSubscriptions.updatedAt} DESC NULLS LAST`);
     res.json({ data: rows.map(adminOrgRow) });
   }),
