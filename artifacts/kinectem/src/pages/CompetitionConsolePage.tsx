@@ -1665,16 +1665,70 @@ function BracketsPanel({
             you like. Brackets are always displayed Boys first, then Girls, then
             Coed, ordered youngest to oldest within each gender.
           </p>
+          <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+              Add a bracket
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                className="h-8 w-44"
+                placeholder="New bracket name"
+                data-testid="input-new-bracket-label"
+              />
+              <Select
+                value={newGender || "none"}
+                onValueChange={(v) => setNewGender(v === "none" ? "" : v)}
+              >
+                <SelectTrigger
+                  className="h-8 w-28"
+                  data-testid="select-new-bracket-gender"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No gender</SelectItem>
+                  {BRACKET_GENDERS.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={newAge}
+                onChange={(e) => setNewAge(e.target.value)}
+                className="h-8 w-24"
+                placeholder="Age (U14)"
+                data-testid="input-new-bracket-age"
+              />
+              <Button
+                size="sm"
+                variant="brand"
+                disabled={create.isPending || newLabel.trim() === ""}
+                onClick={() => create.mutate()}
+                data-testid="btn-add-bracket"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Add bracket
+              </Button>
+            </div>
+          </div>
           {bracketsQ.isLoading && !preview ? (
             <Skeleton className="h-16 rounded-lg" />
           ) : brackets.length === 0 && unassignedGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="text-no-brackets">
               No brackets yet — import a schedule with a division column, or
-              add one below.
+              add one above.
             </p>
           ) : brackets.length > 0 ? (
-            <div className="space-y-1.5" data-testid="list-brackets">
-              {sortedBrackets.map((b) => (
+            <>
+              <p className="pt-1 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                Current brackets
+              </p>
+              <div className="space-y-1.5" data-testid="list-brackets">
+                {sortedBrackets.map((b) => (
                 <div
                   key={b.id}
                   className="rounded-lg border border-border px-2 py-1.5"
@@ -1752,8 +1806,9 @@ function BracketsPanel({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : null}
 
           {/* ── Unassigned groups — participant groups from the schedule that
@@ -1852,43 +1907,6 @@ function BracketsPanel({
             </div>
           )}
 
-          <div className="flex items-center gap-2 flex-wrap pt-1">
-            <Input
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              className="h-8 w-44"
-              placeholder="New bracket name"
-              data-testid="input-new-bracket-label"
-            />
-            <Select value={newGender || "none"} onValueChange={(v) => setNewGender(v === "none" ? "" : v)}>
-              <SelectTrigger className="h-8 w-28" data-testid="select-new-bracket-gender">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No gender</SelectItem>
-                {BRACKET_GENDERS.map((g) => (
-                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              value={newAge}
-              onChange={(e) => setNewAge(e.target.value)}
-              className="h-8 w-24"
-              placeholder="Age (U14)"
-              data-testid="input-new-bracket-age"
-            />
-            <Button
-              size="sm"
-              variant="brand"
-              disabled={create.isPending || newLabel.trim() === ""}
-              onClick={() => create.mutate()}
-              data-testid="btn-add-bracket"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Add bracket
-            </Button>
-          </div>
         </CardContent>
       )}
     </Card>
