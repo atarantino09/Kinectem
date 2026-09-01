@@ -31,6 +31,7 @@ import type {
 interface PostFormFieldsProps {
   postType: "short" | "long";
   onPostTypeChange: (t: "short" | "long") => void;
+  profileOnly?: boolean;
   title: string;
   onTitleChange: (v: string) => void;
   body: string;
@@ -119,6 +120,7 @@ interface PostFormFieldsProps {
 export function PostFormFields({
   postType,
   onPostTypeChange,
+  profileOnly = false,
   title,
   onTitleChange,
   body,
@@ -201,7 +203,7 @@ export function PostFormFields({
           </p>
         </div>
       )}
-      {!draftId && !lockedToTeam && !isEditingPublished && (
+      {!profileOnly && !draftId && !lockedToTeam && !isEditingPublished && (
         // Post-type toggle: only when starting from a blank composer.
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
@@ -422,7 +424,7 @@ export function PostFormFields({
           when the user has zero authorable teams) so "Just my profile"
           is always reachable. For recaps it stays gated on having at
           least one authorable team. */}
-      {!draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && (isShort || myTeams.data.length > 0) && (
+      {!profileOnly && !draftId && !lockedToTeam && !isOrgPost && !isEditingPublished && myTeams && (isShort || myTeams.data.length > 0) && (
         <div>
           <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
             {isShort ? "Post to" : "Post to Team"}

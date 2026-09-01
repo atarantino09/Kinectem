@@ -259,11 +259,13 @@ export function useNewPostForm({
     await Promise.all(promises);
   };
 
-  const [postType, setPostType] = useState<"short" | "long">(initialType);
+  const [postType, setPostType] = useState<"short" | "long">(
+    initialProfileOnly ? "short" : initialType,
+  );
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [teamId, setTeamId] = useState<string>(
-    initialProfileOnly && initialType === "short" ? "__profile__" : "",
+    initialProfileOnly ? "__profile__" : "",
   );
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -352,13 +354,13 @@ export function useNewPostForm({
   const [draftId, setDraftId] = useState<string | null>(initialDraftId);
   const editId = initialEditId;
   const isEditingPublished = !!editId;
-  const lockedToTeam = !!initialTeamId;
+  const lockedToTeam = !!initialTeamId && !initialProfileOnly;
   // The team the recap composer is effectively scoped to: a URL-locked
   // team, the picker selection, or (draft sessions re-opened from
   // /drafts) the loaded draft's team. Drives the claimed-competitions
   // fetch below and the picker's visibility.
   const composerTeamId =
-    initialTeamId ||
+    (initialProfileOnly ? "" : initialTeamId) ||
     (teamId && teamId !== "__profile__" ? teamId : "") ||
     loadedTeamId ||
     "";
@@ -933,13 +935,16 @@ export function useNewPostForm({
     // it leaves teamId === "__profile__", which we translate to
     // "submit with no team / context" so the server takes the
     // profile-only branch.
-    const selectedTeam =
-      teamId === "__profile__" ? "" : teamId;
+    const selectedTeam = initialProfileOnly
+      ? ""
+      : teamId === "__profile__"
+        ? ""
+        : teamId;
     return {
-      postType,
+      postType: initialProfileOnly ? "short" : postType,
       title: title.trim() || undefined,
       body: !isShort && body.trim() ? body.trim() : undefined,
-      ...(initialTeamId || selectedTeam
+      ...(!initialProfileOnly && (initialTeamId || selectedTeam)
         ? ({
             context: {
               type: "team",
@@ -1429,7 +1434,9 @@ export function useNewPostForm({
     setConfirmDeleteOpen,
     deleting: deletePost.isPending,
     // setters
-    setPostType,
+    setPostType: (next: "short" | "long") => {
+      setPostType(initialProfileOnly ? "short" : next);
+    },
     setTitle,
     setBody,
     // Changing the team invalidates any competition pick — the list

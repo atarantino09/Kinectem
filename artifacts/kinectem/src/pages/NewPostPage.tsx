@@ -26,11 +26,12 @@ import {
 export default function NewPostPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
-  const initialType = params.get("type") === "short" ? "short" : "long";
+  const initialProfileOnly = params.get("profileOnly") === "1";
+  const initialType =
+    initialProfileOnly || params.get("type") === "short" ? "short" : "long";
   const initialDraftId = params.get("draftId");
   // Profile page CTA — start a short post with the profile-only destination
   // explicitly selected, even if the author also belongs to teams.
-  const initialProfileOnly = params.get("profileOnly") === "1";
   // editId is the same shape as draftId (a post id that already
   // exists), but it points at an already-PUBLISHED post and the
   // composer must not re-call /publish on submit. This is the
@@ -38,7 +39,9 @@ export default function NewPostPage() {
   // can flip the "Tag every rostered player" checkbox after the
   // fact, but it also supports edits to title/body/media/date.
   const initialEditId = params.get("editId");
-  const initialTeamId = params.get("teamId");
+  // A profile-only deep link owns its destination. Ignore any accidental
+  // team query parameter so this entry point can never post to a team.
+  const initialTeamId = initialProfileOnly ? null : params.get("teamId");
   const initialFrom = params.get("from");
   // Team Schedule "Write game recap" deep-link params (optional).
   const initialScheduleEventId = params.get("scheduleEventId");
@@ -258,6 +261,7 @@ export default function NewPostPage() {
             <PostFormFields
               postType={form.postType}
               onPostTypeChange={form.setPostType}
+              profileOnly={initialProfileOnly}
               title={form.title}
               onTitleChange={form.setTitle}
               body={form.body}
