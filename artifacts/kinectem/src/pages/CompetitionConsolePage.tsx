@@ -1466,16 +1466,25 @@ function BracketsPanel({
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const bracketsQ = useQuery<{ data: CompetitionBracket[] }>({
+  interface UnassignedGroup {
+    age: string | null;
+    gender: string | null;
+    count: number;
+  }
+  const bracketsQ = useQuery<{
+    data: CompetitionBracket[];
+    unassignedGroups: UnassignedGroup[];
+  }>({
     queryKey: ["competition", competitionId, "brackets"],
     queryFn: () =>
-      customFetch<{ data: CompetitionBracket[] }>(
+      customFetch<{ data: CompetitionBracket[]; unassignedGroups: UnassignedGroup[] }>(
         `/api/v1/competitions/${competitionId}/brackets`,
         { method: "GET" },
       ),
     enabled: !preview,
   });
   const brackets = bracketsQ.data?.data ?? [];
+  const unassignedGroups = bracketsQ.data?.unassignedGroups ?? [];
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["competition", competitionId, "brackets"] });
@@ -1510,6 +1519,75 @@ function BracketsPanel({
       invalidate();
     },
     onError: onError("Couldn't add that bracket"),
+  });
+
+  // "Name this group" — for participant groups pulled from the schedule that
+  // have no division/bracket string (the admin sees them on the public page
+  // but couldn't rename them from here before). The POST endpoint links all
+  // matching participants by exact raw age+gender when the bracket is created.
+  //
+  // We keep the original raw age/gender from the DB separate from the
+  // user-editable label/ageGroup/gender fields. The raw values are sent as
+  // linkSourceAge/linkSourceGender so the server can build exact SQL predicates
+  // (no normalization, no wildcards). This prevents a generic bracket create
+  // from accidentally linking the wrong unnamed groups.
+  const [namingGroupKey, setNamingGroupKey] = useState<string | null>(null);
+  // Raw source values from the DB — immutable target for server-side linking.
+  const [namingSourceAge, setNamingSourceAge] = useState<string | null>(null);
+  const [namingSourceGender, setNamingSourceGender] = useState<string | null>(null);
+  const [nameLabel, setNameLabel] = useState("");
+  const [nameGender, setNameGender] = useState("");
+  const [nameAge, setNameAge] = useState("");
+  function startNaming(g: { age: string | null; gender: string | null }) {
+    const rawGender = g.gender ?? "";
+    const normalized = ["boys", "boy", "b", "m", "male", "men"].includes(
+      rawGender.toLowerCase(),
+    )
+      ? "Boys"
+      : ["girls", "girl", "g", "f", "female", "women"].includes(rawGender.toLowerCase())
+        ? "Girls"
+        : ["coed", "co-ed", "mixed", "x"].includes(rawGender.toLowerCase())
+          ? "Coed"
+          : (rawGender
+            ? rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase()
+            : "");
+    const age = g.age ?? "";
+    const defaultLabel = [age, BRACKET_GENDERS.includes(normalized as typeof BRACKET_GENDERS[number]) ? normalized : ""].filter(Boolean).join(" ");
+    setNamingGroupKey(`${g.age ?? ""}||${g.gender ?? ""}`);
+    // Store exact raw DB values as the immutable linking target.
+    setNamingSourceAge(g.age);
+    setNamingSourceGender(g.gender);
+    setNameLabel(defaultLabel || age || normalized);
+    setNameGender(BRACKET_GENDERS.includes(normalized as typeof BRACKET_GENDERS[number]) ? normalized : "");
+    setNameAge(age);
+  }
+  const nameGroup = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/v1/competitions/${competitionId}/brackets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: nameLabel.trim(),
+          gender: nameGender || null,
+          ageGroup: nameAge.trim() || null,
+          // Exact raw values from the DB — the server uses these to build
+          // exact SQL predicates against tournament_participants. Using
+          // linkSourceAge/linkSourceGender (not the edited ageGroup/gender
+          // above) ensures only the correct group's rows are linked.
+          linkSourceAge: namingSourceAge,
+          linkSourceGender: namingSourceGender,
+        }),
+      }),
+    onSuccess: () => {
+      setNamingGroupKey(null);
+      setNamingSourceAge(null);
+      setNamingSourceGender(null);
+      invalidate();
+      // Also refresh the public competition page participant list so the
+      // renamed group appears immediately without a full page reload.
+      qc.invalidateQueries({ queryKey: ["competition", competitionId] });
+    },
+    onError: onError("Couldn't name that group"),
   });
 
   // Inline edit
@@ -1601,12 +1679,12 @@ function BracketsPanel({
           </p>
           {bracketsQ.isLoading && !preview ? (
             <Skeleton className="h-16 rounded-lg" />
-          ) : brackets.length === 0 ? (
+          ) : brackets.length === 0 && unassignedGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="text-no-brackets">
               No brackets yet — import a schedule with a division column, or
               add one below.
             </p>
-          ) : (
+          ) : brackets.length > 0 ? (
             <div className="space-y-1.5" data-testid="list-brackets">
               {brackets.map((b, i) => (
                 <div
@@ -1709,7 +1787,104 @@ function BracketsPanel({
                 </div>
               ))}
             </div>
+          ) : null}
+
+          {/* ── Unassigned groups — participant groups from the schedule that
+              have no division/bracket string and no bracket assignment yet.
+              Naming one creates a bracket AND immediately links all matching
+              participants so the public Teams list reflects the new name. ── */}
+          {unassignedGroups.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                Groups without a name
+              </p>
+              {unassignedGroups.map((g) => {
+                const groupKey = `${g.age ?? ""}||${g.gender ?? ""}`;
+                const isNaming = namingGroupKey === groupKey;
+                const displayAge = g.age ?? "Unknown age";
+                const displayGender = g.gender
+                  ? g.gender.charAt(0).toUpperCase() + g.gender.slice(1).toLowerCase()
+                  : "Unknown gender";
+                return (
+                  <div
+                    key={groupKey}
+                    className="rounded-lg border border-dashed border-border px-2 py-1.5"
+                    data-testid={`row-unassigned-group-${groupKey}`}
+                  >
+                    {isNaming ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Input
+                          value={nameLabel}
+                          onChange={(e) => setNameLabel(e.target.value)}
+                          className="h-8 w-44"
+                          placeholder="Group name"
+                          autoFocus
+                          data-testid="input-name-group-label"
+                        />
+                        <Select
+                          value={nameGender || "none"}
+                          onValueChange={(v) => setNameGender(v === "none" ? "" : v)}
+                        >
+                          <SelectTrigger className="h-8 w-28" data-testid="select-name-group-gender">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No gender</SelectItem>
+                            {BRACKET_GENDERS.map((gv) => (
+                              <SelectItem key={gv} value={gv}>{gv}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={nameAge}
+                          onChange={(e) => setNameAge(e.target.value)}
+                          className="h-8 w-24"
+                          placeholder="Age (U14)"
+                          data-testid="input-name-group-age"
+                        />
+                        <Button
+                          size="sm"
+                          variant="brand"
+                          disabled={nameGroup.isPending || nameLabel.trim() === ""}
+                          onClick={() => nameGroup.mutate()}
+                          data-testid="btn-save-group-name"
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setNamingGroupKey(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground truncate">
+                          {displayAge} · {displayGender}
+                        </span>
+                        <span className="text-xs text-muted-foreground/70">
+                          ({g.count} {g.count === 1 ? "team" : "teams"})
+                        </span>
+                        <span className="flex-1" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="font-bold text-xs"
+                          onClick={() => startNaming(g)}
+                          data-testid={`btn-name-group-${groupKey}`}
+                        >
+                          Name this group
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
+
           <div className="flex items-center gap-2 flex-wrap pt-1">
             <Input
               value={newLabel}

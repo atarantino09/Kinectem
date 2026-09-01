@@ -146,6 +146,49 @@ export async function seedBracketsFromSchedule(
 }
 
 /**
+ * Link participants whose schedule rows have EMPTY division AND bracket (i.e.
+ * they fall into no label-key group) to a specific bracket, targeting an exact
+ * raw age × gender combination from the DB.
+ *
+ * Both `sourceAge` and `sourceGender` are matched EXACTLY as stored — there
+ * is no normalization or wildcard expansion. `null` matches SQL IS NULL.
+ * Only call this when the caller has explicitly supplied both source values
+ * (i.e. the "Name this group" console action, not generic bracket creation).
+ */
+export async function linkParticipantGroupToBracket(
+  tournamentId: string,
+  bracketId: string,
+  sourceAge: string | null,    // exact raw DB value; null → IS NULL
+  sourceGender: string | null, // exact raw DB value; null → IS NULL
+): Promise<number> {
+  // Exact SQL matching — no JS filtering, no normalization, no wildcards.
+  const ageCondition =
+    sourceAge === null
+      ? isNull(tournamentParticipants.age)
+      : eq(tournamentParticipants.age, sourceAge);
+  const genderCondition =
+    sourceGender === null
+      ? isNull(tournamentParticipants.gender)
+      : eq(tournamentParticipants.gender, sourceGender);
+
+  const updated = await db
+    .update(tournamentParticipants)
+    .set({ bracketId })
+    .where(
+      and(
+        eq(tournamentParticipants.tournamentId, tournamentId),
+        isNull(tournamentParticipants.bracketId),
+        eq(tournamentParticipants.division, ""),
+        eq(tournamentParticipants.bracket, ""),
+        ageCondition,
+        genderCondition,
+      ),
+    )
+    .returning({ id: tournamentParticipants.id });
+  return updated.length;
+}
+
+/**
  * Task #865 — link UNLINKED team slots (bracket_id IS NULL) to the bracket
  * whose label key matches the slot's division (fallback bracket) value —
  * the same label derivation the seeder uses. Id-based from then on, so

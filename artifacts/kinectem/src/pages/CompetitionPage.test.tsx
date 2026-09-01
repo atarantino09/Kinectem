@@ -364,68 +364,33 @@ describe("featured recap week sections", () => {
 });
 
 describe("competition Teams ordering", () => {
+  function makeParticipant(
+    id: string,
+    name: string,
+    overrides: Record<string, unknown> = {},
+  ) {
+    return {
+      id,
+      name,
+      division: "",
+      bracket: "",
+      age: null,
+      gender: null,
+      claimed: false,
+      teamId: null,
+      bracketId: null,
+      ...overrides,
+    } as Parameters<typeof competitionTeamSections>[0][number];
+  }
+
   it("separates repeated group names by age and gender, with natural team sorting", () => {
     const sections = competitionTeamSections([
-      {
-        id: "u12-girls-z",
-        name: "Zebras 20",
-        division: "Gold",
-        bracket: "A",
-        age: "U12",
-        gender: "girls",
-        claimed: false,
-        teamId: null,
-      },
-      {
-        id: "u10-boys-20",
-        name: "Storm 20",
-        division: "Gold",
-        bracket: "A",
-        age: "U10",
-        gender: "Boys",
-        claimed: false,
-        teamId: null,
-      },
-      {
-        id: "u8-boys",
-        name: "Comets",
-        division: "Gold",
-        bracket: "A",
-        age: "U8",
-        gender: "boys",
-        claimed: false,
-        teamId: null,
-      },
-      {
-        id: "u10-boys-12",
-        name: "Storm 12",
-        division: "Gold",
-        bracket: "A",
-        age: "U10",
-        gender: "Boys",
-        claimed: false,
-        teamId: null,
-      },
-      {
-        id: "u12-boys",
-        name: "Falcons",
-        division: "Silver",
-        bracket: "B",
-        age: "U12",
-        gender: "Boys",
-        claimed: false,
-        teamId: null,
-      },
-      {
-        id: "missing",
-        name: "Unlisted",
-        division: "Gold",
-        bracket: "A",
-        age: null,
-        gender: null,
-        claimed: false,
-        teamId: null,
-      },
+      makeParticipant("u12-girls-z", "Zebras 20", { division: "Gold", bracket: "A", age: "U12", gender: "girls" }),
+      makeParticipant("u10-boys-20", "Storm 20",  { division: "Gold", bracket: "A", age: "U10", gender: "Boys" }),
+      makeParticipant("u8-boys",     "Comets",    { division: "Gold", bracket: "A", age: "U8",  gender: "boys" }),
+      makeParticipant("u10-boys-12", "Storm 12",  { division: "Gold", bracket: "A", age: "U10", gender: "Boys" }),
+      makeParticipant("u12-boys",    "Falcons",   { division: "Silver", bracket: "B", age: "U12", gender: "Boys" }),
+      makeParticipant("missing",     "Unlisted",  { division: "Gold", bracket: "A" }),
     ]);
 
     expect(sections.map((section) => section.title)).toEqual([
@@ -439,6 +404,76 @@ describe("competition Teams ordering", () => {
       "Storm 12",
       "Storm 20",
     ]);
+  });
+
+  it("places bracket-linked sections first, in bracket-array order, using the bracket label as title", () => {
+    const brackets = [
+      { id: "b1", label: "U9 Girls", gender: "Girls", ageGroup: "U9" },
+      { id: "b2", label: "U11 Boys", gender: "Boys", ageGroup: "U11" },
+    ];
+    const sections = competitionTeamSections(
+      [
+        // Unlinked — should sort after bracket sections using existing logic.
+        makeParticipant("unlinked-z", "Zebras", { age: "U8", gender: "Boys", division: "Gold" }),
+        // Linked to b2 (second bracket in array).
+        makeParticipant("b2-team-a", "Avalanche", { bracketId: "b2" }),
+        makeParticipant("b2-team-b", "Blizzard",  { bracketId: "b2" }),
+        // Linked to b1 (first bracket in array).
+        makeParticipant("b1-team",   "Storm",     { bracketId: "b1" }),
+      ],
+      brackets,
+    );
+
+    expect(sections.map((s) => s.title)).toEqual([
+      "U9 Girls",   // b1 — first in bracket array
+      "U11 Boys",   // b2 — second in bracket array
+      "U8 · Boys · Gold",   // unlinked — falls through to string logic (no bracket string → "General" omitted)
+    ]);
+    expect(sections[0].teams.map((t) => t.id)).toEqual(["b1-team"]);
+    // b2 teams sorted alphabetically.
+    expect(sections[1].teams.map((t) => t.name)).toEqual(["Avalanche", "Blizzard"]);
+  });
+
+  it("falls back to string-based grouping when a bracketId is not in the brackets array", () => {
+    const brackets = [{ id: "b1", label: "Gold Pool", gender: null, ageGroup: null }];
+    const sections = competitionTeamSections(
+      [
+        makeParticipant("stale", "Old Team", { bracketId: "deleted-bracket", age: "U10", gender: "Boys", division: "Div A" }),
+        makeParticipant("linked", "New Team", { bracketId: "b1" }),
+      ],
+      brackets,
+    );
+
+    expect(sections.map((s) => s.title)).toEqual([
+      "Gold Pool",          // bracketId resolved → bracket label
+      "U10 · Boys · Div A", // stale bracketId → falls back to string grouping
+    ]);
+  });
+
+  it("keeps same-age different-gender unnamed groups in separate sections", () => {
+    // This is the key regression guard: a schedule with no division/bracket
+    // column produces groups like "U12 · Boys" and "U12 · Girls" — they must
+    // NOT merge even if one or both are unnamed (empty division/bracket strings).
+    const sections = competitionTeamSections(
+      [
+        makeParticipant("u12-boys-a", "Alpha", { age: "U12", gender: "Boys" }),
+        makeParticipant("u12-boys-b", "Beta",  { age: "U12", gender: "Boys" }),
+        makeParticipant("u12-girls",  "Gamma", { age: "U12", gender: "Girls" }),
+      ],
+      [],
+    );
+
+    expect(sections.map((s) => s.title)).toEqual(["U12 · Boys", "U12 · Girls"]);
+    expect(sections[0].teams.map((t) => t.id)).toEqual(["u12-boys-a", "u12-boys-b"]);
+    expect(sections[1].teams.map((t) => t.id)).toEqual(["u12-girls"]);
+  });
+
+  it("is backward-compatible when called without a brackets argument", () => {
+    const sections = competitionTeamSections([
+      makeParticipant("t1", "Alpha", { age: "U10", gender: "Boys", division: "Gold" }),
+    ]);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe("U10 · Boys · Gold");
   });
 });
 

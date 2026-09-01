@@ -23,6 +23,7 @@ import {
   db,
   tournaments,
   competitionBrackets,
+  tournamentParticipants,
   articles,
 } from "@workspace/db";
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
@@ -36,6 +37,7 @@ import {
   bracketLabelKey,
   seedBracketsFromSchedule,
   linkParticipantsToBrackets,
+  linkParticipantGroupToBracket,
 } from "../lib/competition-brackets";
 
 const router: IRouter = Router();
@@ -54,6 +56,13 @@ const BracketBody = z.object({
   label: z.string().trim().min(1, "Bracket name is required").max(120),
   gender: z.enum(GENDERS).nullable().optional(),
   ageGroup: z.string().trim().max(40).nullable().optional(),
+  // Present ONLY when naming an unassigned schedule group via the console
+  // panel ("Name this group"). Both fields must be supplied together; their
+  // values are the EXACT raw strings stored in tournament_participants
+  // (not the user-edited ageGroup/gender metadata above). The server uses
+  // these to build exact SQL predicates — no normalization, no wildcards.
+  linkSourceAge: z.string().nullable().optional(),
+  linkSourceGender: z.string().nullable().optional(),
 });
 
 function bracketView(b: typeof competitionBrackets.$inferSelect) {
@@ -114,7 +123,30 @@ router.get(
       .from(competitionBrackets)
       .where(eq(competitionBrackets.tournamentId, competition.id))
       .orderBy(asc(competitionBrackets.sortOrder), asc(competitionBrackets.createdAt));
-    res.json({ data: rows.map(bracketView), canManage });
+
+    // For organizers only: surface participant groups that have no bracket_id
+    // AND no division/bracket label — these are "unnamed" age×gender groups
+    // the admin can see on the public page but can't rename from the panel.
+    const unassignedGroups = canManage
+      ? await db
+          .select({
+            age: tournamentParticipants.age,
+            gender: tournamentParticipants.gender,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(tournamentParticipants)
+          .where(
+            and(
+              eq(tournamentParticipants.tournamentId, competition.id),
+              isNull(tournamentParticipants.bracketId),
+              eq(tournamentParticipants.division, ""),
+              eq(tournamentParticipants.bracket, ""),
+            ),
+          )
+          .groupBy(tournamentParticipants.age, tournamentParticipants.gender)
+      : [];
+
+    res.json({ data: rows.map(bracketView), canManage, unassignedGroups });
   }),
 );
 
@@ -166,6 +198,20 @@ router.post(
     // Task #865 — a manually added bracket may match team slots that were
     // previously unmatched ("Other"); adopt them right away.
     await linkParticipantsToBrackets(competition.id);
+    // Task #953 — only link empty-label participants when this POST is
+    // explicitly naming an unassigned schedule group. The client signals
+    // this by providing BOTH linkSourceAge and linkSourceGender (exact raw
+    // DB strings). Generic bracket creation from the console add-bracket
+    // form never sends these fields, so it never triggers the linker.
+    const { linkSourceAge, linkSourceGender } = parsed.data;
+    if (linkSourceAge !== undefined && linkSourceGender !== undefined) {
+      await linkParticipantGroupToBracket(
+        competition.id,
+        created.id,
+        linkSourceAge,    // exact raw value from DB; may be null
+        linkSourceGender, // exact raw value from DB; may be null
+      );
+    }
     res.status(201).json(bracketView(created));
   }),
 );
