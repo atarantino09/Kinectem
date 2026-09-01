@@ -593,6 +593,50 @@
     background: linear-gradient(135deg, hsl(var(--brand-purple) / 0.12), hsl(var(--brand-blue) / 0.12));
     color: hsl(var(--brand-purple));
   }
+  /* Competition pages opt into these surfaces with inline primary and
+     secondary colors. The plain card background is the fallback for browsers
+     that do not support color-mix(). */
+  .competition-section-surface {
+    border-color: hsl(var(--border));
+    background: hsl(var(--card));
+  }
+  .competition-page .competition-section-surface {
+    border-color: color-mix(in srgb, var(--competition-primary) 30%, hsl(var(--border)));
+    background:
+      radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--competition-secondary) 16%, transparent), transparent 38%),
+      linear-gradient(135deg, color-mix(in srgb, var(--competition-primary) 11%, transparent), transparent 62%),
+      hsl(var(--card));
+  }
+  .competition-section-trigger {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--competition-primary) 8%, transparent), transparent 65%);
+  }
+  .competition-filter-panel {
+    border-color: color-mix(in srgb, var(--competition-primary) 24%, hsl(var(--border)));
+    background: color-mix(in srgb, var(--competition-primary) 5%, hsl(var(--background)));
+  }
+  .competition-schedule-group {
+    border: 1px solid color-mix(in srgb, var(--competition-secondary) 18%, hsl(var(--border)));
+    background: color-mix(in srgb, var(--competition-secondary) 4%, hsl(var(--card)));
+  }
+  .competition-empty-state {
+    border-color: color-mix(in srgb, var(--competition-primary) 28%, hsl(var(--border)));
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--competition-primary) 10%, transparent), transparent 72%),
+      color-mix(in srgb, var(--competition-secondary) 4%, hsl(var(--muted)));
+  }
+  .competition-item-row {
+    border-color: color-mix(in srgb, var(--competition-primary) 18%, hsl(var(--border)));
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .competition-page *,
+    .competition-page *::before,
+    .competition-page *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
   @media (max-width: 639px) {
     .app-page-header-content {
       padding: 1rem;

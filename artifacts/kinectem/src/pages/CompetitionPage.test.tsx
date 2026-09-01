@@ -5,19 +5,17 @@ import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { featuredRecapPreviewText } from "../lib/featuredRecapPreview";
 import {
+  allScheduleWeekKeys,
   competitionTeamSections,
   defaultOpenScheduleWeekKeys,
   isPublicFeaturedCompetitionRecap,
-  isMatchInProgress,
   isShortTournament,
   mapUrlForLocation,
   matchCalendarText,
   recapGroups,
-  rollingScheduleSpotlight,
   scheduleDateKeyForViewer,
-  scheduleSpotlightLabel,
   scheduleWeekStateKey,
-  type ScheduleSpotlightMatch,
+  type Match,
   weekGroups,
 } from "./CompetitionPage";
 import CompetitionPage from "./CompetitionPage";
@@ -47,7 +45,7 @@ function makeMatch(
   id: string,
   matchDate: string | null,
   overrides: Record<string, unknown> = {},
-) {
+): Match {
   return {
     id,
     matchNumber: id,
@@ -67,7 +65,7 @@ function makeMatch(
     status: "scheduled",
     statusReason: null,
     ...overrides,
-  } as ScheduleSpotlightMatch;
+  } as Match;
 }
 
 function makePost(overrides: Record<string, unknown> = {}) {
@@ -80,59 +78,18 @@ function makePost(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
-describe("rolling schedule model", () => {
-  it("includes every game in chronological order, with undated games last", () => {
-    const matches = [
-      makeMatch("past", "2026-08-29"),
-      makeMatch("future", "2026-09-02"),
-      makeMatch("today-late", "2026-08-31", { startTime: "7:00 PM" }),
-      makeMatch("today-early", "2026-08-31", { startTime: "9:00 AM" }),
-      makeMatch("invalid", "2026-02-30"),
-      makeMatch("undated", null),
+describe("schedule grouping model", () => {
+  it("can expand every matching week for filtered results, including past and undated games", () => {
+    const groups: [string, Match[]][] = [
+      ["Gold · A", [makeMatch("past", "2020-01-06"), makeMatch("undated", null)]],
+      ["Silver · B", [makeMatch("future", "2099-01-12")]],
     ];
 
-    expect(
-      rollingScheduleSpotlight(matches, "2026-08-31").map(
-        (match) => match.id,
-      ),
-    ).toEqual([
-      "past",
-      "today-early",
-      "today-late",
-      "future",
-      "invalid",
-      "undated",
+    expect(allScheduleWeekKeys(groups)).toEqual([
+      scheduleWeekStateKey("Gold · A", "2020-01-06"),
+      scheduleWeekStateKey("Gold · A", "__undated__"),
+      scheduleWeekStateKey("Silver · B", "2099-01-12"),
     ]);
-  });
-
-  it("keeps malformed dates ahead of genuinely undated games", () => {
-    expect(
-      rollingScheduleSpotlight(
-        [
-          makeMatch("older", "2026-08-20"),
-          makeMatch("recent", "2026-08-30"),
-          makeMatch("undated", null),
-        ],
-        "2026-08-31",
-      ).map((match) => match.id),
-    ).toEqual(["older", "recent", "undated"]);
-
-    expect(
-      rollingScheduleSpotlight(
-        [makeMatch("invalid", "not-a-date"), makeMatch("undated", null)],
-        "2026-08-31",
-      ).map((match) => match.id),
-    ).toEqual(["invalid", "undated"]);
-  });
-
-  it("does not cap the rolling list when a competition has many games", () => {
-    const matches = Array.from({ length: 8 }, (_, index) =>
-      makeMatch(`game-${index + 1}`, `2026-09-${String(index + 1).padStart(2, "0")}`),
-    );
-
-    expect(rollingScheduleSpotlight(matches).map((match) => match.id)).toEqual(
-      matches.map((match) => match.id),
-    );
   });
 
   it("opens the current week, or the next available week, with group-safe keys", () => {
@@ -164,28 +121,6 @@ describe("rolling schedule model", () => {
     );
   });
 
-  it("sorts supported legacy time formats chronologically", () => {
-    const matches = [
-      makeMatch("ten", "2026-08-31", { startTime: "10:00 AM" }),
-      makeMatch("nine", "2026-08-31", { startTime: "9 AM" }),
-      makeMatch("seconds-late", "2026-08-31", { startTime: "09:00:45" }),
-      makeMatch("seconds-early", "2026-08-31", { startTime: "9:00:15 AM" }),
-      makeMatch("evening", "2026-08-31", { startTime: "7.30 P.M." }),
-      makeMatch("unknown", "2026-08-31", { startTime: "After warmups" }),
-    ];
-
-    expect(
-      rollingScheduleSpotlight(matches, "2026-08-31").map((match) => match.id),
-    ).toEqual([
-      "nine",
-      "seconds-early",
-      "seconds-late",
-      "ten",
-      "evening",
-      "unknown",
-    ]);
-  });
-
   it("keeps malformed dates reachable in the Undated week", () => {
     const groups = weekGroups([
       makeMatch("valid", "2026-08-31"),
@@ -205,42 +140,6 @@ describe("rolling schedule model", () => {
 });
 
 describe("event-day schedule helpers", () => {
-  it("only marks a scheduled game live during its two-hour window", () => {
-    const match = makeMatch("live", "2026-08-31", { startTime: "10:00 AM" });
-    expect(isMatchInProgress(match, new Date(2026, 7, 31, 10, 45))).toBe(true);
-    expect(isMatchInProgress(match, new Date(2026, 7, 31, 9, 59))).toBe(false);
-    expect(
-      isMatchInProgress(
-        { ...match, status: "postponed" },
-        new Date(2026, 7, 31, 10, 45),
-      ),
-    ).toBe(false);
-    expect(
-      isMatchInProgress(
-        { ...match, startTime: "10:00 PM ET" },
-        new Date(2026, 7, 31, 10, 45),
-      ),
-    ).toBe(false);
-  });
-
-  it("uses live emphasis only for an in-progress game", () => {
-    const match = makeMatch("game", "2026-08-31", { startTime: "10:00 AM" });
-    expect(
-      scheduleSpotlightLabel(
-        { isActive: true, isEnded: false },
-        match,
-        new Date(2026, 7, 31, 10, 30),
-      ),
-    ).toEqual({ label: "Live now", isLive: true });
-    expect(
-      scheduleSpotlightLabel(
-        { isActive: false, isEnded: true },
-        match,
-        new Date(2026, 7, 31, 15, 0),
-      ),
-    ).toEqual({ label: "Final schedule", isLive: false });
-  });
-
   it("builds encoded directions only for safe non-empty locations", () => {
     expect(mapUrlForLocation("Riverside Complex, CA")).toBe(
       "https://www.google.com/maps/search/?api=1&query=Riverside%20Complex%2C%20CA",
@@ -277,7 +176,7 @@ describe("event-day schedule helpers", () => {
   });
 });
 
-describe("rolling schedule interactions", () => {
+describe("schedule filtering interactions", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/c/rolling-cup");
     mockedFetch.mockReset();
@@ -306,41 +205,102 @@ describe("rolling schedule interactions", () => {
       },
       participants: [],
       matches: [
-        makeMatch("first", "2099-01-05"),
+        makeMatch("first", "2099-01-05", {
+          homeName: "Falcons",
+          awayName: "Comets",
+        }),
         makeMatch("second", "2099-01-12", {
+          homeName: "Storm",
+          awayName: "Lightning",
+          gender: "Boys",
+          age: "U10",
+          division: "Silver",
+          bracket: "B",
+          venue: "North Athletic Park",
+          field: "Pitch 9",
           status: "postponed",
           statusReason: "Weather",
         }),
-        makeMatch("invalid", "2099-02-30"),
+        makeMatch("invalid", "2099-02-30", {
+          homeName: "United",
+          awayName: "City",
+        }),
       ],
       featuredRecaps: [],
       brackets: [],
     } as never);
   });
 
-  it("supports manual navigation and explicit pause without hiding the spotlight", async () => {
+  it("searches both matchup teams and details, updates counts, and clears cleanly", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CompetitionPage />);
 
-    expect(await screen.findByTestId("schedule-spotlight")).toBeInTheDocument();
-    expect(screen.getByTestId("spotlight-match-first")).toBeInTheDocument();
+    await screen.findByTestId("card-schedule");
+    expect(screen.queryByTestId("schedule-spotlight")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-spotlight-next")).not.toBeInTheDocument();
+    expect(screen.queryByText("View full schedule")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-toggle-schedule"));
+    expect(screen.getByTestId("badge-schedule-count")).toHaveTextContent("3");
+    expect(screen.getByTestId("schedule-result-count")).toHaveTextContent(
+      "3 games shown",
+    );
+
+    await user.type(screen.getByTestId("input-search-schedule"), "Lightning");
+    expect(screen.getByTestId("badge-schedule-count")).toHaveTextContent("1 of 3");
+    expect(screen.getByTestId("schedule-result-count")).toHaveTextContent(
+      "1 game shown",
+    );
+    expect(await screen.findByTestId("row-match-second")).toHaveTextContent(
+      "Storm",
+    );
     expect(screen.queryByTestId("row-match-first")).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("btn-spotlight-next"));
-    expect(screen.getByTestId("spotlight-match-second")).toBeInTheDocument();
-    expect(screen.getByTestId("spotlight-status-second")).toHaveTextContent(
-      "Postponed",
-    );
-    expect(screen.getByTestId("btn-spotlight-pause")).toHaveAccessibleName(
-      "Resume spotlight rotation",
+    await user.clear(screen.getByTestId("input-search-schedule"));
+    await user.type(screen.getByTestId("input-search-schedule"), "Pitch 9");
+    expect(screen.getByTestId("row-match-second")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-clear-schedule-filters"));
+    expect(screen.getByTestId("badge-schedule-count")).toHaveTextContent("3");
+    expect(screen.getByTestId("schedule-result-count")).toHaveTextContent(
+      "3 games shown",
     );
   });
 
-  it("toggles week sections independently and keeps malformed dates under Undated", async () => {
+  it("combines Gender, Age, and Group filters and offers a clear no-results action", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CompetitionPage />);
 
-    await screen.findByTestId("schedule-spotlight");
+    await screen.findByTestId("card-schedule");
+    await user.click(screen.getByTestId("btn-toggle-schedule"));
+
+    await user.selectOptions(screen.getByTestId("select-schedule-gender"), "boys");
+    await user.selectOptions(screen.getByTestId("select-schedule-age"), "u10");
+    await user.selectOptions(
+      screen.getByTestId("select-schedule-group"),
+      "silver · b",
+    );
+    expect(screen.getByTestId("badge-schedule-count")).toHaveTextContent("1 of 3");
+    expect(await screen.findByTestId("row-match-second")).toBeInTheDocument();
+
+    await user.type(screen.getByTestId("input-search-schedule"), "no such game");
+    expect(screen.getByTestId("empty-schedule-filters")).toHaveTextContent(
+      "No games match those filters",
+    );
+    expect(screen.getByTestId("schedule-result-count")).toHaveTextContent(
+      "No games match these filters.",
+    );
+
+    await user.click(screen.getByTestId("btn-empty-clear-schedule-filters"));
+    expect(screen.queryByTestId("empty-schedule-filters")).not.toBeInTheDocument();
+    expect(screen.getByTestId("badge-schedule-count")).toHaveTextContent("3");
+  });
+
+  it("keeps grouped week rows and malformed dates reachable", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionPage />);
+
+    await screen.findByTestId("card-schedule");
     await user.click(screen.getByTestId("btn-toggle-schedule"));
 
     await waitFor(() =>
@@ -348,7 +308,7 @@ describe("rolling schedule interactions", () => {
     );
     expect(screen.queryByTestId("row-match-second")).not.toBeInTheDocument();
 
-    const secondKey = scheduleWeekStateKey("Gold · A", "2099-01-12");
+    const secondKey = scheduleWeekStateKey("Silver · B", "2099-01-12");
     await user.click(
       screen.getByTestId(
         `btn-toggle-match-week-${encodeURIComponent(secondKey)}`,
@@ -374,6 +334,48 @@ describe("rolling schedule interactions", () => {
     expect(screen.getByTestId("row-match-invalid")).toHaveTextContent(
       "Date not listed",
     );
+  });
+
+  it("distinguishes a competition with no scheduled games", async () => {
+    mockedFetch.mockResolvedValue({
+      competition: {
+        id: "competition-1",
+        slug: "rolling-cup",
+        name: "Rolling Cup",
+        type: "tournament",
+        startDate: "2099-01-01",
+        endDate: "2099-01-20",
+        location: "Riverside",
+        description: null,
+        isActive: false,
+        isEnded: false,
+        autoApproveClaims: true,
+        logoUrl: null,
+        brandColor: "#2457a7",
+        secondaryColor: "#7c3aed",
+        tertiaryColor: null,
+        bannerUrl: null,
+        websiteUrl: null,
+        claimedCount: 0,
+        participantCount: 0,
+        isFollowing: false,
+      },
+      participants: [],
+      matches: [],
+      featuredRecaps: [],
+      brackets: [],
+    } as never);
+
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionPage />);
+    await screen.findByTestId("card-schedule");
+    await user.click(screen.getByTestId("btn-toggle-schedule"));
+
+    expect(screen.getByTestId("empty-schedule")).toHaveTextContent(
+      "No games scheduled yet",
+    );
+    expect(screen.queryByTestId("empty-schedule-filters")).not.toBeInTheDocument();
+    expect(screen.getByTestId("schedule-filters")).toBeInTheDocument();
   });
 });
 

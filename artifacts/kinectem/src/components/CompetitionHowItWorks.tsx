@@ -59,10 +59,12 @@ export function CompetitionHowItWorks({
   brandColor,
   secondaryColor,
   defaultOpen = false,
+  className,
 }: {
   brandColor?: string | null;
   secondaryColor?: string | null;
   defaultOpen?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   // The claim-link resolve can finish after mount (e.g. for signed-in
@@ -80,14 +82,14 @@ export function CompetitionHowItWorks({
 
   return (
     <Card
-      className="rounded-xl border-border shadow-sm overflow-hidden bg-card"
+      className={`competition-section-surface rounded-xl border-border shadow-sm overflow-hidden bg-card ${className ?? ""}`}
       data-testid="card-how-it-works"
     >
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="w-full flex items-center justify-between gap-3 p-5 text-left hover:bg-muted/40 transition-colors"
+            className="competition-section-trigger w-full flex items-center justify-between gap-3 p-5 text-left hover:bg-muted/40 transition-colors"
             data-testid="btn-how-it-works-toggle"
           >
             <div className="min-w-0">
