@@ -1903,7 +1903,7 @@ export default function CompetitionPage() {
                 ) : (
                   matchGroups.map(([label, matches]) => (
                     <div key={label} className="space-y-3">
-                      <h3 className="border-b border-border/40 pb-1 text-sm font-black uppercase tracking-[0.14em] text-foreground">
+                      <h3 className="border-b border-border/40 pb-1 text-sm font-black uppercase tracking-[0.14em]" style={{ color: brand }}>
                         {label}
                       </h3>
                       <div className="space-y-3">
