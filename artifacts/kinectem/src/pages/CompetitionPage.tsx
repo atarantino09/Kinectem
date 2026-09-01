@@ -1602,7 +1602,8 @@ export default function CompetitionPage() {
               <section
                 className="relative overflow-hidden rounded-t-xl border-b border-border/50 p-5 sm:p-6"
                 style={{
-                  background: `linear-gradient(135deg, ${brand}12 0%, transparent 65%)`,
+                  background: `linear-gradient(135deg, ${brand}28 0%, ${brand}10 50%, transparent 100%)`,
+                  boxShadow: `inset 0 0 0 1px ${brand}18`,
                 }}
                 data-testid="schedule-spotlight"
                 onMouseEnter={() => setSpotlightHovered(true)}
@@ -1629,101 +1630,143 @@ export default function CompetitionPage() {
                         : null;
                   return (
                     <>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p
-                            className="text-[11px] font-black uppercase tracking-[0.2em]"
-                            style={{ color: brand }}
-                          >
-                            Live schedule
-                          </p>
-                          <h3 className="mt-1 text-xl font-black tracking-tight">
-                            {spotlightMatch.homeName ?? "TBD"}{" "}
-                            <span className="text-muted-foreground">vs</span>{" "}
-                            {spotlightMatch.awayName ?? "TBD"}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-1" aria-label="Spotlight controls">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-9 w-9"
-                            onClick={() => {
-                              setSpotlightPaused(true);
-                              setSpotlightIndex(
-                                (current) =>
-                                  (current - 1 + spotlightMatches.length) %
-                                  spotlightMatches.length,
-                              );
-                            }}
-                            aria-label="Previous spotlight game"
-                            data-testid="btn-spotlight-previous"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-9 w-9"
-                            onClick={() => setSpotlightPaused((current) => !current)}
-                            aria-label={
-                              spotlightPaused ? "Resume spotlight rotation" : "Pause spotlight rotation"
-                            }
-                            data-testid="btn-spotlight-pause"
-                          >
-                            {spotlightPaused ? (
-                              <Play className="h-4 w-4" />
-                            ) : (
-                              <Pause className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-9 w-9"
-                            onClick={() => {
-                              setSpotlightPaused(true);
-                              setSpotlightIndex(
-                                (current) => (current + 1) % spotlightMatches.length,
-                              );
-                            }}
-                            aria-label="Next spotlight game"
-                            data-testid="btn-spotlight-next"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
+                      {/* ── Label row: "LIVE SCHEDULE" + pulse dot ── */}
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span
+                            className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                            style={{ backgroundColor: brand }}
+                          />
+                          <span
+                            className="relative inline-flex h-2 w-2 rounded-full"
+                            style={{ backgroundColor: brand }}
+                          />
+                        </span>
+                        <p
+                          className="text-[11px] font-black uppercase tracking-[0.2em]"
+                          style={{ color: brand }}
+                        >
+                          Live schedule
+                        </p>
                       </div>
+
+                      {/* ── Game title — always its own full-width row ── */}
+                      <h3 className="mt-2 text-2xl font-black tracking-tight leading-tight">
+                        {spotlightMatch.homeName ?? "TBD"}{" "}
+                        <span className="text-muted-foreground font-semibold text-xl">vs</span>{" "}
+                        {spotlightMatch.awayName ?? "TBD"}
+                      </h3>
+
+                      {/* ── Nav controls — always below title, never beside it ── */}
+                      <div className="mt-3 flex items-center gap-0 rounded-lg p-0.5 w-fit border" style={{ borderColor: `${brand}30`, backgroundColor: `${brand}0d` }} aria-label="Spotlight controls">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 hover:bg-black/5"
+                          onClick={() => {
+                            setSpotlightPaused(true);
+                            setSpotlightIndex(
+                              (current) =>
+                                (current - 1 + spotlightMatches.length) %
+                                spotlightMatches.length,
+                            );
+                          }}
+                          aria-label="Previous spotlight game"
+                          data-testid="btn-spotlight-previous"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 hover:bg-black/5"
+                          onClick={() => setSpotlightPaused((current) => !current)}
+                          aria-label={
+                            spotlightPaused ? "Resume spotlight rotation" : "Pause spotlight rotation"
+                          }
+                          data-testid="btn-spotlight-pause"
+                        >
+                          {spotlightPaused ? (
+                            <Play className="h-4 w-4" />
+                          ) : (
+                            <Pause className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 hover:bg-black/5"
+                          onClick={() => {
+                            setSpotlightPaused(true);
+                            setSpotlightIndex(
+                              (current) => (current + 1) % spotlightMatches.length,
+                            );
+                          }}
+                          aria-label="Next spotlight game"
+                          data-testid="btn-spotlight-next"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* ── Progress bar — shows position in the rotation ── */}
+                      {spotlightMatches.length > 1 && (
+                        <div className="mt-3 h-1 w-full rounded-full overflow-hidden" style={{ backgroundColor: `${brand}18` }}>
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${((spotlightIndex + 1) / spotlightMatches.length) * 100}%`,
+                              backgroundColor: brand,
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* ── Info chips ── */}
                       <div
-                        className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4"
+                        className="mt-4 flex flex-wrap gap-2 text-sm"
                         aria-live="polite"
                         data-testid={`spotlight-match-${spotlightMatch.id}`}
                       >
-                        <div className="flex min-w-0 items-start gap-2">
-                          <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand }} />
-                          <span className="font-semibold">{spotlightDate}</span>
+                        <div
+                          className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold"
+                          style={{ backgroundColor: `${brand}14` }}
+                        >
+                          <CalendarDays className="h-3.5 w-3.5 shrink-0" style={{ color: brand }} />
+                          <span>{spotlightDate}</span>
                         </div>
-                        <div className="flex min-w-0 items-start gap-2">
-                          <Clock3 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand }} />
-                          <span className="font-semibold">
-                            {spotlightMatch.startTime ?? "Time not listed"}
-                          </span>
+                        <div
+                          className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold"
+                          style={{ backgroundColor: `${brand}14` }}
+                        >
+                          <Clock3 className="h-3.5 w-3.5 shrink-0" style={{ color: brand }} />
+                          <span>{spotlightMatch.startTime ?? "Time not listed"}</span>
                         </div>
-                        <div className="flex min-w-0 items-start gap-2">
-                          <MapPin className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand }} />
-                          <span className="min-w-0 truncate font-semibold">
-                            {venue || spotlightMatch.field || "Venue not listed"}
-                          </span>
-                        </div>
-                        <div className="flex min-w-0 items-start gap-2">
-                          <span className="font-semibold text-muted-foreground">
-                            Field: {spotlightMatch.field ?? "Not listed"}
-                          </span>
-                        </div>
+                        {(venue || spotlightMatch.field) ? (
+                          <div
+                            className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold"
+                            style={{ backgroundColor: `${brand}14` }}
+                          >
+                            <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: brand }} />
+                            <span className="min-w-0 truncate">
+                              {venue || spotlightMatch.field}
+                            </span>
+                          </div>
+                        ) : null}
+                        {spotlightMatch.field ? (
+                          <div
+                            className="flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold text-muted-foreground"
+                            style={{ backgroundColor: `${brand}0a` }}
+                          >
+                            <span>Field: {spotlightMatch.field}</span>
+                          </div>
+                        ) : null}
                       </div>
+
+                      {/* ── Status badge (postponed / canceled) ── */}
                       {statusText ? (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <span
@@ -1743,6 +1786,8 @@ export default function CompetitionPage() {
                           ) : null}
                         </div>
                       ) : null}
+
+                      {/* ── Footer: game counter + view schedule ── */}
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                         <p className="text-xs text-muted-foreground">
                           Game #{spotlightMatch.matchNumber}
