@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { db, highlightTags, organizations, rosterEntries, users } from "@workspace/db";
+import { assets, db, highlightTags, organizations, rosterEntries, users } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 import {
@@ -2071,6 +2071,45 @@ describe("posts", () => {
         .set({ isMinor: false })
         .where(eq(users.id, childLogin.user.id));
     }
+  });
+
+  it("creates a profile-only highlight from a confirmed owned phone video", async () => {
+    const creator = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const [video] = await db
+      .insert(assets)
+      .values({
+        ownerId: creator.user.id,
+        fileName: "phone-highlight.mov",
+        fileType: "video/quicktime",
+        fileSize: 24,
+        status: "confirmed",
+        url: "data:video/quicktime;base64,AAAAFGZ0eXA=",
+      })
+      .returning();
+
+    const create = await creator.agent.post("/api/v1/posts").send({
+      postType: "short",
+      title: "Phone video highlight",
+      description: "Uploaded directly from the camera roll",
+      assetIds: [video.id],
+    });
+
+    expect(create.status).toBe(201);
+    expect(create.body.context).toMatchObject({
+      type: "user",
+      id: creator.user.id,
+    });
+    expect(create.body.description).toBe(
+      "Uploaded directly from the camera roll",
+    );
+    expect(create.body.assets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fileType: "video/mp4",
+          url: "data:video/quicktime;base64,AAAAFGZ0eXA=",
+        }),
+      ]),
+    );
   });
 
   it("a declined roster entry does NOT count as membership (403 like an outsider)", async () => {

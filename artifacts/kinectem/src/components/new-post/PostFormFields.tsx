@@ -44,6 +44,8 @@ interface PostFormFieldsProps {
   onPhotosChange: (next: string[]) => void;
   videoUrl: string;
   onVideoUrlChange: (next: string) => void;
+  videoAssetId?: string;
+  onVideoAssetIdChange?: (next: string) => void;
   teamId: string;
   onTeamIdChange: (v: string) => void;
   myTeams: PaginatedUserTeamMembershipsResponse | undefined;
@@ -133,6 +135,8 @@ export function PostFormFields({
   onPhotosChange,
   videoUrl,
   onVideoUrlChange,
+  videoAssetId = "",
+  onVideoAssetIdChange,
   teamId,
   onTeamIdChange,
   myTeams,
@@ -335,7 +339,7 @@ export function PostFormFields({
         </div>
       )}
 
-      <div>
+      {!isShort && <div>
         <div className="flex items-center justify-between gap-2">
           <Label
             htmlFor="body"
@@ -410,7 +414,7 @@ export function PostFormFields({
             title and game details — then edit it to taste.
           </p>
         )}
-      </div>
+      </div>}
 
 
       <MediaSection
@@ -418,7 +422,39 @@ export function PostFormFields({
         onPhotosChange={onPhotosChange}
         videoUrl={videoUrl}
         onVideoUrlChange={onVideoUrlChange}
+        isHighlight={isShort}
+        videoAssetId={videoAssetId}
+        onVideoAssetIdChange={onVideoAssetIdChange}
       />
+
+      {isShort && <div>
+        <div className="flex items-center justify-between gap-2">
+          <Label
+            htmlFor="body"
+            className="text-xs font-black uppercase tracking-widest text-muted-foreground"
+          >
+            Description
+          </Label>
+          <AiAssistButton
+            postType={postType}
+            title={title}
+            body={body}
+            gameDate={gameDate}
+            teamName={aiTeamName}
+            onInsert={onBodyChange}
+            rosterMembers={rosterMembers}
+            rosterLoading={rosterLoading}
+          />
+        </div>
+        <Textarea
+          id="body"
+          value={body}
+          onChange={(e) => onBodyChange(e.target.value)}
+          placeholder="Add a caption for this clip…"
+          className="mt-2 min-h-[120px]"
+          data-testid="input-body"
+        />
+      </div>}
 
       {/* Task #510 — for short posts the picker always renders (even
           when the user has zero authorable teams) so "Just my profile"

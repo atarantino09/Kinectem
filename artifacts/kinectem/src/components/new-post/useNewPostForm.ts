@@ -269,6 +269,7 @@ export function useNewPostForm({
   );
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
+  const [videoAssetId, setVideoAssetId] = useState("");
   // YYYY-MM-DD value bound to the date input. Pre-filled with today
   // so coaches who don't touch the picker still publish a recap
   // dated today (the backend uses this date to drive the auto-tag
@@ -494,6 +495,7 @@ export function useNewPostForm({
     tagRoster: boolean;
     photos: string[];
     videoUrl: string;
+    videoAssetId: string;
     taggedUserIds: string[];
     competitionId: string;
     competitionGameId: string;
@@ -506,6 +508,7 @@ export function useNewPostForm({
     tagRoster: true,
     photos: [],
     videoUrl: "",
+    videoAssetId: "",
     taggedUserIds: [],
     competitionId: initialCompetitionId ?? "",
     competitionGameId:
@@ -520,6 +523,7 @@ export function useNewPostForm({
     tagRoster,
     photos,
     videoUrl,
+    videoAssetId,
     taggedUserIds,
     competitionId,
     competitionGameId,
@@ -859,6 +863,7 @@ export function useNewPostForm({
               : imageUrls,
           videoUrl:
             d.videoUrl ?? (videoAsset?.url ? String(videoAsset.url) : ""),
+          videoAssetId: "",
           taggedUserIds: [],
           competitionId:
             kind === "article" ? (d.competition?.id ?? "") : "",
@@ -943,6 +948,7 @@ export function useNewPostForm({
     return {
       postType: initialProfileOnly ? "short" : postType,
       title: title.trim() || undefined,
+      ...(isShort && body.trim() ? ({ description: body.trim() } as object) : {}),
       body: !isShort && body.trim() ? body.trim() : undefined,
       ...(!initialProfileOnly && (initialTeamId || selectedTeam)
         ? ({
@@ -958,6 +964,7 @@ export function useNewPostForm({
       // otherwise size-compliant multi-photo recap.
       ...(photos.length > 0 ? ({ photoUrls: photos } as object) : {}),
       ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
+      ...(isShort && videoAssetId ? ({ assetIds: [videoAssetId] } as object) : {}),
       ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
       ...(!isShort && (pickedOpponent ?? initialOpponent)?.trim()
         ? ({
@@ -1501,6 +1508,8 @@ export function useNewPostForm({
     },
     setPhotos,
     setVideoUrl,
+    videoAssetId,
+    setVideoAssetId,
     setGameDate,
     setTagRoster,
     // Task #447 — pending-approval confirmation dialog state. The

@@ -68,6 +68,11 @@ describe("PostFormFields profile-only mode", () => {
     expect(screen.queryByText("Post Type")).not.toBeInTheDocument();
     expect(screen.queryByText("Game Recap")).not.toBeInTheDocument();
     expect(screen.queryByTestId("select-post-to-team")).not.toBeInTheDocument();
+    const title = screen.getByTestId("input-title");
+    const media = screen.getByTestId("media-section");
+    const description = screen.getByTestId("input-body");
+    expect(title.compareDocumentPosition(media) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(media.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("preserves the post type and destination controls for regular highlights", () => {

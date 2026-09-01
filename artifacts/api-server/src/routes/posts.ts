@@ -27,6 +27,7 @@ import {
   competitionFollowers,
   competitionBrackets,
   guardianLinks,
+  assets,
 } from "@workspace/db";
 import {
   and,
@@ -2159,6 +2160,43 @@ router.post(
     // Long-form recaps still require a team — there is no
     // "profile-only" recap.
     const isShort = body.postType !== "long";
+    let uploadedVideoUrl: string | null = null;
+    if (isShort && Array.isArray(body.assetIds) && body.assetIds.length > 0) {
+      const requestedIds = Array.from(
+        new Set(body.assetIds.filter((id: unknown) => typeof id === "string")),
+      );
+      if (requestedIds.length !== 1) {
+        return apiError(res, 400, "Highlights accept one uploaded video.");
+      }
+      const requestedId = requestedIds[0];
+      if (typeof requestedId !== "string") {
+        return apiError(res, 400, "Uploaded highlight video is invalid.");
+      }
+      const [videoAsset] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, requestedId),
+            eq(assets.ownerId, me.id),
+            eq(assets.status, "confirmed"),
+          ),
+        )
+        .limit(1);
+      if (
+        !videoAsset?.url ||
+        !["video/mp4", "video/quicktime"].includes(
+          videoAsset.fileType.toLowerCase(),
+        )
+      ) {
+        return apiError(
+          res,
+          400,
+          "Uploaded highlight video is invalid, unconfirmed, or not owned by you.",
+        );
+      }
+      uploadedVideoUrl = videoAsset.url;
+    }
     const wantsProfileOnly =
       isShort &&
       !teamId &&
@@ -2178,7 +2216,7 @@ router.post(
           uploaderId: me.id,
           title: body.title ?? "Untitled",
           description: body.description ?? undefined,
-          videoUrl: body.assets?.[0]?.url ?? body.videoUrl ?? "",
+          videoUrl: uploadedVideoUrl ?? body.videoUrl ?? "",
         })
         .returning();
       res.status(201).json(
@@ -2573,7 +2611,7 @@ router.post(
         uploaderId: me.id,
         title: body.title ?? "Untitled",
         description: body.description ?? undefined,
-        videoUrl: body.assets?.[0]?.url ?? body.videoUrl ?? "",
+        videoUrl: uploadedVideoUrl ?? body.videoUrl ?? "",
         approvalStatus,
         approvedAt: isStaff ? new Date() : null,
         approvedByUserId: isStaff ? me.id : null,

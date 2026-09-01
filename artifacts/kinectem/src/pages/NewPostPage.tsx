@@ -274,6 +274,8 @@ export default function NewPostPage() {
               onPhotosChange={form.setPhotos}
               videoUrl={form.videoUrl}
               onVideoUrlChange={form.setVideoUrl}
+              videoAssetId={form.videoAssetId}
+              onVideoAssetIdChange={form.setVideoAssetId}
               teamId={form.teamId}
               onTeamIdChange={form.setTeamId}
               myTeams={myTeams}

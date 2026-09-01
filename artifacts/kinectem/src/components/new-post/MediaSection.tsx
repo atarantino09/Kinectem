@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -16,17 +16,40 @@ import {
   POST_IMAGES_TOTAL_MAX_LENGTH,
 } from "@/lib/shrinkImage";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
+import {
+  confirmUpload,
+  requestUpload,
+} from "@workspace/api-client-react";
+
+export const HIGHLIGHT_VIDEO_MAX_BYTES = 10 * 1024 * 1024;
+const HIGHLIGHT_VIDEO_ACCEPT = "video/mp4,video/quicktime";
+const HIGHLIGHT_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime"]);
+
+function uploadErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const data = (error as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+  return typeof (data as { code?: unknown }).code === "string"
+    ? String((data as { code: string }).code)
+    : null;
+}
 
 export function MediaSection({
   photos,
   onPhotosChange,
   videoUrl,
   onVideoUrlChange,
+  isHighlight = false,
+  videoAssetId,
+  onVideoAssetIdChange,
 }: {
   photos: string[];
   onPhotosChange: (next: string[]) => void;
   videoUrl: string;
   onVideoUrlChange: (next: string) => void;
+  isHighlight?: boolean;
+  videoAssetId?: string;
+  onVideoAssetIdChange?: (next: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
@@ -34,6 +57,91 @@ export function MediaSection({
   // can show a faded "lifted" appearance while it's en route. Touch
   // devices fall back to the move-left / move-right buttons below.
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [videoPreview, setVideoPreview] = useState("");
+  const [videoName, setVideoName] = useState("");
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+
+  useEffect(
+    () => () => {
+      if (videoPreview) URL.revokeObjectURL(videoPreview);
+    },
+    [videoPreview],
+  );
+
+  const onHighlightVideo = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    const type = file.type.split(";")[0].trim().toLowerCase();
+    if (!HIGHLIGHT_VIDEO_TYPES.has(type)) {
+      toast({
+        title: "That video format isn’t supported",
+        description: "Choose an MP4 or MOV video from your phone.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > HIGHLIGHT_VIDEO_MAX_BYTES) {
+      toast({
+        title: "Video too large",
+        description:
+          "Videos must be under 10 MB. Choose a shorter clip or trim it in your phone’s Photos/Gallery app.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingVideo(true);
+    try {
+      const upload = await requestUpload({
+        fileName: file.name || "highlight-video",
+        fileType: type,
+        fileSize: file.size,
+      });
+      const putResp = await fetch(upload.uploadUrl, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": type },
+        body: file,
+      });
+      if (!putResp.ok) {
+        let data: unknown = null;
+        try {
+          data = await putResp.json();
+        } catch {
+          // The status is enough for the generic connection guidance below.
+        }
+        throw Object.assign(new Error(`Upload failed (${putResp.status})`), {
+          data,
+        });
+      }
+      await confirmUpload(upload.assetId);
+      if (videoPreview) URL.revokeObjectURL(videoPreview);
+      setVideoPreview(URL.createObjectURL(file));
+      setVideoName(file.name);
+      onVideoAssetIdChange?.(upload.assetId);
+      onVideoUrlChange("");
+    } catch (error) {
+      const minorBlocked = uploadErrorCode(error) === "MINOR_BLOCKED";
+      toast({
+        title: minorBlocked
+          ? "Video uploads aren’t available for this account"
+          : "Couldn’t upload that video",
+        description: minorBlocked
+          ? "Under-13 accounts can only upload JPEG or PNG photos."
+          : "Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const removeHighlightVideo = () => {
+    if (videoPreview) URL.revokeObjectURL(videoPreview);
+    setVideoPreview("");
+    setVideoName("");
+    onVideoAssetIdChange?.("");
+  };
 
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -120,7 +228,7 @@ export function MediaSection({
         Media
       </Label>
 
-      <div>
+      {!isHighlight && <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-bold flex items-center gap-1.5">
             <ImagePlus className="w-4 h-4" /> Photos
@@ -251,19 +359,80 @@ export function MediaSection({
             </div>
           </>
         )}
-      </div>
+      </div>}
+
+      {isHighlight && (
+        <div className="space-y-2" data-testid="highlight-video-upload">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-bold flex items-center gap-1.5">
+              <Video className="w-4 h-4" /> Upload Video
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="font-bold rounded-full"
+              disabled={uploadingVideo}
+              onClick={() => inputRef.current?.click()}
+              data-testid="button-add-video"
+            >
+              <Video className="w-3.5 h-3.5 mr-1.5" />
+              {uploadingVideo ? "Uploading…" : videoAssetId ? "Replace Video" : "Add Video"}
+            </Button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept={HIGHLIGHT_VIDEO_ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                void onHighlightVideo(e.target.files);
+                e.target.value = "";
+              }}
+              data-testid="input-highlight-video"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Choose an MP4 or MOV from your phone, up to 10 MB. If it is too
+            large, trim it in Photos or Gallery first.
+          </p>
+          {videoPreview && (
+            <div className="relative overflow-hidden rounded-lg border bg-black">
+              <video
+                src={videoPreview}
+                controls
+                playsInline
+                preload="metadata"
+                className="max-h-72 w-full"
+                aria-label={`Video preview: ${videoName}`}
+              />
+              <button
+                type="button"
+                onClick={removeHighlightVideo}
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white"
+                aria-label="Remove uploaded video"
+                data-testid="button-remove-video"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <Label
           htmlFor="videoUrl"
           className="text-sm font-bold flex items-center gap-1.5"
         >
-          <Video className="w-4 h-4" /> Video Highlight Link
+          <Video className="w-4 h-4" /> {isHighlight ? "Or Add a Video Link" : "Video Highlight Link"}
         </Label>
         <Input
           id="videoUrl"
           value={videoUrl}
-          onChange={(e) => onVideoUrlChange(e.target.value)}
+          onChange={(e) => {
+            if (isHighlight && videoAssetId) removeHighlightVideo();
+            onVideoUrlChange(e.target.value);
+          }}
           placeholder="Paste a YouTube, Vimeo, or other video link"
           className="mt-2"
           data-testid="input-video-url"
