@@ -29,8 +29,11 @@ const NAV = [
   { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
   { href: "/admin/activity", label: "Activity log", icon: History },
   { href: "/admin/founding-100", label: "Founding 100", icon: Sparkles },
-  { href: "/admin/org-claim-links", label: "Org Links", icon: Link2 },
-  { href: "/admin/competition-claim-links", label: "Competition links", icon: Link2 },
+  {
+    href: "/admin/competition-claim-links",
+    label: "Competition links",
+    icon: Link2,
+  },
   { href: "/admin/claims", label: "Claims", icon: ClipboardCheck },
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },
   { href: "/admin/email", label: "Email", icon: Mail },
@@ -94,9 +97,15 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6" data-testid="admin-layout">
+    <div
+      className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6"
+      data-testid="admin-layout"
+    >
       <aside className="md:sticky md:top-20 self-start space-y-1">
-        <Link href="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
+        >
           <ArrowLeft className="w-4 h-4" /> Back to Kinectem
         </Link>
         <div className="text-xs uppercase tracking-wide font-bold text-muted-foreground px-3 py-2">
@@ -106,7 +115,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           const active =
             item.href === "/admin"
               ? location === "/admin" || location === "/admin/"
-              : location.startsWith(item.href);
+              : item.href === "/admin/organizations"
+                ? location.startsWith(item.href) ||
+                  location === "/admin/org-quick-setup" ||
+                  location === "/admin/org-claim-links"
+                : location.startsWith(item.href);
           const Icon = item.icon;
           return (
             <Link

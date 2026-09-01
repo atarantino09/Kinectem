@@ -48,7 +48,12 @@ type NameMatch = {
 type NameCheckResponse = { data: NameMatch[] };
 
 // Task #929 — operator-created named lists grouping ownerless orgs.
-type OrgList = { id: string; name: string; orgCount: number; createdAt: string };
+type OrgList = {
+  id: string;
+  name: string;
+  orgCount: number;
+  createdAt: string;
+};
 type OrgListsResponse = { data: OrgList[] };
 
 // Task #831 — bulk entry. Each parsed line is a (team name, optional coach
@@ -70,7 +75,9 @@ export function pairsToTeamRows(
       continue;
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push(`Line ${p.line}: "${p.email.trim()}" doesn't look like an email`);
+      errors.push(
+        `Line ${p.line}: "${p.email.trim()}" doesn't look like an email`,
+      );
       continue;
     }
     const key = name.toLowerCase();
@@ -138,7 +145,9 @@ export default function AdminOrgQuickSetup() {
   const { data: listsData } = useQuery<OrgListsResponse>({
     queryKey: ["admin", "org-lists"],
     queryFn: () =>
-      customFetch<OrgListsResponse>(`/api/v1/admin/org-lists`, { method: "GET" }),
+      customFetch<OrgListsResponse>(`/api/v1/admin/org-lists`, {
+        method: "GET",
+      }),
   });
   const lists = useMemo(() => listsData?.data ?? [], [listsData]);
 
@@ -147,17 +156,22 @@ export default function AdminOrgQuickSetup() {
     return () => clearTimeout(t);
   }, [orgName]);
 
-  const { data: nameCheck, isFetching: checking } = useQuery<NameCheckResponse>({
-    queryKey: ["admin", "org-name-check", debounced],
-    enabled: debounced.length >= 2 && !result,
-    queryFn: () =>
-      customFetch<NameCheckResponse>(
-        `/api/v1/admin/org-name-check?name=${encodeURIComponent(debounced)}`,
-        { method: "GET" },
-      ),
-  });
+  const { data: nameCheck, isFetching: checking } = useQuery<NameCheckResponse>(
+    {
+      queryKey: ["admin", "org-name-check", debounced],
+      enabled: debounced.length >= 2 && !result,
+      queryFn: () =>
+        customFetch<NameCheckResponse>(
+          `/api/v1/admin/org-name-check?name=${encodeURIComponent(debounced)}`,
+          { method: "GET" },
+        ),
+    },
+  );
   const matches = useMemo(() => nameCheck?.data ?? [], [nameCheck]);
-  const exactMatch = useMemo(() => matches.find((m) => m.exact) ?? null, [matches]);
+  const exactMatch = useMemo(
+    () => matches.find((m) => m.exact) ?? null,
+    [matches],
+  );
 
   const applyPromoCode = async () => {
     const code = promoInput.trim();
@@ -279,12 +293,18 @@ export default function AdminOrgQuickSetup() {
       );
       setResult(resp.data);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "organizations"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "org-claim-links"],
+        }),
         queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
       ]);
       try {
         await navigator.clipboard.writeText(claimUrl(resp.data.token));
-        toast({ title: `Created "${resp.data.name}"`, description: "Claim link copied to clipboard" });
+        toast({
+          title: `Created "${resp.data.name}"`,
+          description: "Claim link copied to clipboard",
+        });
       } catch {
         toast({ title: `Created "${resp.data.name}"` });
       }
@@ -320,7 +340,10 @@ export default function AdminOrgQuickSetup() {
       await navigator.clipboard.writeText(claimUrl(token));
       toast({ title: "Claim link copied" });
     } catch {
-      toast({ title: "Couldn't copy — select and copy manually", variant: "destructive" });
+      toast({
+        title: "Couldn't copy — select and copy manually",
+        variant: "destructive",
+      });
     }
   };
 
@@ -330,15 +353,18 @@ export default function AdminOrgQuickSetup() {
         <div className="max-w-2xl" data-testid="quick-setup-success">
           <h1 className="text-2xl font-black mb-1">"{result.name}" is ready</h1>
           <p className="text-sm text-muted-foreground mb-4">
-            {result.teams.length} team{result.teams.length === 1 ? "" : "s"} created
+            {result.teams.length} team{result.teams.length === 1 ? "" : "s"}{" "}
+            created
             {result.stagedCoachCount > 0 &&
               ` · ${result.stagedCoachCount} coach email${result.stagedCoachCount === 1 ? "" : "s"} staged for the hand-off`}
-            . No invites were sent — the new owner confirms coaches after claiming.
+            . No invites were sent — the new owner confirms coaches after
+            claiming.
           </p>
           <div className="rounded-lg border bg-card p-4 mb-4">
             <div className="text-sm font-bold mb-1">Claim link</div>
             <p className="text-xs text-muted-foreground mb-2">
-              Send this to the org admin — whoever signs up through it becomes the owner.
+              Send this to the org admin — whoever signs up through it becomes
+              the owner.
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               <code
@@ -347,17 +373,27 @@ export default function AdminOrgQuickSetup() {
               >
                 {claimUrl(result.token)}
               </code>
-              <Button size="sm" onClick={() => copyLink(result.token)} data-testid="btn-quick-setup-copy-link">
+              <Button
+                size="sm"
+                onClick={() => copyLink(result.token)}
+                data-testid="btn-quick-setup-copy-link"
+              >
                 Copy link
               </Button>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button asChild variant="outline" data-testid="link-quick-setup-org-page">
+            <Button
+              asChild
+              variant="outline"
+              data-testid="link-quick-setup-org-page"
+            >
               <Link href={`/organizations/${result.id}`}>Open org page</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/admin/org-claim-links">Back to Org Links</Link>
+              <Link href="/admin/organizations?section=claim-links">
+                Back to Organizations
+              </Link>
             </Button>
             <Button onClick={reset} data-testid="btn-quick-setup-another">
               Set up another org
@@ -396,25 +432,38 @@ export default function AdminOrgQuickSetup() {
               {debounced.length >= 2 && (
                 <div className="mt-1.5 text-xs" data-testid="qs-name-check">
                   {exactMatch ? (
-                    <span className="text-destructive font-medium" data-testid="qs-duplicate-warning">
+                    <span
+                      className="text-destructive font-medium"
+                      data-testid="qs-duplicate-warning"
+                    >
                       ⚠ "{exactMatch.name}" already exists
-                      {exactMatch.hasOwner ? " (claimed)" : " (unclaimed)"} — pick a different name.
+                      {exactMatch.hasOwner ? " (claimed)" : " (unclaimed)"} —
+                      pick a different name.
                     </span>
                   ) : matches.length > 0 ? (
                     <span className="text-muted-foreground">
-                      Similar: {matches.slice(0, 3).map((m) => m.name).join(", ")}
+                      Similar:{" "}
+                      {matches
+                        .slice(0, 3)
+                        .map((m) => m.name)
+                        .join(", ")}
                     </span>
                   ) : checking ? (
                     <span className="text-muted-foreground">Checking…</span>
                   ) : (
-                    <span className="text-emerald-600">No matching organization.</span>
+                    <span className="text-emerald-600">
+                      No matching organization.
+                    </span>
                   )}
                 </div>
               )}
             </div>
             <div>
               <Label htmlFor="qs-org-city">
-                City <span className="text-muted-foreground font-normal">(optional)</span>
+                City{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
               </Label>
               <Input
                 id="qs-org-city"
@@ -425,7 +474,10 @@ export default function AdminOrgQuickSetup() {
             </div>
             <div>
               <Label>
-                State <span className="text-muted-foreground font-normal">(optional)</span>
+                State{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
               </Label>
               <Select value={stateCode} onValueChange={setStateCode}>
                 <SelectTrigger data-testid="select-qs-org-state">
@@ -461,7 +513,11 @@ export default function AdminOrgQuickSetup() {
                   data-testid="input-qs-org-logo"
                 />
                 {logoDataUrl && (
-                  <Button size="sm" variant="ghost" onClick={() => setLogoDataUrl(null)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setLogoDataUrl(null)}
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 )}
@@ -473,7 +529,12 @@ export default function AdminOrgQuickSetup() {
                 {(
                   [
                     ["Primary", primaryColor, setPrimaryColor, "primary"],
-                    ["Secondary", secondaryColor, setSecondaryColor, "secondary"],
+                    [
+                      "Secondary",
+                      secondaryColor,
+                      setSecondaryColor,
+                      "secondary",
+                    ],
                   ] as const
                 ).map(([label, value, set, id]) => (
                   <div key={id} className="flex items-center gap-2">
@@ -524,10 +585,10 @@ export default function AdminOrgQuickSetup() {
         <section className="rounded-lg border bg-card p-4 mb-5">
           <h2 className="text-sm font-bold mb-1">Plan tier (optional)</h2>
           <p className="text-xs text-muted-foreground mb-3">
-            Tiers differ only in the number of teams. Picking one pre-selects
-            it on the new owner's subscribe page (they can still change it)
-            and sets the team cap below. Skip it to leave the choice entirely
-            to them (Starter cap applies during setup).
+            Tiers differ only in the number of teams. Picking one pre-selects it
+            on the new owner's subscribe page (they can still change it) and
+            sets the team cap below. Skip it to leave the choice entirely to
+            them (Starter cap applies during setup).
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {PLANS.map((p) => {
@@ -585,8 +646,8 @@ export default function AdminOrgQuickSetup() {
           <div className="mt-4 border-t pt-3">
             <Label htmlFor="qs-promo-code">Promo code (optional)</Label>
             <p className="text-xs text-muted-foreground mb-2">
-              Applied automatically when the org admin accepts the page and
-              sets up billing — they'll see it's already on their account.
+              Applied automatically when the org admin accepts the page and sets
+              up billing — they'll see it's already on their account.
             </p>
             {appliedPromo ? (
               <div
@@ -600,7 +661,9 @@ export default function AdminOrgQuickSetup() {
                   {appliedPromo.discountType === "percent"
                     ? `${appliedPromo.discountValue}% off first year`
                     : `$${appliedPromo.discountValue} off first year`}
-                  {appliedPromo.description ? ` — ${appliedPromo.description}` : ""}
+                  {appliedPromo.description
+                    ? ` — ${appliedPromo.description}`
+                    : ""}
                 </span>
                 <Button
                   size="icon"
@@ -656,19 +719,17 @@ export default function AdminOrgQuickSetup() {
               </p>
             )}
           </div>
-
         </section>
 
         {/* ---- Teams + coaches — the row editor IS the team list ---- */}
         <section className="rounded-lg border bg-card p-4 mb-5">
           <h2 className="text-sm font-bold mb-1">Teams &amp; coaches</h2>
           <p className="text-xs text-muted-foreground mb-3">
-            One team per line, with an optional coach email on the same line
-            of the second column. Repeat a team name on another line to add
-            more coaches to it. Paste a multi-line list into either column or
-            upload a CSV. Coach emails are staged as drafts — no invites are
-            sent; the org admin reviews and sends them after claiming the
-            page.
+            One team per line, with an optional coach email on the same line of
+            the second column. Repeat a team name on another line to add more
+            coaches to it. Paste a multi-line list into either column or upload
+            a CSV. Coach emails are staged as drafts — no invites are sent; the
+            org admin reviews and sends them after claiming the page.
           </p>
           <BulkPairEditor
             pairs={bulkPairs}
@@ -702,17 +763,26 @@ export default function AdminOrgQuickSetup() {
 
         {/* ---- Save ---- */}
         {saveError && (
-          <p className="text-sm font-medium text-destructive mb-3" data-testid="qs-save-error">
+          <p
+            className="text-sm font-medium text-destructive mb-3"
+            data-testid="qs-save-error"
+          >
             {saveError}
           </p>
         )}
         <div className="flex items-center gap-3 pb-10">
-          <Button onClick={save} disabled={!canSave} size="lg" data-testid="btn-qs-save">
+          <Button
+            onClick={save}
+            disabled={!canSave}
+            size="lg"
+            data-testid="btn-qs-save"
+          >
             {saving ? "Saving…" : "Save everything"}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Creates the org, {validTeams.length} team{validTeams.length === 1 ? "" : "s"}, and
-            staged coach drafts in one shot.
+            Creates the org, {validTeams.length} team
+            {validTeams.length === 1 ? "" : "s"}, and staged coach drafts in one
+            shot.
           </span>
         </div>
       </div>

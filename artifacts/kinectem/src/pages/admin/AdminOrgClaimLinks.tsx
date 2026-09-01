@@ -77,7 +77,12 @@ type ClaimLinksResponse = { data: ClaimLinkRow[] };
 
 // Task #929 — operator-created named lists grouping ownerless orgs (e.g. one
 // per league/tournament). An org belongs to at most one list.
-type OrgList = { id: string; name: string; orgCount: number; createdAt: string };
+type OrgList = {
+  id: string;
+  name: string;
+  orgCount: number;
+  createdAt: string;
+};
 type OrgListsResponse = { data: OrgList[] };
 
 type NameMatch = {
@@ -123,7 +128,8 @@ function sortByList<T extends { listName: string | null; name: string }>(
   if (!dir) return rows;
   const sign = dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
-    if (a.listName === null && b.listName === null) return a.name.localeCompare(b.name);
+    if (a.listName === null && b.listName === null)
+      return a.name.localeCompare(b.name);
     if (a.listName === null) return 1;
     if (b.listName === null) return -1;
     const cmp = a.listName.localeCompare(b.listName) * sign;
@@ -136,7 +142,14 @@ function rowsToCsv(rows: ClaimLinkRow[]): string {
   const lines = [header.join(",")];
   for (const r of rows) {
     lines.push(
-      [r.name, r.city ?? "", r.state ?? "", claimUrl(r.token), r.id, r.listName ?? ""]
+      [
+        r.name,
+        r.city ?? "",
+        r.state ?? "",
+        claimUrl(r.token),
+        r.id,
+        r.listName ?? "",
+      ]
         .map(csvCell)
         .join(","),
     );
@@ -144,7 +157,11 @@ function rowsToCsv(rows: ClaimLinkRow[]): string {
   return lines.join("\n");
 }
 
-export default function AdminOrgClaimLinks() {
+export function OrgClaimLinksContent({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const [q, setQ] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -189,7 +206,9 @@ export default function AdminOrgClaimLinks() {
   const { data: listsData } = useQuery<OrgListsResponse>({
     queryKey: ["admin", "org-lists"],
     queryFn: () =>
-      customFetch<OrgListsResponse>(`/api/v1/admin/org-lists`, { method: "GET" }),
+      customFetch<OrgListsResponse>(`/api/v1/admin/org-lists`, {
+        method: "GET",
+      }),
   });
   const lists = useMemo(() => listsData?.data ?? [], [listsData]);
 
@@ -198,10 +217,13 @@ export default function AdminOrgClaimLinks() {
     if (!trimmed) return null;
     setCreatingList(true);
     try {
-      const resp = await customFetch<{ data: OrgList }>(`/api/v1/admin/org-lists`, {
-        method: "POST",
-        body: JSON.stringify({ name: trimmed }),
-      });
+      const resp = await customFetch<{ data: OrgList }>(
+        `/api/v1/admin/org-lists`,
+        {
+          method: "POST",
+          body: JSON.stringify({ name: trimmed }),
+        },
+      );
       await queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] });
       return resp.data;
     } catch (err) {
@@ -218,13 +240,20 @@ export default function AdminOrgClaimLinks() {
 
   const deleteList = async (list: OrgList) => {
     try {
-      await customFetch(`/api/v1/admin/org-lists/${list.id}`, { method: "DELETE" });
+      await customFetch(`/api/v1/admin/org-lists/${list.id}`, {
+        method: "DELETE",
+      });
       if (listFilter === list.id) setListFilter("all");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
-        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "org-claim-links"],
+        }),
       ]);
-      toast({ title: `Deleted list "${list.name}"`, description: "Its orgs are unaffected." });
+      toast({
+        title: `Deleted list "${list.name}"`,
+        description: "Its orgs are unaffected.",
+      });
     } catch (err) {
       toast({
         title: "Couldn't delete list",
@@ -243,7 +272,9 @@ export default function AdminOrgClaimLinks() {
         body: JSON.stringify({ listId }),
       });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "org-claim-links"],
+        }),
         queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
       ]);
     } catch (err) {
@@ -327,18 +358,23 @@ export default function AdminOrgClaimLinks() {
     return () => clearTimeout(t);
   }, [newName]);
 
-  const { data: nameCheck, isFetching: checking } = useQuery<NameCheckResponse>({
-    queryKey: ["admin", "org-name-check", debounced],
-    enabled: debounced.length >= 2,
-    queryFn: () =>
-      customFetch<NameCheckResponse>(
-        `/api/v1/admin/org-name-check?name=${encodeURIComponent(debounced)}`,
-        { method: "GET" },
-      ),
-  });
+  const { data: nameCheck, isFetching: checking } = useQuery<NameCheckResponse>(
+    {
+      queryKey: ["admin", "org-name-check", debounced],
+      enabled: debounced.length >= 2,
+      queryFn: () =>
+        customFetch<NameCheckResponse>(
+          `/api/v1/admin/org-name-check?name=${encodeURIComponent(debounced)}`,
+          { method: "GET" },
+        ),
+    },
+  );
 
   const matches = useMemo(() => nameCheck?.data ?? [], [nameCheck]);
-  const exactMatch = useMemo(() => matches.find((m) => m.exact) ?? null, [matches]);
+  const exactMatch = useMemo(
+    () => matches.find((m) => m.exact) ?? null,
+    [matches],
+  );
 
   const addOrg = async () => {
     const name = newName.trim();
@@ -373,7 +409,9 @@ export default function AdminOrgClaimLinks() {
       setPromoError(null);
       setNewOrgListId(null);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "org-claim-links"],
+        }),
         queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
       ]);
       try {
@@ -433,7 +471,11 @@ export default function AdminOrgClaimLinks() {
     [filtered, listSort],
   );
   const otherRows = useMemo(
-    () => sortByList(filtered.filter((r) => !r.quickSetupAt), listSort),
+    () =>
+      sortByList(
+        filtered.filter((r) => !r.quickSetupAt),
+        listSort,
+      ),
     [filtered, listSort],
   );
 
@@ -443,7 +485,9 @@ export default function AdminOrgClaimLinks() {
         method: "PATCH",
         body: JSON.stringify({ messaged }),
       });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "org-claim-links"],
+      });
     } catch (err) {
       toast({
         title: "Couldn't update",
@@ -459,7 +503,9 @@ export default function AdminOrgClaimLinks() {
         method: "PATCH",
         body: JSON.stringify({ facebookAdded }),
       });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "org-claim-links"],
+      });
     } catch (err) {
       toast({
         title: "Couldn't update",
@@ -474,7 +520,10 @@ export default function AdminOrgClaimLinks() {
       await navigator.clipboard.writeText(claimUrl(token));
       toast({ title: "Claim link copied" });
     } catch {
-      toast({ title: "Couldn't copy — select and copy manually", variant: "destructive" });
+      toast({
+        title: "Couldn't copy — select and copy manually",
+        variant: "destructive",
+      });
     }
   };
 
@@ -497,7 +546,10 @@ export default function AdminOrgClaimLinks() {
         ? "all-orgs"
         : listFilter === "none"
           ? "unlisted"
-          : exportSlug(lists.find((list) => list.id === listFilter)?.name ?? "selected-list");
+          : exportSlug(
+              lists.find((list) => list.id === listFilter)?.name ??
+                "selected-list",
+            );
     a.href = url;
     a.download = `kinectem-org-claim-links-${scope}-${stamp}.csv`;
     document.body.appendChild(a);
@@ -507,13 +559,16 @@ export default function AdminOrgClaimLinks() {
   };
 
   return (
-    <AdminLayout>
+    <>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-black">Org Links</h1>
+          <h1 className="text-2xl font-black">
+            {embedded ? "Claim links & setup" : "Org Links"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Secret invite links for ownerless organization pages. Send each link
-            to the right org — whoever signs up through it becomes the owner.
+            {embedded
+              ? "Create and organize ownerless organization pages, then send each secure claim link to the right organization."
+              : "Secret invite links for ownerless organization pages. Send each link to the right org — whoever signs up through it becomes the owner."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -643,7 +698,9 @@ export default function AdminOrgClaimLinks() {
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setTier((cur) => (cur === p.id ? null : p.id))}
+                    onClick={() =>
+                      setTier((cur) => (cur === p.id ? null : p.id))
+                    }
                     aria-pressed={selected}
                     className={`rounded-md border px-3 py-2 text-left transition-colors ${
                       selected
@@ -681,7 +738,9 @@ export default function AdminOrgClaimLinks() {
                   {appliedPromo.discountType === "percent"
                     ? `${appliedPromo.discountValue}% off first year`
                     : `$${appliedPromo.discountValue} off first year`}
-                  {appliedPromo.description ? ` — ${appliedPromo.description}` : ""}
+                  {appliedPromo.description
+                    ? ` — ${appliedPromo.description}`
+                    : ""}
                 </span>
                 <Button
                   size="icon"
@@ -749,7 +808,10 @@ export default function AdminOrgClaimLinks() {
             value={newOrgListId ?? "__none__"}
             onValueChange={(v) => setNewOrgListId(v === "__none__" ? null : v)}
           >
-            <SelectTrigger className="max-w-xs" data-testid="select-add-org-list">
+            <SelectTrigger
+              className="max-w-xs"
+              data-testid="select-add-org-list"
+            >
               <SelectValue placeholder="No list" />
             </SelectTrigger>
             <SelectContent>
@@ -771,18 +833,21 @@ export default function AdminOrgClaimLinks() {
                 data-testid="add-org-duplicate-warning"
               >
                 ⚠ "{exactMatch.name}" already exists
-                {exactMatch.hasOwner ? " (already claimed)" : " (unclaimed)"} — adding
-                is blocked to avoid a duplicate.
+                {exactMatch.hasOwner ? " (already claimed)" : " (unclaimed)"} —
+                adding is blocked to avoid a duplicate.
               </p>
             ) : matches.length > 0 ? (
               <p className="text-xs text-muted-foreground mb-1">
-                {matches.length} similar name{matches.length === 1 ? "" : "s"} already
-                exist — make sure yours is different:
+                {matches.length} similar name{matches.length === 1 ? "" : "s"}{" "}
+                already exist — make sure yours is different:
               </p>
             ) : checking ? (
               <p className="text-xs text-muted-foreground">Checking…</p>
             ) : (
-              <p className="text-xs text-emerald-600" data-testid="add-org-no-match">
+              <p
+                className="text-xs text-emerald-600"
+                data-testid="add-org-no-match"
+              >
                 No matching organization — good to add.
               </p>
             )}
@@ -892,7 +957,8 @@ export default function AdminOrgClaimLinks() {
                 data-testid={`list-chip-${l.id}`}
               >
                 <span>
-                  {l.name} <span className="text-muted-foreground">({l.orgCount})</span>
+                  {l.name}{" "}
+                  <span className="text-muted-foreground">({l.orgCount})</span>
                 </span>
                 <Button
                   size="icon"
@@ -918,7 +984,10 @@ export default function AdminOrgClaimLinks() {
           className="max-w-md"
           data-testid="input-claim-links-search"
         />
-        <div className="text-sm text-muted-foreground" data-testid="claim-links-count">
+        <div
+          className="text-sm text-muted-foreground"
+          data-testid="claim-links-count"
+        >
           {rows.length} ownerless page{rows.length === 1 ? "" : "s"}
         </div>
       </div>
@@ -985,7 +1054,10 @@ export default function AdminOrgClaimLinks() {
               </TableCell>
               <TableCell className="text-xs font-mono text-muted-foreground">
                 <div className="flex items-center gap-1">
-                  <span className="max-w-[140px] truncate" title={claimUrl(r.token)}>
+                  <span
+                    className="max-w-[140px] truncate"
+                    title={claimUrl(r.token)}
+                  >
                     {claimUrl(r.token)}
                   </span>
                   <Button
@@ -1003,7 +1075,9 @@ export default function AdminOrgClaimLinks() {
               <TableCell className="w-32">
                 <Select
                   value={r.listId ?? "__none__"}
-                  onValueChange={(v) => assignOrgList(r.id, v === "__none__" ? null : v)}
+                  onValueChange={(v) =>
+                    assignOrgList(r.id, v === "__none__" ? null : v)
+                  }
                 >
                   <SelectTrigger
                     className="h-8 text-xs"
@@ -1078,26 +1152,37 @@ export default function AdminOrgClaimLinks() {
             )}
             <div data-testid="section-all-orgs">
               {quickSetupRows.length > 0 && (
-                <h2 className="text-sm font-bold mb-2">All other unclaimed orgs</h2>
+                <h2 className="text-sm font-bold mb-2">
+                  All other unclaimed orgs
+                </h2>
               )}
               <Table>
                 {header}
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      <TableCell
+                        colSpan={6}
+                        className="text-center py-6 text-muted-foreground"
+                      >
                         Loading…
                       </TableCell>
                     </TableRow>
                   ) : filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      <TableCell
+                        colSpan={6}
+                        className="text-center py-6 text-muted-foreground"
+                      >
                         No ownerless pages.
                       </TableCell>
                     </TableRow>
                   ) : otherRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      <TableCell
+                        colSpan={6}
+                        className="text-center py-6 text-muted-foreground"
+                      >
                         No other unclaimed orgs match.
                       </TableCell>
                     </TableRow>
@@ -1110,6 +1195,14 @@ export default function AdminOrgClaimLinks() {
           </>
         );
       })()}
+    </>
+  );
+}
+
+export default function AdminOrgClaimLinks() {
+  return (
+    <AdminLayout>
+      <OrgClaimLinksContent />
     </AdminLayout>
   );
 }

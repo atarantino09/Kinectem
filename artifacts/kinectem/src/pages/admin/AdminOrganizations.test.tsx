@@ -58,7 +58,16 @@ beforeEach(() => {
       if (method === "GET" && path === "/api/v1/admin/org-lists") {
         return jsonResponse({ data: [] });
       }
-      if (method === "POST" && path === "/api/v1/admin/org-bulk-import/validate") {
+      if (method === "GET" && path === "/api/v1/admin/org-claim-links") {
+        return jsonResponse({ data: [] });
+      }
+      if (method === "GET" && path === "/api/v1/admin/org-name-check") {
+        return jsonResponse({ data: [] });
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/org-bulk-import/validate"
+      ) {
         validatedBody = JSON.parse(String(init?.body ?? "{}"));
         return jsonResponse({
           data: {
@@ -69,8 +78,7 @@ beforeEach(() => {
               discountType: "percent",
               discountValue: 20,
             },
-            organizations:
-              (validatedBody?.organizations as unknown[]) ?? [],
+            organizations: (validatedBody?.organizations as unknown[]) ?? [],
             issues: [],
           },
         });
@@ -129,7 +137,10 @@ describe("AdminOrganizations bulk import", () => {
       "2 organizations · 3 teams",
     );
 
-    await user.type(screen.getByTestId("input-org-bulk-list-name"), "Fall Partners");
+    await user.type(
+      screen.getByTestId("input-org-bulk-list-name"),
+      "Fall Partners",
+    );
     await user.click(screen.getByTestId("select-org-bulk-promo"));
     await user.click(await screen.findByText(/BULK20/));
     await user.click(screen.getByTestId("btn-org-bulk-check"));
@@ -152,5 +163,23 @@ describe("AdminOrganizations bulk import", () => {
     );
     expect(importedBody).toEqual(validatedBody);
     expect(screen.getByText(/org-claim\/token-north/)).toBeInTheDocument();
+  });
+
+  it("opens the claim links and setup workflow inside Organizations", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    expect(await screen.findByTestId("admin-org-overview")).toBeInTheDocument();
+    await user.click(screen.getByTestId("tab-org-claim-links"));
+
+    expect(screen.queryByTestId("admin-org-overview")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Claim links & setup" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-quick-setup")).toBeInTheDocument();
+    expect(screen.getByTestId("input-add-org-name")).toBeInTheDocument();
+    expect(screen.getByTestId("claim-links-count")).toHaveTextContent(
+      "0 ownerless pages",
+    );
   });
 });

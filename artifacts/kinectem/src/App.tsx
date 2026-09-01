@@ -11,7 +11,9 @@ import { PageLoader } from "@/components/PageLoader";
 // The Layout shell stays eager so navigation keeps the chrome on screen.
 const NotFound = lazy(() => import("@/pages/not-found"));
 const FeedPage = lazy(() => import("@/pages/FeedPage"));
-const OrganizationsListPage = lazy(() => import("@/pages/OrganizationsListPage"));
+const OrganizationsListPage = lazy(
+  () => import("@/pages/OrganizationsListPage"),
+);
 const MyOrgsPage = lazy(() => import("@/pages/MyOrgsPage"));
 const OrganizationPage = lazy(() => import("@/pages/OrganizationPage"));
 const MyTeamsPage = lazy(() => import("@/pages/MyTeamsPage"));
@@ -26,7 +28,9 @@ const DraftsPage = lazy(() => import("@/pages/DraftsPage"));
 const MyTagsPage = lazy(() => import("@/pages/MyTagsPage"));
 const GuardianPage = lazy(() => import("@/pages/GuardianPage"));
 const FollowRequestsPage = lazy(() => import("@/pages/FollowRequestsPage"));
-const ChildConversationPage = lazy(() => import("@/pages/ChildConversationPage"));
+const ChildConversationPage = lazy(
+  () => import("@/pages/ChildConversationPage"),
+);
 const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
 const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
 const AdminInviteAcceptPage = lazy(
@@ -56,22 +60,15 @@ const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminModeration = lazy(() => import("@/pages/admin/AdminModeration"));
 const AdminActivity = lazy(() => import("@/pages/admin/AdminActivity"));
 const AdminFounding100 = lazy(() => import("@/pages/admin/AdminFounding100"));
-const AdminOrgClaimLinks = lazy(
-  () => import("@/pages/admin/AdminOrgClaimLinks"),
-);
 const AdminOrgQuickSetup = lazy(
   () => import("@/pages/admin/AdminOrgQuickSetup"),
 );
 const AdminCompetitionClaimLinks = lazy(
   () => import("@/pages/admin/AdminCompetitionClaimLinks"),
 );
-const ClaimCompetitionPage = lazy(
-  () => import("@/pages/ClaimCompetitionPage"),
-);
+const ClaimCompetitionPage = lazy(() => import("@/pages/ClaimCompetitionPage"));
 const AdminAiKeys = lazy(() => import("@/pages/admin/AdminAiKeys"));
-const AdminDailyDigest = lazy(
-  () => import("@/pages/admin/AdminDailyDigest"),
-);
+const AdminDailyDigest = lazy(() => import("@/pages/admin/AdminDailyDigest"));
 const AdminEmailSettings = lazy(
   () => import("@/pages/admin/AdminEmailSettings"),
 );
@@ -88,7 +85,9 @@ const AdminOrganizations = lazy(
 const OrgSubscribePage = lazy(() => import("@/pages/OrgSubscribePage"));
 const AnnouncementsPage = lazy(() => import("@/pages/AnnouncementsPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
-const OrgRosterOutreachPage = lazy(() => import("@/pages/OrgRosterOutreachPage"));
+const OrgRosterOutreachPage = lazy(
+  () => import("@/pages/OrgRosterOutreachPage"),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,110 +101,162 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
-    <Switch>
-      {/* Fullscreen routes (no layout) */}
-      <Route path="/login" component={LoginPage} />
-      <Route path="/reset-password/:token" component={ResetPasswordPage} />
-      <Route path="/guardian-confirm/:token" component={GuardianConfirmPage} />
-      {/* Task #359 — COPPA email-plus parental-consent flow. The order
+      <Switch>
+        {/* Fullscreen routes (no layout) */}
+        <Route path="/login" component={LoginPage} />
+        <Route path="/reset-password/:token" component={ResetPasswordPage} />
+        <Route
+          path="/guardian-confirm/:token"
+          component={GuardianConfirmPage}
+        />
+        {/* Task #359 — COPPA email-plus parental-consent flow. The order
           here matters: wouter matches the more-specific /finalize route
           before falling through to the bare consent route. */}
-      <Route
-        path="/guardian-consent/:token/finalize"
-        component={GuardianConsentFinalizePage}
-      />
-      <Route path="/guardian-consent/:token" component={GuardianConsentPage} />
-      <Route path="/guardian-revoke/:token" component={GuardianRevokePage} />
-      <Route path="/privacy-policy" component={PrivacyPolicyPage} />
-      <Route path="/coppa-notice" component={CoppaNoticePage} />
-      <Route path="/invites/:token" component={InviteAcceptPage} />
-      <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
-      {/* Task #745 — hub/competition admin invite accept page. */}
-      <Route path="/admin-invites/:token" component={AdminInviteAcceptPage} />
-      <Route path="/claim/competition/:token" component={ClaimCompetitionPage} />
-      <Route path="/claim/:token" component={ClaimOrgPage} />
-      <Route path="/adopt-team/:token" component={TeamAdoptPage} />
-      <Route path="/c/:slug/signup" component={TournamentSignupPage} />
-      <Route path="/c/:slug" component={CompetitionPage} />
-      {/* Public organizer hub (parent company) page — Task #723 */}
-      <Route path="/organizers/:slug" component={OrganizerPage} />
-      {/* Legacy tournament links — redirect /t/* to /c/* */}
-      <Route path="/t/:slug/signup">
-        {(p) => <Redirect to={`/c/${p.slug}/signup`} replace />}
-      </Route>
-      <Route path="/t/:slug">
-        {(p) => <Redirect to={`/c/${p.slug}`} replace />}
-      </Route>
-      <Route path="/posts/new" component={NewPostPage} />
+        <Route
+          path="/guardian-consent/:token/finalize"
+          component={GuardianConsentFinalizePage}
+        />
+        <Route
+          path="/guardian-consent/:token"
+          component={GuardianConsentPage}
+        />
+        <Route path="/guardian-revoke/:token" component={GuardianRevokePage} />
+        <Route path="/privacy-policy" component={PrivacyPolicyPage} />
+        <Route path="/coppa-notice" component={CoppaNoticePage} />
+        <Route path="/invites/:token" component={InviteAcceptPage} />
+        <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
+        {/* Task #745 — hub/competition admin invite accept page. */}
+        <Route path="/admin-invites/:token" component={AdminInviteAcceptPage} />
+        <Route
+          path="/claim/competition/:token"
+          component={ClaimCompetitionPage}
+        />
+        <Route path="/claim/:token" component={ClaimOrgPage} />
+        <Route path="/adopt-team/:token" component={TeamAdoptPage} />
+        <Route path="/c/:slug/signup" component={TournamentSignupPage} />
+        <Route path="/c/:slug" component={CompetitionPage} />
+        {/* Public organizer hub (parent company) page — Task #723 */}
+        <Route path="/organizers/:slug" component={OrganizerPage} />
+        {/* Legacy tournament links — redirect /t/* to /c/* */}
+        <Route path="/t/:slug/signup">
+          {(p) => <Redirect to={`/c/${p.slug}/signup`} replace />}
+        </Route>
+        <Route path="/t/:slug">
+          {(p) => <Redirect to={`/c/${p.slug}`} replace />}
+        </Route>
+        <Route path="/posts/new" component={NewPostPage} />
 
-      {/* Layout routes */}
-      <Route>
-        <Layout>
-          <Suspense fallback={<PageLoader />}>
-          <Switch>
-            <Route path="/" component={FeedPage} />
-            <Route path="/announcements" component={AnnouncementsPage} />
-            <Route path="/search" component={SearchPage} />
-            <Route path="/messages/:conversationId" component={MessagesPage} />
-            <Route path="/messages" component={MessagesPage} />
-            <Route path="/tags/pending" component={PendingTagsPage} />
-            <Route path="/drafts" component={DraftsPage} />
-            <Route path="/me/tags" component={MyTagsPage} />
-            <Route path="/follow-requests" component={FollowRequestsPage} />
-            <Route path="/settings" component={SettingsPage} />
-            <Route
-              path="/family/:childId/messages/:conversationId"
-              component={ChildConversationPage}
-            />
-            <Route path="/family" component={GuardianPage} />
-            <Route path="/guardian" component={GuardianPage} />
-            {/* Static "/organizations/mine" must precede the
+        {/* Layout routes */}
+        <Route>
+          <Layout>
+            <Suspense fallback={<PageLoader />}>
+              <Switch>
+                <Route path="/" component={FeedPage} />
+                <Route path="/announcements" component={AnnouncementsPage} />
+                <Route path="/search" component={SearchPage} />
+                <Route
+                  path="/messages/:conversationId"
+                  component={MessagesPage}
+                />
+                <Route path="/messages" component={MessagesPage} />
+                <Route path="/tags/pending" component={PendingTagsPage} />
+                <Route path="/drafts" component={DraftsPage} />
+                <Route path="/me/tags" component={MyTagsPage} />
+                <Route path="/follow-requests" component={FollowRequestsPage} />
+                <Route path="/settings" component={SettingsPage} />
+                <Route
+                  path="/family/:childId/messages/:conversationId"
+                  component={ChildConversationPage}
+                />
+                <Route path="/family" component={GuardianPage} />
+                <Route path="/guardian" component={GuardianPage} />
+                {/* Static "/organizations/mine" must precede the
                 "/organizations/:orgId" dynamic route so wouter matches the
                 more-specific path first. Same pattern for "/teams" vs
                 "/teams/:teamId". */}
-            <Route path="/organizations/mine" component={MyOrgsPage} />
-            <Route path="/organizations" component={OrganizationsListPage} />
-            <Route
-              path="/organizations/:orgId/subscribe"
-              component={OrgSubscribePage}
-            />
-            <Route path="/organizations/:orgId/roster-outreach" component={OrgRosterOutreachPage} />
-            <Route path="/organizations/:orgId" component={OrganizationPage} />
-            {/* In-app competition view (AppShell chrome) — must precede
+                <Route path="/organizations/mine" component={MyOrgsPage} />
+                <Route
+                  path="/organizations"
+                  component={OrganizationsListPage}
+                />
+                <Route
+                  path="/organizations/:orgId/subscribe"
+                  component={OrgSubscribePage}
+                />
+                <Route
+                  path="/organizations/:orgId/roster-outreach"
+                  component={OrgRosterOutreachPage}
+                />
+                <Route
+                  path="/organizations/:orgId"
+                  component={OrganizationPage}
+                />
+                {/* In-app competition view (AppShell chrome) — must precede
                 the console's `/competitions/:id` so "c" isn't read as an id. */}
-            <Route path="/competitions/c/:slug" component={CompetitionPage} />
-            {/* In-app organizer hub view — precedes `/competitions/:id`
+                <Route
+                  path="/competitions/c/:slug"
+                  component={CompetitionPage}
+                />
+                {/* In-app organizer hub view — precedes `/competitions/:id`
                 so "o" isn't read as an id. */}
-            <Route path="/competitions/o/:slug" component={OrganizerPage} />
-            <Route path="/competitions/:id" component={CompetitionConsolePage} />
-            <Route path="/competitions" component={CompetitionsPage} />
-            <Route path="/teams" component={MyTeamsPage} />
-            <Route path="/teams/:teamId" component={TeamPage} />
-            <Route path="/users/:userId" component={UserProfilePage} />
-            <Route path="/posts/:postId" component={PostPage} />
-            <Route path="/admin" component={AdminDashboard} />
-            <Route path="/admin/users" component={AdminUsers} />
-            <Route path="/admin/moderation" component={AdminModeration} />
-            <Route path="/admin/activity" component={AdminActivity} />
-            <Route path="/admin/founding-100" component={AdminFounding100} />
-            <Route path="/admin/org-claim-links" component={AdminOrgClaimLinks} />
-            <Route path="/admin/org-quick-setup" component={AdminOrgQuickSetup} />
-            <Route path="/admin/competition-claim-links" component={AdminCompetitionClaimLinks} />
-            <Route path="/admin/ai-keys" component={AdminAiKeys} />
-            <Route path="/admin/daily-digest" component={AdminDailyDigest} />
-            <Route path="/admin/email" component={AdminEmailSettings} />
-            <Route path="/admin/promo-codes" component={AdminPromoCodes} />
-            <Route path="/admin/schedule" component={AdminSchedule} />
-            <Route path="/admin/tournaments" component={AdminTournaments} />
-            <Route path="/admin/claims" component={AdminClaims} />
-            <Route path="/admin/announcements" component={AdminAnnouncements} />
-            <Route path="/admin/organizations" component={AdminOrganizations} />
-            <Route component={NotFound} />
-          </Switch>
-          </Suspense>
-        </Layout>
-      </Route>
-    </Switch>
+                <Route path="/competitions/o/:slug" component={OrganizerPage} />
+                <Route
+                  path="/competitions/:id"
+                  component={CompetitionConsolePage}
+                />
+                <Route path="/competitions" component={CompetitionsPage} />
+                <Route path="/teams" component={MyTeamsPage} />
+                <Route path="/teams/:teamId" component={TeamPage} />
+                <Route path="/users/:userId" component={UserProfilePage} />
+                <Route path="/posts/:postId" component={PostPage} />
+                <Route path="/admin" component={AdminDashboard} />
+                <Route path="/admin/users" component={AdminUsers} />
+                <Route path="/admin/moderation" component={AdminModeration} />
+                <Route path="/admin/activity" component={AdminActivity} />
+                <Route
+                  path="/admin/founding-100"
+                  component={AdminFounding100}
+                />
+                {/* Keep old Org Links bookmarks working while the workflow lives
+                inside the Organizations admin page. */}
+                <Route path="/admin/org-claim-links">
+                  <Redirect
+                    to="/admin/organizations?section=claim-links"
+                    replace
+                  />
+                </Route>
+                <Route
+                  path="/admin/org-quick-setup"
+                  component={AdminOrgQuickSetup}
+                />
+                <Route
+                  path="/admin/competition-claim-links"
+                  component={AdminCompetitionClaimLinks}
+                />
+                <Route path="/admin/ai-keys" component={AdminAiKeys} />
+                <Route
+                  path="/admin/daily-digest"
+                  component={AdminDailyDigest}
+                />
+                <Route path="/admin/email" component={AdminEmailSettings} />
+                <Route path="/admin/promo-codes" component={AdminPromoCodes} />
+                <Route path="/admin/schedule" component={AdminSchedule} />
+                <Route path="/admin/tournaments" component={AdminTournaments} />
+                <Route path="/admin/claims" component={AdminClaims} />
+                <Route
+                  path="/admin/announcements"
+                  component={AdminAnnouncements}
+                />
+                <Route
+                  path="/admin/organizations"
+                  component={AdminOrganizations}
+                />
+                <Route component={NotFound} />
+              </Switch>
+            </Suspense>
+          </Layout>
+        </Route>
+      </Switch>
     </Suspense>
   );
 }
