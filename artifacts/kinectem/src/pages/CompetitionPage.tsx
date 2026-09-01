@@ -274,7 +274,11 @@ export function competitionTeamSections(
     }
     byKey.set(key, {
       key,
-      title: `${age.label} · ${gender.label} · ${group}`,
+      // "General" is the no-bracket fallback from groupLabel() — it's
+      // meaningless to visitors, so omit it when it's the only group segment.
+      title: group === "General"
+        ? `${age.label} · ${gender.label}`
+        : `${age.label} · ${gender.label} · ${group}`,
       teams: [participant],
       age,
       gender,
@@ -1478,7 +1482,8 @@ export default function CompetitionPage() {
                     <div key={section.key} className="space-y-2">
                       {section.title ? (
                         <p
-                          className="text-[11px] font-black uppercase tracking-widest text-muted-foreground pb-1 border-b border-border/40"
+                          className="text-[13px] font-black uppercase tracking-widest pb-1 border-b border-border/40"
+                          style={{ color: brand }}
                           data-testid={`heading-team-group-${section.key}`}
                         >
                           {section.title}{" "}
