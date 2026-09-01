@@ -1686,6 +1686,19 @@ export default function CompetitionPage() {
                   brandColor={c.brandColor}
                   secondaryColor={c.secondaryColor}
                 />
+                <CardContent className="min-w-0 p-5 pb-4 space-y-2 bg-card">
+                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest truncate">
+                    {r.teamName}
+                    {r.opponentName ? <span className="lowercase"> vs </span> : ""}
+                    {r.opponentName}
+                    {r.teamScore != null && r.opponentScore != null
+                      ? ` · ${r.teamScore}-${r.opponentScore}`
+                      : ""}
+                  </p>
+                  <p className="text-base font-black tracking-tight line-clamp-2 leading-snug">
+                    {r.title}
+                  </p>
+                </CardContent>
                 {r.coverImageUrl ? (
                   <div className="h-36 w-full overflow-hidden relative">
                     <img
@@ -1731,49 +1744,35 @@ export default function CompetitionPage() {
                     <Star className="w-12 h-12 text-muted-foreground/20 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-12" />
                   </div>
                 )}
-                <CardContent className="min-w-0 p-5 space-y-2 flex-1 flex flex-col bg-card">
-                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest truncate">
-                    {r.teamName}
-                    {r.opponentName ? <span className="lowercase"> vs </span> : ""}
-                    {r.opponentName}
-                    {r.teamScore != null && r.opponentScore != null
-                      ? ` · ${r.teamScore}-${r.opponentScore}`
-                      : ""}
-                  </p>
-                  <p className="text-base font-black tracking-tight line-clamp-2 leading-snug">
-                    {r.title}
-                  </p>
-                  <div className="flex-1" />
-                  <div className="pt-3 mt-auto border-t border-border/50">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="w-full font-bold rounded-lg text-xs hover:bg-muted/60"
-                      aria-label={`Share ${r.title} as image`}
-                      data-testid={`btn-share-featured-recap-image-${r.id}`}
-                      disabled={shareImageLoadingId === r.id}
-                      onClick={(event) => openRecapImageExporter(event, r)}
+                <div className="mt-auto border-t border-border/50 bg-card px-5 pb-4 pt-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full font-bold rounded-lg text-xs hover:bg-muted/60"
+                    aria-label={`Share ${r.title} as image`}
+                    data-testid={`btn-share-featured-recap-image-${r.id}`}
+                    disabled={shareImageLoadingId === r.id}
+                    onClick={(event) => openRecapImageExporter(event, r)}
+                  >
+                    {shareImageLoadingId === r.id ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <ImageDown className="w-3.5 h-3.5 mr-1.5 opacity-70" />
+                    )}
+                    {shareImageLoadingId === r.id
+                      ? "Loading image…"
+                      : "Share as image"}
+                  </Button>
+                  {shareImageErrorId === r.id ? (
+                    <p
+                      className="mt-1.5 text-[11px] font-semibold text-destructive text-center"
+                      role="alert"
                     >
-                      {shareImageLoadingId === r.id ? (
-                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                      ) : (
-                        <ImageDown className="w-3.5 h-3.5 mr-1.5 opacity-70" />
-                      )}
-                      {shareImageLoadingId === r.id
-                        ? "Loading image…"
-                        : "Share as image"}
-                    </Button>
-                    {shareImageErrorId === r.id ? (
-                      <p
-                        className="mt-1.5 text-[11px] font-semibold text-destructive text-center"
-                        role="alert"
-                      >
-                        Couldn’t load this image. Try again.
-                      </p>
-                    ) : null}
-                  </div>
-                </CardContent>
+                      Couldn’t load this image. Try again.
+                    </p>
+                  ) : null}
+                </div>
                 </Card>
               </Link>
             );
