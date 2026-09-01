@@ -196,6 +196,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     (post as PostResponse & { albumPhotoCount?: number }).albumPhotoCount ?? 0;
   const Icon = isNews ? Newspaper : isShort ? Play : FileText;
   const reportTarget = parseSyntheticPostId(post.id);
+  const isGameRecap = !isNews && !isShort && reportTarget.contentType === "article";
   // Task #524 — only surface the takedown affordance on posts where the
   // selected child has a plausible client-visible link: child is the
   // author, OR child is tagged on this article/highlight (the child-
@@ -845,7 +846,12 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             {!isNews && post.title && (
               <div className="flex items-start gap-2 mb-2">
                 <Link href={`/posts/${post.id}`} className="flex-1 min-w-0">
-                  <h3 className="font-black text-lg tracking-tight leading-tight hover:underline cursor-pointer">
+                  <h3
+                    className={cn(
+                      "font-black tracking-tight leading-tight hover:underline cursor-pointer",
+                      isGameRecap ? "text-xl" : "text-lg",
+                    )}
+                  >
                     {post.title}
                   </h3>
                 </Link>

@@ -320,6 +320,7 @@ export default function PostPage() {
   const isNews = post.id.startsWith("news-") && !!newsLink;
   const Icon = isShort ? Play : FileText;
   const label = isNews ? "In the News" : isShort ? "Highlight" : "Game Recap";
+  const isGameRecap = !isNews && !isShort;
   // Task #739 — the detail response carries the viewer-visible tag
   // list for recaps; @-mention tokens only render as live profile
   // links for users in it. Tokens for anyone else (deleted account,
@@ -669,7 +670,13 @@ export default function PostPage() {
       ) : (
         post.title && (
           <div className="space-y-1">
-            <h1 className="text-4xl font-black tracking-tight leading-tight">
+            <h1
+              className={
+                isGameRecap
+                  ? "text-5xl font-black tracking-tight leading-tight"
+                  : "text-4xl font-black tracking-tight leading-tight"
+              }
+            >
               {post.title}
             </h1>
             {post.gameDate && (

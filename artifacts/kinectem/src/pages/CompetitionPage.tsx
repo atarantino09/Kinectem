@@ -1687,6 +1687,9 @@ export default function CompetitionPage() {
                   secondaryColor={c.secondaryColor}
                 />
                 <CardContent className="min-w-0 p-5 pb-4 space-y-2 bg-card">
+                  <p className="text-lg font-black tracking-tight line-clamp-2 leading-snug">
+                    {r.title}
+                  </p>
                   <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest truncate">
                     {r.teamName}
                     {r.opponentName ? <span className="lowercase"> vs </span> : ""}
@@ -1694,9 +1697,6 @@ export default function CompetitionPage() {
                     {r.teamScore != null && r.opponentScore != null
                       ? ` · ${r.teamScore}-${r.opponentScore}`
                       : ""}
-                  </p>
-                  <p className="text-base font-black tracking-tight line-clamp-2 leading-snug">
-                    {r.title}
                   </p>
                 </CardContent>
                 {r.coverImageUrl ? (
