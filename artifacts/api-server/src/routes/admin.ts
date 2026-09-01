@@ -1873,9 +1873,21 @@ function parseBulkImportOrganizations(body: unknown): {
     } | null;
     const name = typeof item?.name === "string" ? item.name.trim() : "";
     const teamsRaw = Array.isArray(item?.teams) ? item.teams : [];
-    const teams = teamsRaw.map((team) =>
+    const rawTeams = teamsRaw.map((team) =>
       typeof team === "string" ? team.trim() : "",
     );
+    const teams: string[] = [];
+    const seenTeams = new Set<string>();
+    for (const team of rawTeams) {
+      if (!team) {
+        teams.push(team);
+        continue;
+      }
+      const teamKey = team.toLowerCase();
+      if (seenTeams.has(teamKey)) continue;
+      seenTeams.add(teamKey);
+      teams.push(team);
+    }
     organizations.push({ name, teams });
 
     if (!name) {
@@ -1912,7 +1924,6 @@ function parseBulkImportOrganizations(body: unknown): {
         message: `Organization ${organizationIndex + 1}: too many teams (maximum ${ORG_BULK_MAX_TEAMS_PER_ORG}).`,
       });
     }
-    const seenTeams = new Map<string, number>();
     for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
       const team = teams[teamIndex];
       if (!team) {
@@ -1931,18 +1942,6 @@ function parseBulkImportOrganizations(body: unknown): {
           teamIndex,
           message: `Organization ${organizationIndex + 1}, team ${teamIndex + 1}: name is too long.`,
         });
-      }
-      const teamKey = team.toLowerCase();
-      const previous = seenTeams.get(teamKey);
-      if (previous !== undefined) {
-        issues.push({
-          scope: "team",
-          organizationIndex,
-          teamIndex,
-          message: `Organization ${organizationIndex + 1}, team ${teamIndex + 1}: duplicate team name; it also appears at team ${previous + 1}.`,
-        });
-      } else {
-        seenTeams.set(teamKey, teamIndex);
       }
     }
     totalTeams += teams.length;

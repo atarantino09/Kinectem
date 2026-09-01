@@ -128,13 +128,18 @@ describe("AdminOrganizations bulk import", () => {
     await user.upload(
       fileInput,
       new File(
-        ["North League,South League\nNorth U12,South U12\nNorth U14,"],
+        [
+          "North League,South League\nNorth U12,South U12\nNorth U14,\nNorth U12,",
+        ],
         "partner-organizations.csv",
         { type: "text/csv" },
       ),
     );
     expect(await screen.findByTestId("bulk-import-preview")).toHaveTextContent(
       "2 organizations · 3 teams",
+    );
+    expect(screen.getByTestId("bulk-import-issues")).toHaveTextContent(
+      "repeated names will be imported once",
     );
 
     await user.type(

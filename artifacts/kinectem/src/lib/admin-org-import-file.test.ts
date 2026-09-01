@@ -53,7 +53,7 @@ describe("organization import file parser", () => {
     });
   });
 
-  it("blocks duplicate organization and team names", async () => {
+  it("collapses repeated team names but still blocks repeated organization names", async () => {
     const parsed = await parseOrganizationImportFile(
       new File(
         ["Same Org,Same Org\nBlue,Green\nblue,Yellow"],
@@ -61,11 +61,19 @@ describe("organization import file parser", () => {
         { type: "text/csv" },
       ),
     );
+    expect(parsed.groups[0]).toMatchObject({
+      teams: ["Blue"],
+      duplicateTeams: ["blue"],
+    });
+    expect(parsed.totalTeams).toBe(3);
     expect(parsed.errors).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("same organization name"),
-        expect.stringContaining("repeats team name"),
-      ]),
+      expect.arrayContaining([expect.stringContaining("same organization name")]),
+    );
+    expect(parsed.errors).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("repeats team name")]),
+    );
+    expect(parsed.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("repeated names will be imported once")]),
     );
   });
 });

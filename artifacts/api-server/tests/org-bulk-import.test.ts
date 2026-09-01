@@ -186,6 +186,57 @@ describe("POST /api/v1/admin/org-bulk-import", () => {
     expect(rolledBack).toBeUndefined();
   });
 
+  it("collapses repeated team names into one team per organization", async () => {
+    const { agent } = await loginAs((user) => user.email === ADMIN_EMAIL);
+    const suffix = Date.now().toString(36);
+    const promoCode = `repeat${suffix}`;
+    const listName = `Repeated Team Batch ${suffix}`;
+    const organizationName = `Repeated Team Org ${suffix}`;
+    const payload = {
+      listName,
+      promoCode,
+      organizations: [
+        {
+          name: organizationName,
+          teams: ["Bobcats 2015/2016 Boys", "Lightning", " bobcats 2015/2016 boys "],
+        },
+      ],
+    };
+
+    const promo = await agent.post("/api/v1/admin/promo-codes").send({
+      code: promoCode,
+      discountType: "percent",
+      discountValue: 15,
+      active: true,
+    });
+    expect(promo.status).toBe(201);
+
+    const preview = await agent
+      .post("/api/v1/admin/org-bulk-import/validate")
+      .send(payload);
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.valid).toBe(true);
+    expect(preview.body.data.organizations[0].teams).toEqual([
+      "Bobcats 2015/2016 Boys",
+      "Lightning",
+    ]);
+
+    const imported = await agent.post("/api/v1/admin/org-bulk-import").send(payload);
+    expect(imported.status).toBe(201);
+    expect(imported.body.data.teamCount).toBe(2);
+    expect(imported.body.data.organizations[0].teams).toHaveLength(2);
+
+    const createdOrgId = imported.body.data.organizations[0].id;
+    const createdTeams = await db
+      .select({ name: teams.name })
+      .from(teams)
+      .where(eq(teams.organizationId, createdOrgId));
+    expect(createdTeams.map((team) => team.name)).toEqual([
+      "Bobcats 2015/2016 Boys",
+      "Lightning",
+    ]);
+  });
+
   it("rejects malformed batches and non-admin callers", async () => {
     const { agent } = await loginAs((user) => user.email === ADMIN_EMAIL);
     const invalid = await agent.post("/api/v1/admin/org-bulk-import").send({

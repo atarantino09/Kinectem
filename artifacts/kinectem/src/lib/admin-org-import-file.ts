@@ -143,19 +143,24 @@ export async function parseOrganizationImportFile(
       continue;
     }
     const name = cells[firstValue];
-    const teams = cells.slice(firstValue + 1).filter(Boolean);
-    const seen = new Set<string>();
+    const rawTeams = cells.slice(firstValue + 1).filter(Boolean);
+    const teams: string[] = [];
     const duplicateTeams: string[] = [];
-    for (const team of teams) {
+    const seen = new Set<string>();
+    for (const team of rawTeams) {
       const key = team.toLowerCase();
-      if (seen.has(key) && !duplicateTeams.some((item) => item.toLowerCase() === key)) {
-        duplicateTeams.push(team);
+      if (seen.has(key)) {
+        if (!duplicateTeams.some((item) => item.toLowerCase() === key)) {
+          duplicateTeams.push(team);
+        }
+        continue;
       }
       seen.add(key);
+      teams.push(team);
     }
     if (duplicateTeams.length > 0) {
-      errors.push(
-        `Column ${columnLabel(column)} (“${name}”) repeats team name${duplicateTeams.length === 1 ? "" : "s"}: ${duplicateTeams.join(", ")}.`,
+      warnings.push(
+        `Column ${columnLabel(column)} (“${name}”) repeats team name${duplicateTeams.length === 1 ? "" : "s"}; repeated names will be imported once: ${duplicateTeams.join(", ")}.`,
       );
     }
     if (teams.length === 0) {
