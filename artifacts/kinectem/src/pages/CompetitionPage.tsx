@@ -189,7 +189,7 @@ export type CompetitionTeamSection = {
   teams: CompetitionParticipant[];
 };
 
-const teamNameCollator = new Intl.Collator(undefined, {
+export const teamNameCollator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
 });
@@ -198,7 +198,7 @@ function comparableText(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ");
 }
 
-function ageGroupInfo(raw: string | null): {
+export function ageGroupInfo(raw: string | null): {
   key: string;
   label: string;
   rank: number;
@@ -220,7 +220,7 @@ function ageGroupInfo(raw: string | null): {
   };
 }
 
-function genderInfo(raw: string | null): {
+export function genderInfo(raw: string | null): {
   key: string;
   label: string;
   rank: number;
@@ -243,73 +243,108 @@ function genderInfo(raw: string | null): {
 }
 
 /**
- * Keep the imported Teams list scannable even when multiple schedule rows
- * reuse a group name. The hierarchy is age → gender → group, with missing
- * fields last and teams naturally alphabetized inside their exact section.
- *
- * This intentionally uses the schedule fields on participant slots rather
- * than organizer-managed bracket ids. Brackets remain recap-sorting labels;
- * their editing/reordering must not merge distinct age/gender schedule groups.
+ * Shared sort comparator for bracket-like objects.
+ * Sort order: gender rank → age rank → age number (asc, nulls last) →
+ * age label → groupKey tiebreaker.
+ * Pass objects whose `gender` and `age` fields are already the results of
+ * `genderInfo()` and `ageGroupInfo()` respectively.
  */
+export function compareBracketsByGenderAge(
+  a: {
+    gender: ReturnType<typeof genderInfo>;
+    age: ReturnType<typeof ageGroupInfo>;
+    groupKey?: string;
+  },
+  b: {
+    gender: ReturnType<typeof genderInfo>;
+    age: ReturnType<typeof ageGroupInfo>;
+    groupKey?: string;
+  },
+): number {
+  if (a.gender.rank !== b.gender.rank) return a.gender.rank - b.gender.rank;
+  if (a.age.rank !== b.age.rank) return a.age.rank - b.age.rank;
+  if (a.age.number !== b.age.number) {
+    if (a.age.number === null) return 1;
+    if (b.age.number === null) return -1;
+    return a.age.number - b.age.number;
+  }
+  const ageText = teamNameCollator.compare(a.age.label, b.age.label);
+  if (ageText !== 0) return ageText;
+  return teamNameCollator.compare(a.groupKey ?? "", b.groupKey ?? "");
+}
 /**
  * Group participants into labelled sections for the Teams list.
  *
- * When a participant has a `bracketId` that resolves in the supplied brackets
- * list (organizer-named, sorted by the bracket's saved order), that bracket's
- * label is used as the section title and the section sorts before all
- * non-bracketed sections. This means a rename in the Brackets panel is
- * immediately reflected on the public Teams list without a re-upload.
+ * All sections (bracket-linked and unlinked) are sorted by the unified
+ * gender → age → group hierarchy: Boys first (youngest to oldest), then
+ * Girls (youngest to oldest), then Coed, then unknown gender. Missing fields
+ * sort last. Teams within a section are alphabetized.
  *
- * Participants without a matching bracketId fall back to the existing
- * age × gender × division/bracket string grouping.
+ * When a participant has a `bracketId` that resolves in the supplied brackets
+ * list, that bracket's label is used as the section title. This means a rename
+ * in the Brackets panel is immediately reflected on the public Teams list
+ * without a re-upload.
+ *
+ * Participants without a matching bracketId fall back to the gender × age ×
+ * division/bracket string grouping.
  */
 export function competitionTeamSections(
   participants: CompetitionParticipant[],
   brackets: CompetitionBracketInfo[] = [],
 ): CompetitionTeamSection[] {
   const bracketById = new Map(brackets.map((b) => [b.id, b]));
-  const bracketSortOrder = new Map(brackets.map((b, i) => [b.id, i]));
-
   type Section = CompetitionTeamSection & {
     age: ReturnType<typeof ageGroupInfo>;
     gender: ReturnType<typeof genderInfo>;
     groupKey: string;
-    // ≥ 0 = position in the brackets array; -1 = unlinked (sorts last).
-    bracketPos: number;
   };
 
   const byKey = new Map<string, Section>();
   for (const participant of participants) {
-    // Bracket-linked: group by bracketId, title from the bracket label.
+    const age = ageGroupInfo(participant.age);
+    const gender = genderInfo(participant.gender);
+    const group = comparableText(groupLabel(participant.division, participant.bracket));
+    const groupKey = group.toLowerCase();
+    // Preserve the schedule's raw age × gender × division/bracket identity
+    // even when a bracket is linked. A single imported label can legitimately
+    // span multiple ages or genders; grouping only by bracketId would merge
+    // those separate sections.
+    const rawGroupKey = JSON.stringify([
+      participant.age,
+      participant.gender,
+      participant.division,
+      participant.bracket,
+    ]);
+
+    // Bracket-linked: use the bracket label for presentation without changing
+    // the underlying schedule-group identity or its gender/age sort metadata.
     if (participant.bracketId) {
       const b = bracketById.get(participant.bracketId);
       if (b) {
-        const key = `__b__${participant.bracketId}`;
+        const key = `__b__${participant.bracketId}\u0000${rawGroupKey}`;
         const cur = byKey.get(key);
         if (cur) {
           cur.teams.push(participant);
           continue;
         }
-        // Use bracket metadata for sort-fallback; bracket label is the title.
-        const age = ageGroupInfo(b.ageGroup ?? null);
-        const gender = genderInfo(b.gender ?? null);
+        const linkedAge = comparableText(participant.age)
+          ? age
+          : ageGroupInfo(b.ageGroup ?? null);
+        const linkedGender = comparableText(participant.gender)
+          ? gender
+          : genderInfo(b.gender ?? null);
         byKey.set(key, {
           key,
           title: b.label,
           teams: [participant],
-          age,
-          gender,
+          age: linkedAge,
+          gender: linkedGender,
           groupKey: b.label.toLowerCase(),
-          bracketPos: bracketSortOrder.get(b.id) ?? 0,
         });
         continue;
       }
     }
     // No bracketId or bracket missing from response: existing string logic.
-    const age = ageGroupInfo(participant.age);
-    const gender = genderInfo(participant.gender);
-    const group = comparableText(groupLabel(participant.division, participant.bracket));
-    const groupKey = group.toLowerCase();
     const key = `${age.key}\u0000${gender.key}\u0000${groupKey}`;
     const cur = byKey.get(key);
     if (cur) {
@@ -318,40 +353,24 @@ export function competitionTeamSections(
     }
     byKey.set(key, {
       key,
-      // "General" is the no-bracket fallback — omit it so "9 · Boys" reads
-      // more naturally than "9 · Boys · General".
+      // "General" is the no-bracket fallback — omit it so "Boys · U9" reads
+      // more naturally than "Boys · U9 · General".
       title: group === "General"
-        ? `${age.label} · ${gender.label}`
-        : `${age.label} · ${gender.label} · ${group}`,
+        ? `${gender.label} · ${age.label}`
+        : `${gender.label} · ${age.label} · ${group}`,
       teams: [participant],
       age,
       gender,
       groupKey,
-      bracketPos: -1,
     });
   }
 
   return Array.from(byKey.values())
-    .sort((a, b) => {
-      // Bracket-linked sections appear first, in the organizer's saved order.
-      if (a.bracketPos >= 0 && b.bracketPos >= 0) return a.bracketPos - b.bracketPos;
-      if (a.bracketPos >= 0) return -1;
-      if (b.bracketPos >= 0) return 1;
-      // Unlinked: existing age → gender → group ordering.
-      if (a.age.rank !== b.age.rank) return a.age.rank - b.age.rank;
-      if (a.age.number !== b.age.number) {
-        if (a.age.number === null) return 1;
-        if (b.age.number === null) return -1;
-        return a.age.number - b.age.number;
-      }
-      const ageText = teamNameCollator.compare(a.age.label, b.age.label);
-      if (ageText !== 0) return ageText;
-      if (a.gender.rank !== b.gender.rank) return a.gender.rank - b.gender.rank;
-      const genderText = teamNameCollator.compare(a.gender.label, b.gender.label);
-      if (genderText !== 0) return genderText;
-      return teamNameCollator.compare(a.groupKey, b.groupKey);
-    })
-    .map(({ age: _age, gender: _gender, groupKey: _gk, bracketPos: _bp, ...section }) => ({
+    .sort((a, b) =>
+      compareBracketsByGenderAge(a, b) ||
+      teamNameCollator.compare(a.groupKey, b.groupKey),
+    )
+    .map(({ age: _age, gender: _gender, groupKey: _gk, ...section }) => ({
       ...section,
       teams: [...section.teams].sort(
         (a, b) => teamNameCollator.compare(a.name, b.name) || a.id.localeCompare(b.id),

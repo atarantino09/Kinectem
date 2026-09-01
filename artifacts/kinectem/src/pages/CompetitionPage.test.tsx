@@ -394,11 +394,11 @@ describe("competition Teams ordering", () => {
     ]);
 
     expect(sections.map((section) => section.title)).toEqual([
-      "U8 · Boys · Gold · A",
-      "U10 · Boys · Gold · A",
-      "U12 · Boys · Silver · B",
-      "U12 · Girls · Gold · A",
-      "Age not listed · Gender not listed · Gold · A",
+      "Boys · U8 · Gold · A",
+      "Boys · U10 · Gold · A",
+      "Boys · U12 · Silver · B",
+      "Girls · U12 · Gold · A",
+      "Gender not listed · Age not listed · Gold · A",
     ]);
     expect(sections[1].teams.map((team) => team.name)).toEqual([
       "Storm 12",
@@ -406,32 +406,62 @@ describe("competition Teams ordering", () => {
     ]);
   });
 
-  it("places bracket-linked sections first, in bracket-array order, using the bracket label as title", () => {
+  it("sorts bracket-linked and unlinked sections together by gender → age, using the bracket label as title", () => {
     const brackets = [
       { id: "b1", label: "U9 Girls", gender: "Girls", ageGroup: "U9" },
       { id: "b2", label: "U11 Boys", gender: "Boys", ageGroup: "U11" },
     ];
     const sections = competitionTeamSections(
       [
-        // Unlinked — should sort after bracket sections using existing logic.
+        // Unlinked Boys U8 — sorts before Boys U11 and Girls U9.
         makeParticipant("unlinked-z", "Zebras", { age: "U8", gender: "Boys", division: "Gold" }),
-        // Linked to b2 (second bracket in array).
+        // Linked to b2 (Boys U11).
         makeParticipant("b2-team-a", "Avalanche", { bracketId: "b2" }),
         makeParticipant("b2-team-b", "Blizzard",  { bracketId: "b2" }),
-        // Linked to b1 (first bracket in array).
+        // Linked to b1 (Girls U9).
         makeParticipant("b1-team",   "Storm",     { bracketId: "b1" }),
       ],
       brackets,
     );
 
     expect(sections.map((s) => s.title)).toEqual([
-      "U9 Girls",   // b1 — first in bracket array
-      "U11 Boys",   // b2 — second in bracket array
-      "U8 · Boys · Gold",   // unlinked — falls through to string logic (no bracket string → "General" omitted)
+      "Boys · U8 · Gold",   // unlinked Boys U8 — youngest boys first
+      "U11 Boys",           // b2 — Boys U11
+      "U9 Girls",           // b1 — Girls U9 (girls sort after boys)
     ]);
-    expect(sections[0].teams.map((t) => t.id)).toEqual(["b1-team"]);
+    expect(sections[2].teams.map((t) => t.id)).toEqual(["b1-team"]);
     // b2 teams sorted alphabetically.
     expect(sections[1].teams.map((t) => t.name)).toEqual(["Avalanche", "Blizzard"]);
+  });
+
+  it("keeps linked schedule groups separate when one bracket label spans ages and genders", () => {
+    const brackets = [
+      { id: "shared", label: "Gold", gender: null, ageGroup: null },
+    ];
+    const sections = competitionTeamSections(
+      [
+        makeParticipant("girls-u12", "Falcons", {
+          bracketId: "shared",
+          age: "U12",
+          gender: "Girls",
+          division: "Gold",
+        }),
+        makeParticipant("boys-u10", "Storm", {
+          bracketId: "shared",
+          age: "U10",
+          gender: "Boys",
+          division: "Gold",
+        }),
+      ],
+      brackets,
+    );
+
+    expect(sections).toHaveLength(2);
+    expect(sections.map((section) => section.title)).toEqual(["Gold", "Gold"]);
+    expect(sections.map((section) => section.teams.map((team) => team.id))).toEqual([
+      ["boys-u10"],
+      ["girls-u12"],
+    ]);
   });
 
   it("falls back to string-based grouping when a bracketId is not in the brackets array", () => {
@@ -445,8 +475,8 @@ describe("competition Teams ordering", () => {
     );
 
     expect(sections.map((s) => s.title)).toEqual([
-      "Gold Pool",          // bracketId resolved → bracket label
-      "U10 · Boys · Div A", // stale bracketId → falls back to string grouping
+      "Boys · U10 · Div A", // stale bracketId → falls back to string grouping (Boys sorts before no-gender)
+      "Gold Pool",          // bracketId resolved → bracket label (no gender → sorts last)
     ]);
   });
 
@@ -463,7 +493,7 @@ describe("competition Teams ordering", () => {
       [],
     );
 
-    expect(sections.map((s) => s.title)).toEqual(["U12 · Boys", "U12 · Girls"]);
+    expect(sections.map((s) => s.title)).toEqual(["Boys · U12", "Girls · U12"]);
     expect(sections[0].teams.map((t) => t.id)).toEqual(["u12-boys-a", "u12-boys-b"]);
     expect(sections[1].teams.map((t) => t.id)).toEqual(["u12-girls"]);
   });
@@ -473,7 +503,7 @@ describe("competition Teams ordering", () => {
       makeParticipant("t1", "Alpha", { age: "U10", gender: "Boys", division: "Gold" }),
     ]);
     expect(sections).toHaveLength(1);
-    expect(sections[0].title).toBe("U10 · Boys · Gold");
+    expect(sections[0].title).toBe("Boys · U10 · Gold");
   });
 });
 

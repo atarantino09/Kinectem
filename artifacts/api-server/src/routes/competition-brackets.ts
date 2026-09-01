@@ -161,7 +161,7 @@ router.post(
     const competition = await loadCompetition(String(req.params.id));
     if (!competition) return apiError(res, 404, "Competition not found");
     if (!(await canOperateCompetition(me, competition))) {
-      return apiError(res, 403, "Only the competition operator can manage brackets.", {
+      return apiError(res, 403, "Only the competition operator can curate recaps.", {
         code: "COMPETITION_FORBIDDEN",
       });
     }
@@ -227,7 +227,7 @@ router.patch(
     const competition = await loadCompetition(String(req.params.id));
     if (!competition) return apiError(res, 404, "Competition not found");
     if (!(await canOperateCompetition(me, competition))) {
-      return apiError(res, 403, "Only the competition operator can manage brackets.", {
+      return apiError(res, 403, "Only the competition operator can curate recaps.", {
         code: "COMPETITION_FORBIDDEN",
       });
     }
@@ -335,7 +335,7 @@ router.post(
     const competition = await loadCompetition(String(req.params.id));
     if (!competition) return apiError(res, 404, "Competition not found");
     if (!(await canOperateCompetition(me, competition))) {
-      return apiError(res, 403, "Only the competition operator can manage brackets.", {
+      return apiError(res, 403, "Only the competition operator can curate recaps.", {
         code: "COMPETITION_FORBIDDEN",
       });
     }

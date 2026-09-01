@@ -12,7 +12,7 @@ import {
   tournamentParticipants,
   competitionBrackets,
 } from "@workspace/db";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 
 export function bracketLabelKey(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, " ");

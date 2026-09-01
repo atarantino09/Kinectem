@@ -54,9 +54,14 @@ import {
   ChevronDown,
   Plus,
   Trash2,
-  GripVertical,
   ListOrdered,
 } from "lucide-react";
+import {
+  compareBracketsByGenderAge,
+  genderInfo,
+  ageGroupInfo,
+  teamNameCollator,
+} from "./CompetitionPage";
 import {
   Select,
   SelectContent,
@@ -1455,6 +1460,7 @@ export interface CompetitionBracket {
 
 const BRACKET_GENDERS = ["Boys", "Girls", "Coed"] as const;
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 function BracketsPanel({
   competitionId,
   preview = false,
@@ -1485,6 +1491,13 @@ function BracketsPanel({
   });
   const brackets = bracketsQ.data?.data ?? [];
   const unassignedGroups = bracketsQ.data?.unassignedGroups ?? [];
+
+  const sortedBrackets = [...brackets].sort((a, b) =>
+    compareBracketsByGenderAge(
+      { gender: genderInfo(a.gender), age: ageGroupInfo(a.ageGroup) },
+      { gender: genderInfo(b.gender), age: ageGroupInfo(b.ageGroup) },
+    ) || teamNameCollator.compare(a.label, b.label),
+  );
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["competition", competitionId, "brackets"] });
@@ -1553,7 +1566,7 @@ function BracketsPanel({
             : "");
     const age = g.age ?? "";
     const defaultLabel = [age, BRACKET_GENDERS.includes(normalized as typeof BRACKET_GENDERS[number]) ? normalized : ""].filter(Boolean).join(" ");
-    setNamingGroupKey(`${g.age ?? ""}||${g.gender ?? ""}`);
+    setNamingGroupKey(JSON.stringify([g.age, g.gender]));
     // Store exact raw DB values as the immutable linking target.
     setNamingSourceAge(g.age);
     setNamingSourceGender(g.gender);
@@ -1634,32 +1647,6 @@ function BracketsPanel({
     onError: onError("Couldn't delete that bracket"),
   });
 
-  // Drag-and-drop reorder (native HTML5, same pattern as the photo grid).
-  // Optimistic: reorder the cached list immediately, then persist the full
-  // id order in one call; refetch on settle keeps us honest.
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const reorder = useMutation({
-    mutationFn: (ids: string[]) =>
-      customFetch(`/api/v1/competitions/${competitionId}/brackets/reorder`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      }),
-    onError: (err) => {
-      onError("Couldn't save the new order")(err);
-      invalidate();
-    },
-    onSuccess: invalidate,
-  });
-  const moveTo = (from: number, to: number) => {
-    if (from === to) return;
-    const next = [...brackets];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    qc.setQueryData(["competition", competitionId, "brackets"], { data: next });
-    reorder.mutate(next.map((b) => b.id));
-  };
-
   return (
     <Card>
       <CollapsibleCardHeader
@@ -1674,8 +1661,9 @@ function BracketsPanel({
           <p className="text-xs text-muted-foreground">
             Brackets are labels for sorting incoming recaps (they never change
             how a published recap looks). They're picked up automatically from
-            your schedule's division/bracket column — add, edit, or drag to
-            reorder them any way you like.
+            your schedule's division/bracket column — add or edit them any way
+            you like. Brackets are always displayed Boys first, then Girls, then
+            Coed, ordered youngest to oldest within each gender.
           </p>
           {bracketsQ.isLoading && !preview ? (
             <Skeleton className="h-16 rounded-lg" />
@@ -1686,30 +1674,10 @@ function BracketsPanel({
             </p>
           ) : brackets.length > 0 ? (
             <div className="space-y-1.5" data-testid="list-brackets">
-              {brackets.map((b, i) => (
+              {sortedBrackets.map((b) => (
                 <div
                   key={b.id}
-                  className={`rounded-lg border border-border px-2 py-1.5 ${
-                    dragIndex === i ? "opacity-40" : ""
-                  }`}
-                  draggable={editingId !== b.id}
-                  onDragStart={(e) => {
-                    setDragIndex(i);
-                    e.dataTransfer.effectAllowed = "move";
-                    e.dataTransfer.setData("text/plain", String(i));
-                  }}
-                  onDragOver={(e) => {
-                    if (dragIndex === null || dragIndex === i) return;
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragIndex === null) return;
-                    moveTo(dragIndex, i);
-                    setDragIndex(null);
-                  }}
-                  onDragEnd={() => setDragIndex(null)}
+                  className="rounded-lg border border-border px-2 py-1.5"
                   data-testid={`row-bracket-${b.id}`}
                 >
                   {editingId === b.id ? (
@@ -1754,7 +1722,6 @@ function BracketsPanel({
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 text-muted-foreground/60 cursor-grab shrink-0" />
                       <span className="text-sm font-bold truncate">{b.label}</span>
                       {b.gender && (
                         <Badge variant="secondary" className="shrink-0">{b.gender}</Badge>
@@ -1799,7 +1766,7 @@ function BracketsPanel({
                 Groups without a name
               </p>
               {unassignedGroups.map((g) => {
-                const groupKey = `${g.age ?? ""}||${g.gender ?? ""}`;
+                const groupKey = JSON.stringify([g.age, g.gender]);
                 const isNaming = namingGroupKey === groupKey;
                 const displayAge = g.age ?? "Unknown age";
                 const displayGender = g.gender
@@ -1927,7 +1894,6 @@ function BracketsPanel({
     </Card>
   );
 }
-
 interface CurationRecap {
   id: string;
   title: string;
