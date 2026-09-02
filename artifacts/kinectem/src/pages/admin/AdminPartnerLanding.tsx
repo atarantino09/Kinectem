@@ -609,10 +609,28 @@ export function AdminPartnerLanding({
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             {filteredPartnerPages.map((page) => (
-              <button key={page.id} type="button" onClick={() => loadDetail(page.id)} className="rounded-lg border p-4 text-left hover:border-primary">
-                <div className="font-black">{page.officialName}</div>
+              <div key={page.id} className="rounded-lg border p-4 hover:border-primary">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/partners/${encodeURIComponent(page.slug)}`}
+                    className="font-black text-primary underline-offset-4 hover:underline"
+                    aria-label={`Open public page for ${page.officialName}`}
+                  >
+                    {page.officialName}
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => loadDetail(page.id)}
+                    aria-label={`Edit ${page.officialName}`}
+                  >
+                    Edit
+                  </Button>
+                </div>
                 <div className="text-sm text-muted-foreground">/{page.slug} · {page.memberCount} organizations · {page.published ? "Published" : "Draft"}</div>
-              </button>
+              </div>
             ))}
           </div>
           {normalizedPartnerPageSearch && filteredPartnerPages.length === 0 && (
@@ -659,7 +677,16 @@ export function AdminPartnerLanding({
   const members = detail.data?.data.members ?? [];
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="sm" onClick={() => setSelectedId("")}>← All partner pages</Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setSelectedId("")}>← All partner pages</Button>
+        <Link
+          href={`/partners/${encodeURIComponent(canonicalSlug)}`}
+          className="text-lg font-black text-primary underline-offset-4 hover:underline"
+          aria-label={`Open public page for ${draft.officialName}`}
+        >
+          {draft.officialName}
+        </Link>
+      </div>
       <Step number={1} title="Partner identity and branding" done={!!draft.officialName && !!draft.slug}>
         <div className="grid gap-3 md:grid-cols-2">
           <div><Label>Official partner name</Label><Input value={draft.officialName} onChange={(e) => setDraft({ ...draft, officialName: e.target.value })} /></div>
