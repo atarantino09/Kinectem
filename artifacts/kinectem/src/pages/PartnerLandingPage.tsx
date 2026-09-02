@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { formatOrgName } from "@/lib/format";
+import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
 import {
   ArrowRight,
   Building2,
@@ -188,26 +189,28 @@ export default function PartnerLandingPage() {
       >
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 80% 10%, white 0, transparent 32%), radial-gradient(circle at 10% 90%, white 0, transparent 26%)" }} />
         <div className="relative mx-auto max-w-6xl">
-          <div className="mb-8">
+          <div className="mb-8 text-center">
             <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] opacity-80 md:text-sm">
               Proud partner with Kinectem
             </p>
-            <div className="flex items-end gap-3 sm:gap-5">
-              <div className="flex min-w-0 flex-col items-center text-center">
-                {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-32 w-32 rounded-3xl bg-white/95 object-contain p-3 shadow-xl md:h-40 md:w-40" /> : <div className="grid h-32 w-32 place-items-center rounded-3xl bg-white/20 md:h-40 md:w-40"><Building2 className="h-16 w-16 md:h-20 md:w-20" /></div>}
-                <div className="mt-3 max-w-[10rem]">
+            <div className="flex items-center justify-center gap-3 sm:gap-5">
+              <div className="flex w-32 min-w-0 flex-col items-center text-center md:w-40">
+                <div className="grid h-32 w-32 place-items-center rounded-3xl bg-white/95 shadow-xl md:h-40 md:w-40">
+                  {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-full w-full rounded-3xl object-contain p-3" /> : <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />}
+                </div>
+                <div className="mt-3 flex min-h-[3.25rem] max-w-[10rem] flex-col justify-start">
                   <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{page.associationLabel}</div>
                   <div className="mt-1 text-sm font-black leading-tight md:text-base">{page.officialName}</div>
                 </div>
               </div>
-              <span className="mb-10 text-3xl font-light opacity-70 md:mb-12 md:text-5xl" aria-hidden="true">×</span>
-              <div className="flex min-w-0 flex-col items-center text-center">
+              <span className="text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true">×</span>
+              <div className="flex w-32 min-w-0 flex-col items-center text-center md:w-40">
                 <img
-                  src={`${import.meta.env.BASE_URL}logo-icon.png`}
+                  src={kinectemIcon}
                   alt="Kinectem logo"
-                  className="h-32 w-32 rounded-3xl shadow-xl md:h-40 md:w-40"
+                  className="h-32 w-32 rounded-3xl object-contain shadow-xl md:h-40 md:w-40"
                 />
-                <div className="mt-3 text-sm font-black leading-tight md:text-base">Kinectem</div>
+                <div className="mt-3 flex min-h-[3.25rem] items-start justify-center text-sm font-black leading-tight md:text-base">Kinectem</div>
               </div>
             </div>
           </div>
