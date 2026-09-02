@@ -1,0 +1,55 @@
+**The line:**
+
+> TeamSnap, Byga, PlayMetrics and the rest get you to kickoff. Kinectem is where you go after the final whistle — and where you'll still go months and years later.
+
+---
+
+**Hero (three sentences, top of page):**
+
+Kinectem is the youth-sports platform where the story of your season comes to life.
+
+Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
+
+---
+
+**Main block:**
+
+**You already have software that runs your season.**
+
+TeamSnap, Byga, PlayMetrics, GotSport, Stack — whichever one your club is on, it handles registration, rosters, schedules, payments, and who's bringing the oranges. It gets you to kickoff. That's what it's built for, and none of that changes when you add Kinectem.
+
+But none of those platforms were built to hold onto a season once it's over. Rosters get rebuilt every August. Group chats scroll away. The season ends and the team quietly disappears from the app. Ten years of a kid's soccer life leaves behind a shoebox of medals and a camera roll nobody can search.
+
+**Kinectem starts where those platforms stop.**
+
+After every game, your coach publishes a game recap — and writing one takes a couple of minutes, not an evening. The coach jots down a few notes: the score, a couple of key moments, the player who came off the bench with energy and sparked the comeback, the work they've been putting in at practice finally showing up on the field. The plays that never make a box score but were the real story of the game. AI Assist turns those notes into a full game recap. The coach reads it over, makes it sound like them, and publishes.
+
+One button auto-tags every rostered player. That game recap lands on the team page and on every one of those players' pages, and it stays there permanently. Do that for a season and the team page holds the whole season in order, start to finish, and every player on your roster has a written record of their own journey. Do it for a few years and a kid graduating has hundreds of games written down by the coaches who were there.
+
+**And your club page is where all of it comes together.**
+
+Every club on Kinectem gets one public club page, and it fills itself in. Every team, every game recap, every player, under your crest, updating on its own as the weekend happens.
+
+Nobody has to build it or maintain it. A coach jots down a few notes at the final whistle, and before anyone's out of the parking lot, families from every other team in the club know exactly how that game went. The U9 game and the U17 game sit right next to each other on the same page, and nobody had to go looking for either one. For the first time your club looks like one program instead of a dozen separate group chats that happen to share a logo.
+
+It's also the page you send a family who's deciding between your club and the one in the next town over. Not a schedule and a fee table — a living record of what actually happens at your club every single weekend, written by your own coaches.
+
+**Your club page is already built.**
+
+We've built the organization page and every team page for the clubs across `{{PARTNER_ASSOCIATION_NAME}}`. Yours is sitting there waiting.
+
+Claim it, bulk add your coaches, mass invite your players — each team takes less than a minute. After that there's nothing left to set up. Go play your games, come back to Kinectem, and start preserving the story of your season.
+
+First 90 days are free, and your card isn't charged until day 90.
+
+---
+
+**Build note for Replit — paste this with the copy:**
+
+`{{PARTNER_ASSOCIATION_NAME}}` is a template variable, not literal text. It renders the full official name of the partner association whose landing page this is. For the ENYYSA page it renders as **Eastern New York Youth Soccer Association**, producing: "We've built the organization page and every team page for the clubs across Eastern New York Youth Soccer Association."
+
+It reads better with a leading article, so either store the value with it (`the Eastern New York Youth Soccer Association`) or hardcode "across the `{{PARTNER_ASSOCIATION_NAME}}`" in the sentence — pick one so you don't end up with a doubled "the." Every future partner page should reuse the same variable so this block stays a single reusable template.
+
+---
+
+Alternate for that line if you want the whole club in view rather than two age groups: **"Every game from every team in your club shows up in one place, on its own, as it happens."**
