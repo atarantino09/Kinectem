@@ -12,6 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { parseOrganizationImportFile } from "@/lib/admin-org-import-file";
 import {
+  canonicalizePartnerSlug,
+  isValidPartnerSlug,
+  partnerSlugError,
+} from "@/lib/partner-slug";
+import {
   Check,
   Copy,
   Eye,
@@ -75,7 +80,8 @@ type ImportPreviewRow = {
 };
 
 function shareUrl(slug: string) {
-  return `${window.location.origin}${import.meta.env.BASE_URL}partners/${slug}`;
+  const basePath = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  return `${window.location.origin}${basePath}/partners/${encodeURIComponent(slug)}`;
 }
 
 function Step({
@@ -111,6 +117,7 @@ export function AdminPartnerLanding() {
   const [selectedId, setSelectedId] = useState("");
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(false);
   const [draft, setDraft] = useState({
     officialName: "",
     associationLabel: "League / association",
@@ -182,14 +189,47 @@ export function AdminPartnerLanding() {
     ]);
   };
 
+  const canonicalSlug = canonicalizePartnerSlug(draft.slug);
+  const slugError = partnerSlugError(draft.slug);
+  const showSlugError = slugTouched || !draft.slug || !!selectedId;
+  const setSlugFromInput = (value: string) => {
+    setSlugTouched(true);
+    const trimmed = value.trim();
+    const slug = /^(?:https?:\/\/|www\.)/i.test(trimmed)
+      ? canonicalizePartnerSlug(value) || value
+      : value;
+    setDraft((current) => ({ ...current, slug }));
+  };
+  const normalizeSlug = () => {
+    setDraft((current) => ({
+      ...current,
+      slug: canonicalizePartnerSlug(current.slug),
+    }));
+  };
+  const handleSlugPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData("text");
+    if (!pasted) return;
+    const normalized = canonicalizePartnerSlug(pasted);
+    if (normalized) {
+      event.preventDefault();
+      setSlugTouched(true);
+      setDraft((current) => ({ ...current, slug: normalized }));
+    }
+  };
+
   const createPage = async () => {
+    if (!draft.officialName.trim() || !isValidPartnerSlug(draft.slug)) {
+      setSlugTouched(true);
+      return;
+    }
     setCreating(true);
     try {
       const response = await customFetch<{ data: PartnerSummary }>("/api/v1/admin/partner-pages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({ ...draft, officialName: draft.officialName.trim(), slug: canonicalSlug }),
       });
+      setDraft((current) => ({ ...current, slug: response.data.slug }));
       setSelectedId(response.data.id);
       await refresh();
       toast({ title: "Partner page created" });
@@ -202,14 +242,18 @@ export function AdminPartnerLanding() {
 
   const savePage = async (published = draft.published) => {
     if (!selectedId) return;
+    if (!draft.officialName.trim() || !isValidPartnerSlug(draft.slug)) {
+      setSlugTouched(true);
+      return;
+    }
     setSaving(true);
     try {
       await customFetch(`/api/v1/admin/partner-pages/${selectedId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draft, published }),
+        body: JSON.stringify({ ...draft, officialName: draft.officialName.trim(), slug: canonicalSlug, published }),
       });
-      setDraft((value) => ({ ...value, published }));
+      setDraft((value) => ({ ...value, officialName: value.officialName.trim(), slug: canonicalSlug, published }));
       await refresh();
       toast({ title: published ? "Partner page published" : "Partner page saved" });
     } catch (error) {
@@ -332,10 +376,33 @@ export function AdminPartnerLanding() {
             ))}
           </div>
           <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 md:grid-cols-3">
-            <Input placeholder="Official partner name" value={draft.officialName} onChange={(e) => setDraft({ ...draft, officialName: e.target.value })} />
-            <Input placeholder="League / association label" value={draft.associationLabel} onChange={(e) => setDraft({ ...draft, associationLabel: e.target.value })} />
-            <Input placeholder="url-slug" value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })} />
-            <Button onClick={createPage} disabled={creating || !draft.officialName || !draft.slug}>
+            <Input aria-label="Official partner name" placeholder="Official partner name" value={draft.officialName} onChange={(e) => setDraft({ ...draft, officialName: e.target.value })} />
+            <Input aria-label="League / association label" placeholder="League / association label" value={draft.associationLabel} onChange={(e) => setDraft({ ...draft, associationLabel: e.target.value })} />
+            <div className="md:col-span-3">
+              <Label htmlFor="new-partner-slug">Partner page URL</Label>
+              <div className="mt-1 flex min-w-0 items-stretch">
+                <span className="flex shrink-0 items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm text-muted-foreground">
+                  /partners/
+                </span>
+                <Input
+                  id="new-partner-slug"
+                  data-testid="input-partner-slug"
+                  className="min-w-0 rounded-l-none"
+                  placeholder="your-partner-name"
+                  value={draft.slug}
+                  onChange={(e) => setSlugFromInput(e.target.value)}
+                  onBlur={normalizeSlug}
+                  onPaste={handleSlugPaste}
+                  aria-invalid={showSlugError && !!slugError}
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Enter only the final URL segment. You can type a name-like slug or paste an http(s) address.</p>
+              {showSlugError && slugError && <p className="mt-1 text-sm text-destructive" role="alert" data-testid="partner-slug-error">{slugError}</p>}
+              <p className="mt-2 break-all rounded-md bg-background px-3 py-2 text-sm" data-testid="partner-url-preview">
+                {canonicalSlug ? shareUrl(canonicalSlug) : `${window.location.origin}${(import.meta.env.BASE_URL || "/").replace(/\/$/, "")}/partners/[your-slug]`}
+              </p>
+            </div>
+            <Button onClick={createPage} disabled={creating || !draft.officialName.trim() || !!slugError}>
               {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create partner page
             </Button>
           </div>
@@ -352,7 +419,26 @@ export function AdminPartnerLanding() {
         <div className="grid gap-3 md:grid-cols-2">
           <div><Label>Official partner name</Label><Input value={draft.officialName} onChange={(e) => setDraft({ ...draft, officialName: e.target.value })} /></div>
           <div><Label>League / association label</Label><Input value={draft.associationLabel} onChange={(e) => setDraft({ ...draft, associationLabel: e.target.value })} /></div>
-          <div><Label>URL slug</Label><Input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} /></div>
+          <div className="md:col-span-2">
+            <Label htmlFor="partner-slug">Partner page URL</Label>
+            <div className="mt-1 flex min-w-0 items-stretch">
+              <span className="flex shrink-0 items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm text-muted-foreground">
+                /partners/
+              </span>
+              <Input
+                id="partner-slug"
+                data-testid="input-partner-slug"
+                className="min-w-0 rounded-l-none"
+                value={draft.slug}
+                onChange={(e) => setSlugFromInput(e.target.value)}
+                onBlur={normalizeSlug}
+                onPaste={handleSlugPaste}
+                aria-invalid={showSlugError && !!slugError}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">This is the final segment of the Kinectem partner-page URL.</p>
+            {showSlugError && slugError && <p className="mt-1 text-sm text-destructive" role="alert" data-testid="partner-slug-error">{slugError}</p>}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label>Primary</Label><Input type="color" value={draft.primaryColor} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} /></div>
             <div><Label>Secondary</Label><Input type="color" value={draft.secondaryColor} onChange={(e) => setDraft({ ...draft, secondaryColor: e.target.value })} /></div>
@@ -361,7 +447,7 @@ export function AdminPartnerLanding() {
           <BrandImageField label="Partner banner" value={draft.bannerUrl} onChange={(bannerUrl) => setDraft({ ...draft, bannerUrl })} kind="banner" idPrefix="partner-banner" />
           <div className="md:col-span-2"><Label>Introduction</Label><Textarea rows={4} value={draft.introduction} onChange={(e) => setDraft({ ...draft, introduction: e.target.value })} /></div>
         </div>
-        <Button onClick={() => savePage()} disabled={saving}>Save branding</Button>
+        <Button onClick={() => savePage()} disabled={saving || !draft.officialName.trim() || !!slugError}>Save branding</Button>
       </Step>
 
       <Step number={2} title="Import or add organizations" done={members.length > 0}>
@@ -429,10 +515,10 @@ export function AdminPartnerLanding() {
       <Step number={4} title="Preview, publish, and share" done={draft.published}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2"><Switch checked={draft.published} onCheckedChange={(published) => void savePage(published)} /><span className="font-semibold">{draft.published ? "Published" : "Unpublished"}</span></div>
-          <Link href={`/partners/${draft.slug}`}><Button variant="outline" disabled={!draft.published}>Preview public page</Button></Link>
-          <Button variant="outline" disabled={!draft.published} onClick={() => { void navigator.clipboard.writeText(shareUrl(draft.slug)); toast({ title: "Partner URL copied" }); }}><Copy className="mr-2 h-4 w-4" /> Copy shareable URL</Button>
+          <Link href={`/partners/${canonicalSlug}`}><Button variant="outline" disabled={!draft.published || !!slugError}>Preview public page</Button></Link>
+          <Button variant="outline" disabled={!draft.published || !!slugError} onClick={() => { void navigator.clipboard.writeText(shareUrl(canonicalSlug)); toast({ title: "Partner URL copied" }); }}><Copy className="mr-2 h-4 w-4" /> Copy shareable URL</Button>
         </div>
-        <div className="break-all rounded-lg bg-muted p-3 text-sm">{shareUrl(draft.slug)}</div>
+        <div className="break-all rounded-lg bg-muted p-3 text-sm">{canonicalSlug ? shareUrl(canonicalSlug) : "Enter a valid partner URL segment to preview the shareable address."}</div>
       </Step>
     </div>
   );
